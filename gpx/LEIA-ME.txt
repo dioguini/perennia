@@ -1,0 +1,5 @@
+Põe aqui os teus ficheiros .gpx. A aplicação encontra-os em
+Pedalar → Importar .gpx.
+
+O exemplo-serra.gpx é sintético (1 km plano, 3 km a 6 %, 2 km a descer) e
+serve para experimentar a aplicação sem precisares de um ficheiro teu.

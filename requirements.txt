@@ -1,0 +1,17 @@
+# Interface e render 3D. Python puro, instala em Windows, Linux, macOS e Raspberry Pi.
+pyglet>=2.0.15
+
+# Bluetooth Low Energy (FTMS, potência, cardio). Usa WinRT, BlueZ ou CoreBluetooth.
+bleak>=0.21.0
+
+# ANT+ através da antena USB. Opcional: sem isto, o Bluetooth funciona igual.
+pyusb>=1.2.1
+# A libusb que a pyusb usa. No Windows e no macOS vem neste pacote; no Linux
+# e no Raspberry Pi usa-se a do sistema (sudo apt install libusb-1.0-0).
+libusb-package>=1.0.26 ; platform_system != "Linux"
+
+# Importar o Excel das análises clínicas (.xlsx). Opcional.
+openpyxl>=3.1
+
+# GarminDB (opcional, à parte): descarrega os teus dados do Garmin Connect.
+# pip install garmindb   — e configura ~/.GarminDb/GarminConnectConfig.json

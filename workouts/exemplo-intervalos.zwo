@@ -1,0 +1,9 @@
+<workout_file>
+  <name>Intervalos 4x4</name>
+  <description>Aquecimento, quatro blocos de 4 minutos a 105 % da FTP, retorno à calma.</description>
+  <workout>
+    <Warmup Duration="600" PowerLow="0.50" PowerHigh="0.75"/>
+    <IntervalsT Repeat="4" OnDuration="240" OffDuration="240" OnPower="1.05" OffPower="0.55" Cadence="92" CadenceResting="85"/>
+    <Cooldown Duration="480" PowerLow="0.60" PowerHigh="0.45"/>
+  </workout>
+</workout_file>

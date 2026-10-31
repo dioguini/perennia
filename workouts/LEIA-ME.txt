@@ -1,0 +1,2 @@
+Põe aqui treinos estruturados nos formatos .zwo (Zwift), .mrc ou .erg
+(TrainerRoad, PerfPRO). A aplicação encontra-os em Treinos → Importar treino.

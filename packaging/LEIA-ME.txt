@@ -1,0 +1,72 @@
+PERENNIA — COMO USAR
+=====================
+
+Não precisas de instalar nada: o Python e as bibliotecas vêm cá dentro.
+
+
+1. ABRIR
+--------
+
+Windows: abre Perennia.exe.
+
+  Da primeira vez o Windows pode mostrar "O Windows protegeu o PC". É porque
+  a aplicação não está assinada digitalmente (isso custa dinheiro todos os
+  anos). Carrega em "Mais informações" e depois "Executar mesmo assim".
+  Só acontece uma vez.
+
+macOS: botão direito em Perennia.app → Abrir → Abrir. (Duplo clique da
+  primeira vez não deixa, por a app não estar assinada.) Da primeira vez
+  que procurares sensores, o macOS pede autorização para o Bluetooth: aceita.
+
+Linux / Raspberry Pi: descompacta e corre ./Perennia/Perennia
+
+
+2. PRIMEIROS PASSOS
+-------------------
+
+  Definições   → o teu nome, peso e FTP
+  Dispositivos → Procurar (Bluetooth) ou Procurar ANT+ (antena USB)
+                 Sem hardware, escolhe "Trainer simulado" para experimentar.
+  Pedalar      → Importar .gpx: põe os teus .gpx na pasta "gpx" ao lado da
+                 aplicação (ou em Transferências) e escolhe-os na lista.
+
+Durante a sessão: L = volta · P = pausa · F10 ou "■ Terminar" = acabar e
+gravar · F11 = ecrã inteiro.
+
+
+3. ONDE FICAM OS DADOS
+----------------------
+
+Windows: %APPDATA%\Perennia  (escreve isto na barra do Explorador)
+macOS:   ~/Library/Application Support/Perennia
+Linux:   ~/.local/share/perennia
+
+(Quem já usava a versão anterior, VeloLocal, continua com a pasta antiga:
+VeloLocal / velolocal. A aplicação usa-a sozinha e não perde nada.)
+
+Lá estão a base de dados e a pasta "rides" com os .fit de cada sessão,
+prontos para enviares ao Strava, Garmin Connect ou Intervals.icu.
+Para atualizar a aplicação, substitui esta pasta pela nova: os dados ficam.
+
+
+4. ANTENA ANT+ NO WINDOWS (só se usares ANT+)
+---------------------------------------------
+
+O Bluetooth funciona sem mais nada. Para a antena ANT+ é preciso trocar o
+driver uma vez, com o programa gratuito Zadig (https://zadig.akeo.ie):
+
+  1. Liga a antena e fecha o Zwift / Garmin Express.
+  2. No Zadig: Options → List All Devices.
+  3. Escolhe a antena (ANT USB-m Stick, ANT USBStick2…; o ID começa por 0FCF).
+  4. Escolhe WinUSB e carrega em "Replace Driver".
+
+Outras aplicações que usem o driver da Garmin podem deixar de ver a antena.
+Para voltar atrás: Gestor de Dispositivos → a antena → Reverter driver.
+
+
+5. SE ALGO CORRER MAL
+---------------------
+
+Se a aplicação fechar com um erro, aparece uma janela a dizer onde ficou o
+ficheiro perennia-erro.log (na pasta dos dados). Envia esse ficheiro a quem
+te passou a aplicação.
