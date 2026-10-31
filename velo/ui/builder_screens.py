@@ -101,8 +101,8 @@ class BlockBuilder(EditScreen):
         return [it.mode_name(m) for m in modes]
 
     def on_tab(self) -> None:
+        # mudar de vista não mexe no treino: não conta como alteração
         self.mode = self.modes[self.tab % len(self.modes)]
-        self.dirty = True
         for name, pct, r, lab in self.pal:
             lab.text = self._pal_text(name)
         self.redraw()
@@ -358,8 +358,8 @@ class BlockBuilder(EditScreen):
                                                    "In one sentence: what this workout trains")),
                  Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name"),
-                 Item(tr("✓ Guardar (Ctrl+S)", "✓ Save (Ctrl+S)"), action=self._save,
-                      value="● " + tr("por guardar", "unsaved") if self.dirty else "")]
+                 Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
+                      button=True, primary=True)]
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
                       "running": tr("Corrida", "Running"),
                       "swimming": tr("Natação", "Swimming")}[self.sport]
@@ -461,6 +461,7 @@ class BlockBuilder(EditScreen):
             self.block.goal = self.block.goal[:-1]
         elif self.block is not None:
             self.block.cue = self.block.cue[:-1]
+        self.dirty = True
         self.enter()
 
     def _nudge_duration(self, steps: int) -> None:
@@ -551,18 +552,17 @@ class BlockBuilder(EditScreen):
         if symbol == key.S and modifiers & key.MOD_CTRL:
             self._save()
             return True
-        if self._field("text:") is None:
-            if symbol == key.DELETE:
-                self._delete()
-                return True
-            if symbol == key.ESCAPE and self.dirty:
-                if getattr(self, "_warned", False):
-                    return super().on_key(symbol, modifiers)
-                self._warned = True
-                self.app.message(tr("Há alterações por guardar: Esc outra vez sai sem guardar.",
-                                    "Unsaved changes: Esc again leaves without saving."))
-                return True
+        if self._field("text:") is None and symbol == key.DELETE:
+            self._delete()
+            return True
         return super().on_key(symbol, modifiers)
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
 
     # --------------------------------------------------------------- rato
 

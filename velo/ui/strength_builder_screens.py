@@ -228,6 +228,8 @@ class StrengthBuilder(Screen):
 
     def refresh(self) -> None:
         P = _theme.P
+        if hasattr(self, "list"):
+            self._set_buttons()
         self._r = self._l = 0
         a = self._areas()
         w, h = a["w"], a["h"]
@@ -252,9 +254,6 @@ class StrengthBuilder(Screen):
         # botões à direita: hora de início · planear · guardar · começar
         bx = w - 48
         buttons = [("start_session", tr("▶ Começar", "▶ Start"), P.good),
-                   ("save", tr("Guardado ✓", "Saved ✓") if (time.monotonic() - self.saved_at < 3
-                                                             and not self.dirty)
-                    else (tr("Guardar", "Save") + (" •" if self.dirty else "")), P.accent),
                    ("plan", tr("Planear: {d}", "Plan: {d}",
                                d=self.plan_day.strftime("%d/%m") if self.plan_day
                                else tr("—", "—")), _theme.mix(P.header, (255, 255, 255), 0.14)),
@@ -477,9 +476,16 @@ class StrengthBuilder(Screen):
             "Setas · números · Enter abrir · M menu ⋮ · Alt+↑↓ bloco · Ctrl+S guardar",
             "Arrows · digits · Enter open · M ⋮ menu · Alt+↑↓ block · Ctrl+S save"))
         self.chrome.agent_hint.text = ""
-        self.list.set_items([])
+        self._set_buttons()
         self.list.y = -3000
         self.refresh()
+
+    def _set_buttons(self) -> None:
+        """Guardar fica em baixo, à direita (como em todos os ecrãs)."""
+        saved = time.monotonic() - self.saved_at < 3 and not self.dirty
+        label = tr("Guardado ✓", "Saved ✓") if saved else \
+            tr("Guardar", "Save") + (" •" if self.dirty else "")
+        self.list.set_items([Item(label, action=self.save, button=True, primary=True)])
 
     def changed(self) -> None:
         self.dirty = True
@@ -500,7 +506,7 @@ class StrengthBuilder(Screen):
     # --------------------------------------------------------------- foco
 
     def _focusables(self) -> list[tuple]:
-        out = [("name",), ("start",), ("plan",), ("save",), ("start_session",), ("instr",)]
+        out = [("name",), ("start",), ("plan",), ("start_session",), ("instr",)]
         for row in self._rows():
             for cid, _x, _w in self._cells(row, 0, 800):
                 out.append(cid)
@@ -960,12 +966,7 @@ class StrengthBuilder(Screen):
                 self._typing, self._buf = False, ""
                 self.refresh()
                 return True
-            if self.dirty and self._armed != ("esc",):
-                self._armed = ("esc",)
-                self.app.message(tr("Há alterações por guardar: Ctrl+S guarda, Esc sai sem "
-                                    "guardar", "Unsaved changes: Ctrl+S saves, Esc leaves"))
-                return True
-            self.app.pop()
+            self.app.pop()            # com alterações por guardar, pergunta primeiro
             return True
         self._armed = None
         if alt and symbol in (key.UP, key.DOWN) and self.focus and len(self.focus) > 1:
@@ -1021,9 +1022,18 @@ class StrengthBuilder(Screen):
                 return bi, y0, y1
         return None
 
+    def on_save(self) -> bool:
+        self.save()
+        return True
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
     def on_mouse(self, x: int, y: int) -> bool:
         if self.back_button is not None and self.back_button.hit(x, y):
             self.on_key(key.ESCAPE, 0)
+            return True
+        if self.list.on_mouse_press(x, y):
             return True
         cid = self._cell_at(x, y)
         if cid is not None and cid[0] == "handle":
@@ -1115,7 +1125,9 @@ class StrengthBuilder(Screen):
 
     def draw(self) -> None:
         self.batch.draw()
+        self.chrome.set_footer_limit(self.list.buttons_left)
         self.chrome.draw()
+        self.list.draw()
         if self.back_button is not None:
             self.back_button.draw()
 

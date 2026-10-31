@@ -324,12 +324,13 @@ class TestGarminDBGui(tg.GuiCase):
         folder = make_garmindb(Path(self.tmp) / "g")
         self.app.db.set("garmindb_dir", str(folder))
         self.pick("Definições")
-        self.pick("GarminDB")
+        self.pick("Sincronização")                 # o separador das Definições
         scr = self.screen()
-        self.assertIsInstance(scr, cs.GarminDBScreen)
-        self.assertEqual(scr.list.items[1].value, "sim")
-        self.pick("Importar da garmin.db")
-        self.assertEqual(scr.last_report["days"], 2)
+        self.assertIsInstance(scr, app_mod.SettingsScreen)
+        self.assertEqual(scr.list.items[0].value, "GarminDB")
+        self.assertIn("garmin.db ✓", scr.list.items[1].detail)
+        self.pick("Só importar")
+        self.assertEqual(scr.sync.last_report["days"], 2)
 
 
 # =============================================================== HRV4Training

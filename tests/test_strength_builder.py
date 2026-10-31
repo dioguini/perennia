@@ -193,6 +193,7 @@ class TestBuilderGui(tg.GuiCase):
     def go(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("construtor por blocos")
         b = self.screen()
@@ -297,7 +298,13 @@ class TestBuilderGui(tg.GuiCase):
         b.set_focus(("plan",))
         self.press(key.ENTER)
         self.pick("Amanhã")
-        self.press(key.ESCAPE)                          # avisa que há alterações
+        self.press(key.ESCAPE)                          # pergunta: há alterações
+        pop = self.screen()
+        self.assertIsInstance(pop, tg.app_mod.ConfirmScreen)
+        self.assertEqual([i.label for i in pop.list.items],
+                         ["Sair sem gravar", "Cancelar", "Guardar"])
+        self.assertTrue(all(i.button for i in pop.list.items))
+        self.press(key.ESCAPE)                          # Esc = Cancelar: fica a editar
         self.assertIs(self.screen(), b)
         self.app._on_key_press(key.S, key.MOD_CTRL)
         from datetime import date, timedelta

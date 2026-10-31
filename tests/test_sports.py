@@ -447,7 +447,7 @@ class TestSportsGui(tg.GuiCase):
     def test_running_session_from_the_hub(self):
         self.press(key.ESCAPE)
         self.pick("Corrida")
-        self.pick("Corrida livre")
+        self.pick("Sessão de treino")
         opts = self.screen()
         self.assertIsInstance(opts, app_mod.StartOptions)
         self.select("Auto lap")
@@ -480,6 +480,7 @@ class TestSportsGui(tg.GuiCase):
     def test_gym_free_workout_plan_first_and_keep(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Kettlebell")
         self.pick("Treino livre")
         ed = self.screen()
@@ -528,6 +529,7 @@ class TestSportsGui(tg.GuiCase):
                       [x["name"] for x in gym.exercises(self.app.db, "sandbag")])
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("Treino surpresa")
         sur = self.screen()
@@ -559,7 +561,7 @@ class TestSportsGui(tg.GuiCase):
     def test_swim_crash_recovery(self):
         self.press(key.ESCAPE)
         self.pick("Natação")
-        self.pick("Natação livre")
+        self.pick("Sessão de treino")
         self.pick("Começar")
         scr = self.screen()
         self.press(key.PLUS, key.PLUS)                           # duas piscinas
@@ -580,7 +582,7 @@ class TestSportsGui(tg.GuiCase):
         self.assertTrue(scr)
 
     def test_device_lost_mid_ride_shows_on_the_hud(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

@@ -99,8 +99,9 @@ class ItemEditor(EditScreen):
                       data="num:weight_kg", detail=tr("de cada um (opcional)",
                                                       "each (optional)")),
                  Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes"),
-                 Item(tr("✓ Guardar", "✓ Save"), action=self._save),
-                 Item(tr("Apagar", "Delete"), action=self._delete, enabled=bool(self.iid))]
+                 Item(tr("Apagar", "Delete"), action=self._delete, enabled=bool(self.iid),
+                      button=True),
+                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Artigo", "Item"), inventory.kind_name(v["kind"]), self.footer())
         self.list.set_items(items, keep_index=True)
 
@@ -266,7 +267,7 @@ class ExerciseEditor(EditScreen):
                  data="cyc:kitcur", action=lambda: self._toggle_kit(kc)),
             Item(tr("Descrição", "Description"), value=(v["description"] or "") + "▏",
                  data="text:description"),
-            Item(tr("✓ Guardar", "✓ Save"), action=self._save),
+            Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True),
         ]
         if self.eid:
             items.append(Item(tr("Arquivar (deixa de aparecer)", "Archive (hide it)"),

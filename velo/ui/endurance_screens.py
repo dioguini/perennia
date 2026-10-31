@@ -61,14 +61,15 @@ class EnduranceHub(SportHub):
                   p=hms(float(db.get("swim_css_s", 120))))
 
     def items_train(self) -> list[Item]:
+        from velo.ui.challenge_screens import train_items
         a = self.app
         free = tr("Corrida livre", "Free run") if self.SPORT == "running" else \
             tr("Natação livre", "Free swim")
-        return [Item(free, detail=tr("Sem plano: tempo, distância, voltas e FC",
-                                     "No plan: time, distance, laps and HR"),
-                     action=lambda: start(a, self.SPORT)),
-                Item(t("menu.tests"), action=lambda: a.push(
-                    _health().TestsMenu(a, self.SPORT)))]
+        return train_items(a, self.SPORT, Item(
+            tr("Sessão de treino", "Training session"),
+            detail=free + " · " + tr("sem plano: tempo, distância, voltas e FC",
+                                     "no plan: time, distance, laps and HR"),
+            action=lambda: start(a, self.SPORT)))
 
     def items_builder(self) -> list[Item]:
         a = self.app

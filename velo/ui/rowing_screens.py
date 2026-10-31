@@ -15,6 +15,7 @@ from velo.gfx.compat import label as make_label
 from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
+from velo.ui.challenge_screens import train_items
 from velo.ui.sport_screens import EditScreen
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
@@ -156,25 +157,15 @@ class RowingMenu(SportHub):
         super().enter()
 
     def items_train(self) -> list[Item]:
+        # a máquina de remo liga-se em Dispositivos; a FTP do remo está nas
+        # Definições (Atleta)
         a = self.app
-        machine = getattr(a, "rower", None)
-        return [
-            Item(tr("Remar (livre)", "Row (free)"), detail=tr("Com voltas manuais (L)",
-                                                              "With manual laps (L)"),
-                 action=lambda: self._start({})),
-            Item("Challenge", detail=tr("Desafio adaptativo, jogos e a Regata contra bots",
-                                        "Adaptive challenge, games and the Regatta vs bots"),
-                 action=lambda: a.push(RowChallengeMenu(a))),
-            Item(t("menu.tests"), action=lambda: a.push(_health().TestsMenu(a, "rowing"))),
-            Item(tr("Máquina de remo", "Rowing machine"),
-                 value=machine.name if machine else tr("nenhuma ligada", "none connected"),
-                 action=lambda: a.push(RowerDeviceScreen(a))),
-            Item(tr("FTP do remo", "Rowing FTP"), value=f"{rw.row_ftp(a.db)} W",
-                 detail=tr("←/→ ajustar · o teste de 2000 m atualiza-a",
-                           "←/→ adjust · the 2000 m test updates it"), data="ftp"),
+        return train_items(a, "rowing", session=Item(
+            tr("Sessão de treino", "Training session"),
+            detail=tr("Remo livre, com voltas manuais (L)", "Free row, with manual laps (L)"),
+            action=lambda: self._start({}))) + [
             Item(tr("Campos do ecrã de remo", "Rowing screen fields"),
-                 action=lambda: a.push(RowFieldsScreen(a))),
-        ]
+                 action=lambda: a.push(RowFieldsScreen(a)))]
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -230,11 +221,6 @@ class RowingMenu(SportHub):
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
-        if item is not None and item.data == "ftp" and symbol in (key.LEFT, key.RIGHT):
-            step = (10 if modifiers & key.MOD_SHIFT else 1) * (1 if symbol == key.RIGHT else -1)
-            self.app.db.set("row_ftp_w", max(50, rw.row_ftp(self.app.db) + step))
-            self.enter()
-            return True
         if item is not None and isinstance(item.data, tuple) and item.data[0] == "row_workout" \
                 and symbol == key.P:
             self.app.push(RowWorkoutEditor(self.app, item.data[1]))
@@ -728,6 +714,17 @@ class RowWorkoutEditor(EditScreen):
         self.builtin = bool(w and w["builtin"])
         self.repeat_n = 4
         self._armed = False
+        self._saved_state = self._state()
+
+    def _state(self) -> str:
+        return repr((self.name, self.desc, [vars(s) for s in self.steps]))
+
+    def has_unsaved(self) -> bool:
+        return self._state() != self._saved_state
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def enter(self) -> None:
         a = self.app
@@ -747,10 +744,10 @@ class RowWorkoutEditor(EditScreen):
                        value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat,
                        detail=tr("←/→ quantas vezes · Enter repete",
                                  "←/→ how many times · Enter repeats")),
-                  Item(tr("✓ Guardar", "✓ Save"), action=self._save),
-                  Item(tr("Exportar (.fit)", "Export (.fit)"), action=self._export),
                   Item(tr("Apagar o treino", "Delete the workout"), action=self._delete,
-                       enabled=bool(self.wid))]
+                       enabled=bool(self.wid), button=True),
+                  Item(tr("Exportar (.fit)", "Export (.fit)"), action=self._export, button=True),
+                  Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         tot_s, tot_m = rw.totals(self.steps)
         self.chrome.set(tr("Treino de remo", "Rowing workout"),
                         " + ".join(x for x in (hms(tot_s) if tot_s else "",
@@ -793,6 +790,7 @@ class RowWorkoutEditor(EditScreen):
 
     def _save(self) -> None:
         self.wid = rw.save_workout(self.app.db, self.wid, self.name, self.desc, self.steps)
+        self._saved_state = self._state()
         self.app.message(tr("Treino guardado", "Workout saved"))
         self.app.pop()
 
@@ -825,7 +823,7 @@ class RowWorkoutEditor(EditScreen):
             self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
             return
         rw.delete_workout(self.app.db, self.wid)
-        self.app.pop()
+        self.app.pop(force=True)
 
 
 class RowStepEditor(EditScreen):
@@ -868,8 +866,8 @@ class RowStepEditor(EditScreen):
                        detail=tr("a app põe este nível no início do passo",
                                  "the app sets this level at the start of the step")),
                   Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue"),
-                  Item(tr("✓ Feito", "✓ Done"), action=self.app.pop),
-                  Item(tr("Remover o passo", "Remove the step"), action=self._remove)]
+                  Item(tr("Remover o passo", "Remove the step"), action=self._remove, button=True),
+                  Item(tr("Feito", "Done"), action=self.app.pop, button=True, primary=True)]
         self.chrome.set(tr("Passo {n}", "Step {n}", n=self.idx + 1), "", self.footer())
         self.list.set_items(items, keep_index=True)
 

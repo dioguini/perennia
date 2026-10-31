@@ -540,6 +540,7 @@ class TestStrengthGui(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.assertIsInstance(self.screen(), gs.GymHub)
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.assertIsInstance(self.screen(), gs.ModalityScreen)
 
@@ -612,6 +613,7 @@ class TestStrengthGui(tg.GuiCase):
     def test_back_arrow_in_session_asks_first(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Longevidade")
         self.pick("Longevidade ·")
         self.pick("Começar")
@@ -757,7 +759,7 @@ class TestStatsNewViews(tg.GuiCase):
 
 class TestRecoveryGui(tg.GuiCase):
     def test_crash_mid_ride_then_resume(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -799,6 +801,7 @@ class TestRecoveryGui(tg.GuiCase):
     def test_crash_mid_strength_then_save_as_is(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("Força A")
         self.pick("Começar")
@@ -826,6 +829,7 @@ class TestRecoveryGui(tg.GuiCase):
     def test_discard(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("Força A")
         self.pick("Começar")
@@ -843,6 +847,7 @@ class TestRecoveryGui(tg.GuiCase):
     def test_closing_the_window_saves_strength(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("Força A")
         self.pick("Começar")

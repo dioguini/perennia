@@ -335,7 +335,7 @@ class TestRowingGui(tg.GuiCase):
 
     def test_free_row_with_simulated_machine(self):
         self.go_rowing()
-        self.pick("Remar")
+        self.pick("Sessão de treino")
         dev = self.screen()
         self.assertIsInstance(dev, rs.RowerDeviceScreen)          # pede a máquina
         self.pick("simulada")
@@ -437,11 +437,17 @@ class TestRowingGui(tg.GuiCase):
         self.assertEqual(ses.engine.protocol, "row_500")
 
     def test_fields_and_ftp(self):
+        # a FTP do remo está nas Definições (Atleta); a máquina, nos Dispositivos
         self.go_rowing()
+        labels = [i.label for i in self.screen().list.items]
+        self.assertEqual(labels[:3], ["Sessão de treino", "Challenge", "Desafios"])
+        self.assertFalse(any("Máquina de remo" in x or "FTP" in x for x in labels))
+        self.pick("Definições")
         self.select("FTP do remo")
         before = rw.row_ftp(self.app.db)
         self.press(key.RIGHT)
         self.assertEqual(rw.row_ftp(self.app.db), before + 1)
+        self.press(key.ESCAPE)
         self.pick("Campos")
         self.select("Campo 1")
         self.press(key.RIGHT)
@@ -450,7 +456,7 @@ class TestRowingGui(tg.GuiCase):
     def test_crash_recovery(self):
         self.app.set_rower(rio.SimulatedRower())
         self.go_rowing()
-        self.pick("Remar")
+        self.pick("Sessão de treino")
         self.pick("Começar")
         ses = self.screen()
         for _ in range(60):

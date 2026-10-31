@@ -365,7 +365,10 @@ class RideEngine:
 
         # desafios em curso
         self._attempts: list[tuple[int, int, str, float]] = []  # (attempt, challenge, metric, target)
+        from .sport_challenges import expired
         for ch in db.challenges():
+            if expired(ch):
+                continue                   # passou a data limite: já não conta
             row = db.ensure_attempt(ch["id"])
             self._attempts.append((row["id"], ch["id"], ch["metric"], ch["target"]))
         self._challenge_names = {c["id"]: c["name"] for c in db.challenges()}

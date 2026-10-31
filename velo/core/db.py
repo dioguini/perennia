@@ -649,6 +649,12 @@ class Database:
         if "display_unit" not in existing:
             # a unidade em que o atleta escreveu o objetivo (km, m, mi, ft)
             self.conn.execute("ALTER TABLE challenges ADD COLUMN display_unit TEXT")
+        if "sport" not in existing:
+            # desafios de todos os desportos (NULL = ciclismo, como antes)
+            self.conn.execute("ALTER TABLE challenges ADD COLUMN sport TEXT")
+        if "deadline" not in existing:
+            # data limite opcional (AAAA-MM-DD, inclusive)
+            self.conn.execute("ALTER TABLE challenges ADD COLUMN deadline TEXT")
         row = self.conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
         if row is None or row["v"] is None:
             self.conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
@@ -1107,21 +1113,34 @@ class Database:
 
     # ---------------------------------------------------------- desafios
 
-    def challenges(self) -> list[sqlite3.Row]:
+    def challenges(self, sport: str = "cycling") -> list[sqlite3.Row]:
+        """Os desafios de um desporto (os antigos, sem desporto, são do ciclismo).
+        `sport="*"`: todos."""
+        if sport == "*":
+            return self.conn.execute(
+                "SELECT * FROM challenges ORDER BY is_default DESC, created_at").fetchall()
         return self.conn.execute(
-            "SELECT * FROM challenges ORDER BY is_default DESC, created_at"
+            "SELECT * FROM challenges WHERE COALESCE(sport, 'cycling') = ?"
+            " ORDER BY is_default DESC, created_at", (sport,)
         ).fetchall()
 
     def create_challenge(self, name: str, metric: str, target: float,
-                         display_unit: str | None = None) -> int:
+                         display_unit: str | None = None, sport: str = "cycling",
+                         deadline: str | None = None) -> int:
         if target <= 0:
             raise ValueError("o objetivo tem de ser maior que zero")
         cur = self.conn.execute(
-            "INSERT INTO challenges(name, metric, target, display_unit) VALUES (?,?,?,?)",
-            (name, metric, target, display_unit)
+            "INSERT INTO challenges(name, metric, target, display_unit, sport, deadline)"
+            " VALUES (?,?,?,?,?,?)",
+            (name, metric, target, display_unit, sport, deadline)
         )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    def set_challenge_deadline(self, challenge_id: int, deadline: str | None) -> None:
+        self.conn.execute("UPDATE challenges SET deadline = ? WHERE id = ?",
+                          (deadline, challenge_id))
+        self.conn.commit()
 
     def delete_challenge(self, challenge_id: int) -> None:
         self.conn.execute(

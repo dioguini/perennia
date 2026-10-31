@@ -792,7 +792,7 @@ class StrengthWorkoutEditor(EditScreen):
     def __init__(self, app, workout_id: str | None):
         super().__init__(app)
         self.workout_id = workout_id
-        self.dirty = workout_id is None
+        self.dirty = False                 # só o que mudares conta como por guardar
         db = app.db
         wk = st.workout(db, workout_id) if workout_id else None
         self.name = wk["name"] if wk else t("str.new_name")
@@ -818,9 +818,9 @@ class StrengthWorkoutEditor(EditScreen):
         rows += [
             Item(t("str.add_exercise"), action=lambda: self.app.push(
                 ExercisePicker(self.app, self._add_exercise))),
-            Item(t("str.save"), action=self._save),
             Item(t("str.save_train"), action=self._save_and_train,
-                 enabled=bool(self.items)),
+                 enabled=bool(self.items), button=True),
+            Item(t("str.save"), action=self._save, button=True, primary=True),
         ]
         plan = [st.PlanItem(exercise_id=it["exercise_id"], name=it["name"], sets=it["sets"],
                             reps=it["reps"], rest_s=it["rest_s"],
@@ -878,11 +878,14 @@ class StrengthWorkoutEditor(EditScreen):
                 self.dirty = True
                 self.enter()
                 return True
-        if symbol == key.ESCAPE and self.dirty and not self._esc_armed:
-            self._esc_armed = True
-            self.app.message(t("str.unsaved"))
-            return True
         return super().on_key(symbol, modifiers)
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def _save(self) -> str | None:
         if not self.items:
@@ -1456,7 +1459,7 @@ class WorkoutEditor(EditScreen):
             workouts.Step("steady", 1200, "pct_ftp", 88, 88, cadence_lo=90,
                           cadence_hi=90, text_cue="Sweet spot"),
             workouts.Step("ramp", 300, "pct_ftp", 65, 45, text_cue="Retorno à calma")]
-        self.dirty = workout_id is None
+        self.dirty = False                 # só o que mudares conta como por guardar
         self._esc_armed = False
 
     @property
@@ -1480,9 +1483,9 @@ class WorkoutEditor(EditScreen):
             Item(t("bld.add_ramp"), action=lambda: self._add("ramp")),
             Item(t("bld.add_free"), action=lambda: self._add("freeride")),
             Item(t("bld.add_repeat"), action=lambda: self.app.push(RepeatEditor(self))),
-            Item(t("str.save"), action=self._save),
-            Item(t("bld.save_ride"), action=self._save_and_ride),
-            Item(t("bld.export"), action=self._export),
+            Item(t("bld.export"), action=self._export, button=True),
+            Item(t("bld.save_ride"), action=self._save_and_ride, button=True),
+            Item(t("str.save"), action=self._save, button=True, primary=True),
         ]
         wk = self.workout()
         tss = wk.estimated_tss(ftp)
@@ -1533,11 +1536,14 @@ class WorkoutEditor(EditScreen):
                 self.dirty = True
                 self.enter()
                 return True
-        if symbol == key.ESCAPE and self.dirty and not self._esc_armed:
-            self._esc_armed = True
-            self.app.message(t("str.unsaved"))
-            return True
         return super().on_key(symbol, modifiers)
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def _save(self) -> str | None:
         if not self.steps:
@@ -1985,7 +1991,6 @@ class ChallengeMenu(Screen):
             Item(t("game.adaptive"), value=tr("nível {l}", "level {l}", l=f"{lvl:.2f}"),
                  detail=t("game.adaptive.desc"),
                  action=lambda: a.push(GameSetup(a, "adaptive")), data="adaptive"),
-            Item(tr("— Jogos —", "— Games —"), enabled=False),
         ]
         for key_ in games_mod.GAMES[1:]:
             items.append(Item(t(f"game.{key_}"), detail=t(f"game.{key_}.desc"),

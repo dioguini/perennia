@@ -335,8 +335,10 @@ def _value(raw: Any, conv: str | None) -> Any:
 
 
 def import_garmindb(db: Database, folder: str | Path | None = None,
-                    since: str | None = None) -> dict:
-    """Lê a `garmin.db` do GarminDB e grava os valores diários."""
+                    since: str | None = None, until: str | None = None,
+                    tables: tuple[str, ...] | None = None) -> dict:
+    """Lê a `garmin.db` do GarminDB e grava os valores diários (de `since` a
+    `until`, inclusive, se forem dados; só as `tables` pedidas, se forem)."""
     health.seed(db)
     folder = Path(folder) if folder else garmindb_dir(db)
     path = folder / "garmin.db"
@@ -344,12 +346,12 @@ def import_garmindb(db: Database, folder: str | Path | None = None,
         raise FileNotFoundError(f"não encontrei {path}")
     src = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     src.row_factory = sqlite3.Row
-    tables = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    present = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     cache: dict = {}
     before = {m["key"] for m in health.metrics(db, include_inactive=True)}
     report = {"days": set(), "values": 0, "tables": []}
     for table in ("daily_summary", "sleep", "resting_hr", "hrv", "weight"):
-        if table not in tables:
+        if table not in present or (tables is not None and table not in tables):
             continue
         cols = {r[1] for r in src.execute(f"PRAGMA table_info({table})")}
         wanted = [(c, spec) for (t, c), spec in GARMIN_METRICS.items() if t == table and c in cols]
@@ -358,9 +360,15 @@ def import_garmindb(db: Database, folder: str | Path | None = None,
         report["tables"].append(table)
         sql = f"SELECT day, {', '.join(c for c, _ in wanted)} FROM {table}"
         params: list = []
+        where = []
         if since:
-            sql += " WHERE day >= ?"
+            where.append("day >= ?")
             params.append(since)
+        if until:
+            where.append("substr(day, 1, 10) <= ?")
+            params.append(until)
+        if where:
+            sql += " WHERE " + " AND ".join(where)
         for row in src.execute(sql, params):
             day = str(row["day"])[:10]
             for c, spec in wanted:
