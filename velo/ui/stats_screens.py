@@ -95,9 +95,12 @@ class SportStatsScreen(EditScreen):
             totals = [sum(z[i] for _, z in series) / 60 for i in range(len(series[0][1]))] \
                 if series else []
             self._series = list(zip([f"Z{i + 1}" for i in range(len(totals))], totals))
+            from velo.gfx.hud import zone_color
+            # as cores das zonas são as do construtor de treinos, em todo o lado
             self.chart.show_bars(tr("Minutos por zona de FC", "Minutes per HR zone"), totals,
                                  [f"Z{i + 1}" for i in range(len(totals))], empty,
-                                 fmt=lambda v: f"{v:.0f}")
+                                 fmt=lambda v: f"{v:.0f}",
+                                 colors=[zone_color(i + 1, "hr") for i in range(len(totals))])
             return
         if view == "pace":
             unit = {"rowing": 500.0, "running": 1000.0, "swimming": 100.0}[self.sport]

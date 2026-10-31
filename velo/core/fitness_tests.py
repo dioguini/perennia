@@ -256,3 +256,60 @@ def vo2max_from_5min(watts: float, weight_kg: float) -> float:
 def vo2max_cooper(meters: float) -> float:
     """Teste de Cooper (12 min a correr): (m − 504,9) / 44,73."""
     return (meters - 504.9) / 44.73
+
+
+# ------------------------------------------------------------ os blocos
+
+
+def test_blocks(db: Database, t_: dict) -> list:
+    """Os blocos do teste, como os do construtor de treinos (kind, dur_type,
+    dur, lo, hi em % do limiar; lo None = esforço livre / no máximo).
+
+    * ciclismo: os passos do protocolo de FTP (20 min, rampa, sprint…);
+    * remo: o esforço do teste (2000 m, 500 m, 30 min, 1 min);
+    * os outros, com duração: um bloco no máximo durante esse tempo;
+    * sem duração (repetições, medidas): não tem blocos."""
+    from types import SimpleNamespace as B
+    proto = t_.get("protocol") or ""
+    out: list = []
+    if proto.startswith("row_"):
+        from .rowing import TESTS
+        spec = TESTS.get(proto)
+        if spec:
+            dist, secs, _unit = spec
+            out.append(B(kind="warmup", dur_type="time", dur=600.0, lo=55.0, hi=70.0,
+                         cue="Aquecimento"))
+            out.append(B(kind="active", dur_type="distance" if dist else "time",
+                         dur=float(dist or secs), lo=None, hi=None, cue=t_.get("name") or ""))
+            out.append(B(kind="cooldown", dur_type="time", dur=300.0, lo=45.0, hi=None,
+                         cue="Retorno à calma"))
+        return out
+    if proto:
+        from . import ftp as ftp_mod
+        try:
+            wk = ftp_mod.build(proto, db.athlete().ftp_w)
+        except ValueError:
+            wk = None
+        if wk is not None:
+            ftp = max(1, db.athlete().ftp_w)
+            n = len(wk.steps)
+            for i, s in enumerate(wk.steps):
+                cue = s.text_cue or ""
+                if s.target_type == "none" or s.target_lo is None:
+                    lo = hi = None
+                elif s.target_type == "watts":
+                    lo = s.target_lo / ftp * 100
+                    hi = (s.target_hi or s.target_lo) / ftp * 100
+                else:
+                    lo, hi = s.target_lo, s.target_hi
+                low = cue.lower()
+                kind = ("warmup" if i == 0 and "aquec" in low else
+                        "cooldown" if i == n - 1 and "calma" in low else
+                        "rest" if "recupera" in low or "prepara" in low else "active")
+                out.append(B(kind=kind, dur_type="time", dur=float(s.duration_s), lo=lo,
+                             hi=hi if hi != lo else None, cue=cue))
+            return out
+    if t_.get("duration_s"):
+        out.append(B(kind="active", dur_type="time", dur=float(t_["duration_s"]), lo=None,
+                     hi=None, cue=t_.get("name") or ""))
+    return out

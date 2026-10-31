@@ -14,7 +14,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 525 testes
+python -m unittest discover -s tests -t .       # 560 testes
 ```
 
 **Para partilhar com quem não usa Python:** duplo clique em
@@ -28,7 +28,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   prioridade por métrica — potência dos pedais, cardio da cinta, cadência do
   trainer.
 - Envia **declive** em modo de simulação e **watts alvo** em modo ERG, com
-  *sensação de declive* e *resistência extra* ajustáveis. Dispara o
+  *sensação de declive* ajustável. Dispara o
   **spindown** de calibração.
 - Importa `.gpx`, reamostra a 5 m, suaviza a elevação e **deteta as subidas**,
   com placas de início, distância ao topo e fim, cronometragem e
@@ -102,7 +102,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Testes de aptidão** de ciclismo, remo, corrida, natação e longevidade, editáveis.
 - **Saúde:** diário com métricas tuas e notas, análises clínicas agrupadas
   por área com o comentário do médico e importação do teu Excel (catálogo de
-  parâmetros e intervalos de referência), HRV4Training, Garmin e GarminDB.
+  parâmetros e intervalos de referência), HRV4Training e Garmin.
+- **Sincronização** (Definições): traz os dados do **GarminDB** para a base
+  da Perennia — tudo, só o mais recente ou um intervalo de datas, e que
+  dados (atividades, monitorização, FC em repouso, HRV, sono, peso).
 - **Strava:** os segmentos que cruzam as tuas rotas e os teus PR, com a
   comparação ao vivo durante o passeio (nunca enviados ao agente de IA).
 - **Agente de IA preparado** (F1 resumo da página, F2 resumo contextualizado),
@@ -119,7 +122,10 @@ definições, desafios, estatísticas com gráficos, e o ecrã da sessão: estra
 em 3D em primeira pessoa, HUD com as métricas escolhidas, perfil do que vem
 a seguir, placas de subida e diferença para os fantasmas. Navega-se pelo
 teclado — setas, Enter, Esc — porque quem está em cima da bicicleta não
-chega ao rato. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
+chega ao rato; a lista de todas as teclas está em **Definições → Atalhos de
+teclado**, e **Ctrl+S** guarda em qualquer ecrã. Não há barras de
+deslocamento (as listas continuam em colunas), os botões de ação ficam em
+baixo à direita e a data e a hora estão na faixa do topo. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
 põe em ecrã inteiro. A sessão nunca termina sozinha: ao fim da rota dá a
 volta e conta as voltas; só o botão de parar a fecha.
 
@@ -143,7 +149,9 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   fitness_tests.py   testes de aptidão das quatro modalidades
   health.py          diário, métricas, análises clínicas, importação
   labs.py            Excel das análises, catálogo de parâmetros e referências
-  importers.py       HRV4Training (formato do export) e GarminDB
+  importers.py       HRV4Training (formato do export) e a garmin.db do GarminDB
+  garmin_sync.py     Sincronização: opções e comando do GarminDB, atividades
+  sport_challenges.py Desafios de todos os desportos, com data limite
   segments.py        segmentos do Strava numa rota e o segmento ao vivo
   rowing.py          remo: sessão, treinos, testes, Regata, recuperação
   sports.py          registo dos desportos e volta automática
@@ -186,8 +194,10 @@ velo/assets/icons/   ícones PNG (refeitos com tools/make_icons.py)
 velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      Challenge, estatísticas gerais, recuperação) ·
                      health_screens.py (saúde, testes, agente) ·
-                     rowing_screens.py (remo) · connect_screens.py (Strava,
-                     GarminDB) · hub_screens.py (menus dos desportos,
+                     rowing_screens.py (remo) · connect_screens.py (Strava) ·
+                     sync_screens.py (Sincronização) · shortcuts.py (atalhos) ·
+                     challenge_screens.py (separador Treinar, Challenge da
+                     corrida, natação e ginásio) · hub_screens.py (menus dos desportos,
                      inventários) · builder_screens.py (blocos) ·
                      endurance_screens.py (corrida, natação) ·
                      gym_screens.py (modalidades) · stats_screens.py ·
@@ -202,7 +212,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               525 testes: núcleo, protocolos, força, remo, saúde,
+tests/               560 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

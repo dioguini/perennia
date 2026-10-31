@@ -1278,4 +1278,26 @@ def bests(db: Database) -> dict:
         "SELECT MIN(best_pace_s) AS pace, MAX(distance_m) AS dist, MAX(avg_power_w) AS w,"
         " COUNT(*) AS n, SUM(distance_m) AS total FROM row_sessions WHERE status='completed'"
     ).fetchone()
-    return dict(r) if r else {}
+    out = dict(r) if r else {}
+    out["sessions"] = best_sessions(db)
+    return out
+
+
+def best_sessions(db: Database) -> dict[str, dict]:
+    """A sessão onde cada recorde foi feito: {recorde: linha da sessão}."""
+    ensure(db)
+    picks = {"pace": "best_pace_s IS NOT NULL ORDER BY best_pace_s ASC",
+             "avg_pace": "avg_pace_s IS NOT NULL AND distance_m > 0 ORDER BY avg_pace_s ASC",
+             "dist": "distance_m IS NOT NULL ORDER BY distance_m DESC",
+             "w": "avg_power_w IS NOT NULL ORDER BY avg_power_w DESC",
+             "max_w": "max_power_w IS NOT NULL ORDER BY max_power_w DESC",
+             "spm": "avg_spm IS NOT NULL ORDER BY avg_spm DESC",
+             "time": "COALESCE(moving_s, elapsed_s) IS NOT NULL"
+                     " ORDER BY COALESCE(moving_s, elapsed_s) DESC"}
+    out = {}
+    for k, cond in picks.items():
+        row = db.conn.execute(f"SELECT * FROM row_sessions WHERE status='completed' AND {cond}"
+                              " LIMIT 1").fetchone()
+        if row is not None:
+            out[k] = dict(row)
+    return out

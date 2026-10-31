@@ -86,7 +86,7 @@ Isto importa um GPX, deteta a subida, corre uma sessão inteira com um
 ciclista simulado, grava na base de dados e escreve um `.fit` válido — sem
 abrir janela e sem hardware. Se isto passar, o núcleo está bom nesta máquina.
 
-Para correr a bateria de testes completa (525 testes, ~65 s):
+Para correr a bateria de testes completa (560 testes, ~60 s):
 
 ```bash
 python -m unittest discover -s tests -t .
@@ -130,10 +130,11 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    No nome, escreve diretamente com o teclado (Backspace apaga). As setas
    ←/→ ajustam os valores (no peso, 0,1 kg por toque; Shift+←/→ dá 1 kg);
    Enter alterna unidades, idioma e pausa automática.
-2. **Dispositivos** (no topo, ou F4) → `Procurar` encontra o trainer e a cinta por Bluetooth.
-   Se ainda não quiseres hardware, escolhe **Trainer simulado** e podes
-   experimentar a aplicação toda.
-3. **Ciclismo** → separador Treinar → **Pedalar** → `Importar .gpx`. A aplicação procura ficheiros `.gpx` na
+2. **Dispositivos** (no topo, ou F4) → `Procurar Bluetooth` encontra o trainer, a cinta
+   e a máquina de remo; `Procurar ANT+` usa a antena USB.
+   Se ainda não quiseres hardware, escolhe **Trainer simulado** (ou **Máquina de remo
+   simulada**) e podes experimentar a aplicação toda.
+3. **Ciclismo** → separador Treinar → **Sessão de treino** → `Importar .gpx`. A aplicação procura ficheiros `.gpx` na
    pasta `gpx/` ao lado do `main.py`, e também em Transferências e
    Documentos. Põe lá os teus ficheiros e volta a entrar.
 4. Escolhe a rota, o modo (sozinho ou comparação) e a qualidade do render.
@@ -192,17 +193,25 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Em cima, os cinco desportos em cartões grandes: **Ciclismo**, **Remo**,
-**Corrida**, **Natação** e **Ginásio**. Por baixo, mais pequenos:
+Dez cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), na segunda
 **Calendário**, **Saúde**, **Estatísticas gerais**, **Inventário de
-artigos** e **Exercícios**. Escolhe-se com as setas e Enter, ou com o rato.
+artigos** e **Exercícios**. O título fica sempre por baixo do ícone, com a
+letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
+com o rato.
+
+Por baixo dos cartões: a sequência de treino e a forma (à esquerda), os
+**próximos treinos das duas semanas seguintes** (ao centro, o que está
+planeado no Calendário, dia a dia) e o mapa das últimas 16 semanas (à
+direita). ↓ a partir da segunda fila de cartões entra na lista dos próximos
+treinos; Enter (ou um clique) abre esse dia do calendário.
 
 **A barra do topo** está sempre visível, em todos os ecrãs:
 
 - À esquerda, os teus aparelhos com o estado: verde ligado, vermelho
   perdido, cinzento desligado.
-- À direita, três botões: **Dispositivos** (F4), **Definições** (F8) e
-  **Desligar** (Ctrl+Q).
+- À direita, a **data e a hora** («sáb 31/10/2026 · 09:05») e três botões:
+  **Dispositivos** (F4), **Definições** (F8) e **Desligar** (Ctrl+Q).
 - **Dispositivos** abre uma janela por cima do ecrã onde estás, também a
   meio de uma sessão. Aí ligas ou desligas cada aparelho e a sessão
   continua por baixo. Quando um aparelho se desliga aparece o aviso
@@ -212,11 +221,34 @@ artigos** e **Exercícios**. Escolhe-se com as setas e Enter, ou com o rato.
 - **Desligar** pergunta sempre "Sair da Perennia?". A resposta já
   escolhida é "Não", para um Enter distraído não fechar a aplicação.
 
-**As Definições estão em separadores**: Atleta, Sessões, Ecrã e idioma, e
-Ligações. Tab e Shift+Tab mudam de separador; também podes clicar. Não há
-deslocamento. Em Atleta há dois limiares novos: o **ritmo de limiar da
-corrida** (min/km) e a **CSS da natação** (min/100 m). As zonas da corrida e
-da natação saem daí.
+**As Definições estão em separadores**: Atleta, Sessões, Ecrã e idioma,
+Ligações, **Sincronização** e **Atalhos de teclado**. Tab e Shift+Tab mudam
+de separador; também podes clicar. Em Atleta estão os limiares de todos os
+desportos: a FTP do ciclismo, a LTHR, a **FTP do remo**, o **ritmo de limiar
+da corrida** (min/km) e a **CSS da natação** (min/100 m). As zonas saem daí.
+Em Sessões, **Métricas disponíveis** abre as métricas em cartões espalhados
+pelo ecrã todo (setas mudam, Enter ou um clique liga/desliga).
+
+**Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
+qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
+construtores, listas e calendário). **Ctrl+S** guarda em qualquer ecrã que
+tenha alguma coisa para guardar.
+
+**As regras de todos os ecrãs:**
+
+- **Sem barras de deslocamento.** Quando as linhas não cabem na altura,
+  continuam numa coluna ao lado, até ocupar a largura do ecrã. Só uma lista
+  enorme (o inventário de exercícios da Longevidade, por exemplo) passa a
+  ter páginas — o número da página aparece por baixo («1/3 ↑↓»).
+- **Os botões de ação** (Guardar, Apagar, Exportar, Só importar…) ficam **em
+  baixo, à direita**; o principal é o da ponta, realçado. **← Voltar** fica
+  em baixo, à esquerda. ↑↓ chegam aos botões como a qualquer linha.
+- **Nos construtores de treinos** (de qualquer desporto), voltar atrás com
+  alterações por guardar abre a pergunta **Sair sem gravar · Cancelar ·
+  Guardar**: sair sem gravar volta ao menu, Cancelar (ou Esc) volta à edição,
+  Guardar grava e sai.
+- **Não há «arquivar».** As opções de arquivar exercícios e de desativar
+  testes saíram; o que estivesse escondido assim voltou a aparecer.
 
 ### Temas
 
@@ -458,9 +490,22 @@ Em cima ficam os números de hoje. ←/→ muda o período: 30, 60, 90, 180 ou
 
 ### Os menus de cada desporto
 
-Ciclismo, Remo, Corrida e Natação têm o mesmo menu, com cinco separadores
-em cima: **Treinar**, **Construtor de treinos**, **Lista de treinos**,
-**Histórico** e **Estatísticas**. Tab e Shift+Tab mudam de separador; o rato
+Ciclismo, Remo, Corrida, Natação e Ginásio têm o mesmo menu, com cinco
+separadores em cima: **Treinar**, **Construtor de treinos**, **Lista de
+treinos**, **Histórico** e **Estatísticas**. O separador **Treinar** começa
+sempre pela mesma ordem: **Sessão de treino** · **Challenge** · **Desafios**
+(e depois **Testes**):
+
+- **Sessão de treino**: no ciclismo, escolher a rota; no remo, na corrida e
+  na natação, a sessão livre; no ginásio, a modalidade.
+- **Challenge**: ciclismo — fuga, desafio adaptativo e os jogos; remo — a
+  Regata e os jogos; corrida — 5 km e 10 km contra o relógio, 1 hora o mais
+  longe possível, escada de ritmo; natação — 400 m e 1500 m contra o relógio,
+  30 min o mais longe possível, pirâmide; ginásio — treino surpresa de cada
+  modalidade, EMOM 20 min, Tabata × 3 e pirâmides de passadeira e de remo.
+  Cada prova da corrida e da natação guarda a tua tabela de melhores.
+- **Desafios**: objetivos acumulados do desporto (ver «Desafios com
+  objetivo à tua escolha»). Tab e Shift+Tab mudam de separador; o rato
 também. Antes de cada treino aparece um ecrã de arranque, com a volta
 automática e, na natação, o comprimento da piscina; na corrida, a velocidade
 inicial.
@@ -484,9 +529,12 @@ desportos de resistência.
     arrastado à parte);
   - arrastar o meio muda o bloco de lugar.
 - **Com o teclado:** ←/→ escolhem o bloco, +/− mudam a duração, D duplica,
-  Del apaga e Ctrl+S guarda. Se saíres com alterações por guardar, o Esc
-  avisa.
-- Por baixo aparecem a duração, a carga (TSS) e o IF estimados.
+  Del apaga e Ctrl+S (ou o botão **Guardar**, em baixo à direita) guarda. Se
+  voltares atrás com alterações por guardar, aparece **Sair sem gravar ·
+  Cancelar · Guardar**.
+- Por baixo do título aparecem a duração, a carga (TSS) e o IF estimados; a
+  barra fina por baixo do gráfico é o tempo em cada zona, com as cores dos
+  blocos. As mesmas cores identificam as zonas em todos os gráficos.
 
 No ciclismo, o editor antigo, passo a passo, continua no separador do
 construtor (tecla P), com a exportação para `.zwo`/`.mrc`/`.erg` (tecla E).
@@ -656,8 +704,9 @@ o exercício**.
 - **Enter** abre o que está escolhido, ou desce para a série seguinte;
 - **M** abre o ⋮;
 - **Alt+↑/↓** muda o bloco de sítio;
-- **Ctrl+S** grava;
-- **Esc** avisa se há alterações por guardar;
+- **Ctrl+S** grava (ou o botão **Guardar**, em baixo à direita);
+- **Esc** com alterações por guardar pergunta **Sair sem gravar · Cancelar ·
+  Guardar**;
 - a roda do rato desloca a lista.
 
 **A sessão segue a estrutura:**
@@ -975,8 +1024,12 @@ ficaram feitos agora; os de equipa precisam de outras pessoas.
 
 ### Testes de aptidão
 
-Cada modalidade tem os seus **Testes** (no menu do ciclismo, no remo e na
-corrida, e na Saúde para a longevidade):
+Cada modalidade tem os seus **Testes** (no separador Treinar de cada
+desporto — no ginásio, os de longevidade — e na Saúde). Ao abrir um teste
+vês os **blocos** dele num gráfico, como no construtor de treinos (o
+aquecimento, o esforço — «livre», no máximo — e o retorno à calma), com o
+alvo de cada bloco; um teste sem duração (repetições, medidas) mostra as
+instruções:
 
 | Modalidade | Testes que vêm com a aplicação |
 |---|---|
@@ -1038,28 +1091,65 @@ O cartão **Saúde** tem:
   métricas novas se ligares essa opção. Põe os ficheiros na pasta `imports/`
   (dentro da pasta dos dados) ou em Transferências.
 
-### GarminDB (dados diários do Garmin Connect)
+### Sincronização (GarminDB)
 
-O [GarminDB](https://github.com/tcgoetz/GarminDB) descarrega os teus dados do
-Garmin Connect para uma base local (`~/HealthData/DBs/garmin.db`). A Perennia
-**lê essa base** — não fala com o Garmin, e a tua palavra-passe fica só na
-configuração do GarminDB (`~/.GarminDb/GarminConnectConfig.json`).
+Em **Definições → Sincronização** trazes os teus dados de uma fonte para a
+base da Perennia. Por agora a fonte é o
+[GarminDB](https://github.com/tcgoetz/GarminDB), que descarrega os dados do
+Garmin Connect para bases locais (`~/HealthData/DBs`). A Perennia **lê essas
+bases** e, se o GarminDB estiver instalado, corre-o por ti. A tua
+palavra-passe do Garmin fica só na configuração do GarminDB
+(`~/.GarminDb/GarminConnectConfig.json`); a Perennia nunca a lê.
 
-1. Instala e configura o GarminDB (como já fizeste):
-   `pip install garmindb`, e o ficheiro de configuração com o teu utilizador.
-2. Em **Definições → GarminDB** (ou **Saúde → Importar dados → GarminDB**):
-   - **Atualizar com o GarminDB e importar** corre
-     `garmindb_cli.py --all --download --import --analyze --latest` e depois
-     importa;
-   - **Importar da garmin.db** só lê o que já lá está.
-   - Se a pasta não for a habitual, escreve-a na primeira linha.
+1. Instala e configura o GarminDB: `pip install garmindb`, e o ficheiro de
+   configuração com o teu utilizador.
+2. Escolhe as opções (ficam guardadas):
+   - **Período**:
+     - *Só o mais recente* — `--latest`: o GarminDB traz só o que falta desde
+       o último dia que já tem; a Perennia importa a partir da última
+       sincronização.
+     - *Todo o histórico* — sem `--latest`: desde as datas de início da
+       configuração do GarminDB (`data.<dado>_start_date`; nas atividades,
+       as últimas `download_all_activities`).
+     - *Um intervalo de datas* — **Desde** e **Até** (←/→ um dia, Shift um
+       mês). Com **Escrever as datas na configuração** ligado, as datas vão
+       para `data.<dado>_start_date` e `data.<dado>_end_date` (formato
+       MM/DD/AAAA) do GarminDB, com uma cópia `GarminConnectConfig.json.bak`
+       antes; a Perennia importa só esse intervalo. As atividades, no
+       GarminDB, contam-se por número e não por data: a Perennia filtra-as
+       pelas datas ao importar.
+   - **Dados**: Atividades (`--activities`), Monitorização diária
+     (`--monitoring`: passos, stress, Body Battery…), FC em repouso
+     (`--rhr`), HRV (`--hrv`), Sono (`--sleep`), Peso (`--weight`). Todos
+     juntos dá `--all`.
+   - **Passos do GarminDB**: descarregar do Garmin Connect (`--download`),
+     copiar de um relógio ligado por USB (`--copy`), importar para as bases
+     do GarminDB (`--import`), analisar (`--analyze`) e voltar a descarregar
+     o que já existe (`--overwrite`).
+   - **Pastas**: a das bases (por omissão `~/HealthData/DBs`) e a da
+     configuração (por omissão `~/.GarminDb`; outra pasta vai como `-f`).
+   - A linha **Comando** mostra o comando exato que vai correr.
+3. **Sincronizar agora** (o botão principal, ou Ctrl+S) corre o GarminDB e
+   importa; **Só importar** lê o que já está nas bases, sem correr o
+   GarminDB. Sem o GarminDB instalado, Sincronizar agora também só importa.
+4. Manutenção: **Cópia de segurança das bases** (`--backup`, um `.zip` em
+   `HealthData/Backups`) e **Reconstruir as bases** (`--rebuild_db`, quando o
+   GarminDB o pedir numa mudança de versão). As duas perguntam antes.
 
-Entram: passos, FC em repouso, FC mínima e máxima do dia, stress médio,
-Body Battery (máxima, mínima, carregada), SpO2, respiração, calorias ativas,
-distância, andares, minutos moderados e vigorosos, sono (total, profundo,
-leve, REM, acordado, pontuação, stress no sono), HRV da noite e semanal com o
-estado, e o peso. Ficam marcados com a origem "garmin"; voltar a importar
-atualiza o mesmo dia em vez de duplicar.
+Entram na **Saúde**: passos, FC em repouso, FC mínima e máxima do dia, stress
+médio, Body Battery (máxima, mínima, carregada), SpO2, respiração, calorias
+ativas, distância, andares, minutos moderados e vigorosos, sono (total,
+profundo, leve, REM, acordado, pontuação, stress no sono), HRV da noite e
+semanal com o estado, e o peso. Ficam marcados com a origem "garmin";
+voltar a importar atualiza o mesmo dia em vez de duplicar.
+
+Entram também as **atividades** (`garmin_activities.db`): aparecem no fim
+do separador **Histórico** de cada desporto, marcadas «Garmin», com tempo,
+distância, FC, subida e carga. As distâncias são convertidas para km e m
+quando o GarminDB está em milhas e pés (`settings.metric = false`).
+Importar outra vez não as duplica.
+
+A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 
 ### Strava: segmentos das tuas rotas e os teus PR
 
@@ -1089,16 +1179,22 @@ e as linhas do Strava são retiradas de qualquer resumo.
 
 ### Remo
 
-O cartão **Remo** do ecrã inicial tem: **Remar** (livre, com voltas na tecla
-L), **Treinos** (sete que vêm com a aplicação: base, pirâmide, 8 × 500 m,
-limiar, força com resistência alta, voga 20-24-28, sprints), **Construtor de
-treinos**, **Challenge**, **Testes**, **Histórico**, **Estatísticas**,
-**Máquina de remo**, **FTP do remo** e **Campos do ecrã**.
+O cartão **Remo** do ecrã inicial tem, em Treinar: **Sessão de treino**
+(remo livre, com voltas na tecla L), **Challenge**, **Desafios**, **Testes**
+e **Campos do ecrã**; e os outros separadores (treinos — sete que vêm com a
+aplicação —, construtor, histórico, estatísticas). A **FTP do remo** está em
+**Definições → Atleta**.
 
-**A máquina.** A Domyos Rowing 500B liga-se por Bluetooth (não tem ANT+):
-**Máquina de remo → Procurar** encontra-a pelo nome (DOMYOS-ROW…) ou pelo
-serviço; uma máquina FTMS (como o Concept2 PM5) também é reconhecida. Há
-uma **máquina simulada** para experimentares sem a ligar. A FC vem da banda
+**A máquina.** A Domyos Rowing 500B liga-se por Bluetooth (não tem ANT+), em
+**Dispositivos → Procurar Bluetooth**: aparece marcada REMO, pelo nome
+(DOMYOS-ROW…) ou pelo serviço, e Enter liga-a ali mesmo; uma máquina FTMS
+(como o Concept2 PM5) também é reconhecida. **Dispositivos → Máquina de remo
+simulada** serve para experimentares sem a ligar.
+
+**Estatísticas do remo.** Cada recorde (melhor ritmo aos 500 m, melhor ritmo
+médio, maior distância, sessão mais longa, potência média e máxima, voga)
+diz em que sessão foi feito; Enter abre essa sessão. Na corrida e na
+natação é igual. A FC vem da banda
 ou do relógio (o Swim 2 por ANT+), ou da própria máquina se não houver outra.
 
 **A sessão** mostra oito quadrados configuráveis (ritmo /500 m, voga,
@@ -1107,6 +1203,12 @@ média, remadas, zona de FC, kcal, W/kg, metros por remada, volta atual e
 projeção aos 2 km). **+ / −** mudam o nível de resistência (1–15), **L**
 marca volta, **P** pausa (e pausa sozinha quando paras de remar), **Esc**
 termina e grava um `.fit` de remo indoor.
+
+**As voltas, sempre no mesmo sítio.** Como no ciclismo, à direita da
+sessão (remo, corrida e natação) há um painel só para as voltas: em cima a
+volta em curso (tempo, distância, ritmo, potência ou FC média, voga ou
+piscinas), por baixo as voltas já feitas, da mais recente para a mais
+antiga. O painel pisca quando marcas uma volta.
 
 **Treinos.** Passos por **tempo** (mínimo 10 s) ou por **distância** (mínimo
 50 m), com alvo de **ritmo /500 m**, **potência** (% da FTP do remo, também
@@ -1242,9 +1344,11 @@ o teste de FTP, a rota, ou o progresso dos desafios se pedalares sem rota.
 
 ### Desafios com objetivo à tua escolha
 
-**Desafios → Novo desafio**:
+Todos os desportos têm Desafios (separador Treinar). **Desafios → Novo
+desafio**:
 
-1. **Tipo**: Enter alterna entre distância e subida acumulada.
+1. **Tipo**: Enter alterna entre os que fazem sentido no desporto —
+   distância, subida (ciclismo), tempo de treino ou número de sessões.
 2. **Objetivo**: escreve o número com o teclado. Aceita decimais com ponto
    ou vírgula: `5000.34`, `5000,34` ou `5,000.34` dão todos 5000,34. A linha
    mostra logo como o número foi lido.
@@ -1252,7 +1356,15 @@ o teste de FTP, a rota, ou o progresso dos desafios se pedalares sem rota.
    "subir 23,5 km" escreve-se `23.5` em km.
 4. **Nome**: opcional. Se o deixares vazio, fica "Pedalar 5000.34 km" ou
    "Subir 23.5 km".
-5. **Criar desafio**.
+5. **Data limite** (opcional): ←/→ mudam um dia, Shift+←/→ uma semana, Del
+   tira-a. Com data limite, o desafio mostra quanto tempo falta («faltam 12
+   dias e 4 h», «termina hoje · faltam 3 h 20 min», «terminou a 31/10/2026»),
+   e o que se fizer depois dessa data já não conta.
+6. **Criar desafio** (o botão em baixo, à direita).
+
+No ciclismo o progresso soma-se durante a sessão; nos outros desportos
+conta-se a partir do histórico (as sessões concluídas desde que o desafio
+começou e até à data limite).
 
 ### Fuga
 
@@ -1529,7 +1641,7 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (525 testes a passar).
+**Verificado com testes automáticos nesta versão** (560 testes a passar).
 
 *Novidades desta versão (13 testes):*
 

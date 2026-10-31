@@ -337,3 +337,34 @@ class SyncScreen(Screen):
 
     def update(self, dt: float) -> None:
         self.panel.update()
+
+
+def history_items(app, sport: str) -> list[Item]:
+    """As atividades sincronizadas (GarminDB) deste desporto, para o fim do
+    separador Histórico. Só de leitura: são o que o Garmin registou."""
+    try:
+        acts = gs.activities(app.db, sport)
+    except Exception:
+        return []
+    if not acts:
+        return []
+    rows = [Item(tr("— Sincronizadas do Garmin ({n}) —", "— Synced from Garmin ({n}) —",
+                    n=len(acts)), enabled=False)]
+    from velo.core.units import hms
+    for r in acts:
+        bits = []
+        if r.get("distance_m"):
+            d = r["distance_m"]
+            bits.append(f"{d / 1000:.2f} km" if d >= 1000 else f"{d:.0f} m")
+        if r.get("avg_hr"):
+            bits.append(f"{r['avg_hr']:.0f} bpm")
+        if r.get("ascent_m"):
+            bits.append(f"↑ {r['ascent_m']:.0f} m")
+        if r.get("training_load"):
+            bits.append(tr("carga {l}", "load {l}", l=f"{r['training_load']:.0f}"))
+        bits.append("Garmin" + (f" · {r['source_sport']}" if r.get("source_sport") else ""))
+        rows.append(Item(f"{str(r['started_at'])[:16].replace('T', ' ')}  "
+                         f"{r.get('name') or tr('Atividade', 'Activity')}",
+                         value=hms(r.get("moving_s") or r.get("elapsed_s") or 0),
+                         detail=" · ".join(bits), enabled=False, data=("synced", r["id"])))
+    return rows

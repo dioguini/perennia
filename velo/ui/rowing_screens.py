@@ -19,7 +19,7 @@ from velo.ui.challenge_screens import train_items
 from velo.ui.sport_screens import EditScreen
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
-                             SessionClock)
+                             LapPanel, SessionClock)
 
 
 def _m(v: float | None) -> str:
@@ -204,20 +204,48 @@ class RowingMenu(SportHub):
                                    + (f" · {s['avg_power_w']:.0f} W" if s["avg_power_w"]
                                       else ""),
                             action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "rowing")
 
     def items_stats(self) -> list[Item]:
         a = self.app
         b = rw.bests(a.db)
+        ses = b.get("sessions") or {}
+
+        def record(label: str, key_: str, value: str) -> Item:
+            """Um recorde e a sessão onde foi feito (Enter abre-a)."""
+            s = ses.get(key_)
+            if s is None:
+                return Item(label, value=value, enabled=False)
+            when = str(s["started_at"])[:16].replace("T", " ")
+            return Item(label, value=value,
+                        detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
+                                  n=_pretty(s["name"]) or tr("Remo", "Rowing")),
+                        action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
+                        data=("record", key_, s["id"]))
+
+        avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
+        spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
+        mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
+        longest = ses.get("time")
         return super().items_stats() + [
             Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
             Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
                  enabled=False),
-            Item(tr("Melhor ritmo", "Best pace"), value=pace_text(b.get("pace")),
-                 enabled=False),
-            Item(tr("Maior distância", "Longest"), value=_m(b.get("dist")), enabled=False),
-            Item(tr("Mais potência média", "Best avg power"),
-                 value=f"{b['w']:.0f} W" if b.get("w") else "—", enabled=False)]
+            record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
+                   pace_text(b.get("pace"))),
+            record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
+                   pace_text(avg)),
+            record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
+            record(tr("Sessão mais longa", "Longest session"), "time",
+                   hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
+                   if longest else "—"),
+            record(tr("Mais potência média", "Best avg power"), "w",
+                   f"{b['w']:.0f} W" if b.get("w") else "—"),
+            record(tr("Mais potência máxima", "Best max power"), "max_w",
+                   f"{mx:.0f} W" if mx else "—"),
+            record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
+                   f"{spm:.0f} spm" if spm else "—")]
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
@@ -305,6 +333,7 @@ class RowingSessionScreen(Screen):
         self.track = pyglet.shapes.Rectangle(0, 0, 10, 8, color=P().panel2, batch=b)
         self.bar = pyglet.shapes.Rectangle(0, 0, 0, 8, color=ACCENT[:3], batch=b)
         self.clock = SessionClock(app.window, batch=b)
+        self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
         self._layout()
         for kind, data in self.engine.drain_events():
@@ -344,12 +373,47 @@ class RowingSessionScreen(Screen):
         self._bar_w = right - left
         self.list.y = -1000                                 # a lista fica escondida
         self.clock.layout()
+        rx, rtop = w - 48 - BOARD_W, h - 124
         if self.board_panel is not None:
-            self.board_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W)
+            self.board_panel.layout(rx, rtop, BOARD_W)
+        # com um jogo, a classificação fica em cima e as voltas por baixo
+        laps_top = rtop - (self.board_panel.height + 10 if self.engine.game is not None
+                           and self.board_panel is not None else 0)
+        self.laps_panel.layout(rx, laps_top, BOARD_W, 70)
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
         self._layout()
+
+    def lap_data(self) -> tuple[str, list[tuple[str, str]], list[str]]:
+        """A volta em curso (seis números) e as já feitas, para o painel."""
+        e = self.engine
+        lp = e._lap
+        acc = getattr(lp, "acc", None) or {}
+        avg_w = acc.get("w", 0) / acc["wn"] if acc.get("wn") else None
+        avg_spm = acc.get("spm", 0) / acc["sn"] if acc.get("sn") else None
+        avg_hr = acc.get("hr", 0) / acc["hn"] if acc.get("hn") else None
+        no = lp.no if lp is not None else len(e.laps) + 1
+        cells = [(tr("Tempo", "Time"), hms(e.lap_elapsed_s)),
+                 (tr("Distância", "Distance"), _m(e.lap_distance_m)),
+                 (tr("Ritmo /500 m", "Pace /500 m"), pace_text(e.lap_pace_s)),
+                 (tr("Potência média", "Avg power"), f"{avg_w:.0f} W" if avg_w else "—"),
+                 (tr("Voga média", "Avg rate"), f"{avg_spm:.0f} spm" if avg_spm else "—"),
+                 (tr("FC média", "Avg HR"), f"{avg_hr:.0f} bpm" if avg_hr else "—")]
+        prev = []
+        for x in reversed(e.laps):
+            if x.trigger == "start" and not x.distance_m:
+                continue
+            bits = [f"{x.no}.", hms((x.end_t or 0) - x.start_t), _m(x.distance_m),
+                    pace_text(x.avg_pace_s) + " /500 m" if x.avg_pace_s else ""]
+            if x.avg_power_w:
+                bits.append(f"{x.avg_power_w:.0f} W")
+            if x.avg_spm:
+                bits.append(f"{x.avg_spm:.0f} spm")
+            if x.avg_hr:
+                bits.append(f"{x.avg_hr:.0f} bpm")
+            prev.append("  ".join(b for b in bits if b))
+        return tr("Volta {n}", "Lap {n}", n=no), cells, prev
 
     def footer(self) -> str:
         return tr("+/− resistência · L volta · V outra página · P pausa · Esc terminar",
@@ -402,6 +466,7 @@ class RowingSessionScreen(Screen):
             pt, en = FIELDS[name]
             cap.text = tr(pt, en).upper()
             val.text = field_value(e, name)
+            val.color = _zone_ink(e.hr_zone) if name == "zone" and e.hr_zone else TEXT
             size = getattr(self, "_val_size", 24)
             while size > 12 and len(val.text) * size * 0.66 > bg.width - 20:
                 size -= 2
@@ -416,8 +481,11 @@ class RowingSessionScreen(Screen):
         if self.toast and time.monotonic() > self._toast_until:
             self.toast = ""
         self.toast_label.text = self.toast
-        if self.board_panel is not None and int(e.t) % 2 == 0:
+        if self.board_panel is not None and e.game is not None and int(e.t) % 2 == 0:
             self.refresh_board()
+        title, cells, prev = self.lap_data()
+        self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
+        self.laps_panel.update(time.monotonic())
 
     def _plan_title(self) -> str:
         e = self.engine
@@ -491,14 +559,15 @@ class RowingSessionScreen(Screen):
             "started": tr("A remar!", "Rowing!"),
             "auto_pause": tr("Pausa automática", "Auto pause"),
             "resistance": tr("Resistência {n}", "Resistance {n}", n=data.get("level")),
-            "lap": tr("Volta {n} · {d} · {p}", "Lap {n} · {d} · {p}", n=data.get("no"),
-                      d=_m(data.get("distance_m")), p=pace_text(data.get("avg_pace_s"))),
+            "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
             "workout_done": tr("Treino concluído!", "Workout done!"),
             "test_done": tr("Teste concluído!", "Test done!"),
             "game_over": tr("Fim do jogo", "Game over"),
         }.get(kind)
         if kind == "step" and data.get("cue"):
             msg = data["cue"]
+        if kind == "lap" and hasattr(self, "laps_panel"):
+            self.laps_panel.pulse(time.monotonic())
         if msg:
             self.toast = msg
             self._toast_until = time.monotonic() + 3.0
@@ -519,8 +588,8 @@ class RowingSessionScreen(Screen):
             e.adjust_resistance(-1)
             return True
         if symbol == key.L:
-            e.lap("manual")
-            self.refresh_board()
+            if e.lap("manual") is not None:
+                self.laps_panel.pulse(time.monotonic())
             return True
         if symbol == key.V:
             self.page = (self.page + 1) % PAGES
@@ -572,10 +641,18 @@ class RowingSessionScreen(Screen):
             self.list.draw()
             return
         self.batch.draw()
-        if self.board_panel is not None:
+        if self.board_panel is not None and self.engine.game is not None:
             self.board_panel.draw()
+        self.laps_panel.draw()
         if self.back_button is not None:
             self.back_button.draw()
+
+
+def _zone_ink(z: int):
+    """A cor da zona de FC (a mesma do construtor), legível sobre o painel."""
+    from velo.gfx import theme
+    from velo.gfx.hud import zone_color
+    return theme.ink(zone_color(z, "hr"))
 
 
 def _kind(k: str) -> str:

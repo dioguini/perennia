@@ -7,3 +7,6 @@ build/
 dist/
 *.spec.bak
 build.sh.bak
+
+# ficheiros que os testes escrevem na pasta de trabalho
+strength/

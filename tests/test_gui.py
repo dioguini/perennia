@@ -1414,11 +1414,33 @@ class TestHomeScreen(GuiCase):
         self.assertEqual(titles[5:], ["Calendário", "Saúde", "Estatísticas gerais",
                                       "Inventário de artigos", "Exercícios"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
-        # os desportos em cima (maiores), o resto em baixo
+        # os desportos em cima, o resto em baixo — todos do mesmo tamanho
         self.assertGreater(home.tiles[0].bg.y, home.tiles[5].bg.y)
-        self.assertGreater(home.tiles[0].bg.height, home.tiles[5].bg.height)
+        sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
+        self.assertEqual(len(sizes), 1, sizes)
+        for tl in home.tiles:                        # o título não fica por baixo do ícone
+            self.assertGreater(tl.icon.y, tl.title.y)
+            self.assertGreaterEqual(tl.title.font_size, 12)
         self.assertEqual(home.form_title.text, "Forma")
         self.assertIn("seguidos", home.streak_lines[0].text)
+        self.assertIn("Próximos treinos", home.up_title.text)
+
+    def test_home_lists_the_next_two_weeks(self):
+        from datetime import date, timedelta
+        from velo.core import calendar_view as cv
+        wid = self.app.db.workouts()[0]["id"]
+        cv.plan_add(self.app.db, date.today() + timedelta(days=2), "cycling", wid, "Plano A")
+        cv.plan_add(self.app.db, date.today() + timedelta(days=13), "cycling", wid, "Plano B")
+        cv.plan_add(self.app.db, date.today() + timedelta(days=15), "cycling", wid, "Longe")
+        self.press(key.ESCAPE)
+        home = self.screen()
+        titles = [e.title for e in home.upcoming]
+        self.assertEqual(titles, ["Plano A", "Plano B"])        # só duas semanas
+        self.assertTrue(any("Plano A" in r[2].text for r in home.up_rows))
+        self.press(key.DOWN, key.DOWN, key.ENTER)                # dos cartões para a lista
+        from velo.ui import calendar_screens as cs_
+        self.assertIsInstance(self.screen(), cs_.DayScreen)
+        self.assertEqual(self.screen().day, date.today() + timedelta(days=2))
 
     def test_running_hub_and_back_arrow_returns(self):
         self.press(key.ESCAPE)

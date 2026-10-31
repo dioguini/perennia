@@ -112,7 +112,8 @@ class GymHub(SportHub):
                                if s.get("total_sets") else "")
                             + (f" · {s['avg_hr']:.0f} bpm" if s.get("avg_hr") else ""),
                             action=lambda sid=s["id"]: a.push(_analysis(a, sid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "gym")
 
     def items_stats(self) -> list[Item]:
         ss = gym.sessions(self.app.db, None, 1000)

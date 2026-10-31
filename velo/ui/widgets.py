@@ -74,7 +74,7 @@ class ListView:
     As linhas com `button=True` não aparecem na lista: são os botões de ação
     da faixa de baixo, à direita."""
 
-    MIN_COL_W = 300
+    MIN_COL_W = 270
     COL_GAP = 28
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
@@ -427,6 +427,7 @@ class Chart:
             ln.x = ln.x2 = ln.y = ln.y2 = 0
         for lab in self._labels + self._yticks:
             lab.text = ""
+            lab.color = DIM
         for dot in self._dots:
             dot.radius = 0
         for pool in getattr(self, "_series_lines", []):
@@ -479,6 +480,8 @@ class Chart:
                     lab.text = labels[i]
                     lab.x = self.x + i * bar_w + bar_w / 2
                     lab.y = self.y - 14
+                    # com cores (zonas), a legenda de cada barra tem a cor dela
+                    lab.color = _theme.ink(colors[i]) if colors and i < len(colors) else DIM
 
     # ----------------------------------------------------------------- linha
 
@@ -943,17 +946,21 @@ class Tile:
         o = self.outline
         o.x, o.y, o.width, o.height = x - 1, y - 1, w + 2, h + 2
         self.border.x, self.border.y, self.border.width = x, y, w
-        icon = min(72, h * 0.5, w * 0.6)
-        if self.icon is not None:
-            self.icon.scale = icon / 64
-            self.icon.x, self.icon.y = x + (w - icon) / 2, y + h - icon - 18
-        self.title.x, self.title.y = x + w / 2, y + 40
         # o título tem de caber no cartão (≈ 0,62 da altura da letra por carácter)
-        size = 17
-        while size > 11 and len(self.title.text) * size * 0.62 > w - 16:
+        size = 17 if h >= 120 else 15
+        while size > 12 and len(self.title.text) * size * 0.62 > w - 20:
             size -= 1
         self.title.font_size = size
-        self.note.x, self.note.y = x + w / 2, y + 18
+        title_y = y + max(24.0, h * 0.2) + (8 if self.note.text else 0)
+        self.title.x, self.title.y = x + w / 2, title_y
+        # o ícone fica por cima do título, sem lhe tocar
+        room = (y + h - 12) - (title_y + size * 0.8 + 10)
+        icon = max(20.0, min(72.0, room, w * 0.5))
+        if self.icon is not None:
+            self.icon.scale = icon / 64
+            self.icon.x = x + (w - icon) / 2
+            self.icon.y = title_y + size * 0.8 + 10 + (room - icon) / 2
+        self.note.x, self.note.y = x + w / 2, y + 14
 
     def set_selected(self, on: bool) -> None:
         self.selected = on
@@ -1480,6 +1487,81 @@ class TextColumns:
             slot += 1
         for lab in self.labels[k:]:
             lab.text = ""
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class LapPanel:
+    """As voltas, sempre no mesmo sítio e da mesma maneira em todos os
+    desportos (como no ecrã do ciclismo): em cima a volta em curso, com seis
+    números, e por baixo as voltas já feitas. Pisca quando se marca uma."""
+
+    CELL_H = 40
+    PREV_ROW = 18
+    MAX_PREV = 10
+
+    def __init__(self):
+        b = self.batch = pyglet.graphics.Batch()
+        self.outline = pyglet.shapes.Rectangle(0, 0, 10, 10, color=BORDER, batch=b)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
+        self.flash = pyglet.shapes.Rectangle(0, 0, 10, 10, color=ACCENT[:3], batch=b)
+        self.flash.opacity = 0
+        self.title = make_label("", font_size=13, bold=True, color=ACCENT, anchor_y="top",
+                                batch=b)
+        self.cells = [(make_label("", font_size=9, color=DIM, anchor_y="top", batch=b),
+                       make_label("", font_size=14, bold=True, color=TEXT, anchor_y="top",
+                                  batch=b)) for _ in range(6)]
+        self.prev_title = make_label("", font_size=9, bold=True, color=DIM, anchor_y="top",
+                                     batch=b)
+        self.prev = [make_label("", font_size=10, color=TEXT, anchor_y="top", batch=b)
+                     for _ in range(self.MAX_PREV)]
+        self.geometry = (0, 0, 300, 0)
+        self.rows = 0
+        self._flash_at: float | None = None
+
+    def layout(self, x: float, top: float, width: float, bottom: float) -> None:
+        self.geometry = (x, top, width, bottom)
+        h = top - bottom
+        for r in (self.outline,):
+            r.x, r.y, r.width, r.height = x - 1, bottom - 1, width + 2, h + 2
+        for r in (self.bg, self.flash):
+            r.x, r.y, r.width, r.height = x, bottom, width, h
+        self.title.x, self.title.y = x + 12, top - 8
+        for i, (cap, val) in enumerate(self.cells):
+            c, r = i % 2, i // 2
+            cx = x + 12 + c * (width / 2)
+            cy = top - 32 - r * self.CELL_H
+            cap.x, cap.y = cx, cy
+            val.x, val.y = cx, cy - 12
+        py = top - 32 - 3 * self.CELL_H - 4
+        self.prev_title.x, self.prev_title.y = x + 12, py
+        self.rows = max(0, min(self.MAX_PREV, int((py - 16 - bottom - 6) // self.PREV_ROW)))
+        for i, lab in enumerate(self.prev):
+            lab.x, lab.y = x + 12, py - 16 - i * self.PREV_ROW
+
+    def set(self, title: str, cells: list[tuple[str, str]], prev: list[str],
+            prev_title: str = "") -> None:
+        """`prev`: as voltas feitas, da mais recente para a mais antiga."""
+        x, top, width, bottom = self.geometry
+        self.title.text = title
+        for (cap, val), (c, v) in zip(self.cells, list(cells) + [("", "")] * 6):
+            cap.text = c.upper()
+            val.text = _fit(v, width / 2 - 18, 14)
+        shown = prev[:self.rows]
+        self.prev_title.text = prev_title if prev else ""
+        for i, lab in enumerate(self.prev):
+            lab.text = _fit(shown[i], width - 24, 10) if i < len(shown) else ""
+            lab.color = ACCENT if i == 0 else TEXT
+
+    def pulse(self, now: float) -> None:
+        self._flash_at = now
+
+    def update(self, now: float) -> None:
+        if self._flash_at is not None and now - self._flash_at < 1.5:
+            self.flash.opacity = int(90 * (1.5 - (now - self._flash_at)) / 1.5)
+        else:
+            self.flash.opacity = 0
 
     def draw(self) -> None:
         self.batch.draw()

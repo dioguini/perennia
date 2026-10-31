@@ -439,7 +439,8 @@ class MainMenu(SportHub):
                             value=hms(r["moving_s"] or r["elapsed_s"] or 0),
                             detail=" · ".join(bits),
                             action=lambda rid=r["id"]: a.push(RideDetailScreen(a, rid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "cycling")
 
     def items_stats(self) -> list[Item]:
         a = self.app
@@ -532,12 +533,12 @@ def _has_table(db, name: str) -> bool:
 
 
 class HomeScreen(Screen):
-    """Ecrã inicial: os desportos e as estatísticas, em cartões com ícone, e a
-    sequência de treino (dias e semanas seguidos) com o mapa das últimas
-    16 semanas."""
+    """Ecrã inicial: os desportos e o resto em cartões todos do mesmo tamanho,
+    e por baixo a sequência de treino, a forma, os próximos treinos (duas
+    semanas) e o mapa das últimas 16 semanas."""
 
     ROOT = True
-    # Os desportos em cima; saúde, estatísticas e inventários em baixo.
+    # Os desportos na primeira fila; saúde, estatísticas e inventários na segunda.
     # Dispositivos, Definições e Sair estão na faixa do topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
@@ -545,7 +546,9 @@ class HomeScreen(Screen):
              ("home.calendar", "calendar", ""),
              ("home.health", "heart", ""), ("home.stats", "stats", ""),
              ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
-    BIG = 5               # os cinco desportos; o resto vai na fila de baixo
+    BIG = 5               # cartões por fila
+    UPCOMING_DAYS = 14
+    UPCOMING_ROWS = 12
 
     def __init__(self, app: "App"):
         super().__init__(app)
@@ -553,19 +556,36 @@ class HomeScreen(Screen):
         self.tiles = [Tile(t(key_), icon, t(note) if note else "", batch=self.batch)
                       for key_, icon, note in self.TILES]
         self.selected = 0
-        self.streak_title = make_label("", font_size=16, bold=True, color=ACCENT,
+        self.streak_title = make_label("", font_size=15, bold=True, color=ACCENT,
                                        anchor_y="top", batch=self.batch)
-        self.streak_lines = [make_label("", font_size=13, color=TEXT, anchor_y="top",
+        self.streak_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                         batch=self.batch) for _ in range(3)]
-        self.form_title = make_label("", font_size=16, bold=True, color=ACCENT,
+        self.form_title = make_label("", font_size=15, bold=True, color=ACCENT,
                                      anchor_y="top", batch=self.batch)
-        self.form_lines = [make_label("", font_size=13, color=TEXT, anchor_y="top",
+        self.form_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                       batch=self.batch) for _ in range(2)]
         self.heat_title = make_label("", font_size=11, color=DIM, anchor_y="top",
                                      batch=self.batch)
+        # próximos treinos (o que está planeado no calendário)
+        self.up_title = make_label("", font_size=15, bold=True, color=ACCENT, anchor_y="top",
+                                   batch=self.batch)
+        self.up_sel = pyglet.shapes.Rectangle(0, 0, 10, 20, color=PANEL, batch=self.batch)
+        self.up_sel.opacity = 0
+        self.up_rows = [(pyglet.shapes.Rectangle(0, 0, 4, 14, color=ACCENT[:3], batch=self.batch),
+                         make_label("", font_size=11, bold=True, color=TEXT, anchor_y="center",
+                                    batch=self.batch),
+                         make_label("", font_size=11, color=TEXT, anchor_y="center",
+                                    batch=self.batch),
+                         make_label("", font_size=10, color=DIM, anchor_x="right",
+                                    anchor_y="center", batch=self.batch))
+                        for _ in range(self.UPCOMING_ROWS)]
+        self.up_empty = make_label("", font_size=11, color=DIM, anchor_y="top",
+                                   batch=self.batch)
+        self.upcoming: list = []
+        self._up_rects: list = []
         from velo.gfx import icons
-        self.flame = icons.sprite("flame", 0, 0, 26, batch=self.batch, opacity=240)
-        self.pulse = icons.sprite("pulse", 0, 0, 26, batch=self.batch, opacity=240)
+        self.flame = icons.sprite("flame", 0, 0, 24, batch=self.batch, opacity=240)
+        self.pulse = icons.sprite("pulse", 0, 0, 24, batch=self.batch, opacity=240)
         self.heat = Heatmap(16, batch=self.batch)
         self._layout()
 
@@ -583,44 +603,102 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.InventoryScreen(a)),
                 lambda: a.push(hub.ExerciseInventory(a))]
 
+    def tile_geometry(self, w: int, h: int) -> tuple[float, float, float]:
+        """(largura, altura, topo) dos cartões — todos iguais."""
+        top = h - 120
+        gap = 14
+        tw = (w - 96 - (self.BIG - 1) * gap) / self.BIG
+        th = max(92.0, min(170.0, (top - 60 - 250 - gap) / 2))
+        return tw, th, top
+
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
-        top = h - 120
-        gap = 18
-        nb = self.BIG
-        big_w = (w - 96 - (nb - 1) * gap) / nb
-        big_h = max(150, min(210, h * 0.27))
-        for i in range(nb):
-            self.tiles[i].layout(48 + i * (big_w + gap), top - big_h, big_w, big_h)
-        small = len(self.tiles) - nb
-        small_w = (w - 96 - (small - 1) * gap) / small
-        small_h = 96
-        y2 = top - big_h - gap - small_h
-        for i in range(small):
-            self.tiles[nb + i].layout(48 + i * (small_w + gap), y2, small_w, small_h)
-        sy = y2 - 30
+        gap = 14
+        tw, th, top = self.tile_geometry(w, h)
+        for i, tile in enumerate(self.tiles):
+            r, c = divmod(i, self.BIG)
+            tile.layout(48 + c * (tw + gap), top - (r + 1) * th - r * gap, tw, th)
+        span = w - 96
+        sy = top - 2 * th - gap - 30          # topo da faixa de baixo
+        bottom = 56
+        # esquerda: sequência e forma
+        lx = 48
         if self.flame is not None:
-            self.flame.x, self.flame.y = 48, sy - 26
-        self.streak_title.x, self.streak_title.y = 84, sy
+            self.flame.x, self.flame.y = lx, sy - 24
+        self.streak_title.x, self.streak_title.y = lx + 32, sy
         for i, lab in enumerate(self.streak_lines):
-            lab.x, lab.y = 84, sy - 28 - i * 22
-        # forma (fitness, fadiga, forma) por baixo da sequência, ou ao lado
-        fy = sy - 28 - 3 * 22 - 16
-        fx = 48
-        if fy - 70 < 40:
-            fx, fy = 48 + (w - 96) * 0.42, sy
+            lab.x, lab.y = lx + 32, sy - 26 - i * 20
+        fy = sy - 26 - 3 * 20 - 14
         if self.pulse is not None:
-            self.pulse.x, self.pulse.y = fx, fy - 26
-        self.form_title.x, self.form_title.y = fx + 36, fy
+            self.pulse.x, self.pulse.y = lx, fy - 24
+        self.form_title.x, self.form_title.y = lx + 32, fy
         for i, lab in enumerate(self.form_lines):
-            lab.x, lab.y = fx + 36, fy - 28 - i * 22
-            lab.font_size = 13 if w >= 1200 else 12
-        cell = max(8, min(14, (h - 260 - (top - y2)) / 10))
-        hx = max(420, w - 48 - 16 * (cell + 3))
+            lab.x, lab.y = lx + 32, fy - 26 - i * 20
+            lab.font_size = 12 if w >= 1200 else 11
+        left_w = span * 0.30
+        for lab in self.streak_lines + self.form_lines:
+            lab.text = lab.text            # (o texto é cortado em `enter`)
+        self._left_w = left_w - 36
+        # centro: próximos treinos
+        ux = 48 + span * 0.31
+        uw = span * 0.40
+        self.up_title.x, self.up_title.y = ux, sy
+        self.up_empty.x, self.up_empty.y = ux, sy - 30
+        row_h = 21
+        rows = max(1, min(self.UPCOMING_ROWS, int((sy - 30 - bottom) // row_h)))
+        self._up_geo = (ux, sy - 30, uw, row_h, rows)
+        # direita: as últimas 16 semanas
+        hx = 48 + span * 0.73
+        hw = w - 48 - hx
+        cell = max(8.0, min(14.0, (hw - 15 * 3) / 16, (sy - 24 - bottom) / 7 - 3))
         self.heat_title.x, self.heat_title.y = hx, sy
         self.heat.layout(hx, sy - 22 - 7 * (cell + 3), cell)
         for i, tile in enumerate(self.tiles):
             tile.set_selected(i == self.selected)
+        self._place_upcoming()
+
+    def _place_upcoming(self) -> None:
+        ux, uy, uw, row_h, rows = self._up_geo
+        self._up_rects = []
+        shown = self.upcoming[:rows]
+        sel = self.selected - len(self.tiles)
+        self.up_sel.opacity = 0
+        for k, (dot, day, title, dur) in enumerate(self.up_rows):
+            if k >= len(shown):
+                dot.opacity = 0
+                day.text = title.text = dur.text = ""
+                continue
+            e = shown[k]
+            y = uy - k * row_h - row_h / 2
+            dot.x, dot.y = ux, y - 7
+            dot.color = e.color
+            dot.opacity = 255
+            wd = cv_weekday(e.day)
+            day.text = wd
+            day.x, day.y = ux + 12, y
+            from velo.core import sports as sp
+            text = f"{sp.name(e.sport)} · {e.title}" + ("  ✓" if e.done else "")
+            title.text = _fit_text(text, uw - 210, 11)
+            title.x, title.y = ux + 106, y
+            title.color = ACCENT if k == sel else TEXT
+            dur.text = hms(e.seconds) if e.seconds else ""
+            dur.x, dur.y = ux + uw, y
+            self._up_rects.append((ux - 6, y - row_h / 2, uw + 12, row_h))
+            if k == sel:
+                self.up_sel.x, self.up_sel.y = ux - 6, y - row_h / 2 + 1
+                self.up_sel.width, self.up_sel.height = uw + 12, row_h - 2
+                self.up_sel.color = _select_color()
+                self.up_sel.opacity = 255
+        more = len(self.upcoming) - len(shown)
+        if not self.upcoming:
+            self.up_empty.text = tr("Nada planeado. Planeia treinos no Calendário.",
+                                    "Nothing planned. Plan workouts in the Calendar.")
+        elif more > 0:
+            self.up_empty.text = ""
+            dot, day, title, dur = self.up_rows[len(shown) - 1]
+            dur.text = tr("+{n} no calendário", "+{n} in the calendar", n=more)
+        else:
+            self.up_empty.text = ""
 
     def enter(self) -> None:
         a = self.app
@@ -632,42 +710,80 @@ class HomeScreen(Screen):
         self.list.set_items([Item(tile.title.text, action=act)
                              for tile, act in zip(self.tiles, self._actions())],
                             keep_index=True)
+        self.list.y = -3000
         st = stats.streaks(a.db)
         self.streak_title.text = t("home.streak")
-        self.streak_lines[0].text = (t("home.streak_days", n=st["days"]) + "   ·   "
-                                     + t("home.streak_weeks", n=st["weeks"]))
-        self.streak_lines[1].text = t("home.streak_best", d=st["best_days"],
-                                      w=st["best_weeks"])
-        self.streak_lines[2].text = t("home.this_week", n=st["rides_this_week"])
+        lines = [t("home.streak_days", n=st["days"]) + "  ·  "
+                 + t("home.streak_weeks", n=st["weeks"]),
+                 t("home.streak_best", d=st["best_days"], w=st["best_weeks"]),
+                 t("home.this_week", n=st["rides_this_week"])]
+        for lab, text in zip(self.streak_lines, lines):
+            lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.form_title.text = t("home.form")
         now = stats.fitness_now(a.db)
         if now is None:
-            self.form_lines[0].text = t("home.form_none")
-            self.form_lines[1].text = ""
+            lines = [t("home.form_none"), ""]
         else:
-            self.form_lines[0].text = t("home.form_line", ctl=f"{now['ctl']:.0f}",
-                                        atl=f"{now['atl']:.0f}", tsb=f"{now['tsb']:+.0f}")
-            self.form_lines[1].text = t(f"form.{now['state']}")
+            lines = [t("home.form_line", ctl=f"{now['ctl']:.0f}", atl=f"{now['atl']:.0f}",
+                       tsb=f"{now['tsb']:+.0f}"), t(f"form.{now['state']}")]
+        for lab, text in zip(self.form_lines, lines):
+            lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.heat_title.text = t("home.heatmap")
         self.heat.set(stats.heatmap(a.db, 16))
+        self.up_title.text = tr("Próximos treinos · 2 semanas", "Upcoming · 2 weeks")
+        self.upcoming = self.upcoming_entries()
+        self._place_upcoming()
+
+    def upcoming_entries(self) -> list:
+        """O que está planeado de hoje a 13 dias, pela ordem dos dias."""
+        from datetime import date as _date, timedelta as _td
+        from velo.core import calendar_view as cv
+        today = _date.today()
+        end = today + _td(days=self.UPCOMING_DAYS - 1)
+        try:
+            done = cv.sessions_between(self.app.db, today, today)
+            return [e for e in cv.planned_between(self.app.db, today, end, done)
+                    if not (e.done and e.day < today)]
+        except Exception:
+            return []
 
     def _select(self, i: int) -> None:
-        self.selected = max(0, min(len(self.tiles) - 1, i))
-        self.list.index = self.selected
+        n = len(self.tiles) + min(len(self.upcoming), self._up_geo[4])
+        self.selected = max(0, min(n - 1, i))
+        if self.selected < len(self.tiles):
+            self.list.index = self.selected
         for k, tile in enumerate(self.tiles):
             tile.set_selected(k == self.selected)
+        self._place_upcoming()
+
+    def _open(self, i: int) -> None:
+        if i < len(self.tiles):
+            self._actions()[i]()
+            return
+        k = i - len(self.tiles)
+        if 0 <= k < len(self.upcoming):
+            self.app.push(_calendar().DayScreen(self.app, self.upcoming[k].day))
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if symbol == key.RIGHT:
-            self._select(self.selected + 1)
-        elif symbol == key.LEFT:
-            self._select(self.selected - 1)
+        n_tiles = len(self.tiles)
+        in_list = self.selected >= n_tiles
+        if symbol == key.RIGHT and not in_list:
+            self._select(min(n_tiles - 1, self.selected + 1))
+        elif symbol == key.LEFT and not in_list:
+            self._select(max(0, self.selected - 1))
         elif symbol == key.DOWN:
-            self._select(self.BIG if self.selected < self.BIG else self.selected)
+            if in_list or self.selected >= self.BIG:
+                if self.upcoming and self._up_geo[4]:
+                    self._select(self.selected + 1 if in_list else n_tiles)
+            else:
+                self._select(self.selected + self.BIG)
         elif symbol == key.UP:
-            self._select(0 if self.selected >= self.BIG else self.selected)
+            if in_list:
+                self._select(self.selected - 1 if self.selected > n_tiles else self.BIG)
+            elif self.selected >= self.BIG:
+                self._select(self.selected - self.BIG)
         elif symbol in (key.ENTER, key.RETURN, key.SPACE):
-            self._actions()[self.selected]()
+            self._open(self.selected)
         elif symbol == key.ESCAPE:
             pass                  # no ecrã inicial, Esc não sai por acidente
         else:
@@ -678,17 +794,45 @@ class HomeScreen(Screen):
         for i, tile in enumerate(self.tiles):
             if tile.hit(x, y):
                 self._select(i)
-                self._actions()[i]()
+                self._open(i)
+                return True
+        for k, (rx, ry, rw, rh) in enumerate(self._up_rects):
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._select(len(self.tiles) + k)
+                self._open(len(self.tiles) + k)
                 return True
         return False
 
     def on_resize(self, w: int, h: int) -> None:
         self.chrome.layout()
         self._layout()
+        self.enter()
 
     def draw(self) -> None:
         self.chrome.draw()
         self.batch.draw()
+
+
+def cv_weekday(d) -> str:
+    """«qua 04/11» (ou «hoje», «amanhã»)."""
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+    if d == today:
+        return tr("hoje", "today")
+    if d == today + _td(days=1):
+        return tr("amanhã", "tomorrow")
+    days = tr("seg ter qua qui sex sáb dom", "Mon Tue Wed Thu Fri Sat Sun").split()
+    return f"{days[d.weekday()]} {d.day:02d}/{d.month:02d}"
+
+
+def _fit_text(text: str, width_px: float, size: float) -> str:
+    max_chars = max(4, int(width_px / (size * 0.6)))
+    return text if len(text) <= max_chars else text[:max_chars - 1] + "…"
+
+
+def _select_color():
+    from velo.ui.widgets import SELECT
+    return SELECT
 
 
 class ComingSoonScreen(Screen):
@@ -3350,6 +3494,7 @@ class App:
             endurance.seed(self.db)
         except Exception:
             pass
+        self._unarchive_once()
         if aborted:
             self.message(f"{aborted} sessão(ões) incompleta(s) foram encerradas")
         if self.db.checkpoints():
@@ -3358,6 +3503,20 @@ class App:
             self.push(RecoveryScreen(self))
         if self.db.get("auto_connect", True) and self.db.known_devices():
             self.start_auto_connect()
+
+    def _unarchive_once(self) -> None:
+        """Já não há «arquivar» nem «desativar»: o que estava escondido assim
+        volta a aparecer (uma vez só)."""
+        if self.db.get("migr_unarchive", False):
+            return
+        for sql in ("UPDATE exercises SET archived = 0 WHERE archived = 1",
+                    "UPDATE fitness_tests SET active = 1 WHERE active = 0"):
+            try:
+                self.db.conn.execute(sql)
+            except Exception:
+                pass                      # a tabela (ou a coluna) ainda não existe
+        self.db.conn.commit()
+        self.db.set("migr_unarchive", True)
 
     # ------------------------------------------------- ligação automática
 
