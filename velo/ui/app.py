@@ -83,6 +83,7 @@ class Screen:
         top = self.content_top(h)
         self.list = ListView(48, top, self._list_width(w),
                              visible_rows=max(4, (top - 110) // 38))
+        self.list.bar_right = w - 48          # botões de ação: em baixo, à direita
         if self.AGENT:
             self.chrome.agent_hint.text = t("agent.hint")
         self.board_panel: BoardPanel | None = None
@@ -162,6 +163,7 @@ class Screen:
         self._board_key = (self.list.index, id(self.list.items))
 
     def draw(self) -> None:
+        self.chrome.set_footer_limit(self.list.buttons_left)
         self.chrome.draw()
         if self.tabs is not None:
             self.tabs.draw()
@@ -172,6 +174,16 @@ class Screen:
             if self._board_key != (self.list.index, id(self.list.items)):
                 self.refresh_board()
             self.board_panel.draw()
+
+    # ------------------------------------------------------------ guardar
+
+    def on_save(self) -> bool:
+        """Ctrl+S: carrega no botão principal (Guardar) do ecrã, se houver."""
+        return self.list.press_button("primary")
+
+    def has_unsaved(self) -> bool:
+        """Há alterações por guardar? (os construtores perguntam antes de sair)"""
+        return False
 
     # ------------------------------------------------------------- texto
 
@@ -277,6 +289,7 @@ class Screen:
         top = self.content_top(h)
         self.list.y = top
         self.list.width = self._list_width(w)
+        self.list.bar_right = w - 48
         self.list.set_visible_rows(max(4, (top - 110) // 38))
         if self.board_panel is not None:
             self.board_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W)
@@ -374,17 +387,12 @@ class MainMenu(SportHub):
 
     def items_train(self) -> list[Item]:
         a = self.app
-        return [
-            Item(t("menu.ride"), detail=tr("Escolhe uma rota (ou sem rota)",
-                                           "Pick a route (or no route)"),
-                 action=lambda: a.push(RouteLibrary(a)), data="ride"),
-            Item(t("menu.challenge"), detail=t("menu.challenge_detail"),
-                 action=lambda: a.push(_extra().ChallengeMenu(a)), data="chase"),
-            Item(t("menu.tests"), detail=t("menu.tests_detail"),
-                 action=lambda: a.push(_extra_health().TestsMenu(a, "cycling")), data="ftp"),
-            Item(t("menu.challenges"), action=lambda: a.push(ChallengeScreen(a)),
-                 data="challenges"),
-        ]
+        from velo.ui.challenge_screens import train_items
+        return train_items(a, "cycling", Item(
+            tr("Sessão de treino", "Training session"),
+            detail=tr("Pedalar: escolhe uma rota (ou sem rota)",
+                      "Ride: pick a route (or no route)"),
+            action=lambda: a.push(RouteLibrary(a)), data="ride"))
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -431,7 +439,8 @@ class MainMenu(SportHub):
                             value=hms(r["moving_s"] or r["elapsed_s"] or 0),
                             detail=" · ".join(bits),
                             action=lambda rid=r["id"]: a.push(RideDetailScreen(a, rid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "cycling")
 
     def items_stats(self) -> list[Item]:
         a = self.app
@@ -524,12 +533,12 @@ def _has_table(db, name: str) -> bool:
 
 
 class HomeScreen(Screen):
-    """Ecrã inicial: os desportos e as estatísticas, em cartões com ícone, e a
-    sequência de treino (dias e semanas seguidos) com o mapa das últimas
-    16 semanas."""
+    """Ecrã inicial: os desportos e o resto em cartões todos do mesmo tamanho,
+    e por baixo a sequência de treino, a forma, os próximos treinos (duas
+    semanas) e o mapa das últimas 16 semanas."""
 
     ROOT = True
-    # Os desportos em cima; saúde, estatísticas e inventários em baixo.
+    # Os desportos na primeira fila; saúde, estatísticas e inventários na segunda.
     # Dispositivos, Definições e Sair estão na faixa do topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
@@ -537,7 +546,9 @@ class HomeScreen(Screen):
              ("home.calendar", "calendar", ""),
              ("home.health", "heart", ""), ("home.stats", "stats", ""),
              ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
-    BIG = 5               # os cinco desportos; o resto vai na fila de baixo
+    BIG = 5               # cartões por fila
+    UPCOMING_DAYS = 14
+    UPCOMING_ROWS = 12
 
     def __init__(self, app: "App"):
         super().__init__(app)
@@ -545,19 +556,36 @@ class HomeScreen(Screen):
         self.tiles = [Tile(t(key_), icon, t(note) if note else "", batch=self.batch)
                       for key_, icon, note in self.TILES]
         self.selected = 0
-        self.streak_title = make_label("", font_size=16, bold=True, color=ACCENT,
+        self.streak_title = make_label("", font_size=15, bold=True, color=ACCENT,
                                        anchor_y="top", batch=self.batch)
-        self.streak_lines = [make_label("", font_size=13, color=TEXT, anchor_y="top",
+        self.streak_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                         batch=self.batch) for _ in range(3)]
-        self.form_title = make_label("", font_size=16, bold=True, color=ACCENT,
+        self.form_title = make_label("", font_size=15, bold=True, color=ACCENT,
                                      anchor_y="top", batch=self.batch)
-        self.form_lines = [make_label("", font_size=13, color=TEXT, anchor_y="top",
+        self.form_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                       batch=self.batch) for _ in range(2)]
         self.heat_title = make_label("", font_size=11, color=DIM, anchor_y="top",
                                      batch=self.batch)
+        # próximos treinos (o que está planeado no calendário)
+        self.up_title = make_label("", font_size=15, bold=True, color=ACCENT, anchor_y="top",
+                                   batch=self.batch)
+        self.up_sel = pyglet.shapes.Rectangle(0, 0, 10, 20, color=PANEL, batch=self.batch)
+        self.up_sel.opacity = 0
+        self.up_rows = [(pyglet.shapes.Rectangle(0, 0, 4, 14, color=ACCENT[:3], batch=self.batch),
+                         make_label("", font_size=11, bold=True, color=TEXT, anchor_y="center",
+                                    batch=self.batch),
+                         make_label("", font_size=11, color=TEXT, anchor_y="center",
+                                    batch=self.batch),
+                         make_label("", font_size=10, color=DIM, anchor_x="right",
+                                    anchor_y="center", batch=self.batch))
+                        for _ in range(self.UPCOMING_ROWS)]
+        self.up_empty = make_label("", font_size=11, color=DIM, anchor_y="top",
+                                   batch=self.batch)
+        self.upcoming: list = []
+        self._up_rects: list = []
         from velo.gfx import icons
-        self.flame = icons.sprite("flame", 0, 0, 26, batch=self.batch, opacity=240)
-        self.pulse = icons.sprite("pulse", 0, 0, 26, batch=self.batch, opacity=240)
+        self.flame = icons.sprite("flame", 0, 0, 24, batch=self.batch, opacity=240)
+        self.pulse = icons.sprite("pulse", 0, 0, 24, batch=self.batch, opacity=240)
         self.heat = Heatmap(16, batch=self.batch)
         self._layout()
 
@@ -575,44 +603,102 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.InventoryScreen(a)),
                 lambda: a.push(hub.ExerciseInventory(a))]
 
+    def tile_geometry(self, w: int, h: int) -> tuple[float, float, float]:
+        """(largura, altura, topo) dos cartões — todos iguais."""
+        top = h - 120
+        gap = 14
+        tw = (w - 96 - (self.BIG - 1) * gap) / self.BIG
+        th = max(92.0, min(170.0, (top - 60 - 250 - gap) / 2))
+        return tw, th, top
+
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
-        top = h - 120
-        gap = 18
-        nb = self.BIG
-        big_w = (w - 96 - (nb - 1) * gap) / nb
-        big_h = max(150, min(210, h * 0.27))
-        for i in range(nb):
-            self.tiles[i].layout(48 + i * (big_w + gap), top - big_h, big_w, big_h)
-        small = len(self.tiles) - nb
-        small_w = (w - 96 - (small - 1) * gap) / small
-        small_h = 96
-        y2 = top - big_h - gap - small_h
-        for i in range(small):
-            self.tiles[nb + i].layout(48 + i * (small_w + gap), y2, small_w, small_h)
-        sy = y2 - 30
+        gap = 14
+        tw, th, top = self.tile_geometry(w, h)
+        for i, tile in enumerate(self.tiles):
+            r, c = divmod(i, self.BIG)
+            tile.layout(48 + c * (tw + gap), top - (r + 1) * th - r * gap, tw, th)
+        span = w - 96
+        sy = top - 2 * th - gap - 30          # topo da faixa de baixo
+        bottom = 56
+        # esquerda: sequência e forma
+        lx = 48
         if self.flame is not None:
-            self.flame.x, self.flame.y = 48, sy - 26
-        self.streak_title.x, self.streak_title.y = 84, sy
+            self.flame.x, self.flame.y = lx, sy - 24
+        self.streak_title.x, self.streak_title.y = lx + 32, sy
         for i, lab in enumerate(self.streak_lines):
-            lab.x, lab.y = 84, sy - 28 - i * 22
-        # forma (fitness, fadiga, forma) por baixo da sequência, ou ao lado
-        fy = sy - 28 - 3 * 22 - 16
-        fx = 48
-        if fy - 70 < 40:
-            fx, fy = 48 + (w - 96) * 0.42, sy
+            lab.x, lab.y = lx + 32, sy - 26 - i * 20
+        fy = sy - 26 - 3 * 20 - 14
         if self.pulse is not None:
-            self.pulse.x, self.pulse.y = fx, fy - 26
-        self.form_title.x, self.form_title.y = fx + 36, fy
+            self.pulse.x, self.pulse.y = lx, fy - 24
+        self.form_title.x, self.form_title.y = lx + 32, fy
         for i, lab in enumerate(self.form_lines):
-            lab.x, lab.y = fx + 36, fy - 28 - i * 22
-            lab.font_size = 13 if w >= 1200 else 12
-        cell = max(8, min(14, (h - 260 - (top - y2)) / 10))
-        hx = max(420, w - 48 - 16 * (cell + 3))
+            lab.x, lab.y = lx + 32, fy - 26 - i * 20
+            lab.font_size = 12 if w >= 1200 else 11
+        left_w = span * 0.30
+        for lab in self.streak_lines + self.form_lines:
+            lab.text = lab.text            # (o texto é cortado em `enter`)
+        self._left_w = left_w - 36
+        # centro: próximos treinos
+        ux = 48 + span * 0.31
+        uw = span * 0.40
+        self.up_title.x, self.up_title.y = ux, sy
+        self.up_empty.x, self.up_empty.y = ux, sy - 30
+        row_h = 21
+        rows = max(1, min(self.UPCOMING_ROWS, int((sy - 30 - bottom) // row_h)))
+        self._up_geo = (ux, sy - 30, uw, row_h, rows)
+        # direita: as últimas 16 semanas
+        hx = 48 + span * 0.73
+        hw = w - 48 - hx
+        cell = max(8.0, min(14.0, (hw - 15 * 3) / 16, (sy - 24 - bottom) / 7 - 3))
         self.heat_title.x, self.heat_title.y = hx, sy
         self.heat.layout(hx, sy - 22 - 7 * (cell + 3), cell)
         for i, tile in enumerate(self.tiles):
             tile.set_selected(i == self.selected)
+        self._place_upcoming()
+
+    def _place_upcoming(self) -> None:
+        ux, uy, uw, row_h, rows = self._up_geo
+        self._up_rects = []
+        shown = self.upcoming[:rows]
+        sel = self.selected - len(self.tiles)
+        self.up_sel.opacity = 0
+        for k, (dot, day, title, dur) in enumerate(self.up_rows):
+            if k >= len(shown):
+                dot.opacity = 0
+                day.text = title.text = dur.text = ""
+                continue
+            e = shown[k]
+            y = uy - k * row_h - row_h / 2
+            dot.x, dot.y = ux, y - 7
+            dot.color = e.color
+            dot.opacity = 255
+            wd = cv_weekday(e.day)
+            day.text = wd
+            day.x, day.y = ux + 12, y
+            from velo.core import sports as sp
+            text = f"{sp.name(e.sport)} · {e.title}" + ("  ✓" if e.done else "")
+            title.text = _fit_text(text, uw - 210, 11)
+            title.x, title.y = ux + 106, y
+            title.color = ACCENT if k == sel else TEXT
+            dur.text = hms(e.seconds) if e.seconds else ""
+            dur.x, dur.y = ux + uw, y
+            self._up_rects.append((ux - 6, y - row_h / 2, uw + 12, row_h))
+            if k == sel:
+                self.up_sel.x, self.up_sel.y = ux - 6, y - row_h / 2 + 1
+                self.up_sel.width, self.up_sel.height = uw + 12, row_h - 2
+                self.up_sel.color = _select_color()
+                self.up_sel.opacity = 255
+        more = len(self.upcoming) - len(shown)
+        if not self.upcoming:
+            self.up_empty.text = tr("Nada planeado. Planeia treinos no Calendário.",
+                                    "Nothing planned. Plan workouts in the Calendar.")
+        elif more > 0:
+            self.up_empty.text = ""
+            dot, day, title, dur = self.up_rows[len(shown) - 1]
+            dur.text = tr("+{n} no calendário", "+{n} in the calendar", n=more)
+        else:
+            self.up_empty.text = ""
 
     def enter(self) -> None:
         a = self.app
@@ -624,42 +710,80 @@ class HomeScreen(Screen):
         self.list.set_items([Item(tile.title.text, action=act)
                              for tile, act in zip(self.tiles, self._actions())],
                             keep_index=True)
+        self.list.y = -3000
         st = stats.streaks(a.db)
         self.streak_title.text = t("home.streak")
-        self.streak_lines[0].text = (t("home.streak_days", n=st["days"]) + "   ·   "
-                                     + t("home.streak_weeks", n=st["weeks"]))
-        self.streak_lines[1].text = t("home.streak_best", d=st["best_days"],
-                                      w=st["best_weeks"])
-        self.streak_lines[2].text = t("home.this_week", n=st["rides_this_week"])
+        lines = [t("home.streak_days", n=st["days"]) + "  ·  "
+                 + t("home.streak_weeks", n=st["weeks"]),
+                 t("home.streak_best", d=st["best_days"], w=st["best_weeks"]),
+                 t("home.this_week", n=st["rides_this_week"])]
+        for lab, text in zip(self.streak_lines, lines):
+            lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.form_title.text = t("home.form")
         now = stats.fitness_now(a.db)
         if now is None:
-            self.form_lines[0].text = t("home.form_none")
-            self.form_lines[1].text = ""
+            lines = [t("home.form_none"), ""]
         else:
-            self.form_lines[0].text = t("home.form_line", ctl=f"{now['ctl']:.0f}",
-                                        atl=f"{now['atl']:.0f}", tsb=f"{now['tsb']:+.0f}")
-            self.form_lines[1].text = t(f"form.{now['state']}")
+            lines = [t("home.form_line", ctl=f"{now['ctl']:.0f}", atl=f"{now['atl']:.0f}",
+                       tsb=f"{now['tsb']:+.0f}"), t(f"form.{now['state']}")]
+        for lab, text in zip(self.form_lines, lines):
+            lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.heat_title.text = t("home.heatmap")
         self.heat.set(stats.heatmap(a.db, 16))
+        self.up_title.text = tr("Próximos treinos · 2 semanas", "Upcoming · 2 weeks")
+        self.upcoming = self.upcoming_entries()
+        self._place_upcoming()
+
+    def upcoming_entries(self) -> list:
+        """O que está planeado de hoje a 13 dias, pela ordem dos dias."""
+        from datetime import date as _date, timedelta as _td
+        from velo.core import calendar_view as cv
+        today = _date.today()
+        end = today + _td(days=self.UPCOMING_DAYS - 1)
+        try:
+            done = cv.sessions_between(self.app.db, today, today)
+            return [e for e in cv.planned_between(self.app.db, today, end, done)
+                    if not (e.done and e.day < today)]
+        except Exception:
+            return []
 
     def _select(self, i: int) -> None:
-        self.selected = max(0, min(len(self.tiles) - 1, i))
-        self.list.index = self.selected
+        n = len(self.tiles) + min(len(self.upcoming), self._up_geo[4])
+        self.selected = max(0, min(n - 1, i))
+        if self.selected < len(self.tiles):
+            self.list.index = self.selected
         for k, tile in enumerate(self.tiles):
             tile.set_selected(k == self.selected)
+        self._place_upcoming()
+
+    def _open(self, i: int) -> None:
+        if i < len(self.tiles):
+            self._actions()[i]()
+            return
+        k = i - len(self.tiles)
+        if 0 <= k < len(self.upcoming):
+            self.app.push(_calendar().DayScreen(self.app, self.upcoming[k].day))
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if symbol == key.RIGHT:
-            self._select(self.selected + 1)
-        elif symbol == key.LEFT:
-            self._select(self.selected - 1)
+        n_tiles = len(self.tiles)
+        in_list = self.selected >= n_tiles
+        if symbol == key.RIGHT and not in_list:
+            self._select(min(n_tiles - 1, self.selected + 1))
+        elif symbol == key.LEFT and not in_list:
+            self._select(max(0, self.selected - 1))
         elif symbol == key.DOWN:
-            self._select(self.BIG if self.selected < self.BIG else self.selected)
+            if in_list or self.selected >= self.BIG:
+                if self.upcoming and self._up_geo[4]:
+                    self._select(self.selected + 1 if in_list else n_tiles)
+            else:
+                self._select(self.selected + self.BIG)
         elif symbol == key.UP:
-            self._select(0 if self.selected >= self.BIG else self.selected)
+            if in_list:
+                self._select(self.selected - 1 if self.selected > n_tiles else self.BIG)
+            elif self.selected >= self.BIG:
+                self._select(self.selected - self.BIG)
         elif symbol in (key.ENTER, key.RETURN, key.SPACE):
-            self._actions()[self.selected]()
+            self._open(self.selected)
         elif symbol == key.ESCAPE:
             pass                  # no ecrã inicial, Esc não sai por acidente
         else:
@@ -670,17 +794,45 @@ class HomeScreen(Screen):
         for i, tile in enumerate(self.tiles):
             if tile.hit(x, y):
                 self._select(i)
-                self._actions()[i]()
+                self._open(i)
+                return True
+        for k, (rx, ry, rw, rh) in enumerate(self._up_rects):
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._select(len(self.tiles) + k)
+                self._open(len(self.tiles) + k)
                 return True
         return False
 
     def on_resize(self, w: int, h: int) -> None:
         self.chrome.layout()
         self._layout()
+        self.enter()
 
     def draw(self) -> None:
         self.chrome.draw()
         self.batch.draw()
+
+
+def cv_weekday(d) -> str:
+    """«qua 04/11» (ou «hoje», «amanhã»)."""
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+    if d == today:
+        return tr("hoje", "today")
+    if d == today + _td(days=1):
+        return tr("amanhã", "tomorrow")
+    days = tr("seg ter qua qui sex sáb dom", "Mon Tue Wed Thu Fri Sat Sun").split()
+    return f"{days[d.weekday()]} {d.day:02d}/{d.month:02d}"
+
+
+def _fit_text(text: str, width_px: float, size: float) -> str:
+    max_chars = max(4, int(width_px / (size * 0.6)))
+    return text if len(text) <= max_chars else text[:max_chars - 1] + "…"
+
+
+def _select_color():
+    from velo.ui.widgets import SELECT
+    return SELECT
 
 
 class ComingSoonScreen(Screen):
@@ -1570,6 +1722,8 @@ class ModalScreen(Screen):
         self.list.y = p.y + p.h - 92
         self.list.width = p.w - 56
         self.list.set_visible_rows(max(2, int((p.h - 92 - 96) // 38) + 1))
+        self.list.bar_right = p.x + p.w - 16
+        self.list.bar_y = p.y + 12
         if self.back_button is not None:
             self.back_button.place(p.x + 16, p.y + 12, tr("Fechar", "Close"))
         self.list._sync()
@@ -1585,6 +1739,7 @@ class ModalScreen(Screen):
 
     def draw(self) -> None:
         self.popup.draw()
+        self.chrome.set_footer_limit(self.list.buttons_left)
         self.chrome.draw()
         self.list.draw()
         if self.back_button is not None:
@@ -1592,21 +1747,47 @@ class ModalScreen(Screen):
 
 
 class ConfirmScreen(ModalScreen):
-    """Pergunta antes de fazer (sair da aplicação, terminar uma sessão)."""
+    """Pergunta antes de fazer (sair da aplicação, terminar uma sessão).
+
+    Com `buttons=True` as opções são botões em baixo, à direita (a última é
+    a principal), e não há «Fechar»: uma das opções já é a de cancelar."""
 
     W, H = 560, 300
 
     def __init__(self, app: "App", title: str, sub: str,
-                 options: list[tuple[str, Callable]], default: int = 0):
+                 options: list[tuple[str, Callable]], default: int = 0,
+                 buttons: bool = False, cancel: Callable | None = None):
         self.title_text, self.sub_text, self.options = title, sub, options
         self.default = default
+        self.as_buttons = buttons
+        self.cancel = cancel
         super().__init__(app)
+        if buttons:
+            self.back_button = None
 
     def enter(self) -> None:
         self.chrome.set(self.title_text, self.sub_text, "")
-        self.list.set_items([Item(lab, action=act) for lab, act in self.options])
+        n = len(self.options)
+        self.list.set_items([Item(lab, action=act, button=self.as_buttons,
+                                  primary=self.as_buttons and k == n - 1)
+                             for k, (lab, act) in enumerate(self.options)])
         self.list.index = self.default
         self.list._sync()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if self.as_buttons and symbol in (key.LEFT, key.RIGHT):
+            self.list.move(1 if symbol == key.RIGHT else -1)
+            return True
+        if symbol == key.ESCAPE and self.cancel is not None:
+            self.cancel()
+            return True
+        return super().on_key(symbol, modifiers)
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        if not self.popup.inside(x, y) and self.cancel is not None:
+            self.cancel()
+            return True
+        return super().on_mouse(x, y)
 
 
 class DeviceScreen(ModalScreen):
@@ -1652,15 +1833,23 @@ class DeviceScreen(ModalScreen):
                               detail=" · ".join(caps),
                               action=lambda s=src: self._disconnect(s)))
         from velo.io import rower as rower_io
+        # a máquina de remo ligada (Bluetooth ou a simulada)
+        if a.rower is not None:
+            items.append(Item(f"✓ {a.rower.name}", value=tr("REMO", "ROWER"),
+                              detail=tr("máquina de remo · Enter desliga",
+                                        "rowing machine · Enter disconnects"),
+                              action=self._drop_rower))
         for d in self.found:
             if any(getattr(s, "device_id", "") == d.device_id for s in a.hub.sources):
                 continue
             proto = rower_io.is_rower(d.name, ["00001826-0000-1000-8000-00805f9b34fb"]
                                       if "ftms" in d.profiles else [])
             if proto:
+                if a.rower is not None and getattr(a.rower, "address", None) == d.address:
+                    continue
                 items.append(Item(d.name, value=tr("REMO", "ROWER"),
-                                  detail=tr("máquina de remo: liga-se no menu do Remo",
-                                            "rowing machine: connect it from the Rowing menu"),
+                                  detail=tr("máquina de remo (Bluetooth) · Enter liga",
+                                            "rowing machine (Bluetooth) · Enter connects"),
                                   action=lambda dd=d, p=proto: self._rower(dd, p)))
                 continue
             items.append(Item(d.name, value=" ".join(d.profiles).upper() or "—",
@@ -1676,19 +1865,16 @@ class DeviceScreen(ModalScreen):
                               action=lambda ch=channel, inf=info: self._connect_ant(ch, inf)))
         if not any(getattr(s, "device_id", "") == "sim:trainer" for s in a.hub.sources):
             items.append(Item(t("dev.simulated"), action=self._add_sim))
-        # máquina de remo (protocolo próprio): liga-se aqui também
-        if a.rower is not None:
-            items.append(Item(f"✓ {a.rower.name}", value=tr("REMO", "ROWER"),
-                              detail=tr("Enter desliga", "Enter disconnects"),
-                              action=self._drop_rower))
-        else:
-            items.append(Item(tr("Máquina de remo…", "Rowing machine…"),
-                              detail=tr("procurar a Domyos / Concept2, ou usar a simulada",
-                                        "find the Domyos / Concept2, or use the simulated one"),
-                              action=lambda: a.push(_rowing().RowerDeviceScreen(a))))
-        items.append(Item(tr("Fechar", "Close"), action=a.pop))
-        if a.hub.can_control and getattr(a.hub.trainer, "supports_spindown", False):
-            items.append(Item(t("dev.calibrate"), action=self._calibrate))
+        if a.rower is None or getattr(a.rower, "protocol", "") != "sim":
+            items.append(Item(tr("Máquina de remo simulada", "Simulated rowing machine"),
+                              detail=tr("para remar sem a máquina (testes, demonstração)",
+                                        "to row without the machine (tests, demo)"),
+                              action=self._add_sim_rower))
+        # só com um rolo ligado (que aceite comandos) é que se pode calibrar
+        can_cal = a.hub.can_control and getattr(a.hub.trainer, "supports_spindown", False)
+        items.append(Item(t("dev.calibrate"), action=self._calibrate, enabled=bool(can_cal),
+                          detail="" if can_cal else tr("liga primeiro um rolo",
+                                                       "connect a trainer first")))
 
         reading = a.hub.reading()
         live = []
@@ -1708,6 +1894,17 @@ class DeviceScreen(ModalScreen):
     def update(self, dt: float) -> None:
         if not self.app.in_session:          # a sessão de baixo já avança os sensores
             self.app.hub.tick(dt)
+        res = getattr(self, "_rower_result", None)
+        if res is not None:
+            self._rower_result = None
+            ok, sensor = res
+            if ok:
+                self.app.set_rower(sensor)
+                self.note = tr("Ligada: {n}", "Connected: {n}", n=sensor.name)
+            else:
+                self.note = tr("Não foi possível ligar {n}", "Could not connect {n}",
+                               n=sensor.name)
+            self.enter()
         if self._auto_seen != self.app.auto_generation:
             self._auto_seen = self.app.auto_generation
             self.enter()
@@ -1735,9 +1932,24 @@ class DeviceScreen(ModalScreen):
             self.enter()
 
     def _rower(self, d, proto: str) -> None:
-        scr = _rowing().RowerDeviceScreen(self.app)
-        scr.found = [(d.address, d.name, proto)]
-        self.app.push(scr)
+        """Uma máquina de remo encontrada pelo Bluetooth: liga-se aqui mesmo."""
+        from velo.io import rower as rower_io
+        sensor = rower_io.RowerSensor(d.address, d.name, proto)
+        self.note = tr("A ligar {n}…", "Connecting {n}…", n=d.name)
+
+        def work() -> None:
+            try:
+                self._rower_result = (sensor.connect(), sensor)
+            except Exception:
+                self._rower_result = (False, sensor)
+        threading.Thread(target=work, name="rower-connect", daemon=True).start()
+        self.enter()
+
+    def _add_sim_rower(self) -> None:
+        from velo.io import rower as rower_io
+        self.app.set_rower(rower_io.SimulatedRower())
+        self.note = tr("Máquina de remo simulada ligada", "Simulated rowing machine connected")
+        self.enter()
 
     def _scan(self) -> None:
         if not ble.bleak_available():
@@ -1846,107 +2058,191 @@ class DeviceScreen(ModalScreen):
 
 
 class SettingsScreen(Screen):
-    """Definições por separadores, para não haver listas compridas."""
+    """Definições por separadores, para não haver listas compridas:
+    Atleta · Sessões · Ecrã e idioma · Ligações · Sincronização · Atalhos."""
 
     TABBED = True
-    # que linhas vão em cada separador (índices da lista completa, em baixo)
-    GROUPS = ((0, 1, 2, 3, 4, 20, 21), (23, 24, 7, 8, 12, 13, 16, 17), (22, 5, 6, 9, 10, 11),
-              (14, 15, 18, 19))
+    # que linhas vão em cada separador (pelo nome; ver `_rows`)
+    GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
+              ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "boxes",
+               "metrics"),
+              ("theme", "units", "language", "render", "display", "msaa"),
+              ("connection", "auto_connect", "strava"),
+              ("@sync",),
+              ("@shortcuts",))
+
+    def __init__(self, app: "App"):
+        super().__init__(app)
+        from velo.ui.sync_screens import SyncPanel
+        from velo.ui.widgets import TextColumns
+        self.sync = SyncPanel(self)
+        self.keys_view = TextColumns()
+        self._layout_keys()
 
     def tab_labels(self) -> list[str]:
         return [tr("Atleta", "Athlete"), tr("Sessões", "Sessions"),
-                tr("Ecrã e idioma", "Display & language"), tr("Ligações", "Connections")]
+                tr("Ecrã e idioma", "Display & language"), tr("Ligações", "Connections"),
+                tr("Sincronização", "Sync"), tr("Atalhos de teclado", "Keyboard shortcuts")]
 
-    def enter(self) -> None:
+    def group(self) -> tuple:
+        return self.GROUPS[self.tab % len(self.GROUPS)]
+
+    def _layout_keys(self) -> None:
+        w, h = self.app.window.width, self.app.window.height
+        self.keys_view.layout(48, self.content_top(h) + 18, w - 96, 64)
+
+    def _rows(self) -> dict[str, Item]:
         a = self.app
         db = a.db
         ath = db.athlete()
         wv, wu = weight(ath.weight_kg, a.units)
         diff = float(db.get("trainer_difficulty", 1.0))
-        extra = float(db.get("extra_resistance_pct", 0.0))
-        items = [
-            Item(t("set.name"), value=(ath.name or "") + "▏", detail=t("set.name_hint"),
-                 data="text:name"),
-            Item(t("set.age"), value=str(ath.age or "—"),
-                 detail="←/→ ajustar o ano de nascimento",
-                 action=lambda: None, data="age"),
-            Item(t("set.weight"), value=f"{wv:.1f} {wu}",
-                 detail="←/→ ±0,1 · Shift+←/→ ±1", data="weight"),
-            Item(t("set.ftp"), value=f"{ath.ftp_w} W", detail="←/→ ajustar", data="ftp"),
-            Item("LTHR", value=str(ath.lthr or "—"), detail="←/→ ajustar", data="lthr"),
-            Item(t("set.units"),
-                 value=t("set.units.metric") if a.units == "metric"
-                 else t("set.units.imperial"), action=self._toggle_units),
-            Item(t("set.language"), value="Português" if db.get("language") == PT
-                 else "English", action=self._toggle_language),
-            Item(t("set.difficulty"), value=f"{diff * 100:.0f} %",
-                 detail="←/→ ajustar · escala a sensação de declive", data="difficulty"),
-            Item(t("set.extra_resistance"), value=f"{extra:.0f} %",
-                 detail="←/→ ajustar · resistência de base adicional", data="extra"),
-            Item(t("set.render"), value=t(f"mode.render.{db.get('render_preset', 'low')}"),
-                 action=self._cycle_preset),
-            Item(t("set.display"), value=a.display_label(), detail=t("set.display_hint"),
-                 action=self._cycle_display),
-            Item(t("set.msaa"), value=self._msaa_text(), detail=t("set.msaa_hint"),
-                 action=self._cycle_msaa),
-            Item(t("set.lookahead"), value=str(db.get("workout_lookahead", 2)),
-                 detail=t("set.lookahead_hint"), action=self._cycle_lookahead,
-                 data="lookahead"),
-            Item(t("set.auto_pause"),
-                 value=t("common.on") if db.get("auto_pause", True) else t("common.off"),
-                 detail=t("set.auto_pause_hint"), action=self._toggle_auto_pause),
-            Item(t("set.connection"),
-                 value=t(f"set.pref.{db.get('connection_preference', 'ant_first')}"),
-                 detail=t("set.connection_hint"), action=self._cycle_connection),
-            Item(t("set.auto_connect"),
-                 value=t("common.on") if db.get("auto_connect", True) else t("common.off"),
-                 detail=t("set.auto_connect_hint"), action=self._toggle_auto_connect),
-            Item(t("set.boxes"), value=f"{boxes_mod.N_BOXES}",
-                 detail=t("set.boxes_hint"), action=lambda: a.push(BoxesScreen(a))),
-            Item(t("set.metrics"),
-                 value=f"{len(boxes_mod.enabled_metrics(db, metrics.available()))}",
-                 detail=t("set.metrics_hint"), action=lambda: a.push(MetricsCatalogScreen(a))),
-            Item("Strava", value=tr("ligado", "connected") if (db.get("strava_tokens") or {})
-                 .get("refresh_token") else "", detail=tr("Segmentos das rotas e os teus PR",
-                                                          "Route segments and your PRs"),
-                 action=lambda: a.push(_connect().StravaScreen(a))),
-            Item("GarminDB", detail=tr("Dados diários do Garmin Connect",
-                                       "Daily Garmin Connect data"),
-                 action=lambda: a.push(_connect().GarminDBScreen(a))),
-            Item(tr("Ritmo de limiar (corrida)", "Threshold pace (running)"),
-                 value=hms(float(db.get("run_threshold_pace_s", 300))) + " /km",
-                 detail=tr("←/→ ±5 s · usado nos treinos e zonas de corrida",
-                           "←/→ ±5 s · used for running workouts and zones"), data="run_pace"),
-            Item(tr("Ritmo crítico (natação)", "Critical swim speed"),
-                 value=hms(float(db.get("swim_css_s", 120))) + " /100 m",
-                 detail=tr("←/→ ±1 s · usado nos treinos de natação",
-                           "←/→ ±1 s · used for swim workouts"), data="swim_pace"),
-            Item(tr("Tema", "Theme"), value=_theme_name(db),
-                 detail=tr("←/→ ou Enter · todos claros e profissionais; Ardósia para pouca luz",
-                           "←/→ or Enter · light, professional themes; Slate for low light"),
-                 action=lambda: self._adjust("theme", 1), data="theme"),
-            Item(tr("Ecrã da sessão, por desporto", "Session screen, per sport"),
-                 detail=tr("Arrasta as métricas para onde as queres ver",
-                           "Drag metrics where you want them"),
-                 action=lambda: a.push(_layouts().LayoutSportPicker(a))),
-            Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
-                 value=t("common.on") if db.get("ask_feedback", True) else t("common.off"),
-                 detail=tr("RPE, dores e comentário; fica para o agente treinador",
-                           "RPE, pain and comment; kept for the coach agent"),
-                 action=self._toggle_feedback),
-        ]
+        from velo.core import rowing as rw
+        return {
+            "name": Item(t("set.name"), value=(ath.name or "") + "▏", detail=t("set.name_hint"),
+                         data="text:name"),
+            "age": Item(t("set.age"), value=str(ath.age or "—"),
+                        detail="←/→ ajustar o ano de nascimento",
+                        action=lambda: None, data="age"),
+            "weight": Item(t("set.weight"), value=f"{wv:.1f} {wu}",
+                           detail="←/→ ±0,1 · Shift+←/→ ±1", data="weight"),
+            "ftp": Item(t("set.ftp"), value=f"{ath.ftp_w} W", detail="←/→ ajustar", data="ftp"),
+            "lthr": Item("LTHR", value=str(ath.lthr or "—"), detail="←/→ ajustar", data="lthr"),
+            "row_ftp": Item(tr("FTP do remo", "Rowing FTP"), value=f"{rw.row_ftp(db)} W",
+                            detail=tr("←/→ ±1 · Shift ±10 · o teste de 2000 m atualiza-a",
+                                      "←/→ ±1 · Shift ±10 · the 2000 m test updates it"),
+                            data="row_ftp"),
+            "units": Item(t("set.units"),
+                          value=t("set.units.metric") if a.units == "metric"
+                          else t("set.units.imperial"), action=self._toggle_units),
+            "language": Item(t("set.language"), value="Português" if db.get("language") == PT
+                             else "English", action=self._toggle_language),
+            "difficulty": Item(t("set.difficulty"), value=f"{diff * 100:.0f} %",
+                               detail="←/→ ajustar · escala a sensação de declive",
+                               data="difficulty"),
+            "render": Item(t("set.render"),
+                           value=t(f"mode.render.{db.get('render_preset', 'low')}"),
+                           action=self._cycle_preset),
+            "display": Item(t("set.display"), value=a.display_label(),
+                            detail=t("set.display_hint"), action=self._cycle_display),
+            "msaa": Item(t("set.msaa"), value=self._msaa_text(), detail=t("set.msaa_hint"),
+                         action=self._cycle_msaa),
+            "lookahead": Item(t("set.lookahead"), value=str(db.get("workout_lookahead", 2)),
+                              detail=t("set.lookahead_hint"), action=self._cycle_lookahead,
+                              data="lookahead"),
+            "auto_pause": Item(t("set.auto_pause"),
+                               value=t("common.on") if db.get("auto_pause", True)
+                               else t("common.off"),
+                               detail=t("set.auto_pause_hint"), action=self._toggle_auto_pause),
+            "connection": Item(t("set.connection"),
+                               value=t(f"set.pref.{db.get('connection_preference', 'ant_first')}"),
+                               detail=t("set.connection_hint"), action=self._cycle_connection),
+            "auto_connect": Item(t("set.auto_connect"),
+                                 value=t("common.on") if db.get("auto_connect", True)
+                                 else t("common.off"),
+                                 detail=t("set.auto_connect_hint"),
+                                 action=self._toggle_auto_connect),
+            "boxes": Item(t("set.boxes"), value=f"{boxes_mod.N_BOXES}",
+                          detail=t("set.boxes_hint"), action=lambda: a.push(BoxesScreen(a))),
+            "metrics": Item(t("set.metrics"),
+                            value=f"{len(boxes_mod.enabled_metrics(db, metrics.available()))}",
+                            detail=t("set.metrics_hint"),
+                            action=lambda: a.push(MetricsCatalogScreen(a))),
+            "strava": Item("Strava", value=tr("ligado", "connected") if (
+                db.get("strava_tokens") or {}).get("refresh_token") else "",
+                detail=tr("Segmentos das rotas e os teus PR", "Route segments and your PRs"),
+                action=lambda: a.push(_connect().StravaScreen(a))),
+            "run_pace": Item(tr("Ritmo de limiar (corrida)", "Threshold pace (running)"),
+                             value=hms(float(db.get("run_threshold_pace_s", 300))) + " /km",
+                             detail=tr("←/→ ±5 s · usado nos treinos e zonas de corrida",
+                                       "←/→ ±5 s · used for running workouts and zones"),
+                             data="run_pace"),
+            "swim_pace": Item(tr("Ritmo crítico (natação)", "Critical swim speed"),
+                              value=hms(float(db.get("swim_css_s", 120))) + " /100 m",
+                              detail=tr("←/→ ±1 s · usado nos treinos de natação",
+                                        "←/→ ±1 s · used for swim workouts"), data="swim_pace"),
+            "theme": Item(tr("Tema", "Theme"), value=_theme_name(db),
+                          detail=tr("←/→ ou Enter · todos claros e profissionais; Ardósia para "
+                                    "pouca luz", "←/→ or Enter · light, professional themes; "
+                                    "Slate for low light"),
+                          action=lambda: self._adjust("theme", 1), data="theme"),
+            "layouts": Item(tr("Ecrã da sessão, por desporto", "Session screen, per sport"),
+                            detail=tr("Arrasta as métricas para onde as queres ver",
+                                      "Drag metrics where you want them"),
+                            action=lambda: a.push(_layouts().LayoutSportPicker(a))),
+            "feedback": Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
+                             value=t("common.on") if db.get("ask_feedback", True)
+                             else t("common.off"),
+                             detail=tr("RPE, dores e comentário; fica para o agente treinador",
+                                       "RPE, pain and comment; kept for the coach agent"),
+                             action=self._toggle_feedback),
+        }
+
+    def enter(self) -> None:
         if self.tabs is not None:
             self.tabs.set_labels(self.tab_labels())
             self.tabs.select(self.tab)
-        group = self.GROUPS[self.tab % len(self.GROUPS)]
-        items = [items[i] for i in group]
+        group = self.group()
+        foot = "←/→ ajustar · Enter alternar · Tab separador · Esc voltar"
+        if group == ("@sync",):
+            items = self.sync.items()
+            foot = tr("←/→ mudar · Enter escolher · Ctrl+S sincronizar · Tab separador",
+                      "←/→ change · Enter choose · Ctrl+S sync · Tab tab")
+        elif group == ("@shortcuts",):
+            from velo.ui import shortcuts
+            items = []
+            self.keys_view.set([(tr(gpt, gen), [(k, tr(pt, en)) for k, pt, en in rows])
+                                for gpt, gen, rows in shortcuts.SHORTCUTS])
+        else:
+            rows = self._rows()
+            items = [rows[k] for k in group]
         self.chrome.set(t("menu.settings"), tr("Tab muda de separador", "Tab switches tabs"),
-                        "←/→ ajustar · Enter alternar · Tab separador · Esc voltar")
+                        foot)
         self.list.set_items(items, keep_index=True)
+
+    def update(self, dt: float) -> None:
+        self.sync.update()
+
+    def draw(self) -> None:
+        super().draw()
+        if self.group() == ("@shortcuts",):
+            self.keys_view.draw()
+
+    def on_resize(self, w: int, h: int) -> None:
+        super().on_resize(w, h)
+        self._layout_keys()
+        if self.group() == ("@shortcuts",):
+            self.enter()
+
+    def text_input(self, field: str, text: str) -> None:
+        if self.sync.text(field, text):
+            return
+        if field != "name":
+            return
+        ath = self.app.db.athlete()
+        ath.name = ((ath.name or "") + text)[:40]
+        self.app.db.save_athlete(ath)
+        self.enter()
+
+    def text_backspace(self, field: str) -> None:
+        if self.sync.text(field, None):
+            return
+        if field != "name":
+            return
+        ath = self.app.db.athlete()
+        ath.name = (ath.name or "")[:-1]
+        self.app.db.save_athlete(ath)
+        self.enter()
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
-        if item is not None and item.data and symbol in (key.LEFT, key.RIGHT):
+        if item is not None and isinstance(item.data, str) and item.data.startswith("sync:") \
+                and symbol in (key.LEFT, key.RIGHT):
+            self.sync.adjust(item.data[5:], 1 if symbol == key.RIGHT else -1,
+                             bool(modifiers & key.MOD_SHIFT))
+            return True
+        if item is not None and item.data and symbol in (key.LEFT, key.RIGHT) and \
+                not str(item.data).startswith("text:"):
             step = 1 if symbol == key.RIGHT else -1
             if modifiers & key.MOD_SHIFT:
                 step *= 10
@@ -1971,6 +2267,11 @@ class SettingsScreen(Screen):
         if field == "swim_pace":
             db.set("swim_css_s", max(50, min(300, float(db.get("swim_css_s", 120))
                                              + (1 if step > 0 else -1))))
+            self.enter()
+            return
+        if field == "row_ftp":
+            from velo.core import rowing as rw
+            db.set("row_ftp_w", max(50, min(800, rw.row_ftp(db) + step)))
             self.enter()
             return
         ath = db.athlete()
@@ -2000,26 +2301,6 @@ class SettingsScreen(Screen):
             value = max(0.0, min(1.5, float(db.get("trainer_difficulty", 1.0))
                                  + step * 0.05))
             db.set("trainer_difficulty", round(value, 2))
-        elif field == "extra":
-            value = max(0.0, min(20.0, float(db.get("extra_resistance_pct", 0.0))
-                                 + step))
-            db.set("extra_resistance_pct", value)
-        self.enter()
-
-    def text_input(self, field: str, text: str) -> None:
-        if field != "name":
-            return
-        ath = self.app.db.athlete()
-        ath.name = ((ath.name or "") + text)[:40]
-        self.app.db.save_athlete(ath)
-        self.enter()
-
-    def text_backspace(self, field: str) -> None:
-        if field != "name":
-            return
-        ath = self.app.db.athlete()
-        ath.name = (ath.name or "")[:-1]
-        self.app.db.save_athlete(ath)
         self.enter()
 
     def _toggle_feedback(self) -> None:
@@ -2129,24 +2410,72 @@ class BoxesScreen(Screen):
 
 
 class MetricsCatalogScreen(Screen):
-    """Liga e desliga métricas. As desligadas não aparecem no editor das caixas."""
+    """Liga e desliga métricas. As desligadas não aparecem no editor das caixas.
+
+    Não é uma lista: as métricas espalham-se pelo ecrã todo, em cartões
+    (setas mudam de cartão, Enter ou um clique liga/desliga)."""
+
+    def __init__(self, app: "App"):
+        super().__init__(app)
+        from velo.ui.widgets import GridView
+        self.grid = GridView()
+        self._layout_grid()
+
+    def _layout_grid(self) -> None:
+        w, h = self.app.window.width, self.app.window.height
+        self.grid.layout(48, self.content_top(h) + 24, w - 96, 96)
+        self.list.y = -3000                  # a lista serve o teclado; vê-se a grelha
 
     def enter(self) -> None:
         a = self.app
         on = set(boxes_mod.enabled_metrics(a.db, metrics.available()))
-        items = []
+        items, cells = [], []
         for mid in metrics.available():
             m = metrics.REGISTRY[mid]
             items.append(Item(("✓ " if mid in on else "   ") + m.label,
                               value=t("common.on") if mid in on else t("common.off"),
                               action=lambda x=mid: self._toggle(x), data=mid))
-        self.chrome.set(t("set.metrics"), f"{len(on)}/{len(items)}", self.footer())
+            cells.append((m.label, t("common.on") if mid in on else t("common.off"),
+                          mid in on, True))
+        self.chrome.set(t("set.metrics"), f"{len(on)}/{len(items)} · " + tr(
+            "Enter ou clique liga/desliga", "Enter or click turns on/off"),
+            tr("setas mudar · Enter ligar/desligar · Esc voltar",
+               "arrows move · Enter on/off · Esc back"))
         self.list.set_items(items, keep_index=True)
+        self.grid.set(cells, self.list.index)
 
     def _toggle(self, mid: str) -> None:
         on = mid in boxes_mod.enabled_metrics(self.app.db, metrics.available())
         boxes_mod.set_enabled(self.app.db, mid, not on)
         self.enter()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        moves = {key.LEFT: -1, key.RIGHT: 1, key.UP: -self.grid.cols,
+                 key.DOWN: self.grid.cols}
+        if symbol in moves and self.list.items:
+            self.list.index = max(0, min(len(self.list.items) - 1,
+                                         self.list.index + moves[symbol]))
+            self.list._sync()
+            self.enter()
+            return True
+        return super().on_key(symbol, modifiers)
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        k = self.grid.hit(x, y)
+        if k is not None:
+            self.list.index = k
+            self.list.activate()
+            return True
+        return super().on_mouse(x, y)
+
+    def on_resize(self, w: int, h: int) -> None:
+        super().on_resize(w, h)
+        self._layout_grid()
+        self.enter()
+
+    def draw(self) -> None:
+        super().draw()
+        self.grid.draw()
 
 
 class BoxEditor(Screen):
@@ -2340,23 +2669,37 @@ class FtpRouteChoice(Screen):
 
 
 class ChallengeScreen(Screen):
+    """Os desafios de um desporto: objetivo acumulado e, se tiver, quanto tempo
+    falta para a data limite."""
+
     HAS_BOARD = True
+
+    def __init__(self, app: "App", sport: str = "cycling"):
+        super().__init__(app)
+        self.sport = sport
 
     def side_board(self):
         a = self.app
         item = self.list.selected
         if item is not None and isinstance(item.data, int):
-            ch = next((c for c in a.db.challenges() if c["id"] == item.data), None)
+            ch = next((c for c in a.db.challenges(self.sport) if c["id"] == item.data), None)
             if ch is not None:
                 return boards.challenge_board(a.db, ch, a.units)
-        return boards.challenges_progress_board(a.db, a.units)
+        rows = []
+        for ch in a.db.challenges(self.sport):
+            att = _sport_ch().refresh(a.db, ch)
+            pct = min(100.0, att["progress"] / max(ch["target"], 1e-9) * 100.0)
+            rows.append(boards.Row(None, f"{pct:.0f} %", ch["name"]))
+        return boards.Board(t("menu.challenges"), rows, t("board.progress"),
+                            empty=t("board.empty"))
 
     def enter(self) -> None:
         a = self.app
+        sc = _sport_ch()
         items = [Item(t("ch.new"), detail=t("ch.new_title"),
-                      action=lambda: a.push(ChallengeCreate(a)))]
-        for ch in a.db.challenges():
-            attempt = a.db.ensure_attempt(ch["id"])
+                      action=lambda: a.push(ChallengeCreate(a, self.sport)))]
+        for ch in a.db.challenges(self.sport):
+            attempt = sc.refresh(a.db, ch)
             target, progress = ch["target"], attempt["progress"]
             done_txt = boards.challenge_progress_text(
                 ch["metric"], progress, target, ch["display_unit"], a.units)
@@ -2364,71 +2707,129 @@ class ChallengeScreen(Screen):
             board = a.db.challenge_leaderboard(ch["id"], limit=1)
             best = (t("ch.completed_in", time=boards.long_duration(board[0]["elapsed_s"]))
                     if board else t("ch.in_progress"))
+            left = sc.remaining_text(ch)
             items.append(Item(ch["name"], value=f"{pct:.0f} %",
-                              detail=f"{done_txt} · {best}",
+                              detail=" · ".join(x for x in (done_txt, left or best) if x),
                               action=lambda c=ch: a.push(ChallengeDetail(a, dict(c))),
                               data=ch["id"]))
-        self.chrome.set(t("menu.challenges"), "", self.footer())
+        from velo.core import sports as sp
+        self.chrome.set(t("menu.challenges") + f" · {sp.name(self.sport)}",
+                        tr("Objetivos acumulados, com ou sem data limite",
+                           "Cumulative goals, with or without a deadline"), self.footer())
         self.list.set_items(items, keep_index=True)
 
 
 class ChallengeCreate(Screen):
-    """Novo desafio: tipo, objetivo escrito à mão, unidade e nome opcional.
+    """Novo desafio: tipo, objetivo escrito à mão, unidade, data limite e nome.
 
     O objetivo aceita decimais nos dois formatos («5000.34» ou «5000,34»)
-    e a linha mostra logo como foi lido, para não haver surpresas.
+    e a linha mostra logo como foi lido, para não haver surpresas. A data
+    limite é opcional: ←/→ mudam um dia (Shift: uma semana), Del tira-a.
     """
 
     METRICS = ("distance_m", "ascent_m")
 
-    def __init__(self, app: "App"):
+    def __init__(self, app: "App", sport: str = "cycling"):
         super().__init__(app)
-        self.metric = "distance_m"
+        self.sport = sport
+        self.METRICS = _sport_ch().METRICS.get(sport, ("distance_m",))
+        self.metric = self.METRICS[0]
         self.value_text = ""
         self.name_text = ""
-        imperial = app.units == "imperial"
-        self.unit = "mi" if imperial else "km"
+        self.deadline = None             # date | None
+        self.unit = self._units_for()[0]
 
     def _units_for(self) -> tuple[str, ...]:
         imperial = self.app.units == "imperial"
         if self.metric == "distance_m":
             return ("mi", "ft") if imperial else ("km", "m")
-        return ("ft", "mi") if imperial else ("m", "km")
+        if self.metric == "ascent_m":
+            return ("ft", "mi") if imperial else ("m", "km")
+        if self.metric == "time_s":
+            return ("h", "min")
+        return ("×",)
 
     def target_m(self) -> float | None:
         v = parse_number(self.value_text)
         if v is None or v <= 0:
             return None
+        if self.metric == "time_s":
+            return v * (3600.0 if self.unit == "h" else 60.0)
+        if self.metric == "sessions":
+            return float(round(v))
         return v * boards.CHALLENGE_UNITS[self.unit]
+
+    def _shown(self, target: float) -> str:
+        if self.metric in ("time_s", "sessions"):
+            return boards.challenge_target_text(self.metric, target, None, self.app.units)
+        return boards.challenge_target_text(self.metric, target, self.unit, self.app.units)
 
     def auto_name(self) -> str:
         target = self.target_m()
         if target is None:
             return ""
-        shown = boards.challenge_target_text(self.metric, target, self.unit, self.app.units)
-        return t(f"ch.auto.{self.metric}", v=shown)
+        if self.sport == "cycling" and self.metric in ("distance_m", "ascent_m"):
+            return t(f"ch.auto.{self.metric}", v=self._shown(target))
+        return _sport_ch().default_name(self.sport, self.metric, self._shown(target))
 
     def enter(self) -> None:
+        sc = _sport_ch()
         target = self.target_m()
         reading = ""
         if self.value_text:
-            reading = (f"= {boards.challenge_target_text(self.metric, target, self.unit)}"
-                       if target is not None else t("ch.invalid"))
+            reading = (f"= {self._shown(target)}" if target is not None else t("ch.invalid"))
         name_value = (self.name_text + "▏") if self.name_text else \
             f"({t('ch.name_auto')}: {self.auto_name() or '—'})"
+        if self.deadline is None:
+            dl_value = tr("sem data limite", "no deadline")
+        else:
+            dl_value = self.deadline.strftime("%d/%m/%Y") + "  ·  " + sc.remaining_text(
+                {"deadline": self.deadline.isoformat()})
         items = [
-            Item(t("ch.type"), value=t(f"ch.type.{self.metric}"),
-                 detail="Enter alterna", action=self._toggle_metric),
+            Item(t("ch.type"), value=sc.metric_name(self.metric),
+                 detail="Enter alterna" if len(self.METRICS) > 1 else "",
+                 action=self._toggle_metric),
             Item(t("ch.value"), value=(self.value_text or "") + "▏",
                  detail=reading or t("ch.typing"), data="text:value"),
             Item(t("ch.unit"), value=self.unit, detail="Enter alterna",
                  action=self._cycle_unit),
+            Item(tr("Data limite", "Deadline"), value=dl_value,
+                 detail=tr("opcional · ←/→ um dia · Shift+←/→ uma semana · Del tira",
+                           "optional · ←/→ one day · Shift+←/→ one week · Del removes"),
+                 action=lambda: self._shift_deadline(30 if self.deadline is None else 0),
+                 data="deadline"),
             Item(t("ch.name"), value=name_value, detail=t("ch.typing"),
                  data="text:name"),
-            Item(t("ch.create"), action=self._create, enabled=target is not None),
+            Item(t("ch.create"), action=self._create, enabled=target is not None,
+                 button=True, primary=True),
         ]
-        self.chrome.set(t("ch.new_title"), t("ch.typing"), self.footer())
+        from velo.core import sports as sp
+        self.chrome.set(t("ch.new_title") + f" · {sp.name(self.sport)}", t("ch.typing"),
+                        self.footer())
         self.list.set_items(items, keep_index=True)
+
+    def _shift_deadline(self, days: int) -> None:
+        from datetime import date as _date, timedelta as _td
+        base = self.deadline or _date.today()
+        if days:
+            self.deadline = max(_date.today(), base + _td(days=days))
+        self.enter()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        if item is not None and item.data == "deadline":
+            if symbol in (key.LEFT, key.RIGHT):
+                step = (7 if modifiers & key.MOD_SHIFT else 1) * (1 if symbol == key.RIGHT
+                                                                   else -1)
+                if self.deadline is None and step < 0:
+                    return True
+                self._shift_deadline(step if self.deadline is not None else max(step, 1))
+                return True
+            if symbol in (key.DELETE, key.BACKSPACE):
+                self.deadline = None
+                self.enter()
+                return True
+        return super().on_key(symbol, modifiers)
 
     def text_input(self, field: str, text: str) -> None:
         if field == "value":
@@ -2464,7 +2865,9 @@ class ChallengeCreate(Screen):
             a.message(t("ch.invalid"))
             return
         name = self.name_text.strip() or self.auto_name()
-        a.db.create_challenge(name, self.metric, target, display_unit=self.unit)
+        unit = self.unit if self.metric in ("distance_m", "ascent_m") else None
+        a.db.create_challenge(name, self.metric, target, display_unit=unit, sport=self.sport,
+                              deadline=self.deadline.isoformat() if self.deadline else None)
         a.message(t("ch.created", name=name))
         a.pop()
 
@@ -2482,8 +2885,14 @@ class ChallengeDetail(Screen):
     def enter(self) -> None:
         a = self.app
         ch = self.challenge
-        attempt = a.db.ensure_attempt(ch["id"])
-        items = [Item(t("ch.reset"), action=self._reset)]
+        sc = _sport_ch()
+        attempt = sc.refresh(a.db, ch)
+        items = []
+        left = sc.remaining_text(ch)
+        if left:
+            items.append(Item(tr("Data limite", "Deadline"),
+                              value=sc.deadline_of(ch).strftime("%d/%m/%Y"), detail=left,
+                              enabled=False))
         board = a.db.challenge_leaderboard(ch["id"])
         if board:
             items.append(Item(t("ch.leaderboard"), enabled=False))
@@ -2494,12 +2903,13 @@ class ChallengeDetail(Screen):
                                   enabled=False))
         else:
             items.append(Item(t("stats.no_data"), enabled=False))
+        items.append(Item(t("ch.reset"), action=self._reset, button=True))
         if not ch["is_default"]:
-            items.append(Item(t("ch.delete"), action=self._delete))
+            items.append(Item(t("ch.delete"), action=self._delete, button=True))
         progress = boards.challenge_progress_text(
             ch["metric"], attempt["progress"], ch["target"], ch.get("display_unit"),
             a.units)
-        self.chrome.set(ch["name"], progress, self.footer())
+        self.chrome.set(ch["name"], progress + (f" · {left}" if left else ""), self.footer())
         self.list.set_items(items)
 
     def _reset(self) -> None:
@@ -3020,6 +3430,9 @@ class App:
             workout_library.seed(self.db)          # os treinos que vêm com a aplicação
         except Exception:
             pass
+        # a «resistência extra» saiu das Definições: não fica a pesar escondida
+        if float(self.db.get("extra_resistance_pct", 0.0) or 0.0):
+            self.db.set("extra_resistance_pct", 0.0)
         set_language(self.db.get("language", PT))
         self.units = self.db.get("units", "metric")
         from velo.gfx import theme as _theme_mod
@@ -3081,6 +3494,7 @@ class App:
             endurance.seed(self.db)
         except Exception:
             pass
+        self._unarchive_once()
         if aborted:
             self.message(f"{aborted} sessão(ões) incompleta(s) foram encerradas")
         if self.db.checkpoints():
@@ -3089,6 +3503,20 @@ class App:
             self.push(RecoveryScreen(self))
         if self.db.get("auto_connect", True) and self.db.known_devices():
             self.start_auto_connect()
+
+    def _unarchive_once(self) -> None:
+        """Já não há «arquivar» nem «desativar»: o que estava escondido assim
+        volta a aparecer (uma vez só)."""
+        if self.db.get("migr_unarchive", False):
+            return
+        for sql in ("UPDATE exercises SET archived = 0 WHERE archived = 1",
+                    "UPDATE fitness_tests SET active = 1 WHERE active = 0"):
+            try:
+                self.db.conn.execute(sql)
+            except Exception:
+                pass                      # a tabela (ou a coluna) ainda não existe
+        self.db.conn.commit()
+        self.db.set("migr_unarchive", True)
 
     # ------------------------------------------------- ligação automática
 
@@ -3162,14 +3590,41 @@ class App:
         self.stack.append(screen)
         screen.enter()
 
-    def pop(self) -> None:
+    def pop(self, force: bool = False) -> None:
         if len(self.stack) <= 1:
+            return
+        if not force and not self.stack[-1].MODAL and self.stack[-1].has_unsaved():
+            self.ask_unsaved(self.stack[-1])
             return
         top = self.stack.pop()
         top.leave()
         if top.MODAL and self.stack[-1].IN_SESSION:
             return                 # a sessão de baixo nunca deixou de correr
         self.stack[-1].enter()
+
+    def ask_unsaved(self, editor: Screen) -> None:
+        """Voltar atrás com alterações por guardar: Sair sem gravar · Cancelar ·
+        Guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
+        def leave() -> None:
+            self.pop()                     # a pergunta
+            self.pop(force=True)           # o editor, sem gravar
+
+        def stay() -> None:
+            self.pop()
+
+        def save() -> None:
+            self.pop()
+            editor.on_save()
+            if not editor.has_unsaved() and self.current is editor:
+                self.pop(force=True)
+
+        self.push(ConfirmScreen(
+            self, tr("Há alterações por guardar", "You have unsaved changes"),
+            tr("Fizeste alterações que ainda não foram gravadas.",
+               "Some changes have not been saved yet."),
+            [(tr("Sair sem gravar", "Leave without saving"), leave),
+             (tr("Cancelar", "Cancel"), stay),
+             (tr("Guardar", "Save"), save)], default=2, buttons=True, cancel=stay))
 
     def replace(self, screen: Screen) -> None:
         if self.stack:
@@ -3422,6 +3877,15 @@ class App:
             self.ask_quit()
             return True
         screen = self.current
+        if symbol == key.S and modifiers & key.MOD_CTRL and screen is not None:
+            # Ctrl+S guarda em qualquer ecrã que tenha alguma coisa para guardar
+            if screen.on_save():
+                return True
+            handled = bool(screen.on_key(symbol, modifiers))
+            if not handled and not screen.IN_SESSION:
+                self.message(tr("Não há nada para guardar neste ecrã.",
+                                "Nothing to save on this screen."))
+            return True
         if screen is not None:
             return bool(screen.on_key(symbol, modifiers))
         return False
@@ -3714,3 +4178,8 @@ def _pretty(name) -> str:
 def _feedback():
     from velo.ui import feedback_screens
     return feedback_screens
+
+
+def _sport_ch():
+    from velo.core import sport_challenges
+    return sport_challenges

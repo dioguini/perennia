@@ -15,10 +15,11 @@ from velo.gfx.compat import label as make_label
 from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
+from velo.ui.challenge_screens import train_items
 from velo.ui.sport_screens import EditScreen
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
-                             SessionClock)
+                             LapPanel, SessionClock)
 
 
 def _m(v: float | None) -> str:
@@ -156,25 +157,15 @@ class RowingMenu(SportHub):
         super().enter()
 
     def items_train(self) -> list[Item]:
+        # a máquina de remo liga-se em Dispositivos; a FTP do remo está nas
+        # Definições (Atleta)
         a = self.app
-        machine = getattr(a, "rower", None)
-        return [
-            Item(tr("Remar (livre)", "Row (free)"), detail=tr("Com voltas manuais (L)",
-                                                              "With manual laps (L)"),
-                 action=lambda: self._start({})),
-            Item("Challenge", detail=tr("Desafio adaptativo, jogos e a Regata contra bots",
-                                        "Adaptive challenge, games and the Regatta vs bots"),
-                 action=lambda: a.push(RowChallengeMenu(a))),
-            Item(t("menu.tests"), action=lambda: a.push(_health().TestsMenu(a, "rowing"))),
-            Item(tr("Máquina de remo", "Rowing machine"),
-                 value=machine.name if machine else tr("nenhuma ligada", "none connected"),
-                 action=lambda: a.push(RowerDeviceScreen(a))),
-            Item(tr("FTP do remo", "Rowing FTP"), value=f"{rw.row_ftp(a.db)} W",
-                 detail=tr("←/→ ajustar · o teste de 2000 m atualiza-a",
-                           "←/→ adjust · the 2000 m test updates it"), data="ftp"),
+        return train_items(a, "rowing", session=Item(
+            tr("Sessão de treino", "Training session"),
+            detail=tr("Remo livre, com voltas manuais (L)", "Free row, with manual laps (L)"),
+            action=lambda: self._start({}))) + [
             Item(tr("Campos do ecrã de remo", "Rowing screen fields"),
-                 action=lambda: a.push(RowFieldsScreen(a))),
-        ]
+                 action=lambda: a.push(RowFieldsScreen(a)))]
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -213,28 +204,51 @@ class RowingMenu(SportHub):
                                    + (f" · {s['avg_power_w']:.0f} W" if s["avg_power_w"]
                                       else ""),
                             action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "rowing")
 
     def items_stats(self) -> list[Item]:
         a = self.app
         b = rw.bests(a.db)
+        ses = b.get("sessions") or {}
+
+        def record(label: str, key_: str, value: str) -> Item:
+            """Um recorde e a sessão onde foi feito (Enter abre-a)."""
+            s = ses.get(key_)
+            if s is None:
+                return Item(label, value=value, enabled=False)
+            when = str(s["started_at"])[:16].replace("T", " ")
+            return Item(label, value=value,
+                        detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
+                                  n=_pretty(s["name"]) or tr("Remo", "Rowing")),
+                        action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
+                        data=("record", key_, s["id"]))
+
+        avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
+        spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
+        mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
+        longest = ses.get("time")
         return super().items_stats() + [
             Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
             Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
                  enabled=False),
-            Item(tr("Melhor ritmo", "Best pace"), value=pace_text(b.get("pace")),
-                 enabled=False),
-            Item(tr("Maior distância", "Longest"), value=_m(b.get("dist")), enabled=False),
-            Item(tr("Mais potência média", "Best avg power"),
-                 value=f"{b['w']:.0f} W" if b.get("w") else "—", enabled=False)]
+            record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
+                   pace_text(b.get("pace"))),
+            record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
+                   pace_text(avg)),
+            record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
+            record(tr("Sessão mais longa", "Longest session"), "time",
+                   hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
+                   if longest else "—"),
+            record(tr("Mais potência média", "Best avg power"), "w",
+                   f"{b['w']:.0f} W" if b.get("w") else "—"),
+            record(tr("Mais potência máxima", "Best max power"), "max_w",
+                   f"{mx:.0f} W" if mx else "—"),
+            record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
+                   f"{spm:.0f} spm" if spm else "—")]
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
-        if item is not None and item.data == "ftp" and symbol in (key.LEFT, key.RIGHT):
-            step = (10 if modifiers & key.MOD_SHIFT else 1) * (1 if symbol == key.RIGHT else -1)
-            self.app.db.set("row_ftp_w", max(50, rw.row_ftp(self.app.db) + step))
-            self.enter()
-            return True
         if item is not None and isinstance(item.data, tuple) and item.data[0] == "row_workout" \
                 and symbol == key.P:
             self.app.push(RowWorkoutEditor(self.app, item.data[1]))
@@ -319,6 +333,7 @@ class RowingSessionScreen(Screen):
         self.track = pyglet.shapes.Rectangle(0, 0, 10, 8, color=P().panel2, batch=b)
         self.bar = pyglet.shapes.Rectangle(0, 0, 0, 8, color=ACCENT[:3], batch=b)
         self.clock = SessionClock(app.window, batch=b)
+        self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
         self._layout()
         for kind, data in self.engine.drain_events():
@@ -358,12 +373,47 @@ class RowingSessionScreen(Screen):
         self._bar_w = right - left
         self.list.y = -1000                                 # a lista fica escondida
         self.clock.layout()
+        rx, rtop = w - 48 - BOARD_W, h - 124
         if self.board_panel is not None:
-            self.board_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W)
+            self.board_panel.layout(rx, rtop, BOARD_W)
+        # com um jogo, a classificação fica em cima e as voltas por baixo
+        laps_top = rtop - (self.board_panel.height + 10 if self.engine.game is not None
+                           and self.board_panel is not None else 0)
+        self.laps_panel.layout(rx, laps_top, BOARD_W, 70)
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
         self._layout()
+
+    def lap_data(self) -> tuple[str, list[tuple[str, str]], list[str]]:
+        """A volta em curso (seis números) e as já feitas, para o painel."""
+        e = self.engine
+        lp = e._lap
+        acc = getattr(lp, "acc", None) or {}
+        avg_w = acc.get("w", 0) / acc["wn"] if acc.get("wn") else None
+        avg_spm = acc.get("spm", 0) / acc["sn"] if acc.get("sn") else None
+        avg_hr = acc.get("hr", 0) / acc["hn"] if acc.get("hn") else None
+        no = lp.no if lp is not None else len(e.laps) + 1
+        cells = [(tr("Tempo", "Time"), hms(e.lap_elapsed_s)),
+                 (tr("Distância", "Distance"), _m(e.lap_distance_m)),
+                 (tr("Ritmo /500 m", "Pace /500 m"), pace_text(e.lap_pace_s)),
+                 (tr("Potência média", "Avg power"), f"{avg_w:.0f} W" if avg_w else "—"),
+                 (tr("Voga média", "Avg rate"), f"{avg_spm:.0f} spm" if avg_spm else "—"),
+                 (tr("FC média", "Avg HR"), f"{avg_hr:.0f} bpm" if avg_hr else "—")]
+        prev = []
+        for x in reversed(e.laps):
+            if x.trigger == "start" and not x.distance_m:
+                continue
+            bits = [f"{x.no}.", hms((x.end_t or 0) - x.start_t), _m(x.distance_m),
+                    pace_text(x.avg_pace_s) + " /500 m" if x.avg_pace_s else ""]
+            if x.avg_power_w:
+                bits.append(f"{x.avg_power_w:.0f} W")
+            if x.avg_spm:
+                bits.append(f"{x.avg_spm:.0f} spm")
+            if x.avg_hr:
+                bits.append(f"{x.avg_hr:.0f} bpm")
+            prev.append("  ".join(b for b in bits if b))
+        return tr("Volta {n}", "Lap {n}", n=no), cells, prev
 
     def footer(self) -> str:
         return tr("+/− resistência · L volta · V outra página · P pausa · Esc terminar",
@@ -416,6 +466,7 @@ class RowingSessionScreen(Screen):
             pt, en = FIELDS[name]
             cap.text = tr(pt, en).upper()
             val.text = field_value(e, name)
+            val.color = _zone_ink(e.hr_zone) if name == "zone" and e.hr_zone else TEXT
             size = getattr(self, "_val_size", 24)
             while size > 12 and len(val.text) * size * 0.66 > bg.width - 20:
                 size -= 2
@@ -430,8 +481,11 @@ class RowingSessionScreen(Screen):
         if self.toast and time.monotonic() > self._toast_until:
             self.toast = ""
         self.toast_label.text = self.toast
-        if self.board_panel is not None and int(e.t) % 2 == 0:
+        if self.board_panel is not None and e.game is not None and int(e.t) % 2 == 0:
             self.refresh_board()
+        title, cells, prev = self.lap_data()
+        self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
+        self.laps_panel.update(time.monotonic())
 
     def _plan_title(self) -> str:
         e = self.engine
@@ -505,14 +559,15 @@ class RowingSessionScreen(Screen):
             "started": tr("A remar!", "Rowing!"),
             "auto_pause": tr("Pausa automática", "Auto pause"),
             "resistance": tr("Resistência {n}", "Resistance {n}", n=data.get("level")),
-            "lap": tr("Volta {n} · {d} · {p}", "Lap {n} · {d} · {p}", n=data.get("no"),
-                      d=_m(data.get("distance_m")), p=pace_text(data.get("avg_pace_s"))),
+            "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
             "workout_done": tr("Treino concluído!", "Workout done!"),
             "test_done": tr("Teste concluído!", "Test done!"),
             "game_over": tr("Fim do jogo", "Game over"),
         }.get(kind)
         if kind == "step" and data.get("cue"):
             msg = data["cue"]
+        if kind == "lap" and hasattr(self, "laps_panel"):
+            self.laps_panel.pulse(time.monotonic())
         if msg:
             self.toast = msg
             self._toast_until = time.monotonic() + 3.0
@@ -533,8 +588,8 @@ class RowingSessionScreen(Screen):
             e.adjust_resistance(-1)
             return True
         if symbol == key.L:
-            e.lap("manual")
-            self.refresh_board()
+            if e.lap("manual") is not None:
+                self.laps_panel.pulse(time.monotonic())
             return True
         if symbol == key.V:
             self.page = (self.page + 1) % PAGES
@@ -586,10 +641,18 @@ class RowingSessionScreen(Screen):
             self.list.draw()
             return
         self.batch.draw()
-        if self.board_panel is not None:
+        if self.board_panel is not None and self.engine.game is not None:
             self.board_panel.draw()
+        self.laps_panel.draw()
         if self.back_button is not None:
             self.back_button.draw()
+
+
+def _zone_ink(z: int):
+    """A cor da zona de FC (a mesma do construtor), legível sobre o painel."""
+    from velo.gfx import theme
+    from velo.gfx.hud import zone_color
+    return theme.ink(zone_color(z, "hr"))
 
 
 def _kind(k: str) -> str:
@@ -728,6 +791,17 @@ class RowWorkoutEditor(EditScreen):
         self.builtin = bool(w and w["builtin"])
         self.repeat_n = 4
         self._armed = False
+        self._saved_state = self._state()
+
+    def _state(self) -> str:
+        return repr((self.name, self.desc, [vars(s) for s in self.steps]))
+
+    def has_unsaved(self) -> bool:
+        return self._state() != self._saved_state
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def enter(self) -> None:
         a = self.app
@@ -747,10 +821,10 @@ class RowWorkoutEditor(EditScreen):
                        value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat,
                        detail=tr("←/→ quantas vezes · Enter repete",
                                  "←/→ how many times · Enter repeats")),
-                  Item(tr("✓ Guardar", "✓ Save"), action=self._save),
-                  Item(tr("Exportar (.fit)", "Export (.fit)"), action=self._export),
                   Item(tr("Apagar o treino", "Delete the workout"), action=self._delete,
-                       enabled=bool(self.wid))]
+                       enabled=bool(self.wid), button=True),
+                  Item(tr("Exportar (.fit)", "Export (.fit)"), action=self._export, button=True),
+                  Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         tot_s, tot_m = rw.totals(self.steps)
         self.chrome.set(tr("Treino de remo", "Rowing workout"),
                         " + ".join(x for x in (hms(tot_s) if tot_s else "",
@@ -793,6 +867,7 @@ class RowWorkoutEditor(EditScreen):
 
     def _save(self) -> None:
         self.wid = rw.save_workout(self.app.db, self.wid, self.name, self.desc, self.steps)
+        self._saved_state = self._state()
         self.app.message(tr("Treino guardado", "Workout saved"))
         self.app.pop()
 
@@ -825,7 +900,7 @@ class RowWorkoutEditor(EditScreen):
             self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
             return
         rw.delete_workout(self.app.db, self.wid)
-        self.app.pop()
+        self.app.pop(force=True)
 
 
 class RowStepEditor(EditScreen):
@@ -868,8 +943,8 @@ class RowStepEditor(EditScreen):
                        detail=tr("a app põe este nível no início do passo",
                                  "the app sets this level at the start of the step")),
                   Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue"),
-                  Item(tr("✓ Feito", "✓ Done"), action=self.app.pop),
-                  Item(tr("Remover o passo", "Remove the step"), action=self._remove)]
+                  Item(tr("Remover o passo", "Remove the step"), action=self._remove, button=True),
+                  Item(tr("Feito", "Done"), action=self.app.pop, button=True, primary=True)]
         self.chrome.set(tr("Passo {n}", "Step {n}", n=self.idx + 1), "", self.footer())
         self.list.set_items(items, keep_index=True)
 

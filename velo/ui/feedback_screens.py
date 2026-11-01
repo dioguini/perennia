@@ -436,25 +436,30 @@ class FeedbackScreen(Screen):
         self.box_text.width = int(w - 16)
         self.box_text.x, self.box_text.y = bx + 8, by + box_h - 6
         self.row_y["comment"] = (by, y + 4)
-        # botões
-        bw = min(220, w * 0.58)
-        y2 = by - 12 - 34
-        self.btn_save.x, self.btn_save.y, self.btn_save.width, self.btn_save.height = x, y2, bw, 34
+        # botões: em baixo, à direita, como em todos os ecrãs (o principal à direita)
+        from velo.ui.widgets import BUTTON_H, BUTTON_Y, button_width
         self.btn_save_l.text = tr("Guardar e reanalisar", "Save and re-analyse") if self.saved \
             else tr("Guardar e analisar", "Save and analyse")
-        self.btn_save_l.x, self.btn_save_l.y = x + bw / 2, y2 + 17
-        cw2 = w - bw - 10
-        self.btn_close.x, self.btn_close.y = x + bw + 10, y2
-        self.btn_close.width, self.btn_close.height = cw2, 34
         self.btn_close_l.text = tr("Fechar", "Close") if self.saved else tr("Agora não", "Not now")
-        self.btn_close_l.x, self.btn_close_l.y = x + bw + 10 + cw2 / 2, y2 + 17
-        self.row_y["save"] = (y2, y2 + 34)
-        self.row_y["close"] = (y2, y2 + 34)
+        bw = button_width(self.btn_save_l.text)
+        cw2 = button_width(self.btn_close_l.text)
+        right = self.app.window.width - 48
+        y2 = BUTTON_Y
+        self.btn_save.x, self.btn_save.y = right - bw, y2
+        self.btn_save.width, self.btn_save.height = bw, BUTTON_H
+        self.btn_save_l.x, self.btn_save_l.y = right - bw / 2, y2 + BUTTON_H / 2
+        self.btn_close.x, self.btn_close.y = right - bw - 10 - cw2, y2
+        self.btn_close.width, self.btn_close.height = cw2, BUTTON_H
+        self.btn_close_l.x, self.btn_close_l.y = right - bw - 10 - cw2 / 2, y2 + BUTTON_H / 2
+        self.row_y["save"] = (y2, y2 + BUTTON_H)
+        self.row_y["close"] = (y2, y2 + BUTTON_H)
         self.btn_save.color = _theme.mix(P.accent, P.header, 0.35) if ROWS[self.row] == "save" \
             else P.accent
         self.btn_close.color = P.select if ROWS[self.row] == "close" else P.panel2
         lo, hi = self.row_y[ROWS[self.row]]
         bar_x = x - 10
+        if ROWS[self.row] in ("save", "close"):
+            bar_x = (self.btn_save if ROWS[self.row] == "save" else self.btn_close).x - 6
         self.row_bar.x, self.row_bar.y, self.row_bar.height = bar_x, lo, hi - lo
 
     # ---------------------------------------------------------------- ações

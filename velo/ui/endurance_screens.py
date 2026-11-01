@@ -14,7 +14,7 @@ from velo.core.units import hms
 from velo.gfx.compat import label as make_label
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from velo.ui.brief import BriefScreen, endurance_brief
-from velo.ui.widgets import ACCENT, DIM, GOOD, PANEL, TEXT, Item, SessionClock
+from velo.ui.widgets import ACCENT, DIM, GOOD, PANEL, TEXT, Item, LapPanel, SessionClock
 
 
 def _m(v) -> str:
@@ -61,14 +61,15 @@ class EnduranceHub(SportHub):
                   p=hms(float(db.get("swim_css_s", 120))))
 
     def items_train(self) -> list[Item]:
+        from velo.ui.challenge_screens import train_items
         a = self.app
         free = tr("Corrida livre", "Free run") if self.SPORT == "running" else \
             tr("Natação livre", "Free swim")
-        return [Item(free, detail=tr("Sem plano: tempo, distância, voltas e FC",
-                                     "No plan: time, distance, laps and HR"),
-                     action=lambda: start(a, self.SPORT)),
-                Item(t("menu.tests"), action=lambda: a.push(
-                    _health().TestsMenu(a, self.SPORT)))]
+        return train_items(a, self.SPORT, Item(
+            tr("Sessão de treino", "Training session"),
+            detail=free + " · " + tr("sem plano: tempo, distância, voltas e FC",
+                                     "no plan: time, distance, laps and HR"),
+            action=lambda: start(a, self.SPORT)))
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -101,25 +102,48 @@ class EnduranceHub(SportHub):
                             f"{pace_unit(self.SPORT)}"
                             + (f" · {s['avg_hr']:.0f} bpm" if s["avg_hr"] else ""),
                      action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
-                for s in en.sessions(a.db, self.SPORT)]
+                for s in en.sessions(a.db, self.SPORT)] + _synced(a, self.SPORT)
 
     def items_stats(self) -> list[Item]:
-        ss = en.sessions(self.app.db, self.SPORT, 1000)
+        a = self.app
+        ss = en.sessions(a.db, self.SPORT, 1000)
         dist = sum(s["distance_m"] or 0 for s in ss)
         hours = sum(s["moving_s"] or 0 for s in ss) / 3600
-        best = min((s["avg_pace_s"] for s in ss if s["avg_pace_s"]), default=None)
+
+        def record(label: str, pick, value) -> Item:
+            """O recorde e a sessão onde foi feito (Enter abre-a)."""
+            cands = [s for s in ss if pick(s) is not None]
+            if not cands:
+                return Item(label, value="—", enabled=False)
+            s = min(cands, key=pick)
+            return Item(label, value=value(s),
+                        detail=tr("em {d} · {n}", "on {d} · {n}",
+                                  d=str(s["started_at"])[:16].replace("T", " "),
+                                  n=_pretty(s["name"]) or sp.name(self.SPORT)),
+                        action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
+        unit = " " + pace_unit(self.SPORT)
         return super().items_stats() + [
             Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
             Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
             Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),
-            Item(tr("Melhor ritmo médio", "Best avg pace"),
-                 value=(hms(best) + " " + pace_unit(self.SPORT)) if best else "—",
-                 enabled=False)]
+            record(tr("Melhor ritmo médio", "Best avg pace"),
+                   lambda s: s["avg_pace_s"] or None, lambda s: hms(s["avg_pace_s"]) + unit),
+            record(tr("Maior distância", "Longest"),
+                   lambda s: -(s["distance_m"] or 0) or None, lambda s: _m(s["distance_m"])),
+            record(tr("Sessão mais longa", "Longest session"),
+                   lambda s: -(s["moving_s"] or 0) or None, lambda s: hms(s["moving_s"] or 0)),
+            record(tr("FC média mais alta", "Highest avg HR"),
+                   lambda s: -(s["avg_hr"] or 0) or None, lambda s: f"{s['avg_hr']:.0f} bpm")]
 
 
 def _health():
     from velo.ui import health_screens
     return health_screens
+
+
+def _synced(app, sport: str) -> list[Item]:
+    from velo.ui.sync_screens import history_items
+    return history_items(app, sport)
 
 
 class EndurancePreview(BriefScreen):
@@ -177,12 +201,14 @@ class EnduranceSession(Screen):
                                multiline=True, width=500)
         self.toast_label = make_label("", font_size=14, bold=True, color=GOOD, anchor_y="top",
                                       batch=b)
+        self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
         self._layout()
 
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
-        left, right, top = 48, w - 48, h - 128
+        left, right, top = 48, w - 48 - BOARD_W - 24, h - 128
+        self.laps_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W, 70)
         cols, gap = 4, 10
         cw = (right - left - gap * (cols - 1)) / cols
         ch = max(80, min(116, (h - 360) / 2))
@@ -297,8 +323,15 @@ class EnduranceSession(Screen):
         self.clock.set(e.t, tr("volta {t}", "lap {t}", t=hms(e.lap_elapsed_s)) + (
             f" · {tr('passo', 'step')} {e.workout.remaining_text()}"
             if e.workout is not None and e.workout.step is not None else ""))
-        for (bg, cap, val), (c, v) in zip(self.cells, self.cells_data()):
+        keys = getattr(self, "_layout_keys", None) or []
+        for i, ((bg, cap, val), (c, v)) in enumerate(zip(self.cells, self.cells_data())):
             cap.text, val.text = c.upper(), v
+            if i < len(keys) and keys[i] == "hr_zone" and e.hr_zone:
+                from velo.gfx import theme
+                from velo.gfx.hud import zone_color
+                val.color = theme.ink(zone_color(e.hr_zone, "hr"))
+            else:
+                val.color = TEXT
             # o valor tem de caber no quadrado (≈ 0,62 da letra por carácter)
             size = 26
             while size > 12 and len(v) * size * 0.66 > bg.width - 20:
@@ -314,6 +347,33 @@ class EnduranceSession(Screen):
         if self.toast and time.monotonic() > self._toast_until:
             self.toast = ""
         self.toast_label.text = self.toast
+        title, cells, prev = self.lap_data()
+        self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
+        self.laps_panel.update(time.monotonic())
+
+    def lap_data(self) -> tuple[str, list[tuple[str, str]], list[str]]:
+        """A volta em curso (seis números) e as já feitas, para o painel."""
+        e = self.engine
+        lp = e._lap
+        unit = pace_unit(e.sport)
+        pace = e.pace_s(e.lap_elapsed_s, e.lap_distance_m)
+        avg_hr = lp.hr_sum / lp.hr_n if lp.hr_n else None
+        cells = [(tr("Tempo", "Time"), hms(e.lap_elapsed_s)),
+                 (tr("Distância", "Distance"), _m(e.lap_distance_m)),
+                 (tr("Ritmo", "Pace"), (hms(pace) + unit) if pace else "—"),
+                 (tr("FC média", "Avg HR"), f"{avg_hr:.0f} bpm" if avg_hr else "—"),
+                 (tr("FC máxima", "Max HR"), f"{lp.max_hr} bpm" if lp.max_hr else "—"),
+                 ((tr("Piscinas", "Lengths"), str(e.lengths - lp.start_len))
+                  if e.sport == "swimming" else
+                  (tr("Velocidade", "Speed"), f"{e.speed_kmh:.1f} km/h"))]
+        prev = []
+        for x in reversed(e.laps):
+            p = e.pace_s(x.seconds, x.distance_m)
+            bits = [f"{x.no}.", hms(x.seconds), _m(x.distance_m),
+                    (hms(p) + unit) if p else "",
+                    f"{x.avg_hr:.0f} bpm" if x.avg_hr else ""]
+            prev.append("  ".join(b for b in bits if b))
+        return tr("Volta {n}", "Lap {n}", n=lp.no), cells, prev
 
     def _plan_title(self) -> str:
         e = self.engine
@@ -347,12 +407,13 @@ class EnduranceSession(Screen):
 
     def _event(self, kind: str, data: dict) -> None:
         msg = {"started": tr("A contar!", "Go!"),
-               "lap": tr("Volta {n} · {d} · {t}", "Lap {n} · {d} · {t}", n=data.get("no"),
-                         d=_m(data.get("distance_m")), t=hms(data.get("seconds", 0))),
+               "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
                "workout_done": tr("Treino concluído!", "Workout done!"),
                "recovered": t("recover.toast")}.get(kind)
         if kind == "step" and data.get("cue"):
             msg = data["cue"]
+        if kind == "lap":
+            self.laps_panel.pulse(time.monotonic())
         if msg:
             self.toast, self._toast_until = msg, time.monotonic() + 3.0
 
@@ -438,6 +499,7 @@ class EnduranceSession(Screen):
             self.list.draw()
             return
         self.batch.draw()
+        self.laps_panel.draw()
         if self.back_button is not None:
             self.back_button.draw()
 

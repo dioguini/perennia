@@ -43,13 +43,12 @@ class GymHub(SportHub):
                   h=hr_txt)
 
     def items_train(self) -> list[Item]:
+        from velo.ui.challenge_screens import GymSessionPicker, train_items
         a = self.app
-        items = []
-        for m in gym.modalities():
-            n = len(gym.workouts(a.db, m.key)) if not m.laps else len(ls.plans(a.db, m.key))
-            items.append(Item(m.name, value=tr("{n} treinos", "{n} workouts", n=n) if n else "",
-                              detail=m.desc, action=lambda k=m.key: a.push(ModalityScreen(a, k)),
-                              data=("modality", m.key)))
+        items = train_items(a, "gym", Item(
+            tr("Sessão de treino", "Training session"),
+            detail=", ".join(m.name for m in gym.modalities()),
+            action=lambda: a.push(GymSessionPicker(a))))
         from velo.ui.hub_screens import ExerciseInventory, InventoryScreen
         items += [Item(tr("Exercícios", "Exercises"),
                        detail=tr("O inventário de exercícios de cada modalidade",
@@ -113,7 +112,8 @@ class GymHub(SportHub):
                                if s.get("total_sets") else "")
                             + (f" · {s['avg_hr']:.0f} bpm" if s.get("avg_hr") else ""),
                             action=lambda sid=s["id"]: a.push(_analysis(a, sid))))
-        return out
+        from velo.ui.sync_screens import history_items
+        return out + history_items(a, "gym")
 
     def items_stats(self) -> list[Item]:
         ss = gym.sessions(self.app.db, None, 1000)
@@ -283,7 +283,8 @@ class GymPlanEditor(StrengthWorkoutEditor):
                                     "the clock starts with the 1st set"),
                           action=self._start, enabled=bool(self.items)),
                      Item(tr("Guardar como treino da modalidade", "Save as a modality workout"),
-                          action=self._keep, enabled=bool(self.items))]
+                          action=self._keep, enabled=bool(self.items), button=True,
+                          primary=True)]
         self.chrome.title.text = (tr("Treino livre", "Free workout") if self.draft else
                                   t("menu.builder")) + f" · {m.name}" + (" *" if self.dirty
                                                                          else "")
@@ -292,6 +293,18 @@ class GymPlanEditor(StrengthWorkoutEditor):
     def _pick(self) -> None:
         from velo.ui.hub_screens import ExerciseInventory
         self.app.push(ExerciseInventory(self.app, self.mod, pick=self._add_exercise))
+
+    def has_unsaved(self) -> bool:
+        # o treino livre é de usar e deitar fora: só pergunta num plano a sério
+        return self.dirty and not self.draft
+
+    def on_save(self) -> bool:
+        if self.draft:
+            if self.items:
+                self._keep()
+            return True
+        self._save()
+        return True
 
     def _save(self) -> str | None:
         if not self.items:
@@ -407,6 +420,18 @@ class LapPlanEditor(EditScreen):
                                          if draft else tr("Plano de Conditioning",
                                                           "Conditioning plan"))
         self.items: list[dict] = list(p["items"]) if p else list(items or [])
+        self._saved_state = self._state()
+
+    def _state(self) -> str:
+        return repr((self.name, self.items))
+
+    def has_unsaved(self) -> bool:
+        return not self.draft and self._state() != self._saved_state
+
+    def on_save(self) -> bool:
+        if self.items:
+            self._save()
+        return True
 
     def text_of(self, it: dict) -> str:
         bits = [_kind(it["kind"])]
@@ -437,9 +462,10 @@ class LapPlanEditor(EditScreen):
                       enabled=bool(self.items),
                       detail=tr("o relógio só arranca agora", "the clock starts now")),
                  Item(tr("Guardar o plano", "Save the plan"), action=self._save,
-                      enabled=bool(self.items))]
+                      enabled=bool(self.items), button=True, primary=True)]
         if self.pid:
-            rows.append(Item(tr("Apagar o plano", "Delete the plan"), action=self._delete))
+            rows.insert(-1, Item(tr("Apagar o plano", "Delete the plan"), action=self._delete,
+                                 button=True))
         total = ls.plan_seconds(self.items)
         self.chrome.set(tr("Plano de voltas", "Lap plan") + " · Conditioning",
                         tr("{n} voltas · ≈ {t}", "{n} laps · ≈ {t}", n=len(self.items),
@@ -504,6 +530,7 @@ class LapPlanEditor(EditScreen):
 
     def _save(self) -> None:
         self.pid = ls.save_plan(self.app.db, self.pid, self.name, "conditioning", self.items)
+        self._saved_state = self._state()
         self.app.message(tr("Plano guardado", "Plan saved"))
         self.enter()
 
@@ -512,7 +539,7 @@ class LapPlanEditor(EditScreen):
 
     def _delete(self) -> None:
         ls.delete_plan(self.app.db, self.pid)
-        self.app.pop()
+        self.app.pop(force=True)
 
 
 def _pretty(name) -> str:

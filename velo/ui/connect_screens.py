@@ -1,4 +1,5 @@
-"""Ligações a serviços de fora: Strava (segmentos e PR) e GarminDB.
+"""Ligações a serviços de fora: Strava (segmentos e PR). O GarminDB está na
+Sincronização (velo.ui.sync_screens).
 
 Os ecrãs do Strava têm o agente desligado (F1/F2): pelo acordo da API do
 Strava, esses dados não podem ir para sistemas de IA.
@@ -194,85 +195,10 @@ class StravaSegmentsScreen(Screen):
 # ================================================================ GarminDB
 
 
-class GarminDBScreen(Screen):
-    """Lê o que o GarminDB descarregou (e, se estiver instalado, corre-o)."""
-
-    def __init__(self, app, runner=None):
-        super().__init__(app)
-        self.runner = runner
-        self.job: Job | None = None
-
-    def enter(self) -> None:
-        a = self.app
-        st = importers.garmindb_status(a.db)
-        busy = self.job is not None and not self.job.done
-        yes, no = tr("sim", "yes"), tr("não", "no")
-        rows = [
-            Item(tr("Pasta do GarminDB", "GarminDB folder"), value=st["dir"] + "▏",
-                 data="text:garmindb_dir",
-                 detail=tr("Onde está a garmin.db (por omissão ~/HealthData/DBs)",
-                           "Where garmin.db lives (default ~/HealthData/DBs)")),
-            Item("garmin.db", value=yes if st["found"] else no, enabled=False),
-            Item(tr("GarminDB instalado", "GarminDB installed"),
-                 value=yes if st["cli"] else no, enabled=False,
-                 detail="" if st["cli"] else "pip install garmindb"),
-            Item(tr("Última importação", "Last import"), value=st["last_import"] or "—",
-                 enabled=False),
-            Item(tr("Atualizar com o GarminDB e importar", "Update with GarminDB and import"),
-                 value=tr("a descarregar…", "downloading…") if busy else "",
-                 action=self._update, enabled=st["cli"] and not busy,
-                 detail=tr("Corre «garmindb_cli.py --all --download --import --analyze --latest»",
-                           "Runs «garmindb_cli.py --all --download --import --analyze --latest»")),
-            Item(tr("Importar da garmin.db", "Import from garmin.db"), action=self._import,
-                 enabled=st["found"] and not busy,
-                 detail=tr("Passos, FC repouso, sono, HRV, stress, Body Battery, SpO2, peso…",
-                           "Steps, resting HR, sleep, HRV, stress, Body Battery, SpO2, weight…")),
-            Item(tr("A palavra-passe do Garmin", "Your Garmin password"), enabled=False,
-                 detail=tr("Fica na configuração do GarminDB (~/.GarminDb), nunca na Perennia.",
-                           "Stays in GarminDB's config (~/.GarminDb), never in Perennia.")),
-        ]
-        self.chrome.set("GarminDB", tr("Os teus dados do Garmin Connect, via GarminDB",
-                                       "Your Garmin Connect data, via GarminDB"), self.footer())
-        self.list.set_items(rows, keep_index=True)
-
-    def text_input(self, field: str, text: str) -> None:
-        db = self.app.db
-        db.set(field, str(db.get(field, "") or importers.garmindb_dir(db)) + text)
-        self.enter()
-
-    def text_backspace(self, field: str) -> None:
-        db = self.app.db
-        db.set(field, str(db.get(field, "") or importers.garmindb_dir(db))[:-1])
-        self.enter()
-
-    def _import(self) -> None:
-        try:
-            rep = importers.import_garmindb(self.app.db)
-        except Exception as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        self.last_report = rep
-        self.app.message(tr("Garmin: {v} valores em {d} dias", "Garmin: {v} values over {d} days",
-                            v=rep["values"], d=rep["days"]))
-        self.enter()
-
-    def _update(self) -> None:
-        if self.job is not None and not self.job.done:
-            return
-        runner = self.runner
-        self.job = Job(lambda: importers.run_garmindb(runner=runner))
-        self.enter()
-
-    def update(self, dt: float) -> None:
-        j = self.job
-        if j is not None and j.done:
-            self.job = None
-            ok, out = j.result if j.result else (False, j.error or "")
-            if ok:
-                self._import()
-            else:
-                self.app.message("GarminDB: " + (out.splitlines()[-1] if out else "falhou"))
-                self.enter()
+def GarminDBScreen(app, runner=None):                      # noqa: N802 — compatibilidade
+    """O GarminDB passou para Definições → Sincronização (este é o mesmo ecrã)."""
+    from velo.ui.sync_screens import SyncScreen
+    return SyncScreen(app, runner)
 
 
 def folder_exists(p: str) -> bool:

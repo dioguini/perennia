@@ -596,6 +596,7 @@ class TestLapSessionGui(tg.GuiCase):
         from velo.ui import hub_screens as hs_
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Conditioning")
         self.assertIsInstance(self.screen(), gs.ModalityScreen)
         self.pick("Treino livre")
@@ -687,7 +688,7 @@ class TestAgent(tg.GuiCase):
         self.assertIn("O que almocei", ctx["diario"])
 
     def test_no_agent_during_a_ride(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

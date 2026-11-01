@@ -101,8 +101,8 @@ class BlockBuilder(EditScreen):
         return [it.mode_name(m) for m in modes]
 
     def on_tab(self) -> None:
+        # mudar de vista não mexe no treino: não conta como alteração
         self.mode = self.modes[self.tab % len(self.modes)]
-        self.dirty = True
         for name, pct, r, lab in self.pal:
             lab.text = self._pal_text(name)
         self.redraw()
@@ -127,7 +127,8 @@ class BlockBuilder(EditScreen):
         return int(h * 0.36)
 
     def _list_width(self, w: int) -> int:
-        return int(w * 0.62) - 48
+        # a lista ocupa a largura toda, em colunas: assim cabe sem páginas
+        return w - 96
 
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
@@ -141,14 +142,14 @@ class BlockBuilder(EditScreen):
             r.color = it.zone_color(pct)[:3] if pct else PANEL2
         self.cx0, self.cx1 = 96, w - 48
         self.cy1 = pal_top - self.PAL_H - 14
-        self.cy0 = self.content_top(h) + 34
+        self.cy0 = self.content_top(h) + 46
         self.canvas_bg.x, self.canvas_bg.y = self.cx0, self.cy0
         self.canvas_bg.width, self.canvas_bg.height = self.cx1 - self.cx0, self.cy1 - self.cy0
-        self.summary.x, self.summary.y = int(w * 0.64), self.content_top(h) + 4
-        self.summary.width = int(w * 0.36) - 48
-        zy = self.content_top(h) - 150
-        for i, r in enumerate(self.zone_bar):
-            r.x, r.y = int(w * 0.64), max(60, zy)
+        # o resumo (duração, carga, IF) vai no subtítulo; a distribuição pelas
+        # zonas é uma barra fina logo por baixo do gráfico, da largura dele
+        self.summary.x, self.summary.y = -3000, -3000
+        for r in self.zone_bar:
+            r.x, r.y, r.height = self.cx0, self.content_top(h) + 20, 6
         self.list.y = self.content_top(h)
         self.list.width = self._list_width(w)
         self.list.set_visible_rows(max(2, (self.content_top(h) - 70) // 38))
@@ -292,12 +293,13 @@ class BlockBuilder(EditScreen):
             f"{len(self.blocks)} {tr('blocos', 'blocks')} · {tr('vista', 'view')}: "
             f"{it.mode_name(self.mode)}")
         tot = sum(est["zones"]) or 1.0
-        x = self.summary.x
-        width = self.summary.width
+        x = self.cx0
+        width = self.cx1 - self.cx0
         for r, secs in zip(self.zone_bar, est["zones"]):
             r.x = x
             r.width = width * secs / tot
             x += r.width
+        self.chrome.subtitle.text = self.summary.text.replace("\n", "  ·  ")
 
     def draw(self) -> None:
         super().draw()
@@ -358,16 +360,17 @@ class BlockBuilder(EditScreen):
                                                    "In one sentence: what this workout trains")),
                  Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name"),
-                 Item(tr("✓ Guardar (Ctrl+S)", "✓ Save (Ctrl+S)"), action=self._save,
-                      value="● " + tr("por guardar", "unsaved") if self.dirty else "")]
+                 Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
+                      button=True, primary=True)]
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
                       "running": tr("Corrida", "Running"),
                       "swimming": tr("Natação", "Swimming")}[self.sport]
         self.chrome.set(tr("Construtor de treinos", "Workout builder") + f" · {sport_name}",
-                        tr("Arrasta blocos da paleta para o gráfico · Tab muda a vista",
-                           "Drag blocks from the palette onto the chart · Tab changes the view"),
-                        tr("←/→ bloco · ↑↓ linha · +/− duração · D duplicar · Del apagar",
-                           "←/→ block · ↑↓ row · +/− duration · D duplicate · Del delete"))
+                        self.summary.text.replace("\n", "  ·  "),
+                        tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
+                           "D duplicar · Del apagar · Tab vista",
+                           "Drag palette blocks · ←/→ block · ↑↓ row · +/− duration · "
+                           "D duplicate · Del delete · Tab view"))
         self.list.set_items(rows, keep_index=True)
 
     @property
@@ -461,6 +464,7 @@ class BlockBuilder(EditScreen):
             self.block.goal = self.block.goal[:-1]
         elif self.block is not None:
             self.block.cue = self.block.cue[:-1]
+        self.dirty = True
         self.enter()
 
     def _nudge_duration(self, steps: int) -> None:
@@ -551,18 +555,17 @@ class BlockBuilder(EditScreen):
         if symbol == key.S and modifiers & key.MOD_CTRL:
             self._save()
             return True
-        if self._field("text:") is None:
-            if symbol == key.DELETE:
-                self._delete()
-                return True
-            if symbol == key.ESCAPE and self.dirty:
-                if getattr(self, "_warned", False):
-                    return super().on_key(symbol, modifiers)
-                self._warned = True
-                self.app.message(tr("Há alterações por guardar: Esc outra vez sai sem guardar.",
-                                    "Unsaved changes: Esc again leaves without saving."))
-                return True
+        if self._field("text:") is None and symbol == key.DELETE:
+            self._delete()
+            return True
         return super().on_key(symbol, modifiers)
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
 
     # --------------------------------------------------------------- rato
 

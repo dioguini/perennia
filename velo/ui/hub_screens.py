@@ -99,8 +99,9 @@ class ItemEditor(EditScreen):
                       data="num:weight_kg", detail=tr("de cada um (opcional)",
                                                       "each (optional)")),
                  Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes"),
-                 Item(tr("✓ Guardar", "✓ Save"), action=self._save),
-                 Item(tr("Apagar", "Delete"), action=self._delete, enabled=bool(self.iid))]
+                 Item(tr("Apagar", "Delete"), action=self._delete, enabled=bool(self.iid),
+                      button=True),
+                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Artigo", "Item"), inventory.kind_name(v["kind"]), self.footer())
         self.list.set_items(items, keep_index=True)
 
@@ -176,12 +177,13 @@ class ExerciseInventory(Screen):
         a = self.app
         mod = self.modality()
         m = gym.modality(mod)
+        # as ações são botões em baixo: a lista fica só com os exercícios
         items = [Item(tr("+ Novo exercício", "+ New exercise"),
-                      action=lambda: a.push(ExerciseEditor(a, None, mod))),
-                 Item(tr("Só o que posso fazer com o meu material",
-                         "Only what my equipment allows"),
+                      action=lambda: a.push(ExerciseEditor(a, None, mod)), button=True),
+                 Item((tr("✓ ", "✓ ") if self.only_available else "") +
+                      tr("Só com o meu material", "Only my equipment"),
                       value=tr("sim", "yes") if self.only_available else tr("não", "no"),
-                      action=self._toggle)]
+                      action=self._toggle, button=True)]
         exs = gym.exercises(a.db, mod, available_only=self.only_available)
         for e in exs:
             kit = ", ".join(inventory.kind_name(k) for k in e["equipment"]) or \
@@ -266,11 +268,8 @@ class ExerciseEditor(EditScreen):
                  data="cyc:kitcur", action=lambda: self._toggle_kit(kc)),
             Item(tr("Descrição", "Description"), value=(v["description"] or "") + "▏",
                  data="text:description"),
-            Item(tr("✓ Guardar", "✓ Save"), action=self._save),
+            Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True),
         ]
-        if self.eid:
-            items.append(Item(tr("Arquivar (deixa de aparecer)", "Archive (hide it)"),
-                              action=self._archive))
         self.chrome.set(tr("Exercício", "Exercise"), v["name"], self.footer())
         self.list.set_items(items, keep_index=True)
 
@@ -330,8 +329,4 @@ class ExerciseEditor(EditScreen):
                                      bodyweight=v["bodyweight"], equipment=v["kit"],
                                      description=v["description"] or None)
         self.app.message(tr("Exercício guardado", "Exercise saved"))
-        self.app.pop()
-
-    def _archive(self) -> None:
-        gym.archive_exercise(self.app.db, self.eid)
         self.app.pop()

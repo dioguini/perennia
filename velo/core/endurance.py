@@ -169,10 +169,16 @@ def seed(db: Database) -> None:
     db.set("endurance_seeded", True)
 
 
-def workouts(db: Database, sport: str) -> list[dict]:
+CHALLENGE = 2      # endurance_workouts.builtin: os treinos do modo Challenge
+
+
+def workouts(db: Database, sport: str, challenges: bool = False) -> list[dict]:
+    """Os treinos do desporto. Os do Challenge (builtin = 2) só aparecem com
+    `challenges=True` — não se misturam com a lista de treinos."""
     seed(db)
     out = []
-    for r in db.conn.execute("SELECT * FROM endurance_workouts WHERE sport = ?"
+    cond = "builtin = 2" if challenges else "builtin < 2"
+    for r in db.conn.execute(f"SELECT * FROM endurance_workouts WHERE sport = ? AND {cond}"
                              " ORDER BY builtin DESC, sort, name", (sport,)):
         w = dict(r)
         w["steps"] = steps_of(db, w["id"])
@@ -204,7 +210,7 @@ def totals(steps: list[Step]) -> tuple[float, float]:
 
 
 def save_workout(db: Database, wid: str | None, sport: str, name: str, description: str,
-                 steps: list[Step], mode: str = "pace", builtin: bool = False,
+                 steps: list[Step], mode: str = "pace", builtin: bool | int = False,
                  sort: int = 100) -> str:
     ensure(db)
     wid = wid or new_id()

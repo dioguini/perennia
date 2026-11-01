@@ -43,26 +43,57 @@ def _line(x, y, x2, y2, color, batch):
 
 @dataclass
 class Item:
-    """Uma linha de uma lista: rótulo, valor opcional e ação."""
+    """Uma linha de uma lista: rótulo, valor opcional e ação.
+
+    `button=True`: em vez de uma linha, é um botão de ação na faixa de baixo,
+    à direita (Guardar, Cancelar…). Continua na lista para o teclado: ↑↓
+    chegam lá e Enter carrega nele."""
     label: str
     value: str = ""
     action: Callable[[], None] | None = None
     detail: str = ""
     enabled: bool = True
     data: object = None
+    button: bool = False
+    primary: bool = False         # o botão principal (Guardar) fica realçado
+
+
+BUTTON_H = 36
+BUTTON_Y = 14
+
+
+def button_width(text: str) -> float:
+    return max(110.0, len(text) * 8.2 + 36)
 
 
 class ListView:
-    """Lista rolável com seleção. Reutiliza etiquetas entre redesenhos."""
+    """Lista com seleção, sem barra de deslocamento: quando as linhas não cabem
+    na altura, continuam numa coluna ao lado (o ecrã é ocupado na largura).
+    Só se nem assim couberem é que se passa à «página» seguinte.
+
+    As linhas com `button=True` não aparecem na lista: são os botões de ação
+    da faixa de baixo, à direita."""
+
+    MIN_COL_W = 270
+    COL_GAP = 28
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
         self.visible_rows = visible_rows
         self.items: list[Item] = []
         self.index = 0
-        self.scroll = 0
+        self.scroll = 0               # primeira linha da página à vista
+        self.columns = 1
+        self.max_columns: int | None = None    # None: as que couberem na largura
+        self.bar_right: float | None = None    # onde acabam os botões (à direita)
+        self.bar_y = BUTTON_Y
         self.batch = pyglet.graphics.Batch()
         self._rows = []
+        self._buttons = []
+        self._cells: list[tuple[int, float, float, float]] = []   # (índice, x, y, largura)
+        self._button_rects: list[tuple[int, float, float, float]] = []
+        self.page_label = make_label("", font_size=10, color=DIM, anchor_x="right",
+                                     anchor_y="center", batch=self.batch)
         self._add_rows(visible_rows)
 
     def _add_rows(self, n: int) -> None:
@@ -81,6 +112,13 @@ class ListView:
             detail = make_label("", font_size=11, color=DIM,
                                        anchor_y="center", batch=self.batch)
             self._rows.append((highlight, label, value, detail))
+
+    def _add_button(self) -> None:
+        outline = pyglet.shapes.Rectangle(0, 0, 10, BUTTON_H + 2, color=BORDER, batch=self.batch)
+        bg = pyglet.shapes.Rectangle(0, 0, 10, BUTTON_H, color=PANEL, batch=self.batch)
+        lab = make_label("", font_size=13, bold=True, color=TEXT, anchor_x="center",
+                         anchor_y="center", batch=self.batch)
+        self._buttons.append((outline, bg, lab))
 
     def set_visible_rows(self, n: int) -> None:
         """Ao mudar o tamanho da janela: tantas linhas desenhadas quantas cabem."""
@@ -105,34 +143,112 @@ class ListView:
             self.scroll = 0
         self._sync()
 
+    # ------------------------------------------------------------- arrumar
+
+    def row_indices(self) -> list[int]:
+        return [i for i, it in enumerate(self.items) if not it.button]
+
+    def button_indices(self) -> list[int]:
+        return [i for i, it in enumerate(self.items) if it.button]
+
+    def _columns_for(self, n: int) -> int:
+        per = max(1, self.visible_rows)
+        fit = max(1, int((self.width + self.COL_GAP) // (self.MIN_COL_W + self.COL_GAP)))
+        if self.max_columns is not None:
+            fit = max(1, min(fit, self.max_columns))
+        return max(1, min(fit, -(-n // per)))
+
     def _sync(self) -> None:
-        if self.index < self.scroll:
-            self.scroll = self.index
-        elif self.index >= self.scroll + self.visible_rows:
-            self.scroll = self.index - self.visible_rows + 1
-        for i, (highlight, label, value, detail) in enumerate(self._rows):
-            idx = self.scroll + i
-            row_y = self.y - i * ROW_H
-            highlight.x, highlight.y = self.x - 10, row_y - ROW_H // 2 + 2
-            highlight.width = self.width + 20
+        rows = self.row_indices()
+        per = max(1, self.visible_rows)
+        cols = self._columns_for(len(rows))
+        self.columns = cols
+        page = per * cols
+        if self.index in rows:
+            pos = rows.index(self.index)
+            self.scroll = (pos // page) * page
+        self.scroll = max(0, min(self.scroll, max(0, len(rows) - 1)))
+        self.scroll -= self.scroll % page
+        shown = rows[self.scroll:self.scroll + page]
+        need = len(shown)
+        if need > len(self._rows):
+            self._add_rows(need - len(self._rows))
+        col_w = (self.width - self.COL_GAP * (cols - 1)) / cols
+        self._cells = []
+        for k, (highlight, label, value, detail) in enumerate(self._rows):
+            if k >= len(shown):
+                highlight.opacity = highlight._bar.opacity = 0
+                label.text = value.text = detail.text = ""
+                continue
+            idx = shown[k]
+            c, r = divmod(k, per)
+            x = self.x + c * (col_w + self.COL_GAP)
+            row_y = self.y - r * ROW_H
+            self._cells.append((idx, x, row_y, col_w))
+            highlight.x, highlight.y = x - 10, row_y - ROW_H // 2 + 2
+            highlight.width = col_w + 20
             highlight.opacity = 255 if idx == self.index else 0
             highlight._bar.x, highlight._bar.y = highlight.x, highlight.y
             highlight._bar.opacity = highlight.opacity
-            if idx < len(self.items):
-                item = self.items[idx]
-                label.text = item.label
-                label.x, label.y = self.x, row_y + (6 if item.detail else 0)
-                label.color = (TEXT if item.enabled else DIM) if idx != self.index \
-                    else ACCENT
-                value.text = item.value
-                value.x, value.y = self.x + self.width, row_y
-                # a nota não pode passar por baixo do valor à direita
-                room = int((self.width - len(item.value) * 7.5 - 24) / 6.0)
-                d = item.detail or ""
-                detail.text = d if len(d) <= room else d[:max(0, room - 1)] + "…"
-                detail.x, detail.y = self.x, row_y - 12
+            item = self.items[idx]
+            value.text = item.value
+            value.x, value.y = x + col_w, row_y
+            # o rótulo e a nota não podem passar por baixo do valor à direita
+            free = col_w - len(item.value) * 7.5 - 18
+            label.text = _fit(item.label, free, 14) if cols > 1 else item.label
+            label.x, label.y = x, row_y + (6 if item.detail else 0)
+            label.color = (TEXT if item.enabled else DIM) if idx != self.index \
+                else ACCENT
+            room = int(free / 6.0)
+            d = item.detail or ""
+            detail.text = d if len(d) <= room else d[:max(0, room - 1)] + "…"
+            detail.x, detail.y = x, row_y - 12
+        pages = -(-len(rows) // page) if rows else 1
+        self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
+                                if pages > 1 else "")
+        self.page_label.x = self.x + self.width
+        self.page_label.y = self.y - per * ROW_H + ROW_H // 2 - 4
+        self._sync_buttons()
+
+    def _sync_buttons(self) -> None:
+        ids = self.button_indices()
+        while len(self._buttons) < len(ids):
+            self._add_button()
+        self._button_rects = []
+        right = self.bar_right
+        x = right if right is not None else self.x + self.width
+        widths = [button_width(self.items[i].label) for i in ids]
+        x -= sum(widths) + 10 * max(0, len(ids) - 1)
+        for k, (outline, bg, lab) in enumerate(self._buttons):
+            if k >= len(ids):
+                outline.opacity = bg.opacity = 0
+                lab.text = ""
+                continue
+            idx = ids[k]
+            item = self.items[idx]
+            bw = widths[k]
+            on = idx == self.index
+            bg.x, bg.y, bg.width, bg.height = x, self.bar_y, bw, BUTTON_H
+            outline.x, outline.y, outline.width = x - 1, self.bar_y - 1, bw + 2
+            outline.height = BUTTON_H + 2
+            outline.color = ACCENT[:3] if (on or item.primary) else BORDER
+            bg.color = ACCENT[:3] if item.primary and item.enabled else (SELECT if on else PANEL)
+            outline.opacity = bg.opacity = 255
+            lab.text = item.label
+            lab.x, lab.y = x + bw / 2, self.bar_y + BUTTON_H / 2
+            if item.primary and item.enabled:
+                lab.color = ACCENT_TEXT
             else:
-                label.text = value.text = detail.text = ""
+                lab.color = ACCENT if on else (TEXT if item.enabled else DIM)
+            self._button_rects.append((idx, x, bw, self.bar_y))
+            x += bw + 10
+
+    @property
+    def buttons_left(self) -> float | None:
+        """Onde começam os botões de ação (para o rodapé não lhes passar por cima)."""
+        if not self._button_rects:
+            return None
+        return self._button_rects[0][1]
 
     @property
     def selected(self) -> Item | None:
@@ -146,19 +262,41 @@ class ListView:
         self.index = (self.index + step) % len(self.items)
         self._sync()
 
+    def select_data(self, data) -> bool:
+        for i, it in enumerate(self.items):
+            if it.data == data:
+                self.index = i
+                self._sync()
+                return True
+        return False
+
     def activate(self) -> None:
         item = self.selected
         if item is not None and item.enabled and item.action is not None:
             item.action()
 
+    def press_button(self, which: str = "primary") -> bool:
+        """Carrega no botão principal (Ctrl+S) — devolve False se não houver."""
+        for i in self.button_indices():
+            it = self.items[i]
+            if (which == "primary" and it.primary) and it.enabled and it.action is not None:
+                self.index = i
+                self._sync()
+                it.action()
+                return True
+        return False
+
     def on_mouse_press(self, mx: int, my: int) -> bool:
-        for i in range(self.visible_rows):
-            idx = self.scroll + i
-            if idx >= len(self.items):
-                break
-            top = self.y - i * ROW_H + ROW_H // 2
+        for idx, x, bw, y in self._button_rects:
+            if x <= mx <= x + bw and y <= my <= y + BUTTON_H:
+                self.index = idx
+                self._sync()
+                self.activate()
+                return True
+        for idx, x, row_y, col_w in self._cells:
+            top = row_y + ROW_H // 2
             bottom = top - ROW_H
-            if bottom <= my <= top and self.x - 10 <= mx <= self.x + self.width + 10:
+            if bottom <= my <= top and x - 10 <= mx <= x + col_w + 10:
                 self.index = idx
                 self._sync()
                 self.activate()
@@ -186,6 +324,8 @@ class Chrome:
         self.agent_hint = make_label("", font_size=10, color=DIM, anchor_x="right",
                                      batch=self.batch)
         self.footer_x = 48
+        self.footer_full = ""
+        self.footer_limit: float | None = None      # onde começam os botões de ação
         self.layout()
 
     def layout(self) -> None:
@@ -194,12 +334,23 @@ class Chrome:
         self.subtitle.x, self.subtitle.y = 48, h - 78
         self.message.x, self.message.y = 48, 76
         self.footer.x, self.footer.y = self.footer_x, 26
-        self.agent_hint.x, self.agent_hint.y = w - 48, 26
+        # a dica do agente fica em cima, à direita: em baixo estão os botões
+        self.agent_hint.x, self.agent_hint.y = w - 48, h - 52
 
     def set(self, title: str, subtitle: str = "", footer: str = "") -> None:
         self.title.text = title
         self.subtitle.text = subtitle
-        self.footer.text = footer
+        self.footer_full = footer
+        self._fit_footer()
+
+    def set_footer_limit(self, x_right: float | None) -> None:
+        if x_right != self.footer_limit:
+            self.footer_limit = x_right
+            self._fit_footer()
+
+    def _fit_footer(self) -> None:
+        right = self.footer_limit if self.footer_limit is not None else self.window.width - 48
+        self.footer.text = _fit(self.footer_full, max(60.0, right - 20 - self.footer_x), 11)
 
     def draw(self) -> None:
         self.batch.draw()
@@ -276,6 +427,7 @@ class Chart:
             ln.x = ln.x2 = ln.y = ln.y2 = 0
         for lab in self._labels + self._yticks:
             lab.text = ""
+            lab.color = DIM
         for dot in self._dots:
             dot.radius = 0
         for pool in getattr(self, "_series_lines", []):
@@ -328,6 +480,8 @@ class Chart:
                     lab.text = labels[i]
                     lab.x = self.x + i * bar_w + bar_w / 2
                     lab.y = self.y - 14
+                    # com cores (zonas), a legenda de cada barra tem a cor dela
+                    lab.color = _theme.ink(colors[i]) if colors and i < len(colors) else DIM
 
     # ----------------------------------------------------------------- linha
 
@@ -792,17 +946,21 @@ class Tile:
         o = self.outline
         o.x, o.y, o.width, o.height = x - 1, y - 1, w + 2, h + 2
         self.border.x, self.border.y, self.border.width = x, y, w
-        icon = min(72, h * 0.5, w * 0.6)
-        if self.icon is not None:
-            self.icon.scale = icon / 64
-            self.icon.x, self.icon.y = x + (w - icon) / 2, y + h - icon - 18
-        self.title.x, self.title.y = x + w / 2, y + 40
         # o título tem de caber no cartão (≈ 0,62 da altura da letra por carácter)
-        size = 17
-        while size > 11 and len(self.title.text) * size * 0.62 > w - 16:
+        size = 17 if h >= 120 else 15
+        while size > 12 and len(self.title.text) * size * 0.62 > w - 20:
             size -= 1
         self.title.font_size = size
-        self.note.x, self.note.y = x + w / 2, y + 18
+        title_y = y + max(24.0, h * 0.2) + (8 if self.note.text else 0)
+        self.title.x, self.title.y = x + w / 2, title_y
+        # o ícone fica por cima do título, sem lhe tocar
+        room = (y + h - 12) - (title_y + size * 0.8 + 10)
+        icon = max(20.0, min(72.0, room, w * 0.5))
+        if self.icon is not None:
+            self.icon.scale = icon / 64
+            self.icon.x = x + (w - icon) / 2
+            self.icon.y = title_y + size * 0.8 + 10 + (room - icon) / 2
+        self.note.x, self.note.y = x + w / 2, y + 14
 
     def set_selected(self, on: bool) -> None:
         self.selected = on
@@ -987,11 +1145,36 @@ class TopBar:
         self.enabled = {"devices": True, "settings": True, "quit": True}
         self.devices: list[tuple[str, str]] = []
         self._chip_rects: list[tuple[float, float, float]] = []
+        # data e hora, ao lado do botão Dispositivos
+        self.clock = make_label("", font_size=10, bold=True, color=HEADER_TEXT,
+                                anchor_x="right", anchor_y="center", batch=self.batch)
+        self._clock_key = None
+        self.now = None                       # para os testes: uma hora fixa
+        self.update_clock()
         self.layout()
+
+    def clock_text(self) -> str:
+        import datetime as _dt
+        from velo.core.i18n import tr
+        now = self.now or _dt.datetime.now()
+        days = tr("seg ter qua qui sex sáb dom", "Mon Tue Wed Thu Fri Sat Sun").split()
+        return f"{days[now.weekday()]} {now.day:02d}/{now.month:02d}/{now.year} · " \
+               f"{now.hour:02d}:{now.minute:02d}"
+
+    def update_clock(self) -> bool:
+        """Muda o texto quando muda o minuto (devolve True se mudou)."""
+        text = self.clock_text()
+        if text == self._clock_key:
+            return False
+        self._clock_key = text
+        self.clock.text = text
+        return True
 
     def set_texts(self, devices: str, settings: str, quit_: str) -> None:
         for k, txt in (("devices", devices), ("settings", settings), ("quit", quit_)):
             self.buttons[k][1].text = txt
+        self._clock_key = None
+        self.update_clock()
         self.layout()
 
     def layout(self) -> None:
@@ -1007,6 +1190,8 @@ class TopBar:
                 ic.x, ic.y = x + 6, h - self.H + 5
             lab.x, lab.y = x + 26, h - self.H / 2
             x -= 6
+        self.clock.x, self.clock.y = x - 8, h - self.H / 2
+        x -= 8 + len(self.clock.text) * 6.6 + 10
         self._buttons_left = x
         self._place_chips()
 
@@ -1075,6 +1260,8 @@ class TopBar:
         return "bar"
 
     def draw(self) -> None:
+        if self.update_clock():
+            self.layout()
         self.batch.draw()
 
 
@@ -1149,3 +1336,232 @@ class SessionClock:
     def draw(self) -> None:
         if self._own:
             self.batch.draw()
+
+
+class GridView:
+    """Cartões em grelha, a ocupar a área toda (sem deslocar): para escolher
+    muitas coisas de uma vez, como as métricas disponíveis. Cada cartão tem
+    um rótulo, uma nota pequena e um estado (ligado / desligado)."""
+
+    GAP = 8
+
+    def __init__(self):
+        self.batch = pyglet.graphics.Batch()
+        self.cells: list = []
+        self.rects: list[tuple[float, float, float, float]] = []
+        self.cols = 1
+        self.index = 0
+        self.geometry = (48, 600, 800, 80)
+
+    def _cell(self):
+        bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=self.batch)
+        bar = pyglet.shapes.Rectangle(0, 0, 4, 10, color=GOOD[:3], batch=self.batch)
+        lab = make_label("", font_size=12, bold=True, color=TEXT, anchor_y="center",
+                         batch=self.batch)
+        note = make_label("", font_size=9, color=DIM, anchor_y="center", batch=self.batch)
+        mark = make_label("", font_size=12, bold=True, color=GOOD, anchor_x="right",
+                          anchor_y="center", batch=self.batch)
+        return bg, bar, lab, note, mark
+
+    def layout(self, x: float, top: float, width: float, bottom: float) -> None:
+        self.geometry = (x, top, width, bottom)
+
+    def set(self, entries: list[tuple[str, str, bool, bool]], index: int = 0) -> None:
+        """entries: [(rótulo, nota, ligado, ativo)]."""
+        x, top, width, bottom = self.geometry
+        n = len(entries)
+        while len(self.cells) < n:
+            self.cells.append(self._cell())
+        h_all = max(40.0, top - bottom)
+        best = None
+        for cols in range(1, 9):
+            rows = -(-n // cols) if n else 1
+            tw = (width - self.GAP * (cols - 1)) / cols
+            th = (h_all - self.GAP * (rows - 1)) / rows
+            if tw < 150:
+                break
+            score = abs(tw / max(th, 1) - 4.5) + (100 if th < 30 else 0)
+            if best is None or score < best[0]:
+                best = (score, cols, tw, min(th, 64))
+        _s, cols, tw, th = best or (0, 1, width, 40)
+        self.cols = cols
+        self.index = max(0, min(index, n - 1)) if n else 0
+        self.rects = []
+        for k, (bg, bar, lab, note, mark) in enumerate(self.cells):
+            if k >= n:
+                bg.opacity = bar.opacity = 0
+                lab.text = note.text = mark.text = ""
+                continue
+            text, sub, on, enabled = entries[k]
+            r, c = divmod(k, cols)
+            cx = x + c * (tw + self.GAP)
+            cy = top - (r + 1) * th - r * self.GAP
+            self.rects.append((cx, cy, tw, th))
+            sel = k == self.index
+            bg.x, bg.y, bg.width, bg.height = cx, cy, tw, th
+            bg.color = SELECT if sel else (PANEL if on else PANEL2)
+            bg.opacity = 255
+            bar.x, bar.y, bar.height = cx, cy, th
+            bar.color = ACCENT[:3] if sel else GOOD[:3]
+            bar.opacity = 255 if (on or sel) else 0
+            size = 12 if th >= 40 else 11
+            lab.font_size = size
+            lab.text = _fit(text, tw - 46, size)
+            lab.color = ACCENT if sel else (TEXT if enabled and on else DIM)
+            lab.x, lab.y = cx + 14, cy + th / 2 + (7 if sub and th >= 40 else 0)
+            note.text = _fit(sub, tw - 46, 9) if th >= 40 else ""
+            note.x, note.y = cx + 14, cy + th / 2 - 9
+            mark.text = "✓" if on else ""
+            mark.x, mark.y = cx + tw - 10, cy + th / 2
+
+    def hit(self, mx: float, my: float) -> int | None:
+        for k, (cx, cy, tw, th) in enumerate(self.rects):
+            if cx <= mx <= cx + tw and cy <= my <= cy + th:
+                return k
+        return None
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class TextColumns:
+    """Texto em colunas (grupos com título e linhas «tecla — o que faz»), a
+    ocupar a área toda: os atalhos de teclado."""
+
+    def __init__(self):
+        self.batch = pyglet.graphics.Batch()
+        self.labels: list = []
+        self.geometry = (48, 600, 800, 80)
+
+    def layout(self, x: float, top: float, width: float, bottom: float) -> None:
+        self.geometry = (x, top, width, bottom)
+
+    def set(self, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
+        x, top, width, bottom = self.geometry
+        lines = sum(len(rows) + 2 for _g, rows in groups)
+        height = max(60.0, top - bottom)
+        cols, row_h = 1, 22.0
+        for cols in range(1, 6):
+            # folga de 10 %: um grupo não se parte no fundo de uma coluna
+            row_h = min(22.0, height / max(1, -(-int(lines * 1.1) // cols)))
+            if row_h >= 17 or (width - 24 * cols) / (cols + 1) < 220:
+                break
+        per = max(1, int(height // row_h))
+        col_w = (width - 24 * (cols - 1)) / cols
+        need = sum(len(rows) * 2 + 1 for _g, rows in groups)
+        while len(self.labels) < need:
+            self.labels.append(make_label("", font_size=10, color=TEXT, anchor_y="center",
+                                          batch=self.batch))
+        k = 0
+        slot = 0
+
+        def place(text, xx, slot_, bold=False, color=TEXT, anchor="left", size=10):
+            nonlocal k
+            lab = self.labels[k]
+            k += 1
+            c, r = divmod(slot_, per)
+            lab.text = text
+            lab.font_size = size
+            lab.color = color
+            try:
+                lab.bold = bold
+                lab.anchor_x = anchor
+            except Exception:
+                pass
+            lab.x = x + c * (col_w + 24) + xx
+            lab.y = top - r * row_h - row_h / 2
+            return lab
+
+        size = 10 if row_h >= 18 else 9
+        key_w = min(150.0, col_w * 0.38)
+        for title, rows in groups:
+            # um grupo não começa no fundo de uma coluna
+            if slot % per and (slot % per) + 2 > per:
+                slot += per - slot % per
+            place(title, 0, slot, True, ACCENT, size=size + 1)
+            slot += 1
+            for key_, what in rows:
+                place(key_, 0, slot, True, TEXT, size=size)
+                place(_fit(what, col_w - key_w - 8, size), key_w, slot, False, DIM, size=size)
+                slot += 1
+            slot += 1
+        for lab in self.labels[k:]:
+            lab.text = ""
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class LapPanel:
+    """As voltas, sempre no mesmo sítio e da mesma maneira em todos os
+    desportos (como no ecrã do ciclismo): em cima a volta em curso, com seis
+    números, e por baixo as voltas já feitas. Pisca quando se marca uma."""
+
+    CELL_H = 40
+    PREV_ROW = 18
+    MAX_PREV = 10
+
+    def __init__(self):
+        b = self.batch = pyglet.graphics.Batch()
+        self.outline = pyglet.shapes.Rectangle(0, 0, 10, 10, color=BORDER, batch=b)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
+        self.flash = pyglet.shapes.Rectangle(0, 0, 10, 10, color=ACCENT[:3], batch=b)
+        self.flash.opacity = 0
+        self.title = make_label("", font_size=13, bold=True, color=ACCENT, anchor_y="top",
+                                batch=b)
+        self.cells = [(make_label("", font_size=9, color=DIM, anchor_y="top", batch=b),
+                       make_label("", font_size=14, bold=True, color=TEXT, anchor_y="top",
+                                  batch=b)) for _ in range(6)]
+        self.prev_title = make_label("", font_size=9, bold=True, color=DIM, anchor_y="top",
+                                     batch=b)
+        self.prev = [make_label("", font_size=10, color=TEXT, anchor_y="top", batch=b)
+                     for _ in range(self.MAX_PREV)]
+        self.geometry = (0, 0, 300, 0)
+        self.rows = 0
+        self._flash_at: float | None = None
+
+    def layout(self, x: float, top: float, width: float, bottom: float) -> None:
+        self.geometry = (x, top, width, bottom)
+        h = top - bottom
+        for r in (self.outline,):
+            r.x, r.y, r.width, r.height = x - 1, bottom - 1, width + 2, h + 2
+        for r in (self.bg, self.flash):
+            r.x, r.y, r.width, r.height = x, bottom, width, h
+        self.title.x, self.title.y = x + 12, top - 8
+        for i, (cap, val) in enumerate(self.cells):
+            c, r = i % 2, i // 2
+            cx = x + 12 + c * (width / 2)
+            cy = top - 32 - r * self.CELL_H
+            cap.x, cap.y = cx, cy
+            val.x, val.y = cx, cy - 12
+        py = top - 32 - 3 * self.CELL_H - 4
+        self.prev_title.x, self.prev_title.y = x + 12, py
+        self.rows = max(0, min(self.MAX_PREV, int((py - 16 - bottom - 6) // self.PREV_ROW)))
+        for i, lab in enumerate(self.prev):
+            lab.x, lab.y = x + 12, py - 16 - i * self.PREV_ROW
+
+    def set(self, title: str, cells: list[tuple[str, str]], prev: list[str],
+            prev_title: str = "") -> None:
+        """`prev`: as voltas feitas, da mais recente para a mais antiga."""
+        x, top, width, bottom = self.geometry
+        self.title.text = title
+        for (cap, val), (c, v) in zip(self.cells, list(cells) + [("", "")] * 6):
+            cap.text = c.upper()
+            val.text = _fit(v, width / 2 - 18, 14)
+        shown = prev[:self.rows]
+        self.prev_title.text = prev_title if prev else ""
+        for i, lab in enumerate(self.prev):
+            lab.text = _fit(shown[i], width - 24, 10) if i < len(shown) else ""
+            lab.color = ACCENT if i == 0 else TEXT
+
+    def pulse(self, now: float) -> None:
+        self._flash_at = now
+
+    def update(self, now: float) -> None:
+        if self._flash_at is not None and now - self._flash_at < 1.5:
+            self.flash.opacity = int(90 * (1.5 - (now - self._flash_at)) / 1.5)
+        else:
+            self.flash.opacity = 0
+
+    def draw(self) -> None:
+        self.batch.draw()

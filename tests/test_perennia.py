@@ -381,6 +381,7 @@ class TestLayouts(tg.GuiCase):
         lay.save(self.app.db, "gym", [["volume", "session_time", "hr", "sets"]])
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Sessão de treino")
         self.pick("Força")
         self.pick("Força A")
         self.pick("Começar")

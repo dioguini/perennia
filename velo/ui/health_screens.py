@@ -395,7 +395,7 @@ class MetricEditor(EditScreen):
                              value=self.choices or "—", data="text:choices"))
         rows += [Item(tr("Ativa", "Active"), value=tr("sim", "yes") if self.active
                       else tr("não", "no"), data="cyc:active"),
-                 Item(tr("✓ Guardar", "✓ Save"), action=self._save)]
+                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Métrica", "Metric"), self.name, self.footer())
         self.list.set_items(rows, keep_index=True)
 
@@ -579,7 +579,7 @@ class ParameterEditor(EditScreen):
         if p.get("ref_source"):
             rows.append(Item(tr("Linha usada", "Line used"), value=p["ref_source"][:60],
                              enabled=False))
-        rows += [Item(tr("✓ Guardar", "✓ Save"), action=self._save)]
+        rows += [Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Parâmetro", "Parameter"), p.get("area") or "", self.footer())
         self.list.set_items(rows, keep_index=True)
 
@@ -654,9 +654,9 @@ class LabReportEditor(EditScreen):
                                      action=lambda rid=x["id"]: a.push(
                                          LabResultEditor(a, self.report_id, rid))))
         rows += [Item(tr("+ Adicionar resultado", "+ Add result"), action=self._add),
-                 Item(tr("✓ Guardar", "✓ Save"), action=self._save),
                  Item(tr("Apagar esta análise", "Delete this report"), action=self._delete,
-                      enabled=bool(self.report_id))]
+                      enabled=bool(self.report_id), button=True),
+                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Análises", "Lab report"), f"{self.done_on} {self.lab}",
                         self.footer())
         self.list.set_items(rows, keep_index=True)
@@ -791,7 +791,7 @@ class LabResultEditor(EditScreen):
                 Item(tr("Referência máxima", "Reference high"), value=n(v["ref_high"]),
                      data="num:ref_high"),
                 Item(tr("Comentário", "Comment"), value=v["comment"] or "—", data="text:comment"),
-                Item(tr("✓ Guardar", "✓ Save"), action=self._save),
+                Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True),
                 Item(tr("Remover", "Remove"), action=self._remove, enabled=bool(self.result_id))]
         self.chrome.set(tr("Resultado", "Result"), v["marker"], self.footer())
         self.list.set_items(rows, keep_index=True)
@@ -892,8 +892,9 @@ class ImportScreen(Screen):
         rows = [Item(tr("Criar métricas para colunas desconhecidas", "Create metrics for unknown columns"),
                      value=tr("sim", "yes") if self.create_unknown else tr("não", "no"),
                      action=self._toggle),
-                Item("GarminDB", detail=tr("Ler a garmin.db do GarminDB (ou atualizá-la)",
-                                           "Read GarminDB's garmin.db (or update it)"),
+                Item(tr("Sincronização (GarminDB)", "Sync (GarminDB)"),
+                     detail=tr("Trazer os dados do GarminDB: tudo, o mais recente ou um "
+                               "intervalo", "Bring in GarminDB data: all, the latest or a range"),
                      action=lambda: a.push(_connect().GarminDBScreen(a)))]
         n_fixed = len(rows)
         for p in dict.fromkeys(found):
@@ -1000,10 +1001,50 @@ class TestsMenu(Screen):
 
 
 class TestDetail(Screen):
+    """Um teste: os blocos (como no construtor de treinos), fazer, registar,
+    editar e os resultados."""
+
     def __init__(self, app, test_id: int):
         super().__init__(app)
         self.test_id = test_id
         self._armed = None
+        from velo.ui.brief import BriefPanel
+        self.panel = BriefPanel()
+        self.brief = None
+        self._layout_panel()
+
+    def _list_width(self, w: int) -> int:
+        return max(300, int(w * 0.36))
+
+    def _layout_panel(self) -> None:
+        w, h = self.app.window.width, self.app.window.height
+        x = 48 + self._list_width(w) + 28
+        self.panel.layout(x, self.content_top(h) + 18, w - 48 - x, 66)
+
+    def on_resize(self, w: int, h: int) -> None:
+        super().on_resize(w, h)
+        self._layout_panel()
+
+    def make_brief(self, x: dict):
+        """O cartão do teste com os blocos (None se o teste não tiver blocos)."""
+        from velo.core import objectives as ob
+        blocks = ft.test_blocks(self.app.db, x)
+        if not blocks:
+            return None
+        sport = x["sport"] if x["sport"] in ("cycling", "rowing", "running", "swimming") \
+            else "running"
+        b = ob.build(self.app.db, sport, None, x["name"], blocks,
+                     description=x.get("instructions") or "")
+        b.goal = _excerpt(x.get("instructions"), 220) or b.goal
+        b.goal_written = True
+        if x["sport"] not in ("cycling", "rowing", "running", "swimming"):
+            b.sport = x["sport"]
+        return b
+
+    def draw(self) -> None:
+        super().draw()
+        if self.brief is not None:
+            self.panel.draw()
 
     def enter(self) -> None:
         a = self.app
@@ -1011,6 +1052,12 @@ class TestDetail(Screen):
         if x is None:
             a.pop()
             return
+        try:
+            self.brief = self.make_brief(x)
+        except Exception:
+            self.brief = None
+        if self.brief is not None:
+            self.panel.set(self.brief)
         s = ft.summary(a.db, x)
         rows = []
         if x["protocol"] and str(x["protocol"]).startswith("row_"):
@@ -1028,11 +1075,10 @@ class TestDetail(Screen):
         rows += [Item(tr("Registar um resultado", "Log a result"),
                       action=lambda: a.push(TestRunScreen(a, self.test_id, timer=False))),
                  Item(tr("Editar o teste", "Edit the test"),
-                      action=lambda: a.push(TestEditor(a, self.test_id, x["sport"]))),
-                 Item(tr("Desativar (deixa de aparecer)", "Deactivate (hide it)"),
-                      action=self._deactivate)]
-        rows.append(Item(tr("Instruções", "Instructions"), detail=_excerpt(x["instructions"], 120),
-                         enabled=False))
+                      action=lambda: a.push(TestEditor(a, self.test_id, x["sport"])))]
+        if self.brief is None:
+            rows.append(Item(tr("Instruções", "Instructions"),
+                             detail=_excerpt(x["instructions"], 120), enabled=False))
         for r in ft.results(a.db, self.test_id):
             rows.append(Item(r["done_on"], value=ft.fmt_value(r["value"], x["unit"]),
                              detail=_excerpt(r["notes"], 90), data=("result", r["id"])))
@@ -1041,10 +1087,6 @@ class TestDetail(Screen):
                                       "Best: {b} · {n} results · Del deletes a result",
                                       b=best, n=s["n"]), self.footer())
         self.list.set_items(rows, keep_index=True)
-
-    def _deactivate(self) -> None:
-        ft.set_active(self.app.db, self.test_id, False)
-        self.app.pop()
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
@@ -1096,7 +1138,8 @@ class TestRunScreen(EditScreen):
                                                   u=x["unit"])),
                  Item(tr("Data", "Date"), value=self.done_on, data="text:done_on"),
                  Item(tr("Notas", "Notes"), value=self.notes or "—", data="text:notes"),
-                 Item(tr("✓ Guardar o resultado", "✓ Save the result"), action=self._save)]
+                 Item(tr("Guardar o resultado", "Save the result"), action=self._save, button=True,
+                      primary=True)]
         self.chrome.set(x["name"], _excerpt(x["instructions"], 140), self.footer())
         self.list.set_items(rows, keep_index=True)
         self._layout()
@@ -1205,7 +1248,7 @@ class TestEditor(EditScreen):
                      value=str(self.duration), data="num:duration"),
                 Item(tr("Instruções", "Instructions"), value=_excerpt(self.instructions, 50) or "—",
                      action=self._edit_instr),
-                Item(tr("✓ Guardar", "✓ Save"), action=self._save)]
+                Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Teste", "Test"), sport_name(self.sport), self.footer())
         self.list.set_items(rows, keep_index=True)
 

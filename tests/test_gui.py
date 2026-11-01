@@ -140,7 +140,7 @@ class TestShell(GuiCase):
         self.assertTrue(self.app.window.caption.startswith("Perennia "))
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         labels = self.labels()
-        for expected in ("Pedalar", "Lista de treinos", "Desafios", "Estatísticas",
+        for expected in ("Sessão de treino", "Lista de treinos", "Desafios", "Estatísticas",
                          "Construtor de treinos", "Histórico",
                          "Dispositivos", "Definições", "Desligar"):
             self.assertIn(expected, labels, f"falta «{expected}» no menu")
@@ -182,7 +182,7 @@ class TestShell(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.RouteLibrary)
 
     def test_every_screen_opens_updates_and_draws(self):
-        for entry in ("Pedalar", "Importar treino", "Testes", "Challenge", "Novo treino",
+        for entry in ("Sessão de treino", "Importar treino", "Testes", "Challenge", "Novo treino",
                       "Desafios", "Gráficos e análise", "Dispositivos", "Definições"):
             with self.subTest(ecra=entry):
                 self.app.reset_to_menu()
@@ -199,7 +199,7 @@ class TestShell(GuiCase):
 
 class TestLibraryAndImport(GuiCase):
     def test_route_appears_with_distance_and_climbs(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         labels = self.labels()
         self.assertTrue(any("Serra de Teste" in x for x in labels))
         self.assertTrue(any("5.9" in x or "6.0" in x for x in labels),
@@ -207,7 +207,7 @@ class TestLibraryAndImport(GuiCase):
 
     def test_import_a_gpx_from_the_picker(self):
         before = len(self.app.db.routes())
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Importar")
         self.assertIsInstance(self.screen(), app_mod.GpxPicker)
         # o ficheiro de exemplo está na pasta de testes; aponta o seletor a ela
@@ -217,7 +217,7 @@ class TestLibraryAndImport(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.RouteDetail)
 
     def test_import_of_a_broken_file_shows_an_error(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Importar")
         bad = Path(self.tmp) / "mau.gpx"
         bad.write_text("isto não é xml")
@@ -225,14 +225,14 @@ class TestLibraryAndImport(GuiCase):
         self.assertIn("Erro", self.app._message)
 
     def test_route_detail_lists_the_climb_and_its_board(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.assertIsInstance(self.screen(), app_mod.RouteDetail)
         labels = self.labels()
         self.assertTrue(any("Subida 1" in x for x in labels), labels)
 
     def test_favourite_and_delete_keys(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         view = self.screen().list
         view.index = 1                      # a rota
         view._sync()
@@ -433,11 +433,11 @@ class TestSettingsScreen(GuiCase):
         self.pick("Definições")
         self.pick("Idioma")
         self.app.reset_to_menu()
-        self.assertIn("Ride", self.labels())
+        self.assertIn("Training session", self.labels())
         self.pick("Settings")               # já em inglês
         self.pick("Language")
         self.app.reset_to_menu()
-        self.assertIn("Pedalar", self.labels())
+        self.assertIn("Sessão de treino", self.labels())
 
     def test_render_preset_cycles_through_all_three(self):
         self.pick("Definições")
@@ -502,7 +502,7 @@ class TestSettingsScreen(GuiCase):
         self.assertEqual(self._boxes()[0]["name"], "")
 
     def test_ride_hud_shows_the_six_boxes(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -666,7 +666,7 @@ class TestDeviceScreen(GuiCase):
 
 class TestRideFlow(GuiCase):
     def _start_ride(self, comparison: bool = False) -> app_mod.RideScreen:
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         setup = self.screen()
@@ -679,7 +679,7 @@ class TestRideFlow(GuiCase):
         return ride
 
     def test_setup_screen_offers_mode_and_render(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         labels = self.labels()
@@ -1165,7 +1165,7 @@ class TestRideFlow(GuiCase):
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
         self.pick("Fechar")
 
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Modo de sessão")          # alterna para comparação
@@ -1368,7 +1368,7 @@ class TestChaseScreens(GuiCase):
 
 class TestBoardsEverywhere(GuiCase):
     def test_main_menu_board_changes_with_selection(self):
-        self.select("Pedalar")
+        self.select("Sessão de treino")
         self.assertIn("Recordes", self.board_texts())
         self.select("Testes")
         self.assertIn("Teste de FTP", self.board_texts())
@@ -1376,7 +1376,7 @@ class TestBoardsEverywhere(GuiCase):
         self.assertIn("Fuga", self.board_texts())
 
     def test_route_library_and_detail_show_route_board(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.select("Serra de Teste")
         self.assertIn("Serra de Teste", self.board_texts())
         self.pick("Serra de Teste")
@@ -1385,7 +1385,7 @@ class TestBoardsEverywhere(GuiCase):
 
     def test_summary_highlights_the_ride_just_done(self):
         ride = None
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1414,11 +1414,33 @@ class TestHomeScreen(GuiCase):
         self.assertEqual(titles[5:], ["Calendário", "Saúde", "Estatísticas gerais",
                                       "Inventário de artigos", "Exercícios"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
-        # os desportos em cima (maiores), o resto em baixo
+        # os desportos em cima, o resto em baixo — todos do mesmo tamanho
         self.assertGreater(home.tiles[0].bg.y, home.tiles[5].bg.y)
-        self.assertGreater(home.tiles[0].bg.height, home.tiles[5].bg.height)
+        sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
+        self.assertEqual(len(sizes), 1, sizes)
+        for tl in home.tiles:                        # o título não fica por baixo do ícone
+            self.assertGreater(tl.icon.y, tl.title.y)
+            self.assertGreaterEqual(tl.title.font_size, 12)
         self.assertEqual(home.form_title.text, "Forma")
         self.assertIn("seguidos", home.streak_lines[0].text)
+        self.assertIn("Próximos treinos", home.up_title.text)
+
+    def test_home_lists_the_next_two_weeks(self):
+        from datetime import date, timedelta
+        from velo.core import calendar_view as cv
+        wid = self.app.db.workouts()[0]["id"]
+        cv.plan_add(self.app.db, date.today() + timedelta(days=2), "cycling", wid, "Plano A")
+        cv.plan_add(self.app.db, date.today() + timedelta(days=13), "cycling", wid, "Plano B")
+        cv.plan_add(self.app.db, date.today() + timedelta(days=15), "cycling", wid, "Longe")
+        self.press(key.ESCAPE)
+        home = self.screen()
+        titles = [e.title for e in home.upcoming]
+        self.assertEqual(titles, ["Plano A", "Plano B"])        # só duas semanas
+        self.assertTrue(any("Plano A" in r[2].text for r in home.up_rows))
+        self.press(key.DOWN, key.DOWN, key.ENTER)                # dos cartões para a lista
+        from velo.ui import calendar_screens as cs_
+        self.assertIsInstance(self.screen(), cs_.DayScreen)
+        self.assertEqual(self.screen().day, date.today() + timedelta(days=2))
 
     def test_running_hub_and_back_arrow_returns(self):
         self.press(key.ESCAPE)
@@ -1444,7 +1466,7 @@ class TestHomeScreen(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def test_every_menu_has_a_back_arrow(self):
-        for name in ("Pedalar", "Importar treino", "Desafios", "Definições"):
+        for name in ("Sessão de treino", "Importar treino", "Desafios", "Definições"):
             self.app.reset_to_menu()
             self.pick(name)
             self.assertIsNotNone(self.screen().back_button, name)
@@ -1476,7 +1498,7 @@ class TestHomeScreen(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def test_settings_and_quit_are_off_during_a_session(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1518,7 +1540,7 @@ class TestHomeScreen(GuiCase):
 
 class TestStatsExplorer(GuiCase):
     def _ride(self, seconds=300):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1624,7 +1646,7 @@ class TestStatsScreen(GuiCase):
         self.assertGreaterEqual(len(titles), len(screen.VIEWS))
 
     def test_charts_have_data_after_a_ride(self):
-        self.pick("Pedalar")
+        self.pick("Sessão de treino")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

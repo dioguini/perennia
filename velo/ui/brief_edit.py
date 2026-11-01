@@ -42,8 +42,9 @@ class GoalEditor(EditScreen):
             items.append(Item("    " + tr("Objetivo do bloco", "Block goal"),
                               value=wrap(cur.get("goal") or b.goal, 300, 13, 1) + "▏",
                               data=f"text:goal:{k}"))
-        items += [Item(tr("✓ Guardar", "✓ Save"), action=self._save),
-                  Item(tr("Repor as sugestões", "Reset to suggestions"), action=self._reset)]
+        items += [Item(tr("Repor as sugestões", "Reset to suggestions"), action=self._reset,
+                       button=True),
+                  Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
         self.chrome.set(tr("Objetivos", "Goals"), self.brief.title,
                         tr("Escreve · Backspace apaga · ↑↓ mover · Esc voltar",
                            "Type · Backspace deletes · ↑↓ move · Esc back"))
