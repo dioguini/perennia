@@ -662,7 +662,7 @@ class TestLapSessionGui(tg.GuiCase):
 
 class TestAgent(tg.GuiCase):
     def test_f1_and_f2_show_what_would_be_sent(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         stats_screen = self.screen()
         self.press(key.F1)
         ag = self.screen()

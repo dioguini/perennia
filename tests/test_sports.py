@@ -542,14 +542,22 @@ class TestSportsGui(tg.GuiCase):
         self.assertTrue(first)
 
     def test_stats_sport_tabs(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")                                # pelo ciclismo: desporto fixo
+        fixed = self.screen()
+        self.select("Desporto")
+        self.assertFalse(fixed.list.selected.enabled)
+        self.press(key.RIGHT)
+        self.assertIs(self.screen(), fixed)
+        self.press(key.ESCAPE)
+        self.press(key.ESCAPE)
+        self.pick("Estatísticas gerais")                         # pelo menu: muda-se
         scr = self.screen()
         self.select("Desporto")
-        self.press(key.RIGHT)                                    # ciclismo → remo
+        self.press(key.RIGHT, key.RIGHT)                         # todos → ciclismo → remo
         row = self.screen()
         self.assertIsInstance(row, sts.SportStatsScreen)
         self.assertEqual(row.sport, "rowing")
-        self.assertEqual(row.tab_labels()[0], "Distância")
+        self.assertEqual(row.tab_labels()[:2], ["Geral", "Distância"])
         for _ in range(5):
             self.press(key.TAB)
             self.app._on_draw()

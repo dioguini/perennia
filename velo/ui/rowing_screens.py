@@ -207,44 +207,7 @@ class RowingMenu(SportHub):
         return out + history_items(a, "rowing")
 
     def items_stats(self) -> list[Item]:
-        a = self.app
-        b = rw.bests(a.db)
-        ses = b.get("sessions") or {}
-
-        def record(label: str, key_: str, value: str) -> Item:
-            """Um recorde e a sessão onde foi feito (Enter abre-a)."""
-            s = ses.get(key_)
-            if s is None:
-                return Item(label, value=value, enabled=False)
-            when = str(s["started_at"])[:16].replace("T", " ")
-            return Item(label, value=value,
-                        detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
-                                  n=_pretty(s["name"]) or tr("Remo", "Rowing")),
-                        action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
-                        data=("record", key_, s["id"]))
-
-        avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
-        spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
-        mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
-        longest = ses.get("time")
-        return super().items_stats() + [
-            Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
-            Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
-                 enabled=False),
-            record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
-                   pace_text(b.get("pace"))),
-            record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
-                   pace_text(avg)),
-            record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
-            record(tr("Sessão mais longa", "Longest session"), "time",
-                   hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
-                   if longest else "—"),
-            record(tr("Mais potência média", "Best avg power"), "w",
-                   f"{b['w']:.0f} W" if b.get("w") else "—"),
-            record(tr("Mais potência máxima", "Best max power"), "max_w",
-                   f"{mx:.0f} W" if mx else "—"),
-            record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
-                   f"{spm:.0f} spm" if spm else "—")]
+        return super().items_stats() + record_items(self.app)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
@@ -256,6 +219,48 @@ class RowingMenu(SportHub):
 
     def _start(self, kw: dict) -> None:
         start_session(self.app, **kw)
+
+
+def record_items(app) -> list[Item]:
+    """Os recordes do remo, cada um com a sessão onde foi feito (Enter abre-a)."""
+    a = app
+    b = rw.bests(a.db)
+    ses = b.get("sessions") or {}
+
+    def record(label: str, key_: str, value: str) -> Item:
+        """Um recorde e a sessão onde foi feito (Enter abre-a)."""
+        s = ses.get(key_)
+        if s is None:
+            return Item(label, value=value, enabled=False)
+        when = str(s["started_at"])[:16].replace("T", " ")
+        return Item(label, value=value,
+                    detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
+                              n=_pretty(s["name"]) or tr("Remo", "Rowing")),
+                    action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
+                    data=("record", key_, s["id"]))
+
+    avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
+    spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
+    mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
+    longest = ses.get("time")
+    return [
+        Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
+        Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
+             enabled=False),
+        record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
+               pace_text(b.get("pace"))),
+        record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
+               pace_text(avg)),
+        record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
+        record(tr("Sessão mais longa", "Longest session"), "time",
+               hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
+               if longest else "—"),
+        record(tr("Mais potência média", "Best avg power"), "w",
+               f"{b['w']:.0f} W" if b.get("w") else "—"),
+        record(tr("Mais potência máxima", "Best max power"), "max_w",
+               f"{mx:.0f} W" if mx else "—"),
+        record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
+               f"{spm:.0f} spm" if spm else "—")]
 
 
 def _health():

@@ -90,7 +90,11 @@ class GuiCase(unittest.TestCase):
                 return True
         if scr.tabs is not None:
             start = scr.tab
-            for k in range(1, len(scr.tab_labels())):
+            n = len(scr.tab_labels())
+            for k in range(1, n):
+                # os separadores que abrem outro ecrã (Estatísticas) não se espreitam
+                if getattr(scr, "tab_is_screen", lambda i: False)((start + k) % n):
+                    continue
                 scr.set_tab(start + k)
                 for i, item in enumerate(scr.list.items):
                     if text.lower() in item.label.lower():
@@ -187,7 +191,7 @@ class TestShell(GuiCase):
 
     def test_every_screen_opens_updates_and_draws(self):
         for entry in ("Sessão de treino", "Importar treino", "Testes", "Challenge", "Novo treino",
-                      "Desafios", "Gráficos e análise", "Dispositivos", "Definições"):
+                      "Desafios", "Estatísticas", "Dispositivos", "Definições"):
             with self.subTest(ecra=entry):
                 self.app.reset_to_menu()
                 self.pick(entry)
@@ -1594,8 +1598,11 @@ class TestStatsExplorer(GuiCase):
 
     def test_power_curve_shows_values_and_the_date_of_a_point(self):
         self._ride()
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         screen = self.screen()
+        self.assertEqual(screen.VIEWS[screen.view], "general")         # primeiro, o Geral
+        self.assertIs(screen.hub, self.app.stack[-2])                  # dentro do ciclismo
+        self.press(key.TAB)                                            # → curva de potência
         self.assertEqual(screen.VIEWS[screen.view], "power_curve")
         self.assertTrue(screen.chart._yticks[2].text.endswith("W"))   # valores no eixo
         today = __import__("time").strftime("%Y-%m-%d")
@@ -1611,9 +1618,9 @@ class TestStatsExplorer(GuiCase):
 
     def test_evolution_by_period_with_percentile(self):
         self._ride()
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         screen = self.screen()
-        self.press(key.TAB)                                            # → Evolução
+        self.press(key.TAB, key.TAB)                                   # → Evolução
         self.assertEqual(screen.VIEWS[screen.view], "evolution")
         self.assertEqual(len(screen._series), 12)                      # 12 semanas
         self.assertGreater(screen._series[-1][1], 0)                   # esta semana tem km
@@ -1634,9 +1641,9 @@ class TestStatsExplorer(GuiCase):
 
     def test_time_in_zone_and_power_profile_views(self):
         self._ride()
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         screen = self.screen()
-        self.press(key.TAB, key.TAB)                                   # → Tempo em zona
+        self.press(key.TAB, key.TAB, key.TAB)                          # → Tempo em zona
         self.assertEqual(screen.VIEWS[screen.view], "zones")
         titles = [r["title"].text for r in screen.bars.rows]
         self.assertIn("Tempo em zona · potência", titles)
@@ -1650,7 +1657,9 @@ class TestStatsExplorer(GuiCase):
 
 class TestStatsScreen(GuiCase):
     def test_opens_empty_without_crashing(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
+        self.app._on_draw()
+        self.press(key.TAB)                     # do Geral para a curva de potência
         self.app._on_draw()
         self.assertTrue(any("Sem dados" in x for x in self.labels()))
 
@@ -1668,21 +1677,23 @@ class TestStatsScreen(GuiCase):
         self.assertGreaterEqual(chart.height, 120)
 
     def test_layout_does_not_overlap(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
+        self.press(key.TAB)                     # um separador com gráfico
         self._assert_no_overlap()
         for w, h in ((1024, 640), (1920, 1080), (2560, 1440)):
             self.app.set_display(False, w, h)
             self._assert_no_overlap()
 
     def test_arrows_cycle_the_charts(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         screen = self.screen()
         titles = set()
         for _ in range(len(screen.VIEWS) + 1):
             titles.add(screen.chart.title.text)
             self.press(key.TAB)                     # os gráficos estão em separadores
             self.app._on_draw()
-        self.assertGreaterEqual(len(titles), len(screen.VIEWS))
+        # «Geral» e «Picos» não são gráficos (o resumo e a tabela)
+        self.assertGreaterEqual(len(titles), len(screen.VIEWS) - 2)
 
     def test_charts_have_data_after_a_ride(self):
         self.pick("Sessão de treino")
@@ -1698,11 +1709,13 @@ class TestStatsScreen(GuiCase):
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
         self.pick("Fechar")
 
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         screen = self.screen()
+        # o Geral é o primeiro; a curva de potência a seguir, e agora tem pontos
+        self.assertTrue(any("Sessão mais longa" in i.label for i in screen.list.items))
+        self.press(key.TAB)
         self.assertTrue(any("Horas totais" in (lab.text or "")
                             for lab in pyglet_stub.created["labels"]))
-        # a curva de potência é a primeira vista e agora tem pontos
         self.assertEqual(screen.VIEWS[screen.view], "power_curve")
         self.assertEqual(screen.chart.empty.text, "")
         self.app._on_draw()

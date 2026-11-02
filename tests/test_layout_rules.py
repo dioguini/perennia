@@ -582,8 +582,10 @@ class TestRowingRecords(tg.GuiCase):
             isinstance(s, rs.RowingMenu) for s in self.app.stack) else None
         menu = rs.RowingMenu(self.app)
         self.app.push(menu)
-        menu.tab_named("Estatísticas")
-        rec = next(i for i in menu.list.items if i.label == "Maior distância")
+        menu.tab_named("Estatísticas")                       # abre as estatísticas do remo
+        st = self.screen()
+        self.assertIs(st.hub, menu)
+        rec = next(i for i in st.list.items if i.label == "Maior distância")
         self.assertIn("em ", rec.detail)
         rec.action()
         self.assertIsInstance(self.screen(), rs.RowSessionDetail)

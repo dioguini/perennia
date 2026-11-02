@@ -353,6 +353,7 @@ class TestBuilderGui(tg.GuiCase):
     def test_gym_stats_reach_exercise_statistics(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Estatísticas")
         self.pick("Estatísticas por exercício")
         self.assertIsInstance(self.screen(), ess.ExerciseStatsScreen)
         self.app._on_draw()

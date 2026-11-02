@@ -67,9 +67,14 @@ class Screen:
     IN_SESSION = False    # sessão de treino: Definições e Sair ficam indisponíveis
     MODAL = False         # janela por cima (o ecrã de baixo continua a correr)
     TABBED = False        # separadores por baixo do título (Tab / Shift+Tab)
+    _pending_hub = None   # ver `hub`: o menu do desporto por cima deste ecrã
 
     def __init__(self, app: "App"):
         self.app = app
+        # `hub`: este ecrã abriu num separador do menu de um desporto (as
+        # Estatísticas): os separadores do desporto ficam por cima dos dele
+        self.hub = Screen._pending_hub
+        Screen._pending_hub = None
         w, h = app.window.width, app.window.height
         self.chrome = Chrome(app.window)
         self.back_button: BackButton | None = None
@@ -79,8 +84,13 @@ class Screen:
             self.chrome.layout()
         self.tab = 0
         self.tabs: TabBar | None = None
+        self.hub_tabs: TabBar | None = None
+        if self.hub is not None:
+            self.hub_tabs = TabBar(self.hub.tab_labels(), 48, h - 98, w - 96)
+            self.hub_tabs.select(self.hub.TAB_KEYS.index("stats"))
         if self.TABBED:
-            self.tabs = TabBar(self.tab_labels(), 48, h - 98, self._tabs_width(w))
+            self.tabs = TabBar(self.tab_labels(), 48, h - 98 - self._hub_dy(),
+                               self._tabs_width(w))
         top = self.content_top(h)
         self.list = ListView(48, top, self._list_width(w),
                              visible_rows=max(4, (top - 110) // 38))
@@ -104,9 +114,18 @@ class Screen:
     def _tabs_width(self, w: int) -> int:
         return w - 96
 
+    def _hub_dy(self) -> int:
+        return 44 if getattr(self, "hub", None) is not None else 0
+
     def content_top(self, h: int) -> int:
         """Onde começa a lista: mais abaixo se houver separadores."""
-        return h - 130 - (44 if self.TABBED else 0)
+        return h - 130 - (44 if self.TABBED else 0) - self._hub_dy()
+
+    def titles(self, title: str, subtitle: str) -> tuple[str, str]:
+        """Dentro do menu de um desporto, o título é o do desporto."""
+        if self.hub is not None:
+            return self.hub.title(), self.hub.subtitle()
+        return title, subtitle
 
     def set_tab(self, i: int) -> None:
         if self.tabs is None:
@@ -170,6 +189,8 @@ class Screen:
             # com botões no topo, à direita, a dica do agente sai dali
             self.chrome.agent_hint.text = "" if self.list.has_top_buttons else t("agent.hint")
         self.chrome.draw()
+        if self.hub_tabs is not None:
+            self.hub_tabs.draw()
         if self.tabs is not None:
             self.tabs.draw()
         self.list.draw()
@@ -278,6 +299,14 @@ class Screen:
         if self.back_button is not None and self.back_button.hit(x, y):
             self.app.pop()
             return True
+        if self.hub_tabs is not None:
+            i = self.hub_tabs.hit(x, y)
+            if i is not None:
+                if i != self.hub.TAB_KEYS.index("stats"):
+                    hub = self.hub
+                    self.app.pop()
+                    hub.set_tab(i)
+                return True
         if self.tabs is not None:
             i = self.tabs.hit(x, y)
             if i is not None:
@@ -289,8 +318,10 @@ class Screen:
         self.chrome.layout()
         if self.back_button is not None:
             self.back_button.layout()
+        if self.hub_tabs is not None:
+            self.hub_tabs.layout(48, h - 98, w - 96)
         if self.tabs is not None:
-            self.tabs.layout(48, h - 98, self._tabs_width(w))
+            self.tabs.layout(48, h - 98 - self._hub_dy(), self._tabs_width(w))
         top = self.content_top(h)
         self.list.y = top
         self.list.width = self._list_width(w)
@@ -347,7 +378,24 @@ class SportHub(Screen):
                      detail=tr("Separadores por tipo de gráfico", "Tabs by chart type"),
                      action=lambda: self.app.push(_hubs().stats_screen(self.app, self.SPORT)))]
 
+    def tab_is_screen(self, i: int) -> bool:
+        """O separador Estatísticas abre o ecrã das estatísticas do desporto."""
+        return self.TAB_KEYS[i % len(self.TAB_KEYS)] == "stats"
+
+    def set_tab(self, i: int) -> None:
+        if self.tab_is_screen(i):
+            self.open_stats()
+            return
+        super().set_tab(i)
+
+    def open_stats(self) -> None:
+        self.app.push(_hubs().stats_screen(self.app, self.SPORT, hub=self))
+
     def enter(self) -> None:
+        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "stats":
+            self.tab = 0
+            if self.tabs is not None:
+                self.tabs.select(0)
         key_ = self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
         items = self.items_for(key_)
         if not items:
@@ -3023,8 +3071,8 @@ class StatsScreen(Screen):
     TABBED = True                  # os gráficos por separadores
     VIEW_KEY = "stats.view."
     STATS_SPORT = "cycling"        # o desporto escolhido na linha «Desporto»
-    VIEWS = ("power_curve", "evolution", "zones", "zones_period", "load", "eftp", "profile",
-             "cadence", "balance")
+    VIEWS = ("general", "power_curve", "evolution", "zones", "zones_period", "load", "eftp",
+             "profile", "peaks", "cadence", "balance")
     SPORTS = ("cycling",)          # de que desportos vem a carga (fitness/fadiga/forma)
     COUNTS = (4, 6, 8, 12, 16, 24, 36, 52, 104)
     RECORD_ROWS = 4
@@ -3051,7 +3099,8 @@ class StatsScreen(Screen):
     # ---------------------------------------------------------------- medidas
 
     def tab_labels(self) -> list[str]:
-        return [t(f"{self.VIEW_KEY}{v}") for v in self.VIEWS]
+        names = {"general": tr("Geral", "Overview"), "peaks": tr("Picos", "Peaks")}
+        return [names.get(v) or t(f"{self.VIEW_KEY}{v}") for v in self.VIEWS]
 
     def on_tab(self) -> None:
         self.view = self.tab % len(self.VIEWS)
@@ -3060,15 +3109,85 @@ class StatsScreen(Screen):
     def sport_row(self) -> Item:
         from velo.core import sports as sp
         name = sp.name(self.STATS_SPORT) if self.STATS_SPORT else tr("Todos", "All")
+        if self.hub is not None:
+            # entrou-se pelo desporto: fica fixo (muda-se nas Estatísticas gerais)
+            return Item(tr("Desporto", "Sport"), value=name, enabled=False,
+                        detail=tr("fixo · outros desportos em Estatísticas gerais",
+                                  "fixed · other sports in General statistics"))
         return Item(tr("Desporto", "Sport"), value=name, data="sport",
                     detail=tr("←/→ outro desporto · Tab outro gráfico",
                               "←/→ another sport · Tab another chart"))
 
     def switch_sport(self, step: int) -> None:
+        if self.hub is not None:
+            return
         order = [None, "cycling", "rowing", "running", "swimming", "gym"]
         cur = order.index(self.STATS_SPORT) if self.STATS_SPORT in order else 0
         nxt = order[(cur + step) % len(order)]
         self.app.replace(_hubs().stats_screen(self.app, nxt))
+
+    # -------------------------------------------------------- geral e picos
+
+    PEAK_RANGES = (None, 7, 30, 90, 365)
+
+    def special_view(self) -> str | None:
+        v = self.VIEWS[self.view % len(self.VIEWS)]
+        return v if v in ("general", "peaks") else None
+
+    def enter_special(self) -> None:
+        """«Geral» (o resumo do desporto, ou de todos) e «Picos» (a tabela)."""
+        a = self.app
+        view = self.special_view()
+        title, sub = self.titles(t("menu.statistics"), "")
+        rows = [self.sport_row()]
+        if view == "general":
+            from velo.ui.stats_screens import overview_items
+            rows += overview_items(a, self.STATS_SPORT)
+            foot = tr("Tab outro gráfico · Esc voltar", "Tab another chart · Esc back")
+        else:
+            rng = getattr(self, "peak_range", None)
+            rows.append(Item(tr("Período", "Period"),
+                             value=tr("desde sempre", "all time") if rng is None else
+                             tr("últimos {n} dias", "last {n} days", n=rng),
+                             detail=tr("←/→ muda", "←/→ changes"), data="peak_range"))
+            foot = tr("←/→ período · Tab outro gráfico · Esc voltar",
+                      "←/→ period · Tab another chart · Esc back")
+            self._fill_peaks()
+        self.chrome.set(title, sub, foot)
+        self.list.set_items(rows, keep_index=True)
+        self.list.y = self.content_top(self.app.window.height)
+        self.list.set_visible_rows(2 if view == "peaks" else
+                                   max(4, (self.content_top(self.app.window.height) - 110) // 38))
+
+    def _fill_peaks(self) -> None:
+        from velo.core import peaks as pk
+        from velo.ui.widgets import Table
+        a = self.app
+        rng = getattr(self, "peak_range", None)
+        since = None
+        if rng:
+            from datetime import date as _d, timedelta as _td
+            since = (_d.today() - _td(days=rng)).isoformat()
+        best = pk.all_peaks(a.db, since)
+        if getattr(self, "peak_table", None) is None:
+            self.peak_table = Table()
+        w, h = a.window.width, a.window.height
+        top = self.content_top(h) - 2 * 38 - 10
+        self.peak_table.layout(48, top, w - 96, 70)
+        cols = [tr("Duração", "Duration"), tr("Potência", "Power"), tr("FC", "HR"),
+                tr("Cadência", "Cadence"), tr("Velocidade", "Speed")]
+        rows = []
+        for d in pk.DURATIONS:
+            cells = [pk.duration_label(d)]
+            for m in pk.METRICS:
+                b = best.get(m, {}).get(d)
+                cells.append((pk.fmt(m, b["value"], a.units), b["date"][5:].replace("-", "/"))
+                             if b else ("—", ""))
+            rows.append(cells)
+        self.peak_table.set(cols, rows, tr("Picos: a melhor média em cada duração",
+                                           "Peaks: the best average for each duration"),
+                            empty=tr("Ainda sem sessões com dados.", "No sessions with data yet."))
+        self._peaks = best
 
     def chart_box(self, w: int, h: int) -> tuple[int, int, int, int]:
         list_bottom = self.content_top(h) - (self.RECORD_ROWS - 1) * 38 - 26
@@ -3083,11 +3202,16 @@ class StatsScreen(Screen):
     # ------------------------------------------------------------------ linhas
 
     def enter(self) -> None:
+        if self.special_view():
+            self.enter_special()
+            return
         a = self.app
         tot = stats.totals(a.db)
         dv, du = km(tot["km"] * 1000.0, a.units)
         self.chrome.set(
-            t("menu.statistics"),
+            *self.titles(t("menu.statistics"), ""), "")
+        self.chrome.set(
+            self.chrome.title.text if self.hub is not None else t("menu.statistics"),
             f"{t('stats.rides')} {tot['rides']} · {t('stats.total_hours')} "
             f"{tot['hours']:.1f} · {dv:.0f} {du} · ↑ {tot['ascent_m']:.0f} m",
             "←/→ mudar · ↑↓ escolher a linha · clica no gráfico para ver um ponto")
@@ -3128,6 +3252,12 @@ class StatsScreen(Screen):
     def _cycle(self, which: str, step: int) -> None:
         if which == "sport":
             self.switch_sport(step)
+            return
+        if which == "peak_range":
+            rs = list(self.PEAK_RANGES)
+            cur = getattr(self, "peak_range", None)
+            self.peak_range = rs[(rs.index(cur) + (1 if step > 0 else -1)) % len(rs)]
+            self.enter()
             return
         if which == "view":
             self.view = (self.view + step) % len(self.VIEWS)
@@ -3412,6 +3542,13 @@ class StatsScreen(Screen):
 
     def draw(self) -> None:
         super().draw()
+        special = self.special_view()
+        if special == "general":
+            return
+        if special == "peaks":
+            if getattr(self, "peak_table", None) is not None:
+                self.peak_table.draw()
+            return
         x, y, cw, ch = self.chart.x, self.chart.y, self.chart.width, self.chart.height
         top = y + ch + 40 + 40
         for i, lab in enumerate(self.summary):

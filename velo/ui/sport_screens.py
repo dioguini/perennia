@@ -1307,7 +1307,7 @@ class StrengthStatsScreen(StatsScreen):
     exercício (1RM estimada, carga máxima, volume), tempo em zona de FC e a
     carga (fitness, fadiga e forma) só da força."""
 
-    VIEWS = ("evolution", "exercise", "hr_zones", "load")
+    VIEWS = ("general", "evolution", "exercise", "hr_zones", "load")
     VIEW_KEY = "str.view."
     RECORD_ROWS = 5
     STATS_SPORT = "gym"
@@ -1324,6 +1324,9 @@ class StrengthStatsScreen(StatsScreen):
         return st.exercises_with_history(self.app.db)
 
     def enter(self) -> None:
+        if self.special_view():
+            self.enter_special()
+            return
         a = self.app
         sess = st.sessions(a.db, 100000)
         vol = sum(s["volume_kg"] or 0 for s in sess)
@@ -1481,7 +1484,7 @@ class GeneralStatsScreen(StatsScreen):
     """Estatísticas de todos os desportos: carga total (fitness, fadiga e
     forma), tempo/sessões/carga por desporto e tempo em zona de FC."""
 
-    VIEWS = ("load", "sports", "hr_zones")
+    VIEWS = ("general", "load", "sports", "hr_zones")
     VIEW_KEY = "gen.view."
     RECORD_ROWS = 5
     STATS_SPORT = None
@@ -1495,6 +1498,9 @@ class GeneralStatsScreen(StatsScreen):
         self.smetric = "time"
 
     def enter(self) -> None:
+        if self.special_view():
+            self.enter_special()
+            return
         a = self.app
         stk = stats.streaks(a.db)
         self.chrome.set(t("home.stats"),

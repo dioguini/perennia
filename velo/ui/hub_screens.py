@@ -27,10 +27,16 @@ def SportHub(app, sport: str):                     # noqa: N802 — fábrica
     return GymHub(app)
 
 
-def stats_screen(app, sport: str | None):
-    """As estatísticas, já no desporto pedido (None = todos)."""
+def stats_screen(app, sport: str | None, hub=None):
+    """As estatísticas, já no desporto pedido (None = todos). Com `hub` (o menu
+    do desporto), abrem no separador Estatísticas dele e o desporto fica fixo."""
     from velo.ui import stats_screens
-    return stats_screens.for_sport(app, sport)
+    from velo.ui.app import Screen
+    Screen._pending_hub = hub
+    try:
+        return stats_screens.for_sport(app, sport)
+    finally:
+        Screen._pending_hub = None
 
 
 # ============================================================ inventário

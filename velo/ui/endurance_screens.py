@@ -107,35 +107,40 @@ class EnduranceHub(SportHub):
                 for s in en.sessions(a.db, self.SPORT)] + _synced(a, self.SPORT)
 
     def items_stats(self) -> list[Item]:
-        a = self.app
-        ss = en.sessions(a.db, self.SPORT, 1000)
-        dist = sum(s["distance_m"] or 0 for s in ss)
-        hours = sum(s["moving_s"] or 0 for s in ss) / 3600
+        return super().items_stats() + record_items(self.app, self.SPORT)
 
-        def record(label: str, pick, value) -> Item:
-            """O recorde e a sessão onde foi feito (Enter abre-a)."""
-            cands = [s for s in ss if pick(s) is not None]
-            if not cands:
-                return Item(label, value="—", enabled=False)
-            s = min(cands, key=pick)
-            return Item(label, value=value(s),
-                        detail=tr("em {d} · {n}", "on {d} · {n}",
-                                  d=str(s["started_at"])[:16].replace("T", " "),
-                                  n=_pretty(s["name"]) or sp.name(self.SPORT)),
-                        action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
-        unit = " " + pace_unit(self.SPORT)
-        return super().items_stats() + [
-            Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
-            Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
-            Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),
-            record(tr("Melhor ritmo médio", "Best avg pace"),
-                   lambda s: s["avg_pace_s"] or None, lambda s: hms(s["avg_pace_s"]) + unit),
-            record(tr("Maior distância", "Longest"),
-                   lambda s: -(s["distance_m"] or 0) or None, lambda s: _m(s["distance_m"])),
-            record(tr("Sessão mais longa", "Longest session"),
-                   lambda s: -(s["moving_s"] or 0) or None, lambda s: hms(s["moving_s"] or 0)),
-            record(tr("FC média mais alta", "Highest avg HR"),
-                   lambda s: -(s["avg_hr"] or 0) or None, lambda s: f"{s['avg_hr']:.0f} bpm")]
+
+def record_items(app, sport: str) -> list[Item]:
+    """Os recordes da corrida ou da natação, com a sessão de cada um."""
+    a = app
+    ss = en.sessions(a.db, sport, 1000)
+    dist = sum(s["distance_m"] or 0 for s in ss)
+    hours = sum(s["moving_s"] or 0 for s in ss) / 3600
+
+    def record(label: str, pick, value) -> Item:
+        """O recorde e a sessão onde foi feito (Enter abre-a)."""
+        cands = [s for s in ss if pick(s) is not None]
+        if not cands:
+            return Item(label, value="—", enabled=False)
+        s = min(cands, key=pick)
+        return Item(label, value=value(s),
+                    detail=tr("em {d} · {n}", "on {d} · {n}",
+                              d=str(s["started_at"])[:16].replace("T", " "),
+                              n=_pretty(s["name"]) or sp.name(sport)),
+                    action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
+    unit = " " + pace_unit(sport)
+    return [
+        Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
+        Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
+        Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),
+        record(tr("Melhor ritmo médio", "Best avg pace"),
+               lambda s: s["avg_pace_s"] or None, lambda s: hms(s["avg_pace_s"]) + unit),
+        record(tr("Maior distância", "Longest"),
+               lambda s: -(s["distance_m"] or 0) or None, lambda s: _m(s["distance_m"])),
+        record(tr("Sessão mais longa", "Longest session"),
+               lambda s: -(s["moving_s"] or 0) or None, lambda s: hms(s["moving_s"] or 0)),
+        record(tr("FC média mais alta", "Highest avg HR"),
+               lambda s: -(s["avg_hr"] or 0) or None, lambda s: f"{s['avg_hr']:.0f} bpm")]
 
 
 def _health():
