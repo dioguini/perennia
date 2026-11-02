@@ -302,7 +302,7 @@ class TestBuilderGui(tg.GuiCase):
         pop = self.screen()
         self.assertIsInstance(pop, tg.app_mod.ConfirmScreen)
         self.assertEqual([i.label for i in pop.list.items],
-                         ["Sair sem gravar", "Cancelar", "Guardar"])
+                         ["Sair sem guardar", "Cancelar", "Sair e guardar"])
         self.assertTrue(all(i.button for i in pop.list.items))
         self.press(key.ESCAPE)                          # Esc = Cancelar: fica a editar
         self.assertIs(self.screen(), b)
@@ -353,6 +353,7 @@ class TestBuilderGui(tg.GuiCase):
     def test_gym_stats_reach_exercise_statistics(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
+        self.pick("Estatísticas")
         self.pick("Estatísticas por exercício")
         self.assertIsInstance(self.screen(), ess.ExerciseStatsScreen)
         self.app._on_draw()

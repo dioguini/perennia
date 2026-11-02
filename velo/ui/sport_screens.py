@@ -90,9 +90,13 @@ class EditScreen(Screen):
                 self.num_set(num, parse_number(self._buf) if self._buf else None)
                 self.refresh()
                 return True
-        if cyc is not None and symbol in (key.LEFT, key.RIGHT, key.ENTER, key.RETURN):
+        # as escolhas mudam-se só com as setas (Enter não muda valores)
+        if cyc is not None and symbol in (key.LEFT, key.RIGHT):
             self.cycle(cyc, -1 if symbol == key.LEFT else 1)
             self.refresh()
+            return True
+        if cyc is not None and symbol in (key.ENTER, key.RETURN, key.SPACE) and \
+                (self.list.selected is None or self.list.selected.action is None):
             return True
         return super().on_key(symbol, modifiers)
 
@@ -108,6 +112,205 @@ class EditScreen(Screen):
             self.num_set(num, parse_number(self._buf))
             self.refresh()
         return True
+
+
+# ====================================================== edição numa janela
+
+
+from velo.ui.app import PopupMixin  # noqa: E402
+
+
+class EditPopup(PopupMixin, EditScreen):
+    """Criar ou editar alguma coisa (um artigo, um exercício, um desafio…)
+    numa janela por cima da lista.
+
+    Em baixo, à direita: **Cancelar** · **Guardar** (fica na janela; só ativo
+    quando alguma coisa mudou) · **Guardar e sair**. Cancelar, Esc ou clicar
+    fora com alterações por guardar perguntam: Sair sem guardar · Cancelar ·
+    Sair e guardar.
+
+    Para redefinir: `rows()` (as linhas a editar), `state()` (o que conta como
+    alteração), `commit()` (grava; devolve False se faltar alguma coisa) e,
+    se quiser, `title()` / `subtitle()`."""
+
+    W = 860
+    MIN_H, MAX_H = 300, 680
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.back_button = None
+        self._init_popup()
+        self._saved_state = None
+
+    # para redefinir
+    def rows(self) -> list[Item]:
+        return []
+
+    def state(self):
+        return repr(getattr(self, "v", None))
+
+    def commit(self) -> bool:
+        return True
+
+    def title(self) -> str:
+        return ""
+
+    def subtitle(self) -> str:
+        return ""
+
+    def saved_message(self) -> str:
+        return tr("Guardado", "Saved")
+
+    # -------------------------------------------------------------- estado
+
+    @property
+    def dirty(self) -> bool:
+        if self._saved_state is None:
+            return False
+        return self.state() != self._saved_state
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def buttons(self) -> list[Item]:
+        return [Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True),
+                Item(tr("Guardar", "Save"), action=self.save, button=True,
+                     enabled=self.dirty),
+                Item(tr("Guardar e sair", "Save and close"), action=self.save_exit,
+                     button=True, primary=True)]
+
+    def enter(self) -> None:
+        if self._saved_state is None:
+            self._saved_state = self.state()
+        rows = self.rows()
+        # a janela cresce com as linhas (sem passar do ecrã)
+        h = max(self.MIN_H, min(self.MAX_H, 92 + 96 + len(rows) * 38))
+        self.set_popup_size(self.W, h)
+        self.chrome.set(self.title(), self.subtitle(),
+                        tr("↑↓ linha · ←/→ mudar · Esc cancelar",
+                           "↑↓ row · ←/→ change · Esc cancel"))
+        self.list.set_items(rows + self.buttons(), keep_index=True)
+
+    # -------------------------------------------------------------- ações
+
+    def save(self) -> bool:
+        if not self.commit():
+            return False
+        self._saved_state = self.state()
+        self.app.message(self.saved_message())
+        if self.app.current is self:
+            self.enter()
+        return True
+
+    def save_exit(self) -> None:
+        if self.commit():
+            self._saved_state = self.state()
+            self.app.message(self.saved_message())
+            self.close()
+
+    def close(self) -> None:
+        if self in self.app.stack:
+            while self.app.current is not self:
+                self.app.pop(force=True)
+            self.app.pop(force=True)
+
+    def cancel(self) -> None:
+        if self.dirty:
+            self.app.ask_unsaved(self)
+        else:
+            self.close()
+
+    def on_save(self) -> bool:
+        self.save()
+        return True
+
+    def close_outside(self) -> None:
+        self.cancel()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE and self._field("text:") is None:
+            self.cancel()
+            return True
+        if symbol == key.ESCAPE:
+            self.cancel()
+            return True
+        return super().on_key(symbol, modifiers)
+
+
+class LiveEditPopup(PopupMixin, EditScreen):
+    """Editar, numa janela, uma parte de um treino que se está a construir (um
+    passo, um exercício do plano). As mudanças veem-se logo no treino; em
+    baixo, à direita: Cancelar (repõe o que estava) e Guardar e sair.
+    Cancelar ou Esc com alterações perguntam primeiro."""
+
+    W, H = 860, 600
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.back_button = None
+        self._init_popup()
+        self._snap = None
+
+    # para redefinir: o objeto editado (no editor de cima) e como repô-lo
+    def live_get(self):
+        return None
+
+    def live_set(self, value) -> None: ...
+
+    def _start_live(self) -> None:
+        import copy
+        self._snap = copy.deepcopy(self.live_get())
+        self._parent_dirty = getattr(self._parent(), "dirty", None)
+
+    def _parent(self):
+        return getattr(self, "editor", None) or getattr(self, "ed", None)
+
+    def has_unsaved(self) -> bool:
+        cur = self.live_get()
+        return self._snap is not None and cur is not None and repr(cur) != repr(self._snap)
+
+    def discard(self) -> None:
+        import copy
+        if self._snap is not None and self.live_get() is not None:
+            self.live_set(copy.deepcopy(self._snap))
+            par = self._parent()
+            if par is not None and self._parent_dirty is not None and \
+                    hasattr(par, "dirty") and not isinstance(type(par).__dict__.get("dirty"),
+                                                             property):
+                par.dirty = self._parent_dirty
+
+    def on_save(self) -> bool:
+        import copy
+        self._snap = copy.deepcopy(self.live_get())
+        return True
+
+    def accept(self) -> None:
+        self.on_save()
+        self.app.pop(force=True)
+
+    def cancel(self) -> None:
+        if self.has_unsaved():
+            self.app.ask_unsaved(self)
+        else:
+            self.app.pop(force=True)
+
+    def close_outside(self) -> None:
+        self.cancel()
+
+    def live_buttons(self, extra: list[Item] | None = None) -> list[Item]:
+        return list(extra or []) + [
+            Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True),
+            Item(tr("Guardar e sair", "Save and close"), action=self.accept, button=True,
+                 primary=True)]
+
+    def fit_rows(self, n: int) -> None:
+        self.set_popup_size(self.W, max(300, min(680, 92 + 96 + n * 38)))
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE:
+            self.cancel()
+            return True
+        return super().on_key(symbol, modifiers)
 
 
 # ================================================================ força
@@ -905,14 +1108,21 @@ class StrengthWorkoutEditor(EditScreen):
             self.app.replace(StrengthPreview(self.app, wid))
 
 
-class StrengthItemEditor(EditScreen):
+class StrengthItemEditor(LiveEditPopup):
     """Um exercício do plano: séries, repetições (ou segundos), carga, RPE
-    alvo e descanso."""
+    alvo e descanso — numa janela."""
 
     def __init__(self, editor: StrengthWorkoutEditor, idx: int):
-        super().__init__(editor.app)
         self.editor = editor
         self.idx = idx
+        super().__init__(editor.app)
+        self._start_live()
+
+    def live_get(self):
+        return self.editor.items[self.idx] if self.idx < len(self.editor.items) else None
+
+    def live_set(self, value) -> None:
+        self.editor.items[self.idx] = value
 
     @property
     def it(self) -> dict:
@@ -920,7 +1130,7 @@ class StrengthItemEditor(EditScreen):
 
     def enter(self) -> None:
         if self.idx >= len(self.editor.items):
-            self.app.pop()
+            self.app.pop(force=True)
             return
         it = self.it
         timed = it.get("measure") == "time"
@@ -936,10 +1146,10 @@ class StrengthItemEditor(EditScreen):
                  detail=t("str.rpe_hint")),
             Item(t("str.rest"), value=hms(it["rest_s"]), data="num:rest_s"),
             Item(t("str.notes"), value=it.get("notes") or "—", data="text:notes"),
-            Item(t("str.duplicate"), action=self._duplicate),
-            Item(t("str.remove"), action=self._remove),
-            Item(t("str.done"), action=self.app.pop),
         ]
+        self.fit_rows(len(rows))
+        rows += self.live_buttons([Item(t("str.duplicate"), action=self._duplicate, button=True),
+                                   Item(t("str.remove"), action=self._remove, button=True)])
         self.chrome.set(f"{self.idx + 1}. {it['name']}",
                         StrengthWorkoutEditor._target(it), t("str.item_footer"))
         self.list.set_items(rows, keep_index=True)
@@ -998,7 +1208,8 @@ class StrengthItemEditor(EditScreen):
     def _remove(self) -> None:
         del self.editor.items[self.idx]
         self.editor.dirty = True
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
 
 class ExercisePicker(EditScreen):
@@ -1096,7 +1307,7 @@ class StrengthStatsScreen(StatsScreen):
     exercício (1RM estimada, carga máxima, volume), tempo em zona de FC e a
     carga (fitness, fadiga e forma) só da força."""
 
-    VIEWS = ("evolution", "exercise", "hr_zones", "load")
+    VIEWS = ("general", "evolution", "exercise", "hr_zones", "load")
     VIEW_KEY = "str.view."
     RECORD_ROWS = 5
     STATS_SPORT = "gym"
@@ -1113,6 +1324,9 @@ class StrengthStatsScreen(StatsScreen):
         return st.exercises_with_history(self.app.db)
 
     def enter(self) -> None:
+        if self.special_view():
+            self.enter_special()
+            return
         a = self.app
         sess = st.sessions(a.db, 100000)
         vol = sum(s["volume_kg"] or 0 for s in sess)
@@ -1270,7 +1484,7 @@ class GeneralStatsScreen(StatsScreen):
     """Estatísticas de todos os desportos: carga total (fitness, fadiga e
     forma), tempo/sessões/carga por desporto e tempo em zona de FC."""
 
-    VIEWS = ("load", "sports", "hr_zones")
+    VIEWS = ("general", "load", "sports", "hr_zones")
     VIEW_KEY = "gen.view."
     RECORD_ROWS = 5
     STATS_SPORT = None
@@ -1284,6 +1498,9 @@ class GeneralStatsScreen(StatsScreen):
         self.smetric = "time"
 
     def enter(self) -> None:
+        if self.special_view():
+            self.enter_special()
+            return
         a = self.app
         stk = stats.streaks(a.db)
         self.chrome.set(t("home.stats"),
@@ -1567,7 +1784,7 @@ class WorkoutEditor(EditScreen):
     def _save_and_ride(self) -> None:
         wid = self._save()
         if wid:
-            self.app.push(WorkoutRouteChoice(self.app, wid))
+            self.app.push(WorkoutRouteChoice(self.app, wid))     # a janela da sessão
 
     def _export(self) -> None:
         wid = self._save()
@@ -1575,13 +1792,22 @@ class WorkoutEditor(EditScreen):
             self.app.push(ExportScreen(self.app, wid))
 
 
-class StepEditor(EditScreen):
+class StepEditor(LiveEditPopup):
+    """Um passo do treino de ciclismo, numa janela."""
+
     KINDS = ("steady", "ramp", "freeride")
 
     def __init__(self, editor: WorkoutEditor, idx: int):
-        super().__init__(editor.app)
         self.editor = editor
         self.idx = idx
+        super().__init__(editor.app)
+        self._start_live()
+
+    def live_get(self):
+        return self.editor.steps[self.idx] if self.idx < len(self.editor.steps) else None
+
+    def live_set(self, value) -> None:
+        self.editor.steps[self.idx] = value
 
     @property
     def s(self) -> workouts.Step:
@@ -1589,7 +1815,7 @@ class StepEditor(EditScreen):
 
     def enter(self) -> None:
         if self.idx >= len(self.editor.steps):
-            self.app.pop()
+            self.app.pop(force=True)
             return
         s = self.s
         ftp = self.editor.ftp
@@ -1616,10 +1842,10 @@ class StepEditor(EditScreen):
             Item(t("bld.cadence"), value=f"{s.cadence_lo} rpm" if s.cadence_lo else "—",
                  data="num:cad"),
             Item(t("bld.cue"), value=s.text_cue or "—", data="text:cue"),
-            Item(t("str.duplicate"), action=self._duplicate),
-            Item(t("str.remove"), action=self._remove),
-            Item(t("str.done"), action=self.app.pop),
         ]
+        self.fit_rows(len(rows))
+        rows += self.live_buttons([Item(t("str.duplicate"), action=self._duplicate, button=True),
+                                   Item(t("str.remove"), action=self._remove, button=True)])
         self.chrome.set(f"{t('bld.step')} {self.idx + 1}", step_text(s, ftp),
                         t("str.item_footer"))
         self.list.set_items(rows, keep_index=True)
@@ -1701,7 +1927,8 @@ class StepEditor(EditScreen):
     def _remove(self) -> None:
         del self.editor.steps[self.idx]
         self.editor.dirty = True
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
 
 class RepeatEditor(EditScreen):
@@ -2001,90 +2228,9 @@ class ChallengeMenu(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-from velo.ui.app import AutoLapOptions  # noqa: E402
-
-
-class GameSetup(AutoLapOptions, EditScreen):
-    """Escolhas antes do jogo: duração, adversários, ERG, rota e auto lap."""
-
-    HAS_BOARD = True
-    BOT_OPTIONS = (0, 1, 3, 5, 7)
-
-    def __init__(self, app, game_key: str):
-        super().__init__(app)
-        from velo.core import games as games_mod
-        self.key = game_key
-        self.cls = games_mod.CLASSES[game_key]
-        self.minutes = self.cls.default_minutes
-        self.bots = 1 if game_key == "tug" else (5 if game_key == "elimination" else 4)
-        self.erg = self.cls.erg_default
-        self.route_idx = 0
-
-    def side_board(self):
-        from velo.core import games as games_mod
-        return games_mod.leaderboard(self.app.db, self.key)
-
-    def routes(self) -> list:
-        return [None] + list(self.app.db.routes())
-
-    def enter(self) -> None:
-        from velo.core.i18n import tr
-        cls = self.cls
-        rs = self.routes()
-        route = rs[self.route_idx % len(rs)]
-        rows = [Item(t("mode.start"), action=self._start)]
-        if cls.has_duration:
-            rows.append(Item(tr("Duração", "Duration"), value=f"{self.minutes} min",
-                             data="cyc:minutes"))
-        if cls.has_bots and self.key != "tug":
-            rows.append(Item(tr("Adversários (bots)", "Opponents (bots)"), value=str(self.bots),
-                             data="cyc:bots"))
-        if self.key in ("adaptive", "ladder"):
-            rows.append(Item(t("mode.erg"), value=t("common.on") if self.erg else t("common.off"),
-                             detail=tr("com ERG o rolo põe os watts; aguentar é manter a cadência",
-                                       "with ERG the trainer sets the watts; hold your cadence"),
-                             data="cyc:erg"))
-        rows.append(Item(tr("Rota", "Route"), value=route["name"] if route else t("board.no_route"),
-                         detail=tr("a estrada é só paisagem; o jogo é igual",
-                                   "the road is scenery; the game is the same"),
-                         data="cyc:route"))
-        rows += self.autolap_items()
-        rows.append(Item(tr("Como se joga", "How it works"), detail=t(f"game.{self.key}.desc"),
-                         enabled=False))
-        self.chrome.set(t(f"game.{self.key}"), f"FTP {self.app.db.athlete().ftp_w} W",
-                        self.footer())
-        self.list.set_items(rows, keep_index=True)
-
-    def cycle(self, field: str, step: int) -> None:
-        if field == "minutes":
-            ds = list(self.cls.durations)
-            i = ds.index(self.minutes) if self.minutes in ds else 0
-            self.minutes = ds[(i + step) % len(ds)]
-        elif field == "bots":
-            bs = list(self.BOT_OPTIONS)
-            i = bs.index(self.bots) if self.bots in bs else 0
-            self.bots = bs[(i + step) % len(bs)]
-        elif field == "erg":
-            self.erg = not self.erg
-        elif field == "route":
-            self.route_idx += step
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.autolap_key(symbol):
-            return True
-        return super().on_key(symbol, modifiers)
-
-    def spec(self) -> dict:
-        return {"key": self.key, "minutes": self.minutes, "bots": self.bots, "erg": self.erg,
-                "seed": int(time.time()) % 100000}
-
-    def _start(self) -> None:
-        rs = self.routes()
-        route = rs[self.route_idx % len(rs)]
-        self.app.replace(RideScreen(self.app, route_id=route["id"] if route else None,
-                                    workout_id=None, kind="game", ghosts=[], erg=self.erg,
-                                    game_spec=self.spec(),
-                                    autolap=dict(self.autolap_cfg())))
+# o Challenge do ciclismo prepara-se na janela da sessão (nome e «como se
+# joga» em cima; duração, bots, rota .gpx com os segmentos do Strava, auto lap)
+from velo.ui.session_setup import GameSetup  # noqa: E402,F401
 
 
 # ======================================================= treino livre / conditioning

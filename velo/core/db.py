@@ -1137,6 +1137,16 @@ class Database:
         self.conn.commit()
         return int(cur.lastrowid)
 
+    def update_challenge(self, challenge_id: int, *, name: str, metric: str, target: float,
+                         display_unit: str | None = None, deadline: str | None = None) -> None:
+        if target <= 0:
+            raise ValueError("o objetivo tem de ser maior que zero")
+        self.conn.execute(
+            "UPDATE challenges SET name = ?, metric = ?, target = ?, display_unit = ?,"
+            " deadline = ? WHERE id = ?",
+            (name, metric, target, display_unit, deadline, challenge_id))
+        self.conn.commit()
+
     def set_challenge_deadline(self, challenge_id: int, deadline: str | None) -> None:
         self.conn.execute("UPDATE challenges SET deadline = ? WHERE id = ?",
                           (deadline, challenge_id))

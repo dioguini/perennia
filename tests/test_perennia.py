@@ -34,6 +34,7 @@ from velo.ui import app as app_mod  # noqa: E402
 from velo.ui import brief as br  # noqa: E402
 from velo.ui import calendar_screens as cs  # noqa: E402
 from velo.ui import feedback_screens as fs  # noqa: E402
+from velo.ui import session_setup  # noqa: E402
 from velo.ui import layout_screens as ls  # noqa: E402
 from velo.ui import widgets  # noqa: E402
 
@@ -114,6 +115,8 @@ class TestThemeGui(tg.GuiCase):
         self.pick("Definições")
         self.select("Tema")
         self.press(key.RIGHT)
+        self.assertIsNone(self.app.db.get("theme"))           # rascunho
+        self.save()
         self.assertEqual(self.app.db.get("theme"), theme.names()[1])
         self.assertIs(theme.P, theme.THEMES[theme.names()[1]])
         # o ecrã volta a ser construído: inicial + definições, no mesmo separador
@@ -121,7 +124,6 @@ class TestThemeGui(tg.GuiCase):
         self.assertIsInstance(self.screen(), app_mod.SettingsScreen)
         self.assertTrue(any("Tema" in i.label for i in self.screen().list.items))
         self.assertEqual(self.app.topbar.bg.color, theme.P.header)
-
 
 class TestObjectives(unittest.TestCase):
     def setUp(self):
@@ -195,8 +197,8 @@ class TestBriefScreens(tg.GuiCase):
         self.assertIsInstance(scr, br.CyclingBrief)
         self.app._on_draw()
         self.assertTrue(any("Alvo" in x for x in self.labels()))
-        self.pick("Começar")
-        self.assertIsInstance(self.screen(), app_mod.WorkoutRouteChoice)
+        self.pick("Configurar sessão")
+        self.assertIsInstance(self.screen(), session_setup.SessionSetup)
 
     def test_goal_editor_writes_the_goal(self):
         self.pick("Lista de treinos")
@@ -214,8 +216,9 @@ class TestBriefScreens(tg.GuiCase):
     def test_ride_hud_shows_the_block_goal(self):
         self.pick("Lista de treinos")
         self.pick("Limiar 2×20")
-        self.pick("Começar")
-        self.pick("Serra de Teste")
+        self.pick("Configurar sessão")
+        self.select("Rota (.gpx)")
+        self.press(key.RIGHT)                   # com a Serra de Teste
         self.pick("Começar")
         ride = self.screen()
         ride.world.build_all()
@@ -231,6 +234,7 @@ class TestBriefScreens(tg.GuiCase):
     def test_builder_saves_workout_and_block_goals(self):
         self.pick("Construtor de treinos")
         self.pick("Novo treino")
+        self.pick("ERG")
         b = self.screen()
         b.sel = 1
         b.enter()
@@ -248,8 +252,7 @@ class TestFeedback(tg.GuiCase):
     def _ride_workout(self, name: str, seconds: float):
         self.pick("Lista de treinos")
         self.pick(name)
-        self.pick("Começar")
-        self.pick("Sem rota")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ride = self.screen()
         ride.preparing = False
@@ -331,12 +334,17 @@ class TestLayouts(tg.GuiCase):
         ed = ls.LayoutEditor(self.app, "rowing")
         self.app.push(ed)
         ed.place("wkg", 0, 0)
+        self.assertIsNone(db.get("row_fields"))                # rascunho até Guardar
+        self.assertTrue(ed.dirty)
+        self.save()
         self.assertEqual(db.get("row_fields")[0], "wkg")
         first, second = lay.load(db, "rowing")[0][:2]
         ed.swap((0, 0), (0, 1))
+        self.save()
         self.assertEqual(lay.load(db, "rowing")[0][:2], [second, first])
         # uma métrica que já estava no ecrã muda de sítio (não fica repetida)
         ed.place("wkg", 0, 5)
+        self.save()
         flat = [m for m in db.get("row_fields") if m == "wkg"]
         self.assertEqual(len(flat), 1)
 
@@ -348,6 +356,7 @@ class TestLayouts(tg.GuiCase):
         self.app._on_mouse_press(int(cx + 3), int(cy + 3), 1, 0)
         self.app._on_mouse_drag(int(sx + 10), int(sy + 10), 5, 5)
         self.app._on_mouse_release(int(sx + 10), int(sy + 10))
+        self.save()
         self.assertEqual(lay.keys(self.app.db, "running")[0], "max_hr")
 
     def test_running_session_uses_the_layout(self):
@@ -366,14 +375,17 @@ class TestLayouts(tg.GuiCase):
         self.app.push(ed)
         m = ed.groups[0][0]
         ed.swap((0, 0), (1, 0))                    # passa para a caixa 2
+        self.save()
         self.assertEqual(lay.load(db, "cycling")[1][0], m)
         self.assertNotIn(m, lay.load(db, "cycling")[0])
         g0, g1 = lay.load(db, "cycling")[0], lay.load(db, "cycling")[1]
         ed.swap_boxes(0, 1)
+        self.save()
         self.assertEqual(lay.load(db, "cycling")[0], g1)
         self.assertEqual(lay.load(db, "cycling")[1], g0)
         ed._armed_reset = True
         self.press(key.R)
+        self.save()
         from velo.core.boxes import DEFAULT_BOXES
         self.assertEqual(lay.load(db, "cycling")[0], DEFAULT_BOXES[0])
 
@@ -395,14 +407,19 @@ class TestLayouts(tg.GuiCase):
     def test_settings_open_the_editor(self):
         self.pick("Definições")
         self.pick("Ecrã da sessão")
-        self.assertIsInstance(self.screen(), ls.LayoutSportPicker)
-        self.pick("Remo")
-        self.assertIsInstance(self.screen(), ls.LayoutEditor)
+        ed = self.screen()
+        self.assertIsInstance(ed, ls.LayoutEditor)
+        self.assertEqual(ed.tab_labels(), ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"])
+        ed.tab_named("Remo")                          # um separador por desporto
+        self.assertEqual(ed.sport, "rowing")
+        self.assertEqual(len(ed.page_tabs.labels_text), 2)   # o remo tem duas páginas
         self.press(key.ENTER)                         # escolher pela lista
         self.assertIsInstance(self.screen(), ls.MetricPicker)
         self.pick("W/kg")
+        self.press(key.ESCAPE)                        # por guardar: pergunta
+        self.assertIsInstance(self.screen(), app_mod.ConfirmScreen)
+        self.pick("Sair e guardar")
         self.assertEqual(lay.keys(self.app.db, "rowing")[0], "wkg")
-
 
 class TestCalendar(tg.GuiCase):
     def _ride_on(self, day: date, tss: float = 50, wid: str | None = None) -> None:

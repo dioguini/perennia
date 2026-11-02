@@ -28,6 +28,13 @@ def pace_unit(sport: str) -> str:
 
 
 def start(app, sport: str, workout_id: str | None = None, replace: bool = False) -> None:
+    """Abre a preparação da sessão. Corrida: a janela da sessão (aparelhos,
+    rota .gpx opcional, velocidade, auto lap). Natação: piscina e auto lap."""
+    if sport == "running":
+        from velo.ui.session_setup import SessionSetup
+        app.push(SessionSetup(app, "running", kind="workout" if workout_id else "free",
+                              workout_id=workout_id))
+        return
     title = sp.name(sport)
     if workout_id:
         w = en.workout(app.db, workout_id)
@@ -65,20 +72,29 @@ class EnduranceHub(SportHub):
         a = self.app
         free = tr("Corrida livre", "Free run") if self.SPORT == "running" else \
             tr("Natação livre", "Free swim")
+        if self.SPORT == "swimming":
+            return train_items(a, self.SPORT, None)
         return train_items(a, self.SPORT, Item(
             tr("Sessão de treino", "Training session"),
-            detail=free + " · " + tr("sem plano: tempo, distância, voltas e FC",
-                                     "no plan: time, distance, laps and HR"),
-            action=lambda: start(a, self.SPORT)))
+            detail=free + tr(" ou carregar um treino · com ou sem rota (.gpx)",
+                             " or load a workout · with or without a route (.gpx)"),
+            action=lambda: self._ask()))
+
+    def _ask(self) -> None:
+        from velo.ui.session_setup import ask_start
+        ask_start(self.app, self.SPORT, self)
 
     def items_builder(self) -> list[Item]:
         a = self.app
         from velo.ui import builder_screens as bs
-        items = [Item(tr("+ Novo treino (arrastar blocos)", "+ New workout (drag blocks)"),
-                      action=lambda: a.push(bs.BlockBuilder(a, self.SPORT, None)))]
+        from velo.core import workout_meta as wm
+        items = [Item(tr("+ Novo treino", "+ New workout"),
+                      action=lambda: bs.new_workout(a, self.SPORT),
+                      button=True, primary=True, top=True)]
         for w in en.workouts(a.db, self.SPORT):
             items.append(Item(w["name"], value=self._dur(w),
-                              detail=it.mode_name(w["mode"]) + " · " + (w["description"] or ""),
+                              detail=wm.label(a.db, self.SPORT, w["id"], w["mode"]) + " · "
+                              + (w["description"] or ""),
                               action=lambda wid=w["id"]: a.push(
                                   bs.BlockBuilder(a, self.SPORT, wid))))
         return items
@@ -105,35 +121,40 @@ class EnduranceHub(SportHub):
                 for s in en.sessions(a.db, self.SPORT)] + _synced(a, self.SPORT)
 
     def items_stats(self) -> list[Item]:
-        a = self.app
-        ss = en.sessions(a.db, self.SPORT, 1000)
-        dist = sum(s["distance_m"] or 0 for s in ss)
-        hours = sum(s["moving_s"] or 0 for s in ss) / 3600
+        return super().items_stats() + record_items(self.app, self.SPORT)
 
-        def record(label: str, pick, value) -> Item:
-            """O recorde e a sessão onde foi feito (Enter abre-a)."""
-            cands = [s for s in ss if pick(s) is not None]
-            if not cands:
-                return Item(label, value="—", enabled=False)
-            s = min(cands, key=pick)
-            return Item(label, value=value(s),
-                        detail=tr("em {d} · {n}", "on {d} · {n}",
-                                  d=str(s["started_at"])[:16].replace("T", " "),
-                                  n=_pretty(s["name"]) or sp.name(self.SPORT)),
-                        action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
-        unit = " " + pace_unit(self.SPORT)
-        return super().items_stats() + [
-            Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
-            Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
-            Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),
-            record(tr("Melhor ritmo médio", "Best avg pace"),
-                   lambda s: s["avg_pace_s"] or None, lambda s: hms(s["avg_pace_s"]) + unit),
-            record(tr("Maior distância", "Longest"),
-                   lambda s: -(s["distance_m"] or 0) or None, lambda s: _m(s["distance_m"])),
-            record(tr("Sessão mais longa", "Longest session"),
-                   lambda s: -(s["moving_s"] or 0) or None, lambda s: hms(s["moving_s"] or 0)),
-            record(tr("FC média mais alta", "Highest avg HR"),
-                   lambda s: -(s["avg_hr"] or 0) or None, lambda s: f"{s['avg_hr']:.0f} bpm")]
+
+def record_items(app, sport: str) -> list[Item]:
+    """Os recordes da corrida ou da natação, com a sessão de cada um."""
+    a = app
+    ss = en.sessions(a.db, sport, 1000)
+    dist = sum(s["distance_m"] or 0 for s in ss)
+    hours = sum(s["moving_s"] or 0 for s in ss) / 3600
+
+    def record(label: str, pick, value) -> Item:
+        """O recorde e a sessão onde foi feito (Enter abre-a)."""
+        cands = [s for s in ss if pick(s) is not None]
+        if not cands:
+            return Item(label, value="—", enabled=False)
+        s = min(cands, key=pick)
+        return Item(label, value=value(s),
+                    detail=tr("em {d} · {n}", "on {d} · {n}",
+                              d=str(s["started_at"])[:16].replace("T", " "),
+                              n=_pretty(s["name"]) or sp.name(sport)),
+                    action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
+    unit = " " + pace_unit(sport)
+    return [
+        Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
+        Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
+        Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),
+        record(tr("Melhor ritmo médio", "Best avg pace"),
+               lambda s: s["avg_pace_s"] or None, lambda s: hms(s["avg_pace_s"]) + unit),
+        record(tr("Maior distância", "Longest"),
+               lambda s: -(s["distance_m"] or 0) or None, lambda s: _m(s["distance_m"])),
+        record(tr("Sessão mais longa", "Longest session"),
+               lambda s: -(s["moving_s"] or 0) or None, lambda s: hms(s["moving_s"] or 0)),
+        record(tr("FC média mais alta", "Highest avg HR"),
+               lambda s: -(s["avg_hr"] or 0) or None, lambda s: f"{s['avg_hr']:.0f} bpm")]
 
 
 def _health():
@@ -157,7 +178,7 @@ class EndurancePreview(BriefScreen):
         return endurance_brief(self.app.db, self.sport, self.wid)
 
     def start(self) -> None:
-        start(self.app, self.sport, self.wid, replace=True)
+        start(self.app, self.sport, self.wid, replace=self.sport != "running")
 
     def extra_actions(self) -> list[Item]:
         a = self.app
@@ -172,9 +193,18 @@ class EnduranceSession(Screen):
 
     def __init__(self, app, sport: str, workout_id: str | None = None,
                  autolap: dict | None = None, pool_m: float = 25.0, speed_kmh: float = 10.0,
-                 resume: dict | None = None):
+                 resume: dict | None = None, route_id: str | None = None):
         super().__init__(app)
         cfg = (resume or {}).get("config", {})
+        # corrida com uma rota (.gpx): segue-se a distância e mostra-se a
+        # inclinação da estrada nesse ponto, para pôr na passadeira
+        self.route_id = route_id
+        self.route_name = ""
+        self.route_pts: list = []
+        if route_id:
+            row = app.db.route(route_id)
+            self.route_name = row["name"] if row else ""
+            self.route_pts = app.db.route_points(route_id)
         self.engine = en.EnduranceEngine(
             app.db, app.db.athlete(), cfg.get("sport", sport), sensors=app.hub,
             workout_id=workout_id or cfg.get("workout_id"),
@@ -385,7 +415,39 @@ class EnduranceSession(Screen):
         return f"{tr('PASSO', 'STEP')} {e.workout.idx + 1}/{len(e.workout.steps)} · " \
                f"{e.workout.remaining_text()}"
 
+    def route_state(self) -> tuple[float, float, float] | None:
+        """(km na rota, comprimento, inclinação %) — a rota repete-se no fim."""
+        pts = self.route_pts
+        if not pts:
+            return None
+        total = pts[-1].dist_m or 1.0
+        d = self.engine.distance_m % total
+        lo, hi = 0, len(pts) - 1
+        while lo < hi:                                   # o primeiro ponto ≥ d
+            mid = (lo + hi) // 2
+            if pts[mid].dist_m < d:
+                lo = mid + 1
+            else:
+                hi = mid
+        return d, total, float(pts[lo].grade_pct or 0.0)
+
+    def route_line(self) -> str:
+        st = self.route_state()
+        if st is None:
+            return ""
+        d, total, grade = st
+        incline = max(0.0, min(15.0, round(grade * 2) / 2))
+        return tr("Rota «{n}» · {a} de {b} km · inclinação da estrada {g} % → põe {i} %",
+                  "Route «{n}» · {a} of {b} km · road gradient {g} % → set {i} %",
+                  n=self.route_name, a=f"{d / 1000:.2f}", b=f"{total / 1000:.1f}",
+                  g=f"{grade:+.1f}", i=f"{incline:g}")
+
     def _plan_text(self) -> str:
+        text = self._plan_body()
+        route = self.route_line()
+        return "\n".join(x for x in (route, text) if x)
+
+    def _plan_body(self) -> str:
         e = self.engine
         if e.workout is None or e.workout.step is None:
             return ""

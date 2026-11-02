@@ -647,14 +647,14 @@ class TestStrengthGui(tg.GuiCase):
         self.press(key.RIGHT)
         self.select("Carga")
         self.app._on_text("100")
-        self.pick("Feito")
+        self.pick("Guardar e sair")
         self.assertEqual(ed.items[-1]["sets"], 4)
         self.assertEqual(ed.items[-1]["load_kg"], 100.0)
         self.pick("Adicionar exercício")
         self.pick("Novo exercício")
         self.select("Nome")
         self.type("Nordic curl")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.pick("Nordic curl")
         self.assertEqual(ed.items[-1]["name"], "Nordic curl")
         self.pick("Guardar e treinar")
@@ -675,7 +675,7 @@ class TestStrengthGui(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Sim")
         self.pick("Fechar")
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthStatsScreen)
         titles = set()
@@ -684,8 +684,8 @@ class TestStrengthGui(tg.GuiCase):
             titles.add(scr.chart.title.text)
             self.press(key.TAB)
         self.assertEqual(len(titles), len(scr.VIEWS))
-        self.select("Desporto")
-        self.press(key.RIGHT)                                      # ginásio → todos
+        self.app.reset_to_menu(app_mod.HomeScreen)
+        self.pick("Estatísticas gerais")                           # todos os desportos
         gen = self.screen()
         self.assertIsInstance(gen, ss.GeneralStatsScreen)
         for _ in range(len(gen.VIEWS)):
@@ -714,9 +714,9 @@ class TestCyclingBuilderGui(tg.GuiCase):
         self.app._on_text("2,5")
         self.assertEqual(ed.steps[-1].duration_s, 150)
         self.select("Unidade")
-        self.press(key.ENTER)                                      # watts
+        self.press(key.RIGHT)                                      # watts (setas, não Enter)
         self.assertEqual(ed.steps[-1].target_type, "watts")
-        self.pick("Feito")
+        self.pick("Guardar e sair")
         self.pick("Exportar")
         exp = self.screen()
         self.assertIsInstance(exp, ss.ExportScreen)
@@ -743,7 +743,7 @@ class TestCyclingBuilderGui(tg.GuiCase):
 class TestStatsNewViews(tg.GuiCase):
     def test_fitness_zones_and_eftp(self):
         tg.TestStatsExplorer._ride(self)
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         scr = self.screen()
         for view in ("zones_period", "load", "eftp"):
             scr.view = scr.VIEWS.index(view)
@@ -759,7 +759,7 @@ class TestStatsNewViews(tg.GuiCase):
 
 class TestRecoveryGui(tg.GuiCase):
     def test_crash_mid_ride_then_resume(self):
-        self.pick("Sessão de treino")
+        self.pick("Biblioteca de rotas")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

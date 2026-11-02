@@ -300,17 +300,16 @@ class TestTestsGui(tg.GuiCase):
         self.pick("Testes")
         self.assertIsInstance(self.screen(), hs.TestsMenu)
         self.assertTrue(any("2000 m" in i.label for i in self.screen().list.items))
-        self.pick("Novo teste")
+        self.pick("Adicionar teste")
         ed = self.screen()
         self.type("Remo 10 min")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertTrue(any("Remo 10 min" in i.label for i in self.screen().list.items))
 
     def test_cycling_5min_test_records_vo2max(self):
         self.pick("Testes")
         self.pick("5 minutos")
-        self.pick("Fazer o teste")
-        self.pick("Sem rota")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ride = self.screen()
         for _ in range(int(1500 / 1.0)):
@@ -467,7 +466,7 @@ class TestHealthGui(tg.GuiCase):
         self.assertIsInstance(res, hs.LabResultEditor)
         self.select("Valor")
         self.app._on_text("131")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertIs(self.screen(), ed)
         self.assertTrue(any("LDL ▲" in i.label for i in ed.list.items))
         self.pick("Comentário do médico")
@@ -483,7 +482,7 @@ class TestHealthGui(tg.GuiCase):
         self.pick("Métricas do diário")
         self.pick("Nova métrica")
         self.type("Comi fruta")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertTrue(any("Comi fruta" in i.label for i in self.screen().list.items))
         self.select("Passos")
         self.press(key.A)                                       # desligar
@@ -662,7 +661,7 @@ class TestLapSessionGui(tg.GuiCase):
 
 class TestAgent(tg.GuiCase):
     def test_f1_and_f2_show_what_would_be_sent(self):
-        self.pick("Gráficos e análise")
+        self.pick("Estatísticas")
         stats_screen = self.screen()
         self.press(key.F1)
         ag = self.screen()
@@ -688,7 +687,7 @@ class TestAgent(tg.GuiCase):
         self.assertIn("O que almocei", ctx["diario"])
 
     def test_no_agent_during_a_ride(self):
-        self.pick("Sessão de treino")
+        self.pick("Biblioteca de rotas")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

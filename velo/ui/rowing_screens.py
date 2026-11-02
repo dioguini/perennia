@@ -16,7 +16,7 @@ from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from velo.ui.challenge_screens import train_items
-from velo.ui.sport_screens import EditScreen
+from velo.ui.sport_screens import EditScreen, LiveEditPopup
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
                              LapPanel, SessionClock)
@@ -160,24 +160,31 @@ class RowingMenu(SportHub):
         # a máquina de remo liga-se em Dispositivos; a FTP do remo está nas
         # Definições (Atleta)
         a = self.app
+        # os campos do ecrã estão em Definições → Ecrã da sessão
         return train_items(a, "rowing", session=Item(
             tr("Sessão de treino", "Training session"),
-            detail=tr("Remo livre, com voltas manuais (L)", "Free row, with manual laps (L)"),
-            action=lambda: self._start({}))) + [
-            Item(tr("Campos do ecrã de remo", "Rowing screen fields"),
-                 action=lambda: a.push(RowFieldsScreen(a)))]
+            detail=tr("Remo livre (com voltas) ou carregar um treino",
+                      "Free row (with laps) or load a workout"),
+            action=lambda: self._ask()))
+
+    def _ask(self) -> None:
+        from velo.ui.session_setup import ask_start
+        ask_start(self.app, "rowing", self)
 
     def items_builder(self) -> list[Item]:
         a = self.app
         from velo.ui import builder_screens as bs
-        items = [Item(tr("+ Novo treino (arrastar blocos)", "+ New workout (drag blocks)"),
-                      action=lambda: a.push(bs.BlockBuilder(a, "rowing", None)))]
+        from velo.core import workout_meta as wm
+        items = [Item(tr("+ Novo treino", "+ New workout"),
+                      action=lambda: bs.new_workout(a, "rowing"),
+                      button=True, primary=True, top=True)]
         for w in rw.workouts(a.db):
             dur = " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
                                          _m(w["total_m"]) if w["total_m"] else "") if x)
             items.append(Item(w["name"], value=dur,
-                              detail=tr("Enter: blocos · P: passos (resistência, voga)",
-                                        "Enter: blocks · P: steps (resistance, rate)"),
+                              detail=wm.label(a.db, "rowing", w["id"], "power") + " · "
+                              + tr("Enter: blocos · P: passos (resistência, voga)",
+                                   "Enter: blocks · P: steps (resistance, rate)"),
                               action=lambda wid=w["id"]: a.push(bs.BlockBuilder(a, "rowing",
                                                                                 wid)),
                               data=("row_workout", w["id"])))
@@ -208,44 +215,7 @@ class RowingMenu(SportHub):
         return out + history_items(a, "rowing")
 
     def items_stats(self) -> list[Item]:
-        a = self.app
-        b = rw.bests(a.db)
-        ses = b.get("sessions") or {}
-
-        def record(label: str, key_: str, value: str) -> Item:
-            """Um recorde e a sessão onde foi feito (Enter abre-a)."""
-            s = ses.get(key_)
-            if s is None:
-                return Item(label, value=value, enabled=False)
-            when = str(s["started_at"])[:16].replace("T", " ")
-            return Item(label, value=value,
-                        detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
-                                  n=_pretty(s["name"]) or tr("Remo", "Rowing")),
-                        action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
-                        data=("record", key_, s["id"]))
-
-        avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
-        spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
-        mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
-        longest = ses.get("time")
-        return super().items_stats() + [
-            Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
-            Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
-                 enabled=False),
-            record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
-                   pace_text(b.get("pace"))),
-            record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
-                   pace_text(avg)),
-            record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
-            record(tr("Sessão mais longa", "Longest session"), "time",
-                   hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
-                   if longest else "—"),
-            record(tr("Mais potência média", "Best avg power"), "w",
-                   f"{b['w']:.0f} W" if b.get("w") else "—"),
-            record(tr("Mais potência máxima", "Best max power"), "max_w",
-                   f"{mx:.0f} W" if mx else "—"),
-            record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
-                   f"{spm:.0f} spm" if spm else "—")]
+        return super().items_stats() + record_items(self.app)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
@@ -257,6 +227,48 @@ class RowingMenu(SportHub):
 
     def _start(self, kw: dict) -> None:
         start_session(self.app, **kw)
+
+
+def record_items(app) -> list[Item]:
+    """Os recordes do remo, cada um com a sessão onde foi feito (Enter abre-a)."""
+    a = app
+    b = rw.bests(a.db)
+    ses = b.get("sessions") or {}
+
+    def record(label: str, key_: str, value: str) -> Item:
+        """Um recorde e a sessão onde foi feito (Enter abre-a)."""
+        s = ses.get(key_)
+        if s is None:
+            return Item(label, value=value, enabled=False)
+        when = str(s["started_at"])[:16].replace("T", " ")
+        return Item(label, value=value,
+                    detail=tr("em {d} · {n}", "on {d} · {n}", d=when,
+                              n=_pretty(s["name"]) or tr("Remo", "Rowing")),
+                    action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid)),
+                    data=("record", key_, s["id"]))
+
+    avg = ses.get("avg_pace", {}).get("avg_pace_s") if ses.get("avg_pace") else None
+    spm = ses.get("spm", {}).get("avg_spm") if ses.get("spm") else None
+    mx = ses.get("max_w", {}).get("max_power_w") if ses.get("max_w") else None
+    longest = ses.get("time")
+    return [
+        Item(tr("Sessões", "Sessions"), value=str(b.get("n") or 0), enabled=False),
+        Item(tr("Distância total", "Total distance"), value=_m(b.get("total") or 0),
+             enabled=False),
+        record(tr("Melhor ritmo (500 m)", "Best pace (500 m)"), "pace",
+               pace_text(b.get("pace"))),
+        record(tr("Melhor ritmo médio de uma sessão", "Best session avg pace"), "avg_pace",
+               pace_text(avg)),
+        record(tr("Maior distância", "Longest"), "dist", _m(b.get("dist"))),
+        record(tr("Sessão mais longa", "Longest session"), "time",
+               hms((longest.get("moving_s") or longest.get("elapsed_s") or 0))
+               if longest else "—"),
+        record(tr("Mais potência média", "Best avg power"), "w",
+               f"{b['w']:.0f} W" if b.get("w") else "—"),
+        record(tr("Mais potência máxima", "Best max power"), "max_w",
+               f"{mx:.0f} W" if mx else "—"),
+        record(tr("Voga média mais alta", "Highest avg stroke rate"), "spm",
+               f"{spm:.0f} spm" if spm else "—")]
 
 
 def _health():
@@ -275,20 +287,17 @@ def start_session(app, replace: bool = False, **kw) -> None:
         scr = RowingSessionScreen(app, **kw)
         app.replace(scr) if replace else app.push(scr)
         return
-    title = tr("Remo", "Rowing")
-    if kw.get("workout_id"):
-        w = rw.workout(app.db, kw["workout_id"])
-        title = w["name"] if w else title
-    elif kw.get("game_spec"):
+    title = None
+    if kw.get("game_spec"):
         title = rw.game_title(kw["game_spec"]["key"])
     elif kw.get("protocol"):
         title = tr("Teste", "Test")
-
-    def go(autolap: dict, _opts: dict) -> None:
-        app.replace(RowingSessionScreen(app, autolap=autolap, **kw))
-    opts = StartOptions(app, "rowing", title, go,
-                        lines=[tr("Máquina: {n}", "Machine: {n}", n=app.rower.name)])
-    app.replace(opts) if replace else app.push(opts)
+    from velo.ui.session_setup import SessionSetup
+    kind = "workout" if kw.get("workout_id") else "game" if kw.get("game_spec") else \
+        "test" if kw.get("protocol") else "free"
+    app.push(SessionSetup(app, "rowing", kind=kind, workout_id=kw.get("workout_id"),
+                          protocol=kw.get("protocol"), game_spec=kw.get("game_spec"),
+                          title=title))
 
 
 # ================================================================== sessão
@@ -559,6 +568,8 @@ class RowingSessionScreen(Screen):
             "started": tr("A remar!", "Rowing!"),
             "auto_pause": tr("Pausa automática", "Auto pause"),
             "resistance": tr("Resistência {n}", "Resistance {n}", n=data.get("level")),
+            "resistance_hint": tr("Põe a resistência no {n}", "Set the resistance to {n}",
+                                  n=data.get("level")),
             "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
             "workout_done": tr("Treino concluído!", "Workout done!"),
             "test_done": tr("Teste concluído!", "Test done!"),
@@ -903,11 +914,20 @@ class RowWorkoutEditor(EditScreen):
         self.app.pop(force=True)
 
 
-class RowStepEditor(EditScreen):
+class RowStepEditor(LiveEditPopup):
+    """Um passo do treino de remo, numa janela."""
+
     def __init__(self, app, editor: RowWorkoutEditor, idx: int):
-        super().__init__(app)
         self.ed = editor
         self.idx = idx
+        super().__init__(app)
+        self._start_live()
+
+    def live_get(self):
+        return self.ed.steps[self.idx] if self.idx < len(self.ed.steps) else None
+
+    def live_set(self, value) -> None:
+        self.ed.steps[self.idx] = value
 
     @property
     def s(self) -> rw.Step:
@@ -942,9 +962,10 @@ class RowStepEditor(EditScreen):
                        data="num:resistance",
                        detail=tr("a app põe este nível no início do passo",
                                  "the app sets this level at the start of the step")),
-                  Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue"),
-                  Item(tr("Remover o passo", "Remove the step"), action=self._remove, button=True),
-                  Item(tr("Feito", "Done"), action=self.app.pop, button=True, primary=True)]
+                  Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue")]
+        self.fit_rows(len(items))
+        items += self.live_buttons([Item(tr("Remover o passo", "Remove the step"),
+                                         action=self._remove, button=True)])
         self.chrome.set(tr("Passo {n}", "Step {n}", n=self.idx + 1), "", self.footer())
         self.list.set_items(items, keep_index=True)
 
@@ -1000,7 +1021,8 @@ class RowStepEditor(EditScreen):
 
     def _remove(self) -> None:
         del self.ed.steps[self.idx]
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
     def leave(self) -> None:
         self.s.clean() if self.idx < len(self.ed.steps) else None

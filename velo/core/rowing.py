@@ -646,12 +646,16 @@ class RowEngine:
         self.game_spec = dict(game_spec or {})
         self.workout: RowWorkoutRunner | None = None
         self.title = tr("Remo livre", "Free row")
+        # ERG: a máquina muda a resistência em cada bloco; manual: só a mostra
+        self.erg = True
         if workout_id:
             w = workout(db, workout_id)
             if w:
                 self.workout = RowWorkoutRunner(w["steps"], self.ftp, w["name"])
                 self.title = w["name"]
                 self.kind = "workout"
+                from .workout_meta import get as meta_of
+                self.erg = meta_of(db, "rowing", workout_id)["control"] == "erg"
         self.test = TESTS.get(protocol or "")
         if self.test:
             self.kind = "test"
@@ -807,7 +811,7 @@ class RowEngine:
                 return
             self.started = True
             self.events.append(("started", {}))
-            if self._want_level:
+            if self._want_level and self.erg:
                 self._send_level(self._want_level)
         if moving:
             self._idle = 0.0
@@ -921,7 +925,11 @@ class RowEngine:
         info = self.workout.step_info()
         self.events.append(("step", info))
         if info.get("resistance"):
-            self.set_resistance(info["resistance"])
+            if self.erg:
+                self.set_resistance(info["resistance"])
+            else:                       # manual: diz o nível, quem rema é que o põe
+                self._want_level = int(info["resistance"])
+                self.events.append(("resistance_hint", {"level": self._want_level}))
 
     def _send_level(self, level: int) -> None:
         try:

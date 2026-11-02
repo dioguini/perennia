@@ -118,7 +118,7 @@ def sessions_of(db, sport: str) -> list[dict]:
                " elapsed_s AS secs FROM strength_sessions WHERE status='completed'",
         "cycling": "SELECT id, COALESCE(ended_at, started_at) AS at, distance_m,"
                    " COALESCE(moving_s, elapsed_s) AS secs FROM rides"
-                   " WHERE ended_at IS NOT NULL",
+                   " WHERE status = 'completed'",
     }
     sql = queries.get(sport)
     if sql is None:

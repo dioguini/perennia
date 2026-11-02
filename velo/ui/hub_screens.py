@@ -7,7 +7,7 @@ from pyglet.window import key
 from velo.core import gym, inventory
 from velo.core.i18n import t, tr
 from velo.ui.app import Screen
-from velo.ui.sport_screens import EditScreen
+from velo.ui.sport_screens import EditPopup, EditScreen
 from velo.ui.widgets import Item
 
 
@@ -27,42 +27,61 @@ def SportHub(app, sport: str):                     # noqa: N802 — fábrica
     return GymHub(app)
 
 
-def stats_screen(app, sport: str | None):
-    """As estatísticas, já no desporto pedido (None = todos)."""
+def stats_screen(app, sport: str | None, hub=None):
+    """As estatísticas, já no desporto pedido (None = todos). Com `hub` (o menu
+    do desporto), abrem no separador Estatísticas dele e o desporto fica fixo."""
     from velo.ui import stats_screens
-    return stats_screens.for_sport(app, sport)
+    from velo.ui.app import Screen
+    Screen._pending_hub = hub
+    try:
+        return stats_screens.for_sport(app, sport)
+    finally:
+        Screen._pending_hub = None
 
 
 # ============================================================ inventário
 
 
 class InventoryScreen(Screen):
-    """O teu material, por grupos (máquinas, pesos livres, estações…)."""
+    """O teu material: a «Visão Geral» (totais) e um separador por grupo
+    (máquinas, pesos livres, estações…). **+ Novo artigo** fica em cima, à
+    direita; Enter num artigo abre-o para editar (numa janela)."""
 
     TABBED = True
 
     def tab_labels(self) -> list[str]:
-        return [tr(*v) for v in inventory.GROUPS.values()]
+        return [tr("Visão Geral", "Overview")] + [tr(*v) for v in inventory.GROUPS.values()]
 
-    def group(self) -> str:
-        return list(inventory.GROUPS)[self.tab % len(inventory.GROUPS)]
+    def group(self) -> str | None:
+        if self.tab % len(self.tab_labels()) == 0:
+            return None
+        return list(inventory.GROUPS)[(self.tab - 1) % len(inventory.GROUPS)]
 
     def enter(self) -> None:
         a = self.app
         g = self.group()
-        kinds = [k for k, v in inventory.KINDS.items() if v[2] == g]
-        items = [Item(tr("+ Novo artigo", "+ New item"),
-                      action=lambda: a.push(ItemEditor(a, None, kinds[0] if kinds else "other")))]
-        for r in inventory.items(a.db):
-            if r["kind"] not in kinds:
-                continue
-            w = f" · {r['weight_kg']:g} kg" if r["weight_kg"] else ""
-            items.append(Item(r["name"], value=f"× {r['qty']}",
-                              detail=inventory.kind_name(r["kind"]) + w
-                              + (" · " + r["notes"] if r["notes"] else ""),
-                              action=lambda iid=r["id"]: a.push(ItemEditor(a, iid)),
-                              data=("item", r["id"])))
         summ = inventory.summary(a.db)
+        if g is None:
+            items = self.overview()
+            first_kind = next(iter(inventory.KINDS))
+        else:
+            kinds = [k for k, v in inventory.KINDS.items() if v[2] == g]
+            first_kind = kinds[0] if kinds else "other"
+            items = []
+            for r in inventory.items(a.db):
+                if r["kind"] not in kinds:
+                    continue
+                w = f" · {r['weight_kg']:g} kg" if r["weight_kg"] else ""
+                items.append(Item(r["name"], value=f"× {r['qty']}",
+                                  detail=inventory.kind_name(r["kind"]) + w
+                                  + (" · " + r["notes"] if r["notes"] else ""),
+                                  action=lambda iid=r["id"]: a.push(ItemEditor(a, iid)),
+                                  data=("item", r["id"])))
+            if not items:
+                items = [Item(tr("Ainda nada neste grupo", "Nothing in this group yet"),
+                              enabled=False)]
+        items.append(Item(tr("+ Novo artigo", "+ New item"), top=True,
+                          action=lambda: a.push(ItemEditor(a, None, first_kind))))
         self.chrome.set(tr("Inventário de artigos", "Equipment"),
                         tr("{a} artigos · {u} unidades", "{a} items · {u} units",
                            a=summ["articles"], u=summ["units"]),
@@ -70,12 +89,42 @@ class InventoryScreen(Screen):
                            "Tab group · Enter edit · Esc back"))
         self.list.set_items(items, keep_index=True)
 
+    def overview(self) -> list[Item]:
+        """Totais: artigos, unidades, quilos (todos e só os pesos livres), por grupo."""
+        a = self.app
+        rows = inventory.items(a.db)
+        kg = sum((r["qty"] or 0) * (r["weight_kg"] or 0) for r in rows)
+        out = [Item(tr("Artigos", "Items"), value=str(len(rows)), enabled=False),
+               Item(tr("Unidades", "Units"), value=str(sum(r["qty"] or 0 for r in rows)),
+                    enabled=False),
+               Item(tr("Peso total", "Total weight"), value=f"{kg:,.1f} kg".replace(",", " "),
+                    detail=tr("a soma de quantidade × peso de cada artigo",
+                              "the sum of quantity × weight of each item"), enabled=False)]
+        heavy = max(rows, key=lambda r: r["weight_kg"] or 0, default=None)
+        if heavy is not None and heavy["weight_kg"]:
+            out.append(Item(tr("O mais pesado", "Heaviest"), value=f"{heavy['weight_kg']:g} kg",
+                            detail=heavy["name"], enabled=False))
+        for g, names in inventory.GROUPS.items():
+            kinds = {k for k, v in inventory.KINDS.items() if v[2] == g}
+            grp = [r for r in rows if r["kind"] in kinds]
+            if not grp:
+                continue
+            gkg = sum((r["qty"] or 0) * (r["weight_kg"] or 0) for r in grp)
+            out.append(Item(tr(*names), value=tr("{n} artigos", "{n} items", n=len(grp)),
+                            detail=tr("{u} unidades", "{u} units",
+                                      u=sum(r["qty"] or 0 for r in grp))
+                            + (f" · {gkg:,.1f} kg".replace(",", " ") if gkg else ""),
+                            enabled=False))
+        return out
+
     def agent_data(self) -> dict:
         return {"artigos": [{k: r[k] for k in ("name", "kind", "qty", "weight_kg")}
                             for r in inventory.items(self.app.db)]}
 
 
-class ItemEditor(EditScreen):
+class ItemEditor(EditPopup):
+    """Um artigo do inventário, numa janela."""
+
     def __init__(self, app, iid: int | None, kind: str = "other"):
         super().__init__(app)
         self.iid = iid
@@ -85,25 +134,31 @@ class ItemEditor(EditScreen):
                   "notes": (r or {}).get("notes") or ""}
         self._armed = False
 
-    def enter(self) -> None:
+    def title(self) -> str:
+        return tr("Artigo", "Item") if self.iid else tr("Novo artigo", "New item")
+
+    def subtitle(self) -> str:
+        return inventory.kind_name(self.v["kind"])
+
+    def rows(self) -> list[Item]:
         v = self.v
-        items = [Item(tr("Tipo", "Kind"), value=inventory.kind_name(v["kind"]),
-                      data="cyc:kind", detail=tr("←/→ muda · é o que os exercícios pedem",
-                                                 "←/→ changes · it is what exercises ask for")),
-                 Item(tr("Nome", "Name"), value=(v["name"] or "") + "▏", data="text:name",
-                      detail=tr("ex.: Disco de 1 kg, Domyos Rowing 500B",
-                                "e.g. 1 kg plate, Domyos Rowing 500B")),
-                 Item(tr("Quantidade", "Quantity"), value=str(v["qty"]), data="num:qty"),
-                 Item(tr("Peso (kg)", "Weight (kg)"),
-                      value="—" if v["weight_kg"] is None else f"{v['weight_kg']:g} kg",
-                      data="num:weight_kg", detail=tr("de cada um (opcional)",
-                                                      "each (optional)")),
-                 Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes"),
-                 Item(tr("Apagar", "Delete"), action=self._delete, enabled=bool(self.iid),
-                      button=True),
-                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
-        self.chrome.set(tr("Artigo", "Item"), inventory.kind_name(v["kind"]), self.footer())
-        self.list.set_items(items, keep_index=True)
+        rows = [Item(tr("Tipo", "Kind"), value=inventory.kind_name(v["kind"]),
+                     data="cyc:kind", detail=tr("←/→ muda · é o que os exercícios pedem",
+                                                "←/→ changes · it is what exercises ask for")),
+                Item(tr("Nome", "Name"), value=(v["name"] or "") + "▏", data="text:name",
+                     detail=tr("ex.: Disco de 1 kg, Domyos Rowing 500B",
+                               "e.g. 1 kg plate, Domyos Rowing 500B")),
+                Item(tr("Quantidade", "Quantity"), value=str(v["qty"]), data="num:qty",
+                     detail=tr("←/→ ±1 · Shift ±5 · ou escreve", "←/→ ±1 · Shift ±5 · or type")),
+                Item(tr("Peso (kg)", "Weight (kg)"),
+                     value="—" if v["weight_kg"] is None else f"{v['weight_kg']:g} kg",
+                     data="num:weight_kg", detail=tr("de cada um (opcional)",
+                                                     "each (optional)")),
+                Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes")]
+        if self.iid:
+            rows.append(Item(tr("Apagar o artigo", "Delete the item"), action=self._delete,
+                             detail=tr("Enter duas vezes", "Enter twice")))
+        return rows
 
     def cycle(self, field: str, step: int) -> None:
         ks = list(inventory.KINDS)
@@ -130,12 +185,15 @@ class ItemEditor(EditScreen):
         self.v[field] = self.v[field][:-1]
         self.enter()
 
-    def _save(self) -> None:
+    def saved_message(self) -> str:
+        return tr("Artigo guardado", "Item saved")
+
+    def commit(self) -> bool:
         v = self.v
-        inventory.save(self.app.db, self.iid, name=v["name"], kind=v["kind"], qty=v["qty"],
-                       weight_kg=v["weight_kg"], notes=v["notes"] or None)
-        self.app.message(tr("Artigo guardado", "Item saved"))
-        self.app.pop()
+        self.iid = inventory.save(self.app.db, self.iid, name=v["name"], kind=v["kind"],
+                                  qty=v["qty"], weight_kg=v["weight_kg"],
+                                  notes=v["notes"] or None)
+        return True
 
     def _delete(self) -> None:
         if not self._armed:
@@ -143,7 +201,8 @@ class ItemEditor(EditScreen):
             self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
             return
         inventory.delete(self.app.db, self.iid)
-        self.app.pop()
+        self._saved_state = self.state()
+        self.close()
 
 
 # =========================================================== exercícios
@@ -177,13 +236,13 @@ class ExerciseInventory(Screen):
         a = self.app
         mod = self.modality()
         m = gym.modality(mod)
-        # as ações são botões em baixo: a lista fica só com os exercícios
-        items = [Item(tr("+ Novo exercício", "+ New exercise"),
-                      action=lambda: a.push(ExerciseEditor(a, None, mod)), button=True),
-                 Item((tr("✓ ", "✓ ") if self.only_available else "") +
+        # adicionar e filtrar: em cima, à direita, alinhados; a lista fica só
+        # com os exercícios (Enter abre um para editar, numa janela)
+        items = [Item((tr("✓ ", "✓ ") if self.only_available else "") +
                       tr("Só com o meu material", "Only my equipment"),
-                      value=tr("sim", "yes") if self.only_available else tr("não", "no"),
-                      action=self._toggle, button=True)]
+                      action=self._toggle, top=True),
+                 Item(tr("+ Novo exercício", "+ New exercise"),
+                      action=lambda: a.push(ExerciseEditor(a, None, mod)), top=True)]
         exs = gym.exercises(a.db, mod, available_only=self.only_available)
         for e in exs:
             kit = ", ".join(inventory.kind_name(k) for k in e["equipment"]) or \
@@ -219,7 +278,10 @@ class ExerciseInventory(Screen):
         self.app.pop()
 
 
-class ExerciseEditor(EditScreen):
+class ExerciseEditor(EditPopup):
+    """Um exercício (nome, grupo, medida, modalidades, material), numa janela."""
+
+    MAX_H = 720
     GROUPS = ("legs", "hips", "chest", "back", "shoulders", "arms", "core", "full", "mobility")
 
     def __init__(self, app, eid: int | None, modality: str = "strength"):
@@ -236,7 +298,13 @@ class ExerciseEditor(EditScreen):
         self.mod_cursor = 0
         self.kit_cursor = 0
 
-    def enter(self) -> None:
+    def title(self) -> str:
+        return tr("Exercício", "Exercise") if self.eid else tr("Novo exercício", "New exercise")
+
+    def subtitle(self) -> str:
+        return self.v["name"]
+
+    def rows(self) -> list[Item]:
         v = self.v
         mods = gym.modalities()
         kinds = list(inventory.KINDS)
@@ -268,10 +336,8 @@ class ExerciseEditor(EditScreen):
                  data="cyc:kitcur", action=lambda: self._toggle_kit(kc)),
             Item(tr("Descrição", "Description"), value=(v["description"] or "") + "▏",
                  data="text:description"),
-            Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True),
         ]
-        self.chrome.set(tr("Exercício", "Exercise"), v["name"], self.footer())
-        self.list.set_items(items, keep_index=True)
+        return items
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         cyc = self._field("cyc:")
@@ -319,14 +385,16 @@ class ExerciseEditor(EditScreen):
         self.v[field] = self.v[field][:-1]
         self.enter()
 
-    def _save(self) -> None:
+    def saved_message(self) -> str:
+        return tr("Exercício guardado", "Exercise saved")
+
+    def commit(self) -> bool:
         v = self.v
         if not v["name"].strip():
             self.app.message(tr("Escreve o nome do exercício.", "Type the exercise name."))
-            return
+            return False
         self.eid = gym.save_exercise(self.app.db, self.eid, name=v["name"], mods=v["mods"],
                                      group=v["group"], measure=v["measure"],
                                      bodyweight=v["bodyweight"], equipment=v["kit"],
                                      description=v["description"] or None)
-        self.app.message(tr("Exercício guardado", "Exercise saved"))
-        self.app.pop()
+        return True

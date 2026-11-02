@@ -97,6 +97,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
     def open_builder(self):
         self.pick("Construtor de treinos")
         self.pick("Novo treino")
+        self.pick("ERG")                       # o tipo do treino
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
         return b
@@ -120,7 +121,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         pop = self.screen()
         self.assertIsInstance(pop, app_mod.ConfirmScreen)
         self.assertEqual([i.label for i in pop.list.items],
-                         ["Sair sem gravar", "Cancelar", "Guardar"])
+                         ["Sair sem guardar", "Cancelar", "Sair e guardar"])
         self.pick("Cancelar")
         self.assertIs(self.screen(), b)
         self.assertTrue(b.dirty)
@@ -130,7 +131,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b = self.open_builder()
         b.add_block("Z3")
         self.press(key.ESCAPE)
-        self.pick("Sair sem gravar")
+        self.pick("Sair sem guardar")
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         self.assertEqual(len(self.app.db.workouts()), n)
 
@@ -139,7 +140,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b = self.open_builder()
         b.add_block("Z4")
         self.press(key.ESCAPE)
-        self.pick("Guardar")
+        self.pick("Sair e guardar")
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         self.assertEqual(len(self.app.db.workouts()), n + 1)
 
@@ -167,8 +168,10 @@ class TestTrainTabEverywhere(tg.GuiCase):
         for name in ("Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"):
             self.pick(name)
             labels = [i.label for i in self.screen().list.items]
-            self.assertEqual(labels[:4], ["Sessão de treino", "Challenge", "Desafios",
-                                          "Testes"], name)
+            want = ["Sessão de treino", "Challenge", "Desafios", "Testes"]
+            if name == "Natação":                              # sem «sessão de treino»
+                want = want[1:]
+            self.assertEqual(labels[:len(want)], want, name)
             self.press(key.ESCAPE)
 
     def test_cycling_challenge_has_no_games_header(self):
@@ -208,9 +211,9 @@ class TestChallengesWithDeadline(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Desafios")
-        self.pick("Novo desafio")
+        self.pick("Adicionar desafio")
         scr = self.screen()
-        self.assertIsInstance(scr, app_mod.ChallengeCreate)
+        self.assertIsInstance(scr, chs.ChallengePopup)
         self.select("Objetivo")
         self.type("50")
         self.select("Data limite")
@@ -218,7 +221,7 @@ class TestChallengesWithDeadline(tg.GuiCase):
         for _ in range(4):
             self.app._on_key_press(key.RIGHT, key.MOD_SHIFT)  # + 4 semanas
         self.assertEqual(scr.deadline, date.today() + timedelta(days=29))
-        self.pick("Criar")
+        self.pick("Guardar e sair")
         ch = self.app.db.challenges("running")[-1]
         self.assertEqual(ch["deadline"], (date.today() + timedelta(days=29)).isoformat())
         self.assertEqual(ch["target"], 50_000)
@@ -279,8 +282,9 @@ class TestSettingsTabs(tg.GuiCase):
     def test_tabs_and_athlete_rowing_ftp(self):
         self.pick("Definições")
         scr = self.screen()
-        self.assertEqual(scr.tab_labels(), ["Atleta", "Sessões", "Ecrã e idioma", "Ligações",
-                                            "Sincronização", "Atalhos de teclado"])
+        self.assertEqual(scr.tab_labels(), ["Atleta", "Sessões", "Ecrã e idioma",
+                                            "Ligações Externas", "Sincronização",
+                                            "Atalhos de teclado"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
         scr.tab_named("Sessões")
         self.assertFalse(any("Resistência extra" in i.label or "resistência" in i.label.lower()
@@ -457,19 +461,25 @@ class TestSyncTabGui(tg.GuiCase):
         scr = self.screen()
         self.select("Período")
         self.press(key.RIGHT, key.RIGHT)                      # mais recente → tudo → intervalo
-        self.assertEqual(gsync.load_options(self.app.db).period, "range")
+        self.assertEqual(scr.sync.opts.period, "range")
+        self.assertEqual(gsync.load_options(self.app.db).period, "latest")   # por guardar
         self.assertIn("Desde", [i.label for i in scr.list.items])
         self.select("Desde")
         self.press(key.LEFT)
+        self.select("HRV")
+        self.press(key.RIGHT)                                 # tira a HRV (setas, não Enter)
+        imp = next(i for i in scr.list.items if i.label == "Só importar")
+        self.assertFalse(imp.enabled)                         # guarda primeiro
+        self.save()
         o = gsync.load_options(self.app.db)
         self.assertEqual(o.start, (date.today() - timedelta(days=91)).isoformat())
-        self.pick("HRV")                                     # tira a HRV
-        self.assertNotIn("hrv", gsync.load_options(self.app.db).stats)
+        self.assertNotIn("hrv", o.stats)
         cmd = next(i for i in scr.list.items if i.label == "Comando").detail
         self.assertIn("--sleep", cmd)
         self.assertNotIn("--hrv", cmd)
         self.select("Período")
         self.press(key.RIGHT)                                 # volta a «só o mais recente»
+        self.save()
         self.pick("Só importar")
         self.assertEqual(scr.sync.last_report["activities"], 3)
         self.press(key.ESCAPE)
@@ -503,6 +513,7 @@ class TestLapsInOnePlace(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Sessão de treino")
+        self.pick("Livre")
         self.pick("Começar")
         ses = self.screen()
         self.press(key.SPACE)
@@ -573,8 +584,10 @@ class TestRowingRecords(tg.GuiCase):
             isinstance(s, rs.RowingMenu) for s in self.app.stack) else None
         menu = rs.RowingMenu(self.app)
         self.app.push(menu)
-        menu.tab_named("Estatísticas")
-        rec = next(i for i in menu.list.items if i.label == "Maior distância")
+        menu.tab_named("Estatísticas")                       # abre as estatísticas do remo
+        st = self.screen()
+        self.assertIs(st.hub, menu)
+        rec = next(i for i in st.list.items if i.label == "Maior distância")
         self.assertIn("em ", rec.detail)
         rec.action()
         self.assertIsInstance(self.screen(), rs.RowSessionDetail)
@@ -582,3 +595,65 @@ class TestRowingRecords(tg.GuiCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRideInfographics(tg.GuiCase):
+    def _ride(self, seconds=900):
+        from velo.ui import app as am
+        ride = am.RideScreen(self.app, route_id=self.route_id, workout_id=None, kind="route",
+                             ghosts=[], erg=False)
+        self.app.push(ride)
+        ride.world.build_all()
+        ride.preparing = False
+        for _ in range(int(seconds / 0.5)):
+            self.app.hub.tick(0.5)
+            ride.update(0.5)
+        self.press(key.F10, key.ENTER)
+        return ride.engine.ride_id
+
+    def test_detail_peaks_and_infographics(self):
+        from velo.core import peaks as pk
+        from velo.ui import ride_report_screens as rr
+        rid = self._ride()
+        det = app_mod.RideDetailScreen(self.app, rid)
+        self.app.push(det)
+        labels = [i.label for i in det.list.items]
+        self.assertIn("Infográficos de sessão", labels[:2])
+        peaks_row = next(i for i in det.list.items if i.label == "Picos de potência")
+        self.assertIn("5 s", peaks_row.value)
+        self.pick("Infográficos de sessão")
+        inf = self.screen()
+        self.assertIsInstance(inf, rr.RideInfographics)
+        self.assertEqual(inf.tab_labels(), ["Relatório", "Curva de potência", "Zonas",
+                                            "Gráfico", "Picos"])
+        rep = {i.label: i.value for i in inf.list.items}
+        self.assertTrue(rep["Potência normalizada (NP)"].endswith(" W"))
+        self.assertIn("Desacoplamento Pa:FC", rep)
+        for _ in range(5):
+            self.app._on_draw()
+            self.press(key.TAB)
+        inf.tab_named("Gráfico")
+        self.assertEqual(len([s for s in inf.chart._series_lines]) + 1, 3)   # 3 séries
+        self.select("FC")
+        self.press(key.RIGHT)                                 # desliga a FC
+        self.assertFalse(inf.show["hr_bpm"])
+        inf.tab_named("Picos")
+        self.app._on_draw()
+        texts = [m.text for row in inf.table.cells for m, _n in row if m.text]
+        self.assertIn("5 s", texts)
+        self.assertGreater(pk.all_peaks(self.app.db)["power_w"][5]["value"], 0)
+
+    def test_cycling_stats_peaks_tab(self):
+        self._ride(400)
+        self.pick("Fechar")
+        self.pick("Estatísticas")
+        scr = self.screen()
+        scr.tab_named("Picos")
+        self.assertEqual(scr.VIEWS[scr.view], "peaks")
+        self.app._on_draw()
+        first = [m.text for m, _n in scr.peak_table.cells[0] if m.text]
+        self.assertEqual(first[0], "5 s")
+        self.assertTrue(first[1].endswith(" W"))
+        self.select("Período")
+        self.press(key.RIGHT)
+        self.assertEqual(scr.peak_range, 7)

@@ -982,3 +982,31 @@ def sport_totals(db: Database, grouping: str, count: int, today=None) -> dict:
     data = {m: sport_series(db, m, grouping, count, today) for m in GENERAL_METRICS}
     out = {s: {m: sum(v[s] for _, v in data[m]) for m in GENERAL_METRICS} for s in SPORTS}
     return out
+
+
+# ------------------------------------------------------------------ geral
+
+
+def overview(db: Database, sport: str, today=None) -> dict:
+    """O resumo «Geral» de um desporto: sessões, horas e distância, no total e
+    nos últimos 7 e 30 dias e neste ano, e a sessão mais longa e a última."""
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+    from .sport_challenges import sessions_of
+    today = today or _date.today()
+    ss = sessions_of(db, sport)
+
+    def agg(items):
+        return {"n": len(items), "hours": sum(x["seconds"] for x in items) / 3600.0,
+                "km": sum(x["distance_m"] for x in items) / 1000.0}
+    week = [x for x in ss if x["at"].date() > today - _td(days=7)]
+    month = [x for x in ss if x["at"].date() > today - _td(days=30)]
+    year = [x for x in ss if x["at"].year == today.year]
+    longest = max(ss, key=lambda x: x["seconds"], default=None)
+    farthest = max(ss, key=lambda x: x["distance_m"], default=None)
+    return {"sport": sport, "total": agg(ss), "week": agg(week), "month": agg(month),
+            "year": agg(year), "longest": longest, "farthest": farthest,
+            "last": ss[-1] if ss else None, "first": ss[0] if ss else None}
+
+
+def overview_all(db: Database) -> list[dict]:
+    return [overview(db, s) for s in ("cycling", "rowing", "running", "swimming", "gym")]

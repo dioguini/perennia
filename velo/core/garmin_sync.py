@@ -97,9 +97,7 @@ class Options:
 
 
 def load_options(db: Database) -> Options:
-    raw = db.get("sync_garmindb", {}) or {}
-    known = {k: v for k, v in raw.items() if k in Options.__dataclass_fields__}
-    return Options(**known).clean()
+    return options_from(db.get("sync_garmindb", {}) or {})
 
 
 def save_options(db: Database, opts: Options) -> None:
@@ -174,6 +172,69 @@ def write_range(path: Path, start: str, end: str | None, stats: list[str]) -> Pa
     return backup
 
 
+def credentials(path: Path) -> tuple[str, bool]:
+    """(utilizador, há palavra-passe?) da configuração do GarminDB. A
+    palavra-passe nunca sai do ficheiro."""
+    cfg = read_config(path) or {}
+    cred = cfg.get("credentials", {}) or {}
+    return str(cred.get("user") or ""), bool(cred.get("password") or cred.get("password_file"))
+
+
+def new_config(start: str | None = None) -> dict:
+    """Uma configuração do GarminDB nova, como a do exemplo do projeto."""
+    start = start or garmin_date((date.today() - timedelta(days=365 * 5)).isoformat())
+    return {
+        "db": {"type": "sqlite"},
+        "garmin": {"domain": "garmin.com"},
+        "credentials": {"user": "", "secure_password": False, "password": "",
+                        "password_file": None},
+        "data": {"weight_start_date": start, "sleep_start_date": start,
+                 "rhr_start_date": start, "hrv_start_date": start,
+                 "monitoring_start_date": start, "download_latest_activities": 25,
+                 "download_all_activities": 1000},
+        "directories": {"relative_to_home": True, "base_dir": "HealthData",
+                        "mount_dir": "/Volumes/GARMIN"},
+        "enabled_stats": {k: True for k in ("monitoring", "steps", "itime", "sleep", "rhr",
+                                            "hrv", "weight", "activities")},
+        "settings": {"metric": True, "default_display_activities": ["walking", "running",
+                                                                    "cycling"]},
+        "checkup": {"look_back_days": 90},
+    }
+
+
+def write_credentials(path: Path, user: str | None, password: str | None) -> Path | None:
+    """Grava o utilizador e/ou a palavra-passe do Garmin Connect na configuração do
+    GarminDB (é lá que o GarminDB os lê). Cria o ficheiro se não existir; se
+    existir, guarda antes uma cópia `.bak`. Devolve a cópia (ou None)."""
+    path = Path(path)
+    cfg = read_config(path)
+    backup = None
+    if cfg is None:
+        cfg = new_config()
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        backup = path.with_name(path.name + ".bak")
+        shutil.copy2(path, backup)
+    cred = cfg.setdefault("credentials", {})
+    if user is not None:
+        cred["user"] = user
+    if password is not None:
+        cred["password"] = password
+        cred["secure_password"] = False
+    path.write_text(json.dumps(cfg, indent=4, ensure_ascii=False), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)                   # só o dono lê a palavra-passe
+    except OSError:
+        pass
+    return backup
+
+
+def options_from(raw: dict | None) -> Options:
+    raw = raw or {}
+    known = {k: v for k, v in raw.items() if k in Options.__dataclass_fields__}
+    return Options(**known).clean()
+
+
 def metric_units(cfg: dict | None) -> bool:
     """O GarminDB guarda distâncias em km e m só com settings.metric = true."""
     return bool(((cfg or {}).get("settings", {}) or {}).get("metric", False))
@@ -206,8 +267,9 @@ def build_command(cli: str, opts: Options, cfg_dir: Path | None = None) -> list[
     return cmd
 
 
-def command_text(db: Database, opts: Options) -> str:
-    cmd = build_command(importers.garmindb_cli() or "garmindb_cli.py", opts, config_dir(db))
+def command_text(db: Database, opts: Options, cfg_dir: Path | None = None) -> str:
+    cmd = build_command(importers.garmindb_cli() or "garmindb_cli.py", opts,
+                        cfg_dir if cfg_dir is not None else config_dir(db))
     cmd[0] = Path(cmd[0]).name
     return " ".join(cmd)
 

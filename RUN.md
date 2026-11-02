@@ -134,12 +134,25 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    e a máquina de remo; `Procurar ANT+` usa a antena USB.
    Se ainda não quiseres hardware, escolhe **Trainer simulado** (ou **Máquina de remo
    simulada**) e podes experimentar a aplicação toda.
-3. **Ciclismo** → separador Treinar → **Sessão de treino** → `Importar .gpx`. A aplicação procura ficheiros `.gpx` na
-   pasta `gpx/` ao lado do `main.py`, e também em Transferências e
-   Documentos. Põe lá os teus ficheiros e volta a entrar.
-4. Escolhe a rota, o modo (sozinho ou comparação) e a qualidade do render.
+3. **Ciclismo** → separador Treinar → **Sessão de treino** → pergunta
+   **Livre** ou **Carregar treino**.
+   - **Carregar treino** abre a Lista de treinos; a ficha do treino tem, em
+     baixo à direita, **Configurar sessão de treino** (Enter).
+   - **Livre** abre logo a janela da sessão.
+4. Na **janela da sessão** escolhes tudo de uma vez: **Aparelhos** (Enter
+   abre o emparelhamento), **Rota (.gpx)** com ←/→ ou **Carregar um .gpx
+   novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
+   e em Documentos), **Segmentos do Strava** dessa rota, **Modo de sessão**
+   (sozinho ou comparação), ERG (nos treinos ERG) e **Auto lap**. A sessão
+   livre precisa de uma rota; num treino a rota é opcional (é paisagem). A
+   qualidade do 3D está em Definições → Ecrã e idioma.
    O mundo é construído antes de arrancar — vês a barra "A preparar a rota".
 5. Pedala.
+
+**Strava sem internet.** Se, ao procurar os segmentos, a aplicação não
+conseguir ligar-se ao Strava, aparece o aviso **«Não foi possível ligar ao
+Strava»** com duas escolhas: **Prosseguir sem Strava** (a sessão corre igual,
+sem os segmentos) ou **Cancelar a sessão**.
 
 ### Teclas durante a sessão
 
@@ -366,7 +379,8 @@ no estilo do intervals.icu:
 - a lista dos blocos, com as repetições agrupadas («5 × Esforço»), o
   objetivo e o alvo de cada um.
 
-Daí carregas em **Começar**.
+Daí carregas em **Configurar sessão de treino** (em baixo à direita, ou
+Enter), que abre a janela da sessão.
 
 **Durante a sessão** aparecem o objetivo e o alvo do bloco em curso:
 
@@ -496,8 +510,11 @@ treinos**, **Histórico** e **Estatísticas**. O separador **Treinar** começa
 sempre pela mesma ordem: **Sessão de treino** · **Challenge** · **Desafios**
 (e depois **Testes**):
 
-- **Sessão de treino**: no ciclismo, escolher a rota; no remo, na corrida e
-  na natação, a sessão livre; no ginásio, a modalidade.
+- **Sessão de treino**: no ciclismo, no remo e na corrida pergunta
+  **Livre** ou **Carregar treino** e abre a janela da sessão (aparelhos,
+  rota `.gpx` — não no remo —, opções e auto lap); na corrida com rota, a
+  sessão diz a inclinação da estrada a pôr na passadeira. No ginásio, a
+  modalidade. A natação não tem sessão livre (os treinos começam na ficha).
 - **Challenge**: ciclismo — fuga, desafio adaptativo e os jogos; remo — a
   Regata e os jogos; corrida — 5 km e 10 km contra o relógio, 1 hora o mais
   longe possível, escada de ritmo; natação — 400 m e 1500 m contra o relógio,
@@ -516,10 +533,25 @@ O construtor desenha o treino como um gráfico: cada bloco é uma barra, a
 largura é a duração e a altura é o esforço. Funciona igual nos quatro
 desportos de resistência.
 
-- **A vista** muda com Tab: zonas de potência, FC ou RPE, e na corrida e na
-  natação também o ritmo. O treino é guardado em % do limiar, por isso trocar
-  de vista não o altera; só muda a forma de o ler. Os números (W, bpm, RPE,
-  min/km, min/100 m) saem das tuas Definições.
+- **ERG ou Manual.** «+ Novo treino» (em cima à direita) pergunta primeiro o
+  tipo, no ciclismo, no remo e na corrida (a natação é sempre manual):
+  - **ERG** — o aparelho segue o treino sozinho (o rolo põe os watts, a
+    máquina de remo muda a resistência). Precisa de um aparelho ligado que
+    aceite comandos. No ciclismo é por **zonas de potência**.
+  - **Manual** — a sessão mostra o que o treino pede e és tu que o pões no
+    aparelho, ou o segues pela FC/RPE. No ciclismo: **FC**, **RPE** ou
+    **Níveis do rolo** (primeiro defines em **Definições → Sessões** quantos
+    níveis tem o teu rolo e os watts no nível 1 e no máximo). Na corrida: o
+    ritmo, e por bloco a **velocidade** e a **inclinação** da passadeira. No
+    remo: potência, ritmo, FC ou RPE, com a **resistência** e a **voga**.
+  As listas de treinos mostram a definição e o tipo («Potência · ERG»).
+- **A vista** muda com Tab, entre as do tipo do treino. O treino é guardado
+  em % do limiar, por isso trocar de vista não o altera; só muda a forma de o
+  ler. Os números (W, bpm, RPE, min/km, min/100 m, nível) saem das tuas
+  Definições. A paleta, em cima, tem a cor, o nome e o intervalo de cada zona
+  na vista escolhida.
+- **Cada bloco** tem a **cadência alvo** (ciclismo) e o **alvo**: exato ou
+  com margem (± 1 a 15 %, ←/→).
 - **Com o rato:**
   - arrasta um bloco da paleta (Z1–Z6, Descanso, Rampa, Livre) para o
     gráfico; uma linha mostra onde vai entrar;
@@ -997,8 +1029,10 @@ No menu do ciclismo, **Challenge** junta:
   retorno à calma. Cada esforço conta como cumprido se a média ficar a 95 %
   do alvo ou mais. Cumpres, o nível sobe 0,015; falhas, desce 0,03 (e o
   descanso seguinte alonga). **O nível fica guardado** e a sessão seguinte
-  começa daí. Com ERG ligado (por omissão) o rolo põe os watts e o desafio é
-  aguentar a cadência; com ERG desligado é tudo nas tuas pernas.
+  começa daí. O rolo põe os watts (ERG) e o desafio é aguentar a cadência.
+  Cada jogo abre numa janela com o nome e **como se joga** em cima, e depois
+  a duração, os bots, a rota `.gpx` (com os segmentos do Strava) e o auto
+  lap.
 - **Jogos**, contra bots gerados à volta das tuas capacidades, por isso um
   atleta de 150 W e um de 350 W têm o mesmo desafio:
   - **Zone Hero:** as zonas vão passando; manter a zona dá pontos, a
@@ -1159,8 +1193,9 @@ A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 2. Em **Definições → Strava** escreve o **Client ID** e o **Client Secret**
    (ficam só neste computador) e escolhe **Autorizar no browser**. Aceita na
    página do Strava; a janela diz "Strava ligado" e podes fechá-la.
-3. Na rota (**Rotas → a rota → Segmentos do Strava**) escolhe **Atualizar do
-   Strava**: a Perennia procura os segmentos ao longo da rota, fica com os
+3. Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
+   (**Biblioteca de rotas → a rota → Segmentos do Strava → Atualizar do
+   Strava**): a Perennia procura os segmentos ao longo da rota, fica com os
    que a rota percorre no mesmo sentido, e vai buscar o teu **PR** e o número
    de esforços de cada um.
 
@@ -1180,8 +1215,9 @@ e as linhas do Strava são retiradas de qualquer resumo.
 ### Remo
 
 O cartão **Remo** do ecrã inicial tem, em Treinar: **Sessão de treino**
-(remo livre, com voltas na tecla L), **Challenge**, **Desafios**, **Testes**
-e **Campos do ecrã**; e os outros separadores (treinos — sete que vêm com a
+(livre — com voltas na tecla L — ou carregar um treino, sempre pela janela
+da sessão, onde também se emparelha a máquina), **Challenge**, **Desafios** e
+**Testes** (os campos do ecrã estão em Definições → Ecrã da sessão); e os outros separadores (treinos — sete que vêm com a
 aplicação —, construtor, histórico, estatísticas). A **FTP do remo** está em
 **Definições → Atleta**.
 

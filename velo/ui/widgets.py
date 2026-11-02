@@ -56,10 +56,16 @@ class Item:
     data: object = None
     button: bool = False
     primary: bool = False         # o botão principal (Guardar) fica realçado
+    top: bool = False             # botão no topo, à direita (Adicionar, filtros)
+
+    def __post_init__(self):
+        if self.top:
+            self.button = True
 
 
 BUTTON_H = 36
 BUTTON_Y = 14
+TOP_BUTTON_H = 30
 
 
 def button_width(text: str) -> float:
@@ -87,6 +93,7 @@ class ListView:
         self.max_columns: int | None = None    # None: as que couberem na largura
         self.bar_right: float | None = None    # onde acabam os botões (à direita)
         self.bar_y = BUTTON_Y
+        self.top_y: float | None = None        # botões do topo (Adicionar, filtros)
         self.batch = pyglet.graphics.Batch()
         self._rows = []
         self._buttons = []
@@ -211,44 +218,59 @@ class ListView:
         self._sync_buttons()
 
     def _sync_buttons(self) -> None:
-        ids = self.button_indices()
-        while len(self._buttons) < len(ids):
+        bottom = [i for i in self.button_indices() if not self.items[i].top]
+        top = [i for i in self.button_indices() if self.items[i].top]
+        while len(self._buttons) < len(bottom) + len(top):
             self._add_button()
         self._button_rects = []
-        right = self.bar_right
-        x = right if right is not None else self.x + self.width
-        widths = [button_width(self.items[i].label) for i in ids]
-        x -= sum(widths) + 10 * max(0, len(ids) - 1)
+        right = self.bar_right if self.bar_right is not None else self.x + self.width
+        places = []
+        widths = [button_width(self.items[i].label) for i in bottom]
+        x = right - (sum(widths) + 10 * max(0, len(bottom) - 1))
+        for i, bw in zip(bottom, widths):
+            places.append((i, x, bw, self.bar_y, BUTTON_H))
+            x += bw + 10
+        # em cima, à direita, alinhados à mesma margem dos de baixo
+        ty = self.top_y if self.top_y is not None else self.y + 40
+        widths = [max(90.0, button_width(self.items[i].label) - 16) for i in top]
+        x = right - (sum(widths) + 8 * max(0, len(top) - 1))
+        for i, bw in zip(top, widths):
+            places.append((i, x, bw, ty, TOP_BUTTON_H))
+            x += bw + 8
         for k, (outline, bg, lab) in enumerate(self._buttons):
-            if k >= len(ids):
+            if k >= len(places):
                 outline.opacity = bg.opacity = 0
                 lab.text = ""
                 continue
-            idx = ids[k]
+            idx, x, bw, y, bh = places[k]
             item = self.items[idx]
-            bw = widths[k]
             on = idx == self.index
-            bg.x, bg.y, bg.width, bg.height = x, self.bar_y, bw, BUTTON_H
-            outline.x, outline.y, outline.width = x - 1, self.bar_y - 1, bw + 2
-            outline.height = BUTTON_H + 2
+            bg.x, bg.y, bg.width, bg.height = x, y, bw, bh
+            outline.x, outline.y, outline.width = x - 1, y - 1, bw + 2
+            outline.height = bh + 2
             outline.color = ACCENT[:3] if (on or item.primary) else BORDER
             bg.color = ACCENT[:3] if item.primary and item.enabled else (SELECT if on else PANEL)
             outline.opacity = bg.opacity = 255
             lab.text = item.label
-            lab.x, lab.y = x + bw / 2, self.bar_y + BUTTON_H / 2
+            lab.font_size = 13 if bh >= BUTTON_H else 11
+            lab.x, lab.y = x + bw / 2, y + bh / 2
             if item.primary and item.enabled:
                 lab.color = ACCENT_TEXT
             else:
                 lab.color = ACCENT if on else (TEXT if item.enabled else DIM)
-            self._button_rects.append((idx, x, bw, self.bar_y))
-            x += bw + 10
+            self._button_rects.append((idx, x, bw, y, bh))
 
     @property
     def buttons_left(self) -> float | None:
         """Onde começam os botões de ação (para o rodapé não lhes passar por cima)."""
-        if not self._button_rects:
+        low = [r for r in self._button_rects if not self.items[r[0]].top]
+        if not low:
             return None
-        return self._button_rects[0][1]
+        return low[0][1]
+
+    @property
+    def has_top_buttons(self) -> bool:
+        return any(it.top for it in self.items)
 
     @property
     def selected(self) -> Item | None:
@@ -287,8 +309,8 @@ class ListView:
         return False
 
     def on_mouse_press(self, mx: int, my: int) -> bool:
-        for idx, x, bw, y in self._button_rects:
-            if x <= mx <= x + bw and y <= my <= y + BUTTON_H:
+        for idx, x, bw, y, bh in self._button_rects:
+            if x <= mx <= x + bw and y <= my <= y + bh:
                 self.index = idx
                 self._sync()
                 self.activate()
@@ -1562,6 +1584,80 @@ class LapPanel:
             self.flash.opacity = int(90 * (1.5 - (now - self._flash_at)) / 1.5)
         else:
             self.flash.opacity = 0
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class Table:
+    """Uma tabela simples: cabeçalho e linhas; cada célula é um texto ou
+    (texto, nota pequena por baixo). Ocupa a largura dada, linhas iguais."""
+
+    MAX_COLS, MAX_ROWS = 8, 16
+
+    def __init__(self):
+        b = self.batch = pyglet.graphics.Batch()
+        self.bg = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL, batch=b)
+        self.head_bg = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL2, batch=b)
+        self.title = make_label("", font_size=13, bold=True, color=TEXT, anchor_y="bottom",
+                                batch=b)
+        self.empty = make_label("", font_size=12, color=DIM, anchor_y="top", batch=b)
+        self.stripes = [pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL2, batch=b)
+                        for _ in range(self.MAX_ROWS)]
+        self.heads = [make_label("", font_size=10, bold=True, color=DIM, anchor_y="center",
+                                 batch=b) for _ in range(self.MAX_COLS)]
+        self.cells = [[(make_label("", font_size=12, bold=True, color=TEXT, anchor_y="center",
+                                   batch=b),
+                        make_label("", font_size=9, color=DIM, anchor_y="center", batch=b))
+                       for _ in range(self.MAX_COLS)] for _ in range(self.MAX_ROWS)]
+        self.geometry = (48, 500, 800, 60)
+        self.rows: list = []
+
+    def layout(self, x: float, top: float, width: float, bottom: float) -> None:
+        self.geometry = (x, top, width, bottom)
+
+    def set(self, columns: list[str], rows: list[list], title: str = "",
+            empty: str = "") -> None:
+        x, top, width, bottom = self.geometry
+        self.rows = rows
+        n = min(len(rows), self.MAX_ROWS)
+        head_h = 30
+        row_h = max(22.0, min(40.0, (top - bottom - head_h - 24) / max(1, n)))
+        h = head_h + n * row_h
+        self.title.text = title
+        self.title.x, self.title.y = x, top - 18
+        y0 = top - 24
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y0 - h, width, h
+        self.head_bg.x, self.head_bg.y = x, y0 - head_h
+        self.head_bg.width, self.head_bg.height = width, head_h
+        ncols = min(len(columns), self.MAX_COLS)
+        first = min(140.0, width * 0.16)
+        cw = (width - first) / max(1, ncols - 1)
+
+        def col_x(c: int) -> float:
+            return x + 12 + (0 if c == 0 else first + (c - 1) * cw)
+        for c, lab in enumerate(self.heads):
+            lab.text = columns[c].upper() if c < ncols else ""
+            lab.x, lab.y = col_x(c), y0 - head_h / 2
+        for r, (stripe, cells) in enumerate(zip(self.stripes, self.cells)):
+            ry = y0 - head_h - (r + 1) * row_h
+            stripe.x, stripe.y, stripe.width, stripe.height = x, ry, width, row_h
+            stripe.opacity = 120 if (r < n and r % 2) else 0
+            for c, (main, note) in enumerate(cells):
+                if r >= n or c >= ncols:
+                    main.text = note.text = ""
+                    continue
+                v = rows[r][c] if c < len(rows[r]) else ""
+                text, sub = (v if isinstance(v, tuple) else (v, ""))
+                main.text = str(text)
+                main.font_size = 12 if row_h >= 30 else 11
+                note.text = str(sub) if row_h >= 30 else ""
+                cx = col_x(c)
+                main.x, main.y = cx, ry + row_h / 2 + (5 if note.text else 0)
+                note.x, note.y = cx, ry + row_h / 2 - 9
+                main.color = TEXT if c else DIM
+        self.empty.text = empty if not rows else ""
+        self.empty.x, self.empty.y = x + 12, y0 - head_h - 10
 
     def draw(self) -> None:
         self.batch.draw()

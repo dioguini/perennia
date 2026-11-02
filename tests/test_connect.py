@@ -515,7 +515,7 @@ class TestLabsGui(tg.GuiCase):
         self.assertTrue(any(">15 anos (homem)" in i.label for i in ed.list.items))
         self.select("Referência mínima")
         self.type("40")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertEqual(labs.parameter_by_name(self.app.db, "Ferritina")["ref_low"], 40)
 
 

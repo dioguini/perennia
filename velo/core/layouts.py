@@ -187,6 +187,21 @@ def save(db, sport: str, groups: list[list[str | None]]) -> None:
     db.set(f"layout_{sport}", [m for m in groups[0]])
 
 
+def defaults(sport: str) -> list[list[str | None]]:
+    """O ecrã de origem do desporto (o que «repor» põe), sem gravar nada."""
+    sh = shape(sport)
+    valid = {k for k, _ in catalog(sport)}
+    if sport == "cycling":
+        from . import boxes
+        return [list(m) for m in boxes.DEFAULT_BOXES]
+    if sport == "rowing":
+        raw = [x if x in valid else None for x in ROW_DEFAULT]
+        flat = _pad(raw, sh.groups * sh.per_group)
+        return [flat[g * sh.per_group:(g + 1) * sh.per_group] for g in range(sh.groups)]
+    default = {"running": DEFAULT_RUN, "swimming": DEFAULT_SWIM}.get(sport, DEFAULT_GYM)
+    return [_pad([x if x in valid else None for x in default], sh.per_group)]
+
+
 def reset(db, sport: str) -> None:
     if sport == "cycling":
         db.set("hud_boxes", None)
