@@ -442,16 +442,13 @@ class TestRowingGui(tg.GuiCase):
         labels = [i.label for i in self.screen().list.items]
         self.assertEqual(labels[:3], ["Sessão de treino", "Challenge", "Desafios"])
         self.assertFalse(any("Máquina de remo" in x or "FTP" in x for x in labels))
+        self.assertNotIn("Campos do ecrã de remo", labels)     # estão nas Definições
         self.pick("Definições")
         self.select("FTP do remo")
         before = rw.row_ftp(self.app.db)
         self.press(key.RIGHT)
+        self.save()
         self.assertEqual(rw.row_ftp(self.app.db), before + 1)
-        self.press(key.ESCAPE)
-        self.pick("Campos")
-        self.select("Campo 1")
-        self.press(key.RIGHT)
-        self.assertEqual(rs.field_names(self.app.db)[0], "avg_pace")
 
     def test_crash_recovery(self):
         self.app.set_rower(rio.SimulatedRower())

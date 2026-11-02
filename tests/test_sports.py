@@ -559,9 +559,10 @@ class TestSportsGui(tg.GuiCase):
         self.assertIsNot(scr, self.screen())
 
     def test_swim_crash_recovery(self):
+        from velo.ui import endurance_screens as es_
         self.press(key.ESCAPE)
-        self.pick("Natação")
-        self.pick("Sessão de treino")
+        self.pick("Natação")                     # sem «sessão de treino»: um treino da lista
+        es_.start(self.app, "swimming")
         self.pick("Começar")
         scr = self.screen()
         self.press(key.PLUS, key.PLUS)                           # duas piscinas

@@ -714,7 +714,7 @@ class TestCyclingBuilderGui(tg.GuiCase):
         self.app._on_text("2,5")
         self.assertEqual(ed.steps[-1].duration_s, 150)
         self.select("Unidade")
-        self.press(key.ENTER)                                      # watts
+        self.press(key.RIGHT)                                      # watts (setas, não Enter)
         self.assertEqual(ed.steps[-1].target_type, "watts")
         self.pick("Feito")
         self.pick("Exportar")

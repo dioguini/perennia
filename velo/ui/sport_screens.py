@@ -90,9 +90,13 @@ class EditScreen(Screen):
                 self.num_set(num, parse_number(self._buf) if self._buf else None)
                 self.refresh()
                 return True
-        if cyc is not None and symbol in (key.LEFT, key.RIGHT, key.ENTER, key.RETURN):
+        # as escolhas mudam-se só com as setas (Enter não muda valores)
+        if cyc is not None and symbol in (key.LEFT, key.RIGHT):
             self.cycle(cyc, -1 if symbol == key.LEFT else 1)
             self.refresh()
+            return True
+        if cyc is not None and symbol in (key.ENTER, key.RETURN, key.SPACE) and \
+                (self.list.selected is None or self.list.selected.action is None):
             return True
         return super().on_key(symbol, modifiers)
 
@@ -108,6 +112,129 @@ class EditScreen(Screen):
             self.num_set(num, parse_number(self._buf))
             self.refresh()
         return True
+
+
+# ====================================================== edição numa janela
+
+
+from velo.ui.app import PopupMixin  # noqa: E402
+
+
+class EditPopup(PopupMixin, EditScreen):
+    """Criar ou editar alguma coisa (um artigo, um exercício, um desafio…)
+    numa janela por cima da lista.
+
+    Em baixo, à direita: **Cancelar** · **Guardar** (fica na janela; só ativo
+    quando alguma coisa mudou) · **Guardar e sair**. Cancelar, Esc ou clicar
+    fora com alterações por guardar perguntam: Sair sem guardar · Cancelar ·
+    Sair e guardar.
+
+    Para redefinir: `rows()` (as linhas a editar), `state()` (o que conta como
+    alteração), `commit()` (grava; devolve False se faltar alguma coisa) e,
+    se quiser, `title()` / `subtitle()`."""
+
+    W = 860
+    MIN_H, MAX_H = 300, 680
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.back_button = None
+        self._init_popup()
+        self._saved_state = None
+
+    # para redefinir
+    def rows(self) -> list[Item]:
+        return []
+
+    def state(self):
+        return repr(getattr(self, "v", None))
+
+    def commit(self) -> bool:
+        return True
+
+    def title(self) -> str:
+        return ""
+
+    def subtitle(self) -> str:
+        return ""
+
+    def saved_message(self) -> str:
+        return tr("Guardado", "Saved")
+
+    # -------------------------------------------------------------- estado
+
+    @property
+    def dirty(self) -> bool:
+        if self._saved_state is None:
+            return False
+        return self.state() != self._saved_state
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def buttons(self) -> list[Item]:
+        return [Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True),
+                Item(tr("Guardar", "Save"), action=self.save, button=True,
+                     enabled=self.dirty),
+                Item(tr("Guardar e sair", "Save and close"), action=self.save_exit,
+                     button=True, primary=True)]
+
+    def enter(self) -> None:
+        if self._saved_state is None:
+            self._saved_state = self.state()
+        rows = self.rows()
+        # a janela cresce com as linhas (sem passar do ecrã)
+        h = max(self.MIN_H, min(self.MAX_H, 92 + 96 + len(rows) * 38))
+        self.set_popup_size(self.W, h)
+        self.chrome.set(self.title(), self.subtitle(),
+                        tr("↑↓ linha · ←/→ mudar · Esc cancelar",
+                           "↑↓ row · ←/→ change · Esc cancel"))
+        self.list.set_items(rows + self.buttons(), keep_index=True)
+
+    # -------------------------------------------------------------- ações
+
+    def save(self) -> bool:
+        if not self.commit():
+            return False
+        self._saved_state = self.state()
+        self.app.message(self.saved_message())
+        if self.app.current is self:
+            self.enter()
+        return True
+
+    def save_exit(self) -> None:
+        if self.commit():
+            self._saved_state = self.state()
+            self.app.message(self.saved_message())
+            self.close()
+
+    def close(self) -> None:
+        if self in self.app.stack:
+            while self.app.current is not self:
+                self.app.pop(force=True)
+            self.app.pop(force=True)
+
+    def cancel(self) -> None:
+        if self.dirty:
+            self.app.ask_unsaved(self)
+        else:
+            self.close()
+
+    def on_save(self) -> bool:
+        self.save()
+        return True
+
+    def close_outside(self) -> None:
+        self.cancel()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE and self._field("text:") is None:
+            self.cancel()
+            return True
+        if symbol == key.ESCAPE:
+            self.cancel()
+            return True
+        return super().on_key(symbol, modifiers)
 
 
 # ================================================================ força

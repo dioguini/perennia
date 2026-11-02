@@ -65,6 +65,8 @@ class EnduranceHub(SportHub):
         a = self.app
         free = tr("Corrida livre", "Free run") if self.SPORT == "running" else \
             tr("Natação livre", "Free swim")
+        if self.SPORT == "swimming":
+            return train_items(a, self.SPORT, None)
         return train_items(a, self.SPORT, Item(
             tr("Sessão de treino", "Training session"),
             detail=free + " · " + tr("sem plano: tempo, distância, voltas e FC",

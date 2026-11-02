@@ -891,7 +891,7 @@ class ImportScreen(Screen):
                     found += sorted(folder.glob(pat))[:40]
         rows = [Item(tr("Criar métricas para colunas desconhecidas", "Create metrics for unknown columns"),
                      value=tr("sim", "yes") if self.create_unknown else tr("não", "no"),
-                     action=self._toggle),
+                     detail=tr("←/→ muda", "←/→ changes"), data="create_unknown"),
                 Item(tr("Sincronização (GarminDB)", "Sync (GarminDB)"),
                      detail=tr("Trazer os dados do GarminDB: tudo, o mais recente ou um "
                                "intervalo", "Bring in GarminDB data: all, the latest or a range"),
@@ -926,6 +926,13 @@ class ImportScreen(Screen):
                            "HRV4Training CSV, Garmin JSON, or any CSV with a date column"),
                         self.footer())
         self.list.set_items(rows, keep_index=True)
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        if item is not None and item.data == "create_unknown" and symbol in (key.LEFT, key.RIGHT):
+            self._toggle()
+            return True
+        return super().on_key(symbol, modifiers)
 
     def _toggle(self) -> None:
         self.create_unknown = not self.create_unknown

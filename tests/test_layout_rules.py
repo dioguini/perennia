@@ -120,7 +120,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         pop = self.screen()
         self.assertIsInstance(pop, app_mod.ConfirmScreen)
         self.assertEqual([i.label for i in pop.list.items],
-                         ["Sair sem gravar", "Cancelar", "Guardar"])
+                         ["Sair sem guardar", "Cancelar", "Sair e guardar"])
         self.pick("Cancelar")
         self.assertIs(self.screen(), b)
         self.assertTrue(b.dirty)
@@ -130,7 +130,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b = self.open_builder()
         b.add_block("Z3")
         self.press(key.ESCAPE)
-        self.pick("Sair sem gravar")
+        self.pick("Sair sem guardar")
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         self.assertEqual(len(self.app.db.workouts()), n)
 
@@ -139,7 +139,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b = self.open_builder()
         b.add_block("Z4")
         self.press(key.ESCAPE)
-        self.pick("Guardar")
+        self.pick("Sair e guardar")
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         self.assertEqual(len(self.app.db.workouts()), n + 1)
 
@@ -167,8 +167,10 @@ class TestTrainTabEverywhere(tg.GuiCase):
         for name in ("Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"):
             self.pick(name)
             labels = [i.label for i in self.screen().list.items]
-            self.assertEqual(labels[:4], ["Sessão de treino", "Challenge", "Desafios",
-                                          "Testes"], name)
+            want = ["Sessão de treino", "Challenge", "Desafios", "Testes"]
+            if name == "Natação":                              # sem «sessão de treino»
+                want = want[1:]
+            self.assertEqual(labels[:len(want)], want, name)
             self.press(key.ESCAPE)
 
     def test_cycling_challenge_has_no_games_header(self):
@@ -279,8 +281,9 @@ class TestSettingsTabs(tg.GuiCase):
     def test_tabs_and_athlete_rowing_ftp(self):
         self.pick("Definições")
         scr = self.screen()
-        self.assertEqual(scr.tab_labels(), ["Atleta", "Sessões", "Ecrã e idioma", "Ligações",
-                                            "Sincronização", "Atalhos de teclado"])
+        self.assertEqual(scr.tab_labels(), ["Atleta", "Sessões", "Ecrã e idioma",
+                                            "Ligações Externas", "Sincronização",
+                                            "Atalhos de teclado"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
         scr.tab_named("Sessões")
         self.assertFalse(any("Resistência extra" in i.label or "resistência" in i.label.lower()
@@ -457,19 +460,25 @@ class TestSyncTabGui(tg.GuiCase):
         scr = self.screen()
         self.select("Período")
         self.press(key.RIGHT, key.RIGHT)                      # mais recente → tudo → intervalo
-        self.assertEqual(gsync.load_options(self.app.db).period, "range")
+        self.assertEqual(scr.sync.opts.period, "range")
+        self.assertEqual(gsync.load_options(self.app.db).period, "latest")   # por guardar
         self.assertIn("Desde", [i.label for i in scr.list.items])
         self.select("Desde")
         self.press(key.LEFT)
+        self.select("HRV")
+        self.press(key.RIGHT)                                 # tira a HRV (setas, não Enter)
+        imp = next(i for i in scr.list.items if i.label == "Só importar")
+        self.assertFalse(imp.enabled)                         # guarda primeiro
+        self.save()
         o = gsync.load_options(self.app.db)
         self.assertEqual(o.start, (date.today() - timedelta(days=91)).isoformat())
-        self.pick("HRV")                                     # tira a HRV
-        self.assertNotIn("hrv", gsync.load_options(self.app.db).stats)
+        self.assertNotIn("hrv", o.stats)
         cmd = next(i for i in scr.list.items if i.label == "Comando").detail
         self.assertIn("--sleep", cmd)
         self.assertNotIn("--hrv", cmd)
         self.select("Período")
         self.press(key.RIGHT)                                 # volta a «só o mais recente»
+        self.save()
         self.pick("Só importar")
         self.assertEqual(scr.sync.last_report["activities"], 3)
         self.press(key.ESCAPE)

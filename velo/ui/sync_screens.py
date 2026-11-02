@@ -1,9 +1,10 @@
 """Definições → Sincronização: trazer os dados de uma fonte (por agora, o
 GarminDB) para a base da Perennia. As opções são as do GarminDB — que dados,
-que passos, que período — e ficam guardadas para a próxima vez.
+que passos, que período — e ficam guardadas com o Guardar das Definições.
 
-`SyncPanel` dá as linhas e trata das teclas; serve o separador das
-Definições e o ecrã `SyncScreen` (aberto a partir da Saúde).
+`SyncPanel` dá as linhas e trata das teclas dentro das Definições: lê e
+escreve no rascunho delas (`store.get` / `store.put`), por isso nada fica
+gravado sem carregar em Guardar.
 """
 from __future__ import annotations
 
@@ -54,9 +55,10 @@ def _day(iso: str | None) -> str:
 class SyncPanel:
     """As linhas e o comportamento da sincronização, dentro de um ecrã."""
 
-    def __init__(self, screen: Screen, runner=None):
+    def __init__(self, screen: Screen, runner=None, store=None):
         self.screen = screen
         self.app = screen.app
+        self.store = store or screen    # o rascunho das Definições
         self.runner = runner            # para os testes: corre «subprocess.run» falso
         self.job = None
         self.last_report: dict | None = None
@@ -64,10 +66,21 @@ class SyncPanel:
 
     @property
     def opts(self) -> gs.Options:
-        return gs.load_options(self.app.db)
+        return gs.options_from(self.store.get("sync_garmindb", {}) or {})
 
     def save(self, o: gs.Options) -> None:
-        gs.save_options(self.app.db, o)
+        from dataclasses import asdict
+        self.store.put("sync_garmindb", asdict(o.clean()))
+
+    def folder(self, field: str) -> str:
+        db = self.app.db
+        default = str(gs.db_dir(db)) if field == "garmindb_dir" else str(gs.config_dir(db))
+        return str(self.store.get(field, "") or default)
+
+    @property
+    def pending(self) -> bool:
+        """Há alterações por guardar nas Definições? (sincronizar usa o que está gravado)"""
+        return bool(getattr(self.store, "dirty", False))
 
     @property
     def busy(self) -> bool:
@@ -114,10 +127,9 @@ class SyncPanel:
                                     "Shift+←/→ one month")),
                      Item(tr("Escrever as datas na configuração", "Write the dates to the config"),
                           value=t("common.on") if o.write_config else t("common.off"),
-                          data="sync:opt:write_config", action=lambda: self.toggle(
-                              "write_config"),
-                          detail=tr("com uma cópia .bak de GarminConnectConfig.json",
-                                    "with a .bak copy of GarminConnectConfig.json"))]
+                          data="sync:opt:write_config",
+                          detail=tr("←/→ muda · com uma cópia .bak de GarminConnectConfig.json",
+                                    "←/→ changes · with a .bak copy of GarminConnectConfig.json"))]
         elif o.period == "all":
             dates = [d for d, _e in st["dates"].values() if d]
             if dates:
@@ -126,38 +138,47 @@ class SyncPanel:
                                  detail=tr("o mais antigo das datas de início do GarminDB",
                                            "the earliest GarminDB start date")))
         rows.append(Item(tr("— Dados —", "— Data —"), enabled=False,
-                         detail=tr("Enter escolhe · todos = --all", "Enter picks · all = --all")))
+                         detail=tr("←/→ liga/desliga · todos = --all",
+                                   "←/→ on/off · all = --all")))
         for k, short, long in gs.STATS:
             on = k in o.stats
             rows.append(Item(("✓ " if on else "   ") + tr(*STAT_NAMES[k]), value=long,
-                             action=lambda kk=k: self.toggle_stat(kk),
                              data=f"sync:stat:{k}"))
-        rows.append(Item(tr("— Passos do GarminDB —", "— GarminDB steps —"), enabled=False))
+        rows.append(Item(tr("— Passos do GarminDB —", "— GarminDB steps —"), enabled=False,
+                         detail=tr("←/→ liga/desliga", "←/→ on/off")))
         for k, ((pt, en), flag) in STEP_NAMES.items():
             on = bool(getattr(o, k))
             rows.append(Item(("✓ " if on else "   ") + tr(pt, en), value=flag,
-                             action=lambda kk=k: self.toggle(kk), data=f"sync:opt:{k}"))
+                             data=f"sync:opt:{k}"))
+        from pathlib import Path
+        ready = not self.busy and not self.pending
+        wait = tr("guarda primeiro as alterações", "save your changes first") \
+            if self.pending else ""
         rows += [
             Item(tr("Pasta das bases do GarminDB", "GarminDB databases folder"),
-                 value=st["dir"] + "▏", data="text:garmindb_dir",
+                 value=self.folder("garmindb_dir") + "▏", data="text:garmindb_dir",
                  detail=tr("por omissão ~/HealthData/DBs", "default ~/HealthData/DBs")),
             Item(tr("Pasta da configuração", "Config folder"),
-                 value=str(gs.config_dir(db)) + "▏", data="text:garmindb_config_dir",
-                 detail=tr("por omissão ~/.GarminDb · a palavra-passe fica lá, nunca aqui",
-                           "default ~/.GarminDb · the password stays there, never here")),
-            Item(tr("Comando", "Command"), detail=gs.command_text(db, o), enabled=False),
+                 value=self.folder("garmindb_config_dir") + "▏", data="text:garmindb_config_dir",
+                 detail=tr("por omissão ~/.GarminDb · o utilizador e a palavra-passe estão em "
+                           "Ligações Externas", "default ~/.GarminDb · user and password are in "
+                           "External connections")),
+            Item(tr("Comando", "Command"),
+                 detail=gs.command_text(db, o, Path(self.folder("garmindb_config_dir"))),
+                 enabled=False),
             Item(tr("Cópia de segurança das bases (--backup)", "Back up the databases (--backup)"),
-                 action=lambda: self.ask_maintenance("backup"), enabled=st["cli"] and not self.busy),
+                 action=lambda: self.ask_maintenance("backup"), enabled=st["cli"] and ready,
+                 detail=wait),
             Item(tr("Reconstruir as bases (--rebuild_db)", "Rebuild the databases (--rebuild_db)"),
                  action=lambda: self.ask_maintenance("rebuild"),
-                 enabled=st["cli"] and not self.busy,
-                 detail=tr("se o GarminDB pedir (mudança de versão)",
-                           "if GarminDB asks for it (version change)")),
+                 enabled=st["cli"] and ready,
+                 detail=wait or tr("se o GarminDB pedir (mudança de versão)",
+                                   "if GarminDB asks for it (version change)")),
             Item(tr("Só importar", "Import only"), action=self.import_only, button=True,
-                 enabled=(st["garmin_db"] or st["activities_db"]) and not self.busy),
+                 enabled=(st["garmin_db"] or st["activities_db"]) and ready),
             Item(tr("A sincronizar…", "Syncing…") if self.busy else
                  tr("Sincronizar agora", "Sync now"), action=self.sync_now, button=True,
-                 primary=True, enabled=not self.busy),
+                 primary=True, enabled=ready),
         ]
         return rows
 
@@ -213,10 +234,8 @@ class SyncPanel:
     def text(self, field: str, text: str | None) -> bool:
         if field not in ("garmindb_dir", "garmindb_config_dir"):
             return False
-        db = self.app.db
-        default = str(gs.db_dir(db)) if field == "garmindb_dir" else str(gs.config_dir(db))
-        cur = str(db.get(field, "") or default)
-        db.set(field, cur[:-1] if text is None else cur + text)
+        cur = self.folder(field)
+        self.store.put(field, cur[:-1] if text is None else cur + text)
         self.screen.enter()
         return True
 
@@ -228,7 +247,7 @@ class SyncPanel:
         self.screen.enter()
 
     def sync_now(self) -> None:
-        if self.busy:
+        if self.busy or self.pending:
             return
         db, o, runner = self.app.db, self.opts, self.runner
         if not gs.status(db)["cli"]:
@@ -240,7 +259,7 @@ class SyncPanel:
         self._job(lambda: gs.sync(db, o, runner=runner))
 
     def import_only(self) -> None:
-        if self.busy:
+        if self.busy or self.pending:
             return
         db, o = self.app.db, self.opts
         try:
@@ -299,44 +318,6 @@ class SyncPanel:
         else:
             ok, msg, rep = res
             self._done(ok, msg, rep)
-
-
-class SyncScreen(Screen):
-    """A sincronização num ecrã à parte (a Saúde abre este)."""
-
-    def __init__(self, app, runner=None):
-        super().__init__(app)
-        self.panel = SyncPanel(self, runner)
-
-    @property
-    def last_report(self):
-        return self.panel.last_report
-
-    def enter(self) -> None:
-        self.chrome.set(tr("Sincronização", "Sync"),
-                        tr("Da fonte (GarminDB) para a base da Perennia",
-                           "From the source (GarminDB) into the Perennia database"),
-                        tr("←/→ mudar · Enter escolher · Ctrl+S sincronizar · Esc voltar",
-                           "←/→ change · Enter choose · Ctrl+S sync · Esc back"))
-        self.list.set_items(self.panel.items(), keep_index=True)
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        item = self.list.selected
-        if item is not None and isinstance(item.data, str) and item.data.startswith("sync:") \
-                and symbol in (key.LEFT, key.RIGHT):
-            self.panel.adjust(item.data[5:], 1 if symbol == key.RIGHT else -1,
-                              bool(modifiers & key.MOD_SHIFT))
-            return True
-        return super().on_key(symbol, modifiers)
-
-    def text_input(self, field: str, text: str) -> None:
-        self.panel.text(field, text)
-
-    def text_backspace(self, field: str) -> None:
-        self.panel.text(field, None)
-
-    def update(self, dt: float) -> None:
-        self.panel.update()
 
 
 def history_items(app, sport: str) -> list[Item]:

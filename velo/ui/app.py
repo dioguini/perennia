@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import date
 import threading
 import time
 from pathlib import Path
@@ -84,6 +85,7 @@ class Screen:
         self.list = ListView(48, top, self._list_width(w),
                              visible_rows=max(4, (top - 110) // 38))
         self.list.bar_right = w - 48          # botões de ação: em baixo, à direita
+        self.list.top_y = h - 74              # Adicionar / filtros: em cima, à direita
         if self.AGENT:
             self.chrome.agent_hint.text = t("agent.hint")
         self.board_panel: BoardPanel | None = None
@@ -164,6 +166,9 @@ class Screen:
 
     def draw(self) -> None:
         self.chrome.set_footer_limit(self.list.buttons_left)
+        if self.AGENT and not self.MODAL:
+            # com botões no topo, à direita, a dica do agente sai dali
+            self.chrome.agent_hint.text = "" if self.list.has_top_buttons else t("agent.hint")
         self.chrome.draw()
         if self.tabs is not None:
             self.tabs.draw()
@@ -290,6 +295,7 @@ class Screen:
         self.list.y = top
         self.list.width = self._list_width(w)
         self.list.bar_right = w - 48
+        self.list.top_y = h - 74
         self.list.set_visible_rows(max(4, (top - 110) // 38))
         if self.board_panel is not None:
             self.board_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W)
@@ -703,8 +709,7 @@ class HomeScreen(Screen):
     def enter(self) -> None:
         a = self.app
         athlete = a.db.athlete()
-        self.chrome.set("Perennia",
-                        f"{athlete.name or '—'} · FTP {athlete.ftp_w} W · {a.device_summary()}",
+        self.chrome.set("Perennia", f"{athlete.name or '—'} · {a.device_summary()}",
                         "←→↑↓ escolher · Enter abrir")
         # a lista (invisível) serve o teclado e os testes; os cartões são o que se vê
         self.list.set_items([Item(tile.title.text, action=act)
@@ -1055,13 +1060,13 @@ class AutoLapOptions:
         rows = [Item(tr("Auto lap", "Auto lap"),
                      value={"off": tr("desligado", "off"), "time": tr("por tempo", "by time"),
                             "distance": tr("por distância", "by distance")}[mode],
-                     detail=tr("←/→ ou Enter muda · desligado por omissão",
-                               "←/→ or Enter changes · off by default"),
-                     action=lambda: self.autolap_cycle("mode", 1), data="autolap_mode")]
+                     detail=tr("←/→ muda · desligado por omissão",
+                               "←/→ changes · off by default"),
+                     data="autolap_mode")]
         if mode != "off":
             rows.append(Item(tr("Volta a cada", "Lap every"), value=sp.autolap_text(cfg)[
                 len(tr("a cada ", "every ")):], detail=tr("←/→ muda", "←/→ changes"),
-                action=lambda: self.autolap_cycle("value", 1), data="autolap_value"))
+                data="autolap_value"))
         return rows
 
     def autolap_cycle(self, which: str, step: int) -> None:
@@ -1112,7 +1117,7 @@ class StartOptions(AutoLapOptions, Screen):
             items.append(Item(tr("Piscina", "Pool"), value=f"{self.options['pool_m']:g} m",
                               detail=tr("←/→ muda (25 m, 50 m, 33,3 m, 20 m)",
                                         "←/→ changes (25 m, 50 m, 33.3 m, 20 m)"),
-                              action=lambda: self._cycle_pool(1), data="pool"))
+                              data="pool"))
         if "speed_kmh" in self.options:
             items.append(Item(tr("Velocidade inicial da passadeira", "Treadmill start speed"),
                               value=f"{self.options['speed_kmh']:.1f} km/h",
@@ -1178,14 +1183,12 @@ class RideSetup(AutoLapOptions, Screen):
             Item(t("mode.start"), action=self._start),
             Item(t("mode.title"),
                  value=t("mode.comparison") if self.comparison else t("mode.alone"),
-                 action=self._toggle_mode),
-            Item(t("mode.render"), value=t(f"mode.render.{preset}"),
-                 action=self._cycle_preset),
+                 detail=tr("←/→ muda", "←/→ changes"), data="mode"),
         ]
         if self.workout_id:
             items.append(Item(t("mode.erg"),
                               value=t("common.on") if self.erg else t("common.off"),
-                              action=self._toggle_erg))
+                              detail=tr("←/→ muda", "←/→ changes"), data="erg"))
         items += self.autolap_items()
         if self.comparison:
             if past:
@@ -1223,6 +1226,14 @@ class RideSetup(AutoLapOptions, Screen):
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if self.autolap_key(symbol):
             return True
+        item = self.list.selected
+        if item is not None and symbol in (key.LEFT, key.RIGHT):
+            if item.data == "mode":
+                self._toggle_mode()
+                return True
+            if item.data == "erg":
+                self._toggle_erg()
+                return True
         return super().on_key(symbol, modifiers)
 
     def _toggle_mode(self) -> None:
@@ -1695,18 +1706,23 @@ class SummaryScreen(Screen):
 # -------------------------------------------------------------- dispositivos
 
 
-class ModalScreen(Screen):
-    """Janela por cima do ecrã atual. O de baixo continua a correr (uma sessão
-    não para por se abrir os dispositivos). Esc ou clicar fora fecham."""
+class PopupMixin:
+    """Um ecrã numa janela por cima do atual (o de baixo continua a correr: uma
+    sessão não para por se abrir os dispositivos). Esc ou clicar fora fecham.
+    Usa-se com `Screen` (ou `EditScreen`), à esquerda dele na herança."""
 
     MODAL = True
     AGENT = False
     W, H = 760, 520
 
-    def __init__(self, app: "App"):
-        super().__init__(app)
-        self.popup = Popup(app.window, self.W, self.H)
+    def _init_popup(self) -> None:
+        self.popup = Popup(self.app.window, self.W, self.H)
         self._place()
+
+    def set_popup_size(self, w: float, h: float) -> None:
+        if self.popup.want != (w, h):
+            self.popup.want = (w, h)
+            self._place()
 
     def _place(self) -> None:
         p = self.popup
@@ -1724,6 +1740,7 @@ class ModalScreen(Screen):
         self.list.set_visible_rows(max(2, int((p.h - 92 - 96) // 38) + 1))
         self.list.bar_right = p.x + p.w - 16
         self.list.bar_y = p.y + 12
+        self.list.top_y = p.y + p.h - 50
         if self.back_button is not None:
             self.back_button.place(p.x + 16, p.y + 12, tr("Fechar", "Close"))
         self.list._sync()
@@ -1731,9 +1748,13 @@ class ModalScreen(Screen):
     def on_resize(self, w: int, h: int) -> None:
         self._place()
 
+    def close_outside(self) -> None:
+        """Clicar fora da janela."""
+        self.app.pop()
+
     def on_mouse(self, x: int, y: int) -> bool:
         if not self.popup.inside(x, y):
-            self.app.pop()
+            self.close_outside()
             return True
         return super().on_mouse(x, y)
 
@@ -1744,6 +1765,14 @@ class ModalScreen(Screen):
         self.list.draw()
         if self.back_button is not None:
             self.back_button.draw()
+
+
+class ModalScreen(PopupMixin, Screen):
+    """Janela por cima do ecrã atual (ver `PopupMixin`)."""
+
+    def __init__(self, app: "App"):
+        super().__init__(app)
+        self._init_popup()
 
 
 class ConfirmScreen(ModalScreen):
@@ -2058,30 +2087,41 @@ class DeviceScreen(ModalScreen):
 
 
 class SettingsScreen(Screen):
-    """Definições por separadores, para não haver listas compridas:
-    Atleta · Sessões · Ecrã e idioma · Ligações · Sincronização · Atalhos."""
+    """Definições por separadores: Atleta · Sessões · Ecrã e idioma · Ligações
+    Externas · Sincronização · Atalhos de teclado.
+
+    Funcionam em **rascunho**: as setas ←/→ mudam os valores (Enter não),
+    mas nada fica gravado até carregar em **Guardar** (em baixo, à direita;
+    só fica ativo quando alguma coisa mudou). **Cancelar** volta aos valores
+    gravados. Sair com alterações por guardar pergunta primeiro."""
 
     TABBED = True
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
     GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
-              ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "boxes",
-               "metrics"),
+              ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "connection",
+               "auto_connect", "boxes", "metrics"),
               ("theme", "units", "language", "render", "display", "msaa"),
-              ("connection", "auto_connect", "strava"),
+              ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
               ("@sync",),
               ("@shortcuts",))
+    ATH_FIELDS = ("name", "birth_year", "weight_kg", "ftp_w", "lthr")
 
     def __init__(self, app: "App"):
         super().__init__(app)
         from velo.ui.sync_screens import SyncPanel
         from velo.ui.widgets import TextColumns
+        self.draft: dict = {}
+        self._orig: dict = {}
+        self.ath = app.db.athlete()
+        self._ath0 = self._ath_sig()
         self.sync = SyncPanel(self)
         self.keys_view = TextColumns()
         self._layout_keys()
 
     def tab_labels(self) -> list[str]:
         return [tr("Atleta", "Athlete"), tr("Sessões", "Sessions"),
-                tr("Ecrã e idioma", "Display & language"), tr("Ligações", "Connections"),
+                tr("Ecrã e idioma", "Display & language"),
+                tr("Ligações Externas", "External connections"),
                 tr("Sincronização", "Sync"), tr("Atalhos de teclado", "Keyboard shortcuts")]
 
     def group(self) -> tuple:
@@ -2091,103 +2131,232 @@ class SettingsScreen(Screen):
         w, h = self.app.window.width, self.app.window.height
         self.keys_view.layout(48, self.content_top(h) + 18, w - 96, 64)
 
-    def _rows(self) -> dict[str, Item]:
+    # ------------------------------------------------------------ rascunho
+
+    def _ath_sig(self) -> tuple:
+        return tuple(getattr(self.ath, k) for k in self.ATH_FIELDS)
+
+    def get(self, key_: str, default=None):
+        if key_ in self.draft:
+            return self.draft[key_]
+        if key_.startswith("@"):
+            return default
+        return self.app.db.get(key_, default)
+
+    def put(self, key_: str, value) -> None:
+        if key_ not in self._orig:
+            self._orig[key_] = self.get(key_, None)
+        if value == self._orig[key_]:
+            self.draft.pop(key_, None)
+        else:
+            self.draft[key_] = value
+
+    @property
+    def dirty(self) -> bool:
+        return bool(self.draft) or self._ath_sig() != self._ath0
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def on_save(self) -> bool:
+        if self.dirty:
+            self.save()
+            return True
+        return self.list.press_button("primary")
+
+    def save(self) -> None:
         a = self.app
         db = a.db
-        ath = db.athlete()
-        wv, wu = weight(ath.weight_kg, a.units)
-        diff = float(db.get("trainer_difficulty", 1.0))
+        draft = dict(self.draft)
+        if self._ath_sig() != self._ath0:
+            db.save_athlete(self.ath)
+        for k, v in draft.items():
+            if not k.startswith("@") and k not in ("theme", "display"):
+                db.set(k, v)
+        if "@garmin_user" in draft or "@garmin_password" in draft:
+            from velo.core import garmin_sync as gsync
+            try:
+                gsync.write_credentials(gsync.config_path(db), draft.get("@garmin_user"),
+                                        draft.get("@garmin_password"))
+            except OSError as e:
+                a.message(f"{t('common.error')}: {e}")
+        if "units" in draft:
+            a.units = draft["units"]
+        if "language" in draft:
+            set_language(draft["language"])
+            a._topbar_texts()
+        if "connection_preference" in draft:
+            a.apply_connection_preference()
+        self.draft.clear()
+        self._orig.clear()
+        self.ath = db.athlete()
+        self._ath0 = self._ath_sig()
+        if "display" in draft:
+            d = draft["display"]
+            a.set_display(bool(d["fullscreen"]), d.get("w"), d.get("h"))
+        a.message(tr("Definições guardadas", "Settings saved"))
+        if "theme" in draft:
+            a.set_theme(draft["theme"])      # volta a construir os ecrãs com as cores novas
+            return
+        if a.current is self:
+            self.enter()
+
+    def cancel(self) -> None:
+        """Volta aos valores gravados."""
+        self.draft.clear()
+        self._orig.clear()
+        self.ath = self.app.db.athlete()
+        self._ath0 = self._ath_sig()
+        self.enter()
+
+    # -------------------------------------------------------------- linhas
+
+    def _display_now(self) -> dict:
+        a = self.app
+        cur = {"fullscreen": bool(a.window.fullscreen), "w": a.window.width,
+               "h": a.window.height}
+        return self.get("display", None) if "display" in self.draft else cur
+
+    def _display_text(self) -> str:
+        d = self._display_now()
+        if d["fullscreen"]:
+            size = self.app.screen_size() or (self.app.window.width, self.app.window.height)
+            return t("set.display.full", w=size[0], h=size[1])
+        return t("set.display.window", w=d["w"], h=d["h"])
+
+    def _msaa_text(self) -> str:
+        want = int(self.get("msaa_samples", 4))
+        text = f"{want}×" if want else t("common.off")
+        if want != self.app.msaa_samples:
+            text += " · " + t("set.msaa_restart")
+        return text
+
+    def _rows(self) -> dict[str, Item]:
+        a = self.app
+        ath = self.ath
+        units = self.get("units", a.units)
+        wv, wu = weight(ath.weight_kg, units)
+        diff = float(self.get("trainer_difficulty", 1.0))
+        from velo.core import garmin_sync as gsync
         from velo.core import rowing as rw
+        arrows = tr("←/→ muda", "←/→ changes")
+        on, off = t("common.on"), t("common.off")
+        user0, has_pw = gsync.credentials(gsync.config_path(a.db))
+        user = self.get("@garmin_user", None)
+        pw = self.get("@garmin_password", None)
+        age = (date.today().year - ath.birth_year) if ath.birth_year else None
         return {
             "name": Item(t("set.name"), value=(ath.name or "") + "▏", detail=t("set.name_hint"),
                          data="text:name"),
-            "age": Item(t("set.age"), value=str(ath.age or "—"),
-                        detail="←/→ ajustar o ano de nascimento",
-                        action=lambda: None, data="age"),
+            "age": Item(t("set.age"), value=str(age or "—"),
+                        detail=tr("←/→ ajustar o ano de nascimento",
+                                  "←/→ adjust the year of birth"), data="age"),
             "weight": Item(t("set.weight"), value=f"{wv:.1f} {wu}",
                            detail="←/→ ±0,1 · Shift+←/→ ±1", data="weight"),
-            "ftp": Item(t("set.ftp"), value=f"{ath.ftp_w} W", detail="←/→ ajustar", data="ftp"),
-            "lthr": Item("LTHR", value=str(ath.lthr or "—"), detail="←/→ ajustar", data="lthr"),
-            "row_ftp": Item(tr("FTP do remo", "Rowing FTP"), value=f"{rw.row_ftp(db)} W",
+            "ftp": Item(t("set.ftp"), value=f"{ath.ftp_w} W", detail="←/→ ±5 W", data="ftp"),
+            "lthr": Item("LTHR", value=str(ath.lthr or "—"), detail="←/→ ±1", data="lthr"),
+            "row_ftp": Item(tr("FTP do remo", "Rowing FTP"),
+                            value=f"{int(self.get('row_ftp_w', rw.row_ftp(a.db)))} W",
                             detail=tr("←/→ ±1 · Shift ±10 · o teste de 2000 m atualiza-a",
                                       "←/→ ±1 · Shift ±10 · the 2000 m test updates it"),
                             data="row_ftp"),
             "units": Item(t("set.units"),
-                          value=t("set.units.metric") if a.units == "metric"
-                          else t("set.units.imperial"), action=self._toggle_units),
-            "language": Item(t("set.language"), value="Português" if db.get("language") == PT
-                             else "English", action=self._toggle_language),
+                          value=t("set.units.metric") if units == "metric"
+                          else t("set.units.imperial"), detail=arrows, data="units"),
+            "language": Item(t("set.language"),
+                             value="Português" if self.get("language", PT) == PT else "English",
+                             detail=arrows, data="language"),
             "difficulty": Item(t("set.difficulty"), value=f"{diff * 100:.0f} %",
-                               detail="←/→ ajustar · escala a sensação de declive",
+                               detail=tr("←/→ ajustar · escala a sensação de declive",
+                                         "←/→ adjust · scales how the gradient feels"),
                                data="difficulty"),
             "render": Item(t("set.render"),
-                           value=t(f"mode.render.{db.get('render_preset', 'low')}"),
-                           action=self._cycle_preset),
-            "display": Item(t("set.display"), value=a.display_label(),
-                            detail=t("set.display_hint"), action=self._cycle_display),
+                           value=t(f"mode.render.{self.get('render_preset', 'low')}"),
+                           detail=arrows, data="render"),
+            "display": Item(t("set.display"), value=self._display_text(),
+                            detail=t("set.display_hint"), data="display"),
             "msaa": Item(t("set.msaa"), value=self._msaa_text(), detail=t("set.msaa_hint"),
-                         action=self._cycle_msaa),
-            "lookahead": Item(t("set.lookahead"), value=str(db.get("workout_lookahead", 2)),
-                              detail=t("set.lookahead_hint"), action=self._cycle_lookahead,
-                              data="lookahead"),
+                         data="msaa"),
+            "lookahead": Item(t("set.lookahead"), value=str(self.get("workout_lookahead", 2)),
+                              detail=t("set.lookahead_hint"), data="lookahead"),
             "auto_pause": Item(t("set.auto_pause"),
-                               value=t("common.on") if db.get("auto_pause", True)
-                               else t("common.off"),
-                               detail=t("set.auto_pause_hint"), action=self._toggle_auto_pause),
+                               value=on if self.get("auto_pause", True) else off,
+                               detail=t("set.auto_pause_hint"), data="auto_pause"),
             "connection": Item(t("set.connection"),
-                               value=t(f"set.pref.{db.get('connection_preference', 'ant_first')}"),
-                               detail=t("set.connection_hint"), action=self._cycle_connection),
+                               value=t(f"set.pref.{self.get('connection_preference', 'ant_first')}"),
+                               detail=t("set.connection_hint"), data="connection"),
             "auto_connect": Item(t("set.auto_connect"),
-                                 value=t("common.on") if db.get("auto_connect", True)
-                                 else t("common.off"),
-                                 detail=t("set.auto_connect_hint"),
-                                 action=self._toggle_auto_connect),
+                                 value=on if self.get("auto_connect", True) else off,
+                                 detail=t("set.auto_connect_hint"), data="auto_connect"),
             "boxes": Item(t("set.boxes"), value=f"{boxes_mod.N_BOXES}",
                           detail=t("set.boxes_hint"), action=lambda: a.push(BoxesScreen(a))),
             "metrics": Item(t("set.metrics"),
-                            value=f"{len(boxes_mod.enabled_metrics(db, metrics.available()))}",
+                            value=f"{len(boxes_mod.enabled_metrics(a.db, metrics.available()))}",
                             detail=t("set.metrics_hint"),
                             action=lambda: a.push(MetricsCatalogScreen(a))),
             "strava": Item("Strava", value=tr("ligado", "connected") if (
-                db.get("strava_tokens") or {}).get("refresh_token") else "",
-                detail=tr("Segmentos das rotas e os teus PR", "Route segments and your PRs"),
+                a.db.get("strava_tokens") or {}).get("refresh_token") else "",
+                detail=tr("Enter abre · segmentos das rotas e os teus PR",
+                          "Enter opens · route segments and your PRs"),
                 action=lambda: a.push(_connect().StravaScreen(a))),
+            "@garmin_head": Item(tr("— GarminDB (Garmin Connect) —",
+                                    "— GarminDB (Garmin Connect) —"), enabled=False,
+                                 detail=tr("a autenticação; o resto está em Sincronização",
+                                           "the sign-in; the rest is in Sync")),
+            "garmin_user": Item(tr("Utilizador do Garmin Connect", "Garmin Connect user"),
+                                value=(user if user is not None else user0) + "▏",
+                                detail=tr("o email da tua conta Garmin", "your Garmin account email"),
+                                data="text:garmin_user"),
+            "garmin_password": Item(tr("Palavra-passe do Garmin Connect", "Garmin Connect password"),
+                                    value=("•" * len(pw) if pw is not None else
+                                           (tr("(definida)", "(set)") if has_pw else "")) + "▏",
+                                    detail=tr("fica só na configuração do GarminDB, nunca na base "
+                                              "da Perennia", "kept only in the GarminDB config, "
+                                              "never in the Perennia database"),
+                                    data="text:garmin_password"),
+            "garmin_cfg": Item(tr("Configuração do GarminDB", "GarminDB config"),
+                               value=str(gsync.config_path(a.db)), enabled=False,
+                               detail=tr("criada ao guardar, se ainda não existir (com cópia .bak)",
+                                         "created on save if missing (with a .bak copy)")),
             "run_pace": Item(tr("Ritmo de limiar (corrida)", "Threshold pace (running)"),
-                             value=hms(float(db.get("run_threshold_pace_s", 300))) + " /km",
+                             value=hms(float(self.get("run_threshold_pace_s", 300))) + " /km",
                              detail=tr("←/→ ±5 s · usado nos treinos e zonas de corrida",
                                        "←/→ ±5 s · used for running workouts and zones"),
                              data="run_pace"),
             "swim_pace": Item(tr("Ritmo crítico (natação)", "Critical swim speed"),
-                              value=hms(float(db.get("swim_css_s", 120))) + " /100 m",
+                              value=hms(float(self.get("swim_css_s", 120))) + " /100 m",
                               detail=tr("←/→ ±1 s · usado nos treinos de natação",
                                         "←/→ ±1 s · used for swim workouts"), data="swim_pace"),
-            "theme": Item(tr("Tema", "Theme"), value=_theme_name(db),
-                          detail=tr("←/→ ou Enter · todos claros e profissionais; Ardósia para "
-                                    "pouca luz", "←/→ or Enter · light, professional themes; "
-                                    "Slate for low light"),
-                          action=lambda: self._adjust("theme", 1), data="theme"),
+            "theme": Item(tr("Tema", "Theme"), value=_theme_name_of(self.get("theme", None)),
+                          detail=tr("←/→ · todos claros e profissionais; Ardósia para pouca luz",
+                                    "←/→ · light, professional themes; Slate for low light"),
+                          data="theme"),
             "layouts": Item(tr("Ecrã da sessão, por desporto", "Session screen, per sport"),
-                            detail=tr("Arrasta as métricas para onde as queres ver",
-                                      "Drag metrics where you want them"),
-                            action=lambda: a.push(_layouts().LayoutSportPicker(a))),
+                            detail=tr("Enter abre · um separador por desporto; arrasta as métricas",
+                                      "Enter opens · one tab per sport; drag the metrics"),
+                            action=lambda: a.push(_layouts().LayoutEditor(a, "cycling"))),
             "feedback": Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
-                             value=t("common.on") if db.get("ask_feedback", True)
-                             else t("common.off"),
+                             value=on if self.get("ask_feedback", True) else off,
                              detail=tr("RPE, dores e comentário; fica para o agente treinador",
                                        "RPE, pain and comment; kept for the coach agent"),
-                             action=self._toggle_feedback),
+                             data="feedback"),
         }
+
+    def buttons(self) -> list[Item]:
+        return [Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True,
+                     enabled=self.dirty),
+                Item(tr("Guardar", "Save"), action=self.save, button=True, primary=True,
+                     enabled=self.dirty)]
 
     def enter(self) -> None:
         if self.tabs is not None:
             self.tabs.set_labels(self.tab_labels())
             self.tabs.select(self.tab)
         group = self.group()
-        foot = "←/→ ajustar · Enter alternar · Tab separador · Esc voltar"
+        foot = tr("←/→ mudar · Enter abrir · Tab separador · Ctrl+S guardar · Esc voltar",
+                  "←/→ change · Enter open · Tab tab · Ctrl+S save · Esc back")
         if group == ("@sync",):
             items = self.sync.items()
-            foot = tr("←/→ mudar · Enter escolher · Ctrl+S sincronizar · Tab separador",
-                      "←/→ change · Enter choose · Ctrl+S sync · Tab tab")
         elif group == ("@shortcuts",):
             from velo.ui import shortcuts
             items = []
@@ -2196,9 +2365,11 @@ class SettingsScreen(Screen):
         else:
             rows = self._rows()
             items = [rows[k] for k in group]
-        self.chrome.set(t("menu.settings"), tr("Tab muda de separador", "Tab switches tabs"),
-                        foot)
-        self.list.set_items(items, keep_index=True)
+        sub = tr("Por guardar: carrega em Guardar (Ctrl+S) ou em Cancelar",
+                 "Unsaved: press Save (Ctrl+S) or Cancel") if self.dirty else \
+            tr("Tab muda de separador", "Tab switches tabs")
+        self.chrome.set(t("menu.settings"), sub, foot)
+        self.list.set_items(items + self.buttons(), keep_index=True)
 
     def update(self, dt: float) -> None:
         self.sync.update()
@@ -2211,28 +2382,49 @@ class SettingsScreen(Screen):
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
         self._layout_keys()
-        if self.group() == ("@shortcuts",):
-            self.enter()
+        self.enter()
+
+    # -------------------------------------------------------------- texto
 
     def text_input(self, field: str, text: str) -> None:
         if self.sync.text(field, text):
             return
-        if field != "name":
+        if field == "name":
+            self.ath.name = ((self.ath.name or "") + text)[:40]
+        elif field == "garmin_user":
+            from velo.core import garmin_sync as gsync
+            cur = self.get("@garmin_user", None)
+            if cur is None:
+                cur = gsync.credentials(gsync.config_path(self.app.db))[0]
+            self.put("@garmin_user", (cur + text)[:120])
+        elif field == "garmin_password":
+            self.put("@garmin_password", ((self.get("@garmin_password", None) or "") + text)[:120])
+        else:
             return
-        ath = self.app.db.athlete()
-        ath.name = ((ath.name or "") + text)[:40]
-        self.app.db.save_athlete(ath)
         self.enter()
 
     def text_backspace(self, field: str) -> None:
         if self.sync.text(field, None):
             return
-        if field != "name":
+        if field == "name":
+            self.ath.name = (self.ath.name or "")[:-1]
+        elif field == "garmin_user":
+            from velo.core import garmin_sync as gsync
+            cur = self.get("@garmin_user", None)
+            if cur is None:
+                cur = gsync.credentials(gsync.config_path(self.app.db))[0]
+            self.put("@garmin_user", cur[:-1])
+        elif field == "garmin_password":
+            cur = self.get("@garmin_password", None) or ""
+            if cur[:-1]:
+                self.put("@garmin_password", cur[:-1])
+            else:
+                self.draft.pop("@garmin_password", None)
+        else:
             return
-        ath = self.app.db.athlete()
-        ath.name = (ath.name or "")[:-1]
-        self.app.db.save_athlete(ath)
         self.enter()
+
+    # -------------------------------------------------------------- setas
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
@@ -2250,138 +2442,79 @@ class SettingsScreen(Screen):
             return True
         return super().on_key(symbol, modifiers)
 
+    def _cycle(self, key_: str, options: list, step: int, default) -> None:
+        cur = self.get(key_, default)
+        i = options.index(cur) if cur in options else 0
+        self.put(key_, options[(i + (1 if step > 0 else -1)) % len(options)])
+
     def _adjust(self, field: str, step: int) -> None:
-        db = self.app.db
+        a = self.app
+        unit = 1 if step > 0 else -1
+        ath = self.ath
         if field == "theme":
             from velo.gfx import theme as theme_mod
-            keys = theme_mod.names()
-            cur = str(db.get("theme", theme_mod.DEFAULT))
-            i = keys.index(cur) if cur in keys else 0
-            self.app.set_theme(keys[(i + (1 if step > 0 else -1)) % len(keys)])
-            return
-        if field == "run_pace":
-            db.set("run_threshold_pace_s", max(150, min(600, float(
-                db.get("run_threshold_pace_s", 300)) + 5 * (1 if step > 0 else -1))))
-            self.enter()
-            return
-        if field == "swim_pace":
-            db.set("swim_css_s", max(50, min(300, float(db.get("swim_css_s", 120))
-                                             + (1 if step > 0 else -1))))
-            self.enter()
-            return
-        if field == "row_ftp":
+            self._cycle("theme", list(theme_mod.names()), step, theme_mod.DEFAULT)
+        elif field == "run_pace":
+            self.put("run_threshold_pace_s", max(150, min(600, float(
+                self.get("run_threshold_pace_s", 300)) + 5 * unit)))
+        elif field == "swim_pace":
+            self.put("swim_css_s", max(50, min(300, float(self.get("swim_css_s", 120)) + unit)))
+        elif field == "row_ftp":
             from velo.core import rowing as rw
-            db.set("row_ftp_w", max(50, min(800, rw.row_ftp(db) + step)))
-            self.enter()
-            return
-        ath = db.athlete()
-        if abs(step) > 1 and field != "weight":
-            step = 1 if step > 0 else -1
-        if field == "lookahead":
-            db.set("workout_lookahead",
-                   max(0, min(4, int(db.get("workout_lookahead", 2)) + step)))
-            self.enter()
-            return
-        if field == "age":
-            ath.birth_year = (ath.birth_year or 1990) - step
-            db.save_athlete(ath)
+            self.put("row_ftp_w", max(50, min(800, int(self.get("row_ftp_w", rw.row_ftp(a.db)))
+                                         + step)))
+        elif field == "lookahead":
+            self.put("workout_lookahead", max(0, min(4, int(self.get("workout_lookahead", 2))
+                                                    + unit)))
+        elif field == "age":
+            ath.birth_year = (ath.birth_year or 1990) - unit
         elif field == "weight":
             # passo de 0,1 na unidade mostrada (kg ou lb); Shift dá passos de 1
-            unit_kg = 1.0 if self.app.units == "metric" else 0.45359237
+            unit_kg = 1.0 if self.get("units", a.units) == "metric" else 0.45359237
             shown = round(ath.weight_kg / unit_kg, 1) + step * 0.1
             ath.weight_kg = max(35.0, min(200.0, round(shown, 1) * unit_kg))
-            db.save_athlete(ath)
         elif field == "ftp":
-            ath.ftp_w = max(60, min(600, ath.ftp_w + step * 5))
-            db.save_athlete(ath)
+            ath.ftp_w = max(60, min(600, ath.ftp_w + unit * 5))
         elif field == "lthr":
-            ath.lthr = max(100, min(220, (ath.lthr or 160) + step))
-            db.save_athlete(ath)
+            ath.lthr = max(100, min(220, (ath.lthr or 160) + unit))
         elif field == "difficulty":
-            value = max(0.0, min(1.5, float(db.get("trainer_difficulty", 1.0))
-                                 + step * 0.05))
-            db.set("trainer_difficulty", round(value, 2))
-        self.enter()
-
-    def _toggle_feedback(self) -> None:
-        db = self.app.db
-        db.set("ask_feedback", not db.get("ask_feedback", True))
-        self.enter()
-
-    def _cycle_lookahead(self) -> None:
-        db = self.app.db
-        db.set("workout_lookahead", (int(db.get("workout_lookahead", 2)) + 1) % 5)
-        self.enter()
-
-    def _msaa_text(self) -> str:
-        want = int(self.app.db.get("msaa_samples", 4))
-        text = f"{want}×" if want else t("common.off")
-        if want != self.app.msaa_samples:
-            text += " · " + t("set.msaa_restart")
-        return text
-
-    def _cycle_msaa(self) -> None:
-        db = self.app.db
-        order = (4, 2, 0)
-        cur = int(db.get("msaa_samples", 4))
-        db.set("msaa_samples", order[(order.index(cur) + 1) % 3] if cur in order else 4)
-        self.enter()
-
-    def _cycle_display(self) -> None:
-        a = self.app
-        options = a.display_options()
-        current = (True, 0, 0) if a.window.fullscreen else \
-            (False, a.window.width, a.window.height)
-        # próxima opção maior do que a atual; depois do ecrã inteiro, volta ao início
-        later = [o for o in options if not o[0] and not current[0]
-                 and (o[1], o[2]) > (current[1], current[2])]
-        if current[0]:
-            nxt = options[0]
-        elif later:
-            nxt = later[0]
+            value = max(0.0, min(1.5, float(self.get("trainer_difficulty", 1.0)) + unit * 0.05))
+            self.put("trainer_difficulty", round(value, 2))
+        elif field == "units":
+            self._cycle("units", ["metric", "imperial"], step, a.units)
+        elif field == "language":
+            self._cycle("language", [PT, EN], step, PT)
+        elif field == "render":
+            self._cycle("render_preset", list(PRESET_ORDER), step, "low")
+        elif field == "msaa":
+            self._cycle("msaa_samples", [4, 2, 0], step, 4)
+        elif field == "auto_pause":
+            self.put("auto_pause", not self.get("auto_pause", True))
+        elif field == "auto_connect":
+            self.put("auto_connect", not self.get("auto_connect", True))
+        elif field == "feedback":
+            self.put("ask_feedback", not self.get("ask_feedback", True))
+        elif field == "connection":
+            self._cycle("connection_preference", list(autoconnect.PREFERENCES), step,
+                        autoconnect.ANT_FIRST)
+        elif field == "display":
+            opts = a.display_options()
+            cur = self._display_now()
+            key_ = (True, 0, 0) if cur["fullscreen"] else (False, cur["w"], cur["h"])
+            keys = [(o[0], 0, 0) if o[0] else o for o in opts]
+            i = keys.index(key_) if key_ in keys else (len(keys) - 1 if cur["fullscreen"] else -1)
+            nxt = opts[(i + unit) % len(opts)]
+            new = {"fullscreen": nxt[0], "w": nxt[1] or None, "h": nxt[2] or None}
+            now = {"fullscreen": bool(a.window.fullscreen), "w": a.window.width,
+                   "h": a.window.height}
+            if new["fullscreen"] == now["fullscreen"] and (new["fullscreen"] or
+                                                           (new["w"], new["h"]) ==
+                                                           (now["w"], now["h"])):
+                self.draft.pop("display", None)
+            else:
+                self.draft["display"] = new
         else:
-            nxt = options[-1]
-        a.set_display(nxt[0], nxt[1], nxt[2])
-        self.enter()
-
-    def _cycle_connection(self) -> None:
-        db = self.app.db
-        prefs = autoconnect.PREFERENCES
-        cur = db.get("connection_preference", autoconnect.ANT_FIRST)
-        db.set("connection_preference",
-               prefs[(prefs.index(cur) + 1) % len(prefs)] if cur in prefs else prefs[0])
-        self.app.apply_connection_preference()
-        self.enter()
-
-    def _toggle_auto_connect(self) -> None:
-        db = self.app.db
-        db.set("auto_connect", not db.get("auto_connect", True))
-        self.enter()
-
-    def _toggle_auto_pause(self) -> None:
-        db = self.app.db
-        db.set("auto_pause", not db.get("auto_pause", True))
-        self.enter()
-
-    def _toggle_units(self) -> None:
-        a = self.app
-        a.db.set("units", "imperial" if a.units == "metric" else "metric")
-        a.units = a.db.get("units")
-        self.enter()
-
-    def _toggle_language(self) -> None:
-        db = self.app.db
-        new = EN if db.get("language") == PT else PT
-        db.set("language", new)
-        set_language(new)
-        self.app._topbar_texts()
-        self.enter()
-
-    def _cycle_preset(self) -> None:
-        db = self.app.db
-        current = db.get("render_preset", "low")
-        db.set("render_preset",
-               PRESET_ORDER[(PRESET_ORDER.index(current) + 1) % len(PRESET_ORDER)])
+            return
         self.enter()
 
 
@@ -3004,7 +3137,7 @@ class StatsScreen(Screen):
     """Explorador de estatísticas.
 
     Quatro linhas de controlo em cima — gráfico, métrica (ou ponto, ou
-    tabela), agrupar por, intervalo — que se mudam com ←/→ ou Enter. Por
+    tabela), agrupar por, intervalo — que se mudam com ←/→. Por
     baixo, o resumo do período com o percentil em que estás, e o gráfico.
 
     A curva de potência é sempre do histórico todo; o resto segue o período
@@ -3157,7 +3290,7 @@ class StatsScreen(Screen):
         if symbol in (key.LEFT, key.RIGHT) and which:
             self._cycle(str(which), 1 if symbol == key.RIGHT else -1)
             return True
-        if symbol in (key.ENTER, key.RETURN) and which:
+        if symbol in (key.ENTER, key.RETURN) and which == "apply_eftp":
             self._cycle(str(which), 1)
             return True
         return super().on_key(symbol, modifiers)
@@ -3603,8 +3736,8 @@ class App:
         self.stack[-1].enter()
 
     def ask_unsaved(self, editor: Screen) -> None:
-        """Voltar atrás com alterações por guardar: Sair sem gravar · Cancelar ·
-        Guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
+        """Voltar atrás com alterações por guardar: Sair sem guardar · Cancelar ·
+        Sair e guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
         def leave() -> None:
             self.pop()                     # a pergunta
             self.pop(force=True)           # o editor, sem gravar
@@ -3622,9 +3755,10 @@ class App:
             self, tr("Há alterações por guardar", "You have unsaved changes"),
             tr("Fizeste alterações que ainda não foram gravadas.",
                "Some changes have not been saved yet."),
-            [(tr("Sair sem gravar", "Leave without saving"), leave),
+            [(tr("Sair sem guardar", "Leave without saving"), leave),
              (tr("Cancelar", "Cancel"), stay),
-             (tr("Guardar", "Save"), save)], default=2, buttons=True, cancel=stay))
+             (tr("Sair e guardar", "Save and leave"), save)], default=2, buttons=True,
+            cancel=stay))
 
     def replace(self, screen: Screen) -> None:
         if self.stack:
@@ -3834,6 +3968,11 @@ class App:
             self.window.projection = pyglet.math.Mat4.orthogonal_projection(
                 0, self.window.width, 0, self.window.height, -255, 255)
             self.window.view = pyglet.math.Mat4()
+            # janelas por cima de janelas: desenham-se todas, pela ordem
+            start = self.stack.index(below) + 1 if below in self.stack else 0
+            for scr in self.stack[start:-1]:
+                if scr.MODAL:
+                    scr.draw()
             screen.draw()
             if self._message and time.monotonic() - self._message_at < 6.0:
                 screen.chrome.message.text = self._message
@@ -4083,6 +4222,11 @@ def _make_window(samples: int = 4, **kw):
 def _theme_name(db) -> str:
     from velo.gfx import theme as theme_mod
     return theme_mod.name(str(db.get("theme", theme_mod.DEFAULT)))
+
+
+def _theme_name_of(key_) -> str:
+    from velo.gfx import theme as theme_mod
+    return theme_mod.name(str(key_ or theme_mod.DEFAULT))
 
 
 def _calendar():

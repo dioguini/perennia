@@ -196,9 +196,12 @@ class StravaSegmentsScreen(Screen):
 
 
 def GarminDBScreen(app, runner=None):                      # noqa: N802 — compatibilidade
-    """O GarminDB passou para Definições → Sincronização (este é o mesmo ecrã)."""
-    from velo.ui.sync_screens import SyncScreen
-    return SyncScreen(app, runner)
+    """O GarminDB está em Definições → Sincronização: abre as Definições lá."""
+    from velo.ui.app import SettingsScreen
+    scr = SettingsScreen(app)
+    scr.sync.runner = runner
+    scr.tab_named(tr("Sincronização", "Sync"))
+    return scr
 
 
 def folder_exists(p: str) -> bool:

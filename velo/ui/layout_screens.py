@@ -64,30 +64,91 @@ class LayoutSportPicker(Screen):
 
 
 class LayoutEditor(Screen):
+    """O ecrã da sessão de cada desporto: um separador por desporto, e mexe-se
+    ali mesmo (arrastar, setas, Enter para escolher a métrica). As
+    alterações ficam em rascunho até **Guardar** (em baixo, à direita);
+    **Cancelar** volta ao que estava gravado. No remo, que tem várias páginas
+    de campos, PgUp/PgDn (ou um clique) mudam de página."""
+
     AGENT = False
+    TABBED = True
     MAX_CHIPS = 60
 
-    def __init__(self, app, sport: str):
+    def __init__(self, app, sport: str = "cycling"):
         self.sport = sport
         self.sh = lay.shape(sport)
-        self.TABBED = self.sh.kind == "grid" and self.sh.groups > 1
         super().__init__(app)
-        self.groups = lay.load(app.db, sport)
-        self.cat = lay.catalog(sport)
-        self.sel: tuple[int, int] | None = (0, 0)
+        self.drafts: dict[str, list] = {}
+        self.saved: dict[str, str] = {}
+        self.page_idx = 0
+        from velo.ui.widgets import TabBar
+        self.page_tabs = TabBar([], small=True)
         self.drag: dict | None = None
         self._armed_reset = False
+        self.tab = SPORTS.index(sport) if sport in SPORTS else 0
+        if self.tabs is not None:
+            self.tabs.select(self.tab)
+        self._load_sport(SPORTS[self.tab])
+
+    def tab_labels(self) -> list[str]:
+        return [sport_title(s) for s in SPORTS]
+
+    def _load_sport(self, sport: str) -> None:
+        self.sport = sport
+        self.sh = lay.shape(sport)
+        if sport not in self.drafts:
+            loaded = lay.load(self.app.db, sport)
+            self.saved[sport] = repr(loaded)
+            self.drafts[sport] = [list(g) for g in loaded]
+        self.groups = self.drafts[sport]
+        self.cat = lay.catalog(sport)
+        self.sel = (0, 0)
+        self.page_idx = 0
+        pages = list(self.sh.group_names) if self.sh.kind == "grid" and self.sh.groups > 1 \
+            else []
+        self.page_tabs.set_labels(pages)
+        self.page_tabs.select(0)
         self.list.y = -2000
         self._build()
         self._layout()
         self._refresh()
 
-    def tab_labels(self) -> list[str]:
-        return list(self.sh.group_names) if self.TABBED else []
-
     @property
     def page(self) -> int:
-        return self.tab if self.TABBED else 0
+        return self.page_idx
+
+    def content_top(self, h: int) -> int:
+        has_pages = getattr(self, "page_tabs", None) is not None and \
+            bool(self.page_tabs.labels_text)
+        return super().content_top(h) - (36 if has_pages else 0)
+
+    # ------------------------------------------------------------- rascunho
+
+    @property
+    def dirty(self) -> bool:
+        return any(repr(g) != self.saved.get(s) for s, g in self.drafts.items())
+
+    def has_unsaved(self) -> bool:
+        return self.dirty
+
+    def on_save(self) -> bool:
+        self.save()
+        return True
+
+    def save(self) -> None:
+        for s, g in self.drafts.items():
+            if repr(g) != self.saved.get(s):
+                lay.save(self.app.db, s, g)
+                self.saved[s] = repr(lay.load(self.app.db, s))
+                self.drafts[s] = [list(x) for x in lay.load(self.app.db, s)]
+        self.groups = self.drafts[self.sport]
+        self.app.message(tr("Ecrã da sessão guardado", "Session screen saved"))
+        self.enter()
+
+    def cancel(self) -> None:
+        self.drafts.clear()
+        self._load_sport(self.sport)
+        self.enter()
 
     # ------------------------------------------------------------ construção
 
@@ -157,19 +218,32 @@ class LayoutEditor(Screen):
         self._refresh()
 
     def on_tab(self) -> None:
-        self.sel = (self.page, 0)
+        self._load_sport(SPORTS[self.tab % len(SPORTS)])
+
+    def set_page(self, i: int) -> None:
+        n = len(self.page_tabs.labels_text)
+        if not n:
+            return
+        self.page_idx = i % n
+        self.page_tabs.select(self.page_idx)
+        self.sel = (self.page_idx, 0)
+        self._refresh()
 
     # -------------------------------------------------------------- conteúdo
 
     def enter(self) -> None:
-        self.chrome.set(tr("Ecrã da sessão · {s}", "Session screen · {s}",
-                           s=sport_title(self.sport)),
-                        tr("Arrasta as métricas da paleta para o ecrã · grava sozinho",
-                           "Drag metrics from the palette onto the screen · saves itself"),
-                        tr("Setas lugar · Enter escolher · ,/. trocar · Del esvaziar · "
-                           "R repor · Esc voltar", "Arrows slot · Enter choose · ,/. swap · "
-                           "Del clear · R reset · Esc back"))
-        self.list.set_items([])
+        sub = tr("Por guardar: Guardar (Ctrl+S) ou Cancelar", "Unsaved: Save (Ctrl+S) or Cancel") \
+            if self.dirty else tr("Arrasta as métricas da paleta para o ecrã · Tab outro desporto",
+                                  "Drag metrics from the palette onto the screen · Tab another sport")
+        self.chrome.set(tr("Ecrã da sessão", "Session screen"), sub,
+                        tr("Setas lugar · Enter escolher · ,/. trocar · Del esvaziar · R repor · "
+                           "PgUp/PgDn página", "Arrows slot · Enter choose · ,/. swap · "
+                           "Del clear · R reset · PgUp/PgDn page"))
+        self.list.set_items([
+            Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True, enabled=self.dirty),
+            Item(tr("Guardar", "Save"), action=self.save, button=True, primary=True,
+                 enabled=self.dirty)])
+        self.list.y = -2000
         self._refresh()
 
     def _refresh(self) -> None:
@@ -407,8 +481,7 @@ class LayoutEditor(Screen):
         self._changed()
 
     def _changed(self) -> None:
-        lay.save(self.app.db, self.sport, self.groups)
-        self._refresh()
+        self.enter()               # rascunho: grava-se com Guardar
 
     # --------------------------------------------------------------- rato
 
@@ -421,6 +494,13 @@ class LayoutEditor(Screen):
             if i is not None:
                 self.set_tab(i)
                 return True
+        if self.page_tabs.labels_text:
+            i = self.page_tabs.hit(x, y)
+            if i is not None:
+                self.set_page(i)
+                return True
+        if self.list.on_mouse_press(x, y):           # Guardar / Cancelar
+            return True
         k = self._chip_at(x, y)
         if k is not None:
             self.drag = {"what": "chip", "metric": k, "moved": False}
@@ -501,7 +581,10 @@ class LayoutEditor(Screen):
             self.set_tab(self.tab + (-1 if modifiers & key.MOD_SHIFT else 1))
             return True
         if symbol == key.ESCAPE:
-            self.app.pop()
+            self.app.pop()              # com alterações por guardar, pergunta primeiro
+            return True
+        if symbol in (getattr(key, "PAGEUP", -1), getattr(key, "PAGEDOWN", -2)):
+            self.set_page(self.page_idx + (1 if symbol == getattr(key, "PAGEDOWN", -2) else -1))
             return True
         if self.sel is None:
             self.sel = (self.page, 0)
@@ -528,11 +611,12 @@ class LayoutEditor(Screen):
             return True
         if symbol == key.R:
             if self._armed_reset:
-                lay.reset(self.app.db, self.sport)
-                self.groups = lay.load(self.app.db, self.sport)
+                self.drafts[self.sport] = lay.defaults(self.sport)
+                self.groups = self.drafts[self.sport]
                 self._armed_reset = False
-                self.app.message(tr("Ecrã reposto", "Screen reset"))
-                self._refresh()
+                self.app.message(tr("Ecrã reposto (Guardar para ficar)",
+                                    "Screen reset (Save to keep it)"))
+                self.enter()
             else:
                 self._armed_reset = True
                 self.app.message(tr("R outra vez para repor o ecrã de origem",
@@ -565,10 +649,16 @@ class LayoutEditor(Screen):
         return {"desporto": self.sport, "ecra": self.groups}
 
     def draw(self) -> None:
+        self.chrome.set_footer_limit(self.list.buttons_left)
         self.chrome.draw()
         if self.tabs is not None:
             self.tabs.draw()
+        if self.page_tabs.labels_text:
+            w, h = self.app.window.width, self.app.window.height
+            self.page_tabs.layout(48, h - 98 - 40, w - 96)
+            self.page_tabs.draw()
         self.batch.draw()
+        self.list.draw()
         if self.back_button is not None:
             self.back_button.draw()
 

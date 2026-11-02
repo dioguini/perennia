@@ -93,7 +93,7 @@ GYM_FORMATS = (
 # ============================================================ separador Treinar
 
 
-def train_items(app, sport: str, session: Item, tests: bool = True) -> list[Item]:
+def train_items(app, sport: str, session: Item | None, tests: bool = True) -> list[Item]:
     """Sessão de treino · Challenge · Desafios · Testes — igual em todos."""
     a = app
     from velo.ui import app as app_mod
@@ -105,7 +105,8 @@ def train_items(app, sport: str, session: Item, tests: bool = True) -> list[Item
                     detail=tr("Objetivos acumulados, com data limite se quiseres",
                               "Cumulative goals, with a deadline if you like"),
                     action=lambda: a.push(ChallengeScreen(a, sport)), data="challenges")
-    items = [session, challenge, desafios]
+    # na natação não há «sessão de treino» (conta-se à mão, no fim): só o resto
+    items = ([] if session is None else [session]) + [challenge, desafios]
     if tests:
         test_sport = "longevity" if sport == "gym" else sport
         items.append(Item(t("menu.tests"), detail=t("menu.tests_detail"),

@@ -160,12 +160,11 @@ class RowingMenu(SportHub):
         # a máquina de remo liga-se em Dispositivos; a FTP do remo está nas
         # Definições (Atleta)
         a = self.app
+        # os campos do ecrã estão em Definições → Ecrã da sessão
         return train_items(a, "rowing", session=Item(
             tr("Sessão de treino", "Training session"),
             detail=tr("Remo livre, com voltas manuais (L)", "Free row, with manual laps (L)"),
-            action=lambda: self._start({}))) + [
-            Item(tr("Campos do ecrã de remo", "Rowing screen fields"),
-                 action=lambda: a.push(RowFieldsScreen(a)))]
+            action=lambda: self._start({})))
 
     def items_builder(self) -> list[Item]:
         a = self.app

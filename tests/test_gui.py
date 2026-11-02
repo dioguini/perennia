@@ -70,6 +70,10 @@ class GuiCase(unittest.TestCase):
         for s in symbols:
             self.app._on_key_press(s, 0)
 
+    def save(self) -> None:
+        """Ctrl+S: o Guardar do ecrã."""
+        self.app._on_key_press(key.S, key.MOD_CTRL)
+
     def labels(self) -> list[str]:
         return [lab.text for lab in pyglet_stub.created["labels"] if lab.text]
 
@@ -249,31 +253,35 @@ class TestSettingsScreen(GuiCase):
     def test_arrows_adjust_values(self):
         self.pick("Definições")
         before = self.app.db.athlete().ftp_w
-        self.pick("FTP")                    # seleciona a linha
+        self.select("FTP")
         self.press(key.RIGHT, key.RIGHT)
-        self.assertEqual(self.app.db.athlete().ftp_w, before + 10)
+        self.assertEqual(self.app.db.athlete().ftp_w, before)     # rascunho: ainda não gravou
+        self.assertEqual(self.screen().list.selected.value, f"{before + 10} W")
         self.press(key.LEFT)
+        self.save()
         self.assertEqual(self.app.db.athlete().ftp_w, before + 5)
 
     def test_weight_steps_by_a_tenth_and_shift_by_one(self):
         self.pick("Definições")
-        self.pick("Peso")                   # 72,0 kg
+        self.select("Peso")                 # 72,0 kg
         self.press(key.RIGHT, key.RIGHT, key.RIGHT)
-        self.assertAlmostEqual(self.app.db.athlete().weight_kg, 72.3, places=6)
+        self.assertAlmostEqual(self.screen().ath.weight_kg, 72.3, places=6)
         self.press(key.LEFT)
-        self.assertAlmostEqual(self.app.db.athlete().weight_kg, 72.2, places=6)
+        self.assertAlmostEqual(self.screen().ath.weight_kg, 72.2, places=6)
         self.app._on_key_press(key.RIGHT, key.MOD_SHIFT)
-        self.assertAlmostEqual(self.app.db.athlete().weight_kg, 73.2, places=6)
+        self.assertAlmostEqual(self.screen().ath.weight_kg, 73.2, places=6)
         for _ in range(20):                 # sem deriva de vírgula flutuante
             self.press(key.RIGHT)
+        self.save()
         self.assertAlmostEqual(self.app.db.athlete().weight_kg, 75.2, places=6)
         self.assertTrue(any("75.2 kg" in x for x in self.labels()))
 
     def test_shift_does_not_multiply_other_fields(self):
         self.pick("Definições")
         before = self.app.db.athlete().ftp_w
-        self.pick("FTP")
+        self.select("FTP")
         self.app._on_key_press(key.RIGHT, key.MOD_SHIFT)
+        self.save()
         self.assertEqual(self.app.db.athlete().ftp_w, before + 5)
 
     def test_name_is_typed_on_the_keyboard(self):
@@ -281,33 +289,42 @@ class TestSettingsScreen(GuiCase):
         self.select("Nome")
         for _ in range(10):
             self.press(key.BACKSPACE)
-        self.assertEqual(self.app.db.athlete().name, "")
         self.type("Jose Kim")
+        self.assertEqual(self.app.db.athlete().name, "Daniel")       # ainda por gravar
+        self.save()
         self.assertEqual(self.app.db.athlete().name, "Jose Kim")
         self.assertIsInstance(self.screen(), app_mod.SettingsScreen)   # não saiu
 
     def test_auto_pause_toggle(self):
         self.pick("Definições")
-        self.pick("Pausa automática")
+        self.select("Pausa automática")
+        self.press(key.ENTER)                         # Enter não muda valores
+        self.assertFalse(self.screen().dirty)
+        self.press(key.RIGHT)
+        self.save()
         self.assertFalse(self.app.db.get("auto_pause"))
-        self.pick("Pausa automática")
+        self.select("Pausa automática")
+        self.press(key.LEFT)
+        self.save()
         self.assertTrue(self.app.db.get("auto_pause"))
 
     def test_resolution_cycles_and_is_remembered(self):
         self.pick("Definições")
         self.select("Resolução")
         self.assertIn("Janela 1280×760", self.screen().list.selected.value)
-        self.pick("Resolução")                      # → 1366×768
-        self.assertEqual((self.app.window.width, self.app.window.height), (1366, 768))
-        self.pick("Resolução")                      # → 1600×900
-        self.pick("Resolução")                      # → 1920×1080
-        self.pick("Resolução")                      # → 2560×1440 (o ecrã falso é 2560×1440)
-        self.pick("Resolução")                      # 3840×2160 não cabe → ecrã inteiro
-        self.assertTrue(self.app.window.fullscreen)
+        self.press(key.RIGHT)                          # → 1280×720 (a primeira da lista)
+        self.assertEqual((self.app.window.width, self.app.window.height), (1280, 760))
+        self.save()
+        self.assertEqual((self.app.window.width, self.app.window.height), (1280, 720))
+        self.select("Resolução")
+        self.press(key.RIGHT, key.RIGHT, key.RIGHT, key.RIGHT, key.RIGHT)   # … → ecrã inteiro
         self.assertIn("Ecrã inteiro (2560×1440)", self.screen().list.selected.value)
-        saved = self.app.db.get("display")
-        self.assertTrue(saved["fullscreen"])
-        self.pick("Resolução")                      # volta ao início, em janela
+        self.save()
+        self.assertTrue(self.app.window.fullscreen)
+        self.assertTrue(self.app.db.get("display")["fullscreen"])
+        self.select("Resolução")
+        self.press(key.RIGHT)                          # volta ao início, em janela
+        self.save()
         self.assertFalse(self.app.window.fullscreen)
         self.assertEqual((self.app.window.width, self.app.window.height), (1280, 720))
         self.assertEqual(self.app.db.get("display"),
@@ -396,11 +413,13 @@ class TestSettingsScreen(GuiCase):
         self.pick("Definições")
         self.select("Suavização")
         self.assertEqual(self.screen().list.selected.value, "4×")
-        self.pick("Suavização")
+        self.press(key.RIGHT)
+        self.save()
         self.assertEqual(self.app.db.get("msaa_samples"), 2)
+        self.select("Suavização")
         self.assertIn("reabrir", self.screen().list.selected.value)
-        self.pick("Suavização")
-        self.pick("Suavização")
+        self.press(key.RIGHT, key.RIGHT)
+        self.save()
         self.assertEqual(self.app.db.get("msaa_samples"), 4)
 
     def test_f11_toggles_and_remembers(self):
@@ -412,17 +431,22 @@ class TestSettingsScreen(GuiCase):
 
     def test_difficulty_and_extra_resistance_are_bounded(self):
         self.pick("Definições")
-        self.pick("Sensação")
+        self.select("Sensação")
         for _ in range(60):
             self.press(key.RIGHT)
+        self.save()
         self.assertLessEqual(float(self.app.db.get("trainer_difficulty")), 1.5)
+        self.select("Sensação")
         for _ in range(80):
             self.press(key.LEFT)
+        self.save()
         self.assertGreaterEqual(float(self.app.db.get("trainer_difficulty")), 0.0)
 
     def test_units_toggle_changes_the_display(self):
         self.pick("Definições")
-        self.pick("Unidades")
+        self.select("Unidades")
+        self.press(key.RIGHT)
+        self.save()
         self.assertEqual(self.app.db.get("units"), "imperial")
         self.assertEqual(self.app.units, "imperial")
         self.screen().tab_named("Atleta")           # o peso está no separador do atleta
@@ -431,11 +455,15 @@ class TestSettingsScreen(GuiCase):
 
     def test_language_toggle_switches_the_menu(self):
         self.pick("Definições")
-        self.pick("Idioma")
+        self.select("Idioma")
+        self.press(key.RIGHT)
+        self.save()
         self.app.reset_to_menu()
         self.assertIn("Training session", self.labels())
         self.pick("Settings")               # já em inglês
-        self.pick("Language")
+        self.select("Language")
+        self.press(key.LEFT)
+        self.save()
         self.app.reset_to_menu()
         self.assertIn("Sessão de treino", self.labels())
 
@@ -444,7 +472,9 @@ class TestSettingsScreen(GuiCase):
         seen = set()
         for _ in range(4):
             seen.add(self.app.db.get("render_preset"))
-            self.pick("Qualidade")
+            self.select("Qualidade")
+            self.press(key.RIGHT)
+            self.save()
         self.assertEqual(seen, set(PRESETS))
 
     def _boxes(self):
@@ -646,11 +676,14 @@ class TestDeviceScreen(GuiCase):
 
     def test_connection_preference_cycles_in_settings(self):
         self.pick("Definições")
-        self.pick("Ligação preferida")
+        self.select("Ligação preferida")
+        self.press(key.RIGHT)
+        self.save()
         self.assertEqual(self.app.db.get("connection_preference"), "ble_first")
         self.assertEqual(self.app.hub.preferred_transport, "ble")
-        for _ in range(3):
-            self.pick("Ligação preferida")
+        self.select("Ligação preferida")
+        self.press(key.RIGHT, key.RIGHT, key.RIGHT)
+        self.save()
         self.assertEqual(self.app.db.get("connection_preference"), "ant_first")
         self.assertEqual(self.app.hub.preferred_transport, "ant")
 
