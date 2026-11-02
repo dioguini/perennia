@@ -567,6 +567,26 @@ class RideDetailScreen(Screen):
             items.append(Item(f"  {tr('Volta', 'Lap')} {lp['lap_no']}",
                               value=hms((lp["end_t_s"] or 0) - (lp["start_t_s"] or 0)),
                               enabled=False))
+        # os picos de potência da sessão (como no TrainingPeaks)
+        from velo.core import peaks as pk
+        try:
+            power = pk.ride_peaks(a.db, self.ride_id).get("power_w", {})
+        except Exception:
+            power = {}
+        shown = [(d, power[d]) for d in (5, 60, 300, 600, 1200, 3600) if d in power]
+        if shown:
+            items.append(Item(tr("Picos de potência", "Power peaks"),
+                              value="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
+                                                 for d, v in shown[:3]),
+                              detail="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
+                                                  for d, v in shown[3:]), enabled=False))
+        items.insert(0, Item(tr("Infográficos de sessão", "Session infographics"),
+                             detail=tr("Relatório, curva de potência, zonas, gráfico de potência/"
+                                       "cadência/FC, picos e desacoplamento",
+                                       "Report, power curve, zones, power/cadence/HR chart, "
+                                       "peaks and decoupling"),
+                             action=lambda: a.push(_ride_report().RideInfographics(
+                                 a, self.ride_id))))
         if r["fit_path"]:
             items.append(Item(".fit", value=r["name"] or "", detail=r["fit_path"],
                               enabled=False))
@@ -4337,6 +4357,11 @@ def _pretty(name) -> str:
 def _feedback():
     from velo.ui import feedback_screens
     return feedback_screens
+
+
+def _ride_report():
+    from velo.ui import ride_report_screens
+    return ride_report_screens
 
 
 def _sport_ch():

@@ -593,3 +593,65 @@ class TestRowingRecords(tg.GuiCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRideInfographics(tg.GuiCase):
+    def _ride(self, seconds=900):
+        from velo.ui import app as am
+        ride = am.RideScreen(self.app, route_id=self.route_id, workout_id=None, kind="route",
+                             ghosts=[], erg=False)
+        self.app.push(ride)
+        ride.world.build_all()
+        ride.preparing = False
+        for _ in range(int(seconds / 0.5)):
+            self.app.hub.tick(0.5)
+            ride.update(0.5)
+        self.press(key.F10, key.ENTER)
+        return ride.engine.ride_id
+
+    def test_detail_peaks_and_infographics(self):
+        from velo.core import peaks as pk
+        from velo.ui import ride_report_screens as rr
+        rid = self._ride()
+        det = app_mod.RideDetailScreen(self.app, rid)
+        self.app.push(det)
+        labels = [i.label for i in det.list.items]
+        self.assertIn("Infográficos de sessão", labels[:2])
+        peaks_row = next(i for i in det.list.items if i.label == "Picos de potência")
+        self.assertIn("5 s", peaks_row.value)
+        self.pick("Infográficos de sessão")
+        inf = self.screen()
+        self.assertIsInstance(inf, rr.RideInfographics)
+        self.assertEqual(inf.tab_labels(), ["Relatório", "Curva de potência", "Zonas",
+                                            "Gráfico", "Picos"])
+        rep = {i.label: i.value for i in inf.list.items}
+        self.assertTrue(rep["Potência normalizada (NP)"].endswith(" W"))
+        self.assertIn("Desacoplamento Pa:FC", rep)
+        for _ in range(5):
+            self.app._on_draw()
+            self.press(key.TAB)
+        inf.tab_named("Gráfico")
+        self.assertEqual(len([s for s in inf.chart._series_lines]) + 1, 3)   # 3 séries
+        self.select("FC")
+        self.press(key.RIGHT)                                 # desliga a FC
+        self.assertFalse(inf.show["hr_bpm"])
+        inf.tab_named("Picos")
+        self.app._on_draw()
+        texts = [m.text for row in inf.table.cells for m, _n in row if m.text]
+        self.assertIn("5 s", texts)
+        self.assertGreater(pk.all_peaks(self.app.db)["power_w"][5]["value"], 0)
+
+    def test_cycling_stats_peaks_tab(self):
+        self._ride(400)
+        self.pick("Fechar")
+        self.pick("Estatísticas")
+        scr = self.screen()
+        scr.tab_named("Picos")
+        self.assertEqual(scr.VIEWS[scr.view], "peaks")
+        self.app._on_draw()
+        first = [m.text for m, _n in scr.peak_table.cells[0] if m.text]
+        self.assertEqual(first[0], "5 s")
+        self.assertTrue(first[1].endswith(" W"))
+        self.select("Período")
+        self.press(key.RIGHT)
+        self.assertEqual(scr.peak_range, 7)
