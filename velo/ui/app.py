@@ -2803,7 +2803,8 @@ class FtpRouteChoice(Screen):
 
 class ChallengeScreen(Screen):
     """Os desafios de um desporto: objetivo acumulado e, se tiver, quanto tempo
-    falta para a data limite."""
+    falta para a data limite. **Adicionar desafio** (em baixo, à direita)
+    abre a janela de edição; Enter num desafio abre-o."""
 
     HAS_BOARD = True
 
@@ -2829,8 +2830,7 @@ class ChallengeScreen(Screen):
     def enter(self) -> None:
         a = self.app
         sc = _sport_ch()
-        items = [Item(t("ch.new"), detail=t("ch.new_title"),
-                      action=lambda: a.push(ChallengeCreate(a, self.sport)))]
+        items = []
         for ch in a.db.challenges(self.sport):
             attempt = sc.refresh(a.db, ch)
             target, progress = ch["target"], attempt["progress"]
@@ -2845,6 +2845,10 @@ class ChallengeScreen(Screen):
                               detail=" · ".join(x for x in (done_txt, left or best) if x),
                               action=lambda c=ch: a.push(ChallengeDetail(a, dict(c))),
                               data=ch["id"]))
+        if not items:
+            items = [Item(tr("Ainda sem desafios", "No challenges yet"), enabled=False)]
+        items.append(Item(tr("Adicionar desafio", "Add challenge"), button=True, primary=True,
+                          action=lambda: a.push(_challenge_popup(a, self.sport))))
         from velo.core import sports as sp
         self.chrome.set(t("menu.challenges") + f" · {sp.name(self.sport)}",
                         tr("Objetivos acumulados, com ou sem data limite",
@@ -2852,172 +2856,37 @@ class ChallengeScreen(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-class ChallengeCreate(Screen):
-    """Novo desafio: tipo, objetivo escrito à mão, unidade, data limite e nome.
+def ChallengeCreate(app: "App", sport: str = "cycling"):          # noqa: N802 — compatibilidade
+    """O novo desafio abre numa janela (`challenge_screens.ChallengePopup`)."""
+    return _challenge_popup(app, sport)
 
-    O objetivo aceita decimais nos dois formatos («5000.34» ou «5000,34»)
-    e a linha mostra logo como foi lido, para não haver surpresas. A data
-    limite é opcional: ←/→ mudam um dia (Shift: uma semana), Del tira-a.
-    """
 
-    METRICS = ("distance_m", "ascent_m")
-
-    def __init__(self, app: "App", sport: str = "cycling"):
-        super().__init__(app)
-        self.sport = sport
-        self.METRICS = _sport_ch().METRICS.get(sport, ("distance_m",))
-        self.metric = self.METRICS[0]
-        self.value_text = ""
-        self.name_text = ""
-        self.deadline = None             # date | None
-        self.unit = self._units_for()[0]
-
-    def _units_for(self) -> tuple[str, ...]:
-        imperial = self.app.units == "imperial"
-        if self.metric == "distance_m":
-            return ("mi", "ft") if imperial else ("km", "m")
-        if self.metric == "ascent_m":
-            return ("ft", "mi") if imperial else ("m", "km")
-        if self.metric == "time_s":
-            return ("h", "min")
-        return ("×",)
-
-    def target_m(self) -> float | None:
-        v = parse_number(self.value_text)
-        if v is None or v <= 0:
-            return None
-        if self.metric == "time_s":
-            return v * (3600.0 if self.unit == "h" else 60.0)
-        if self.metric == "sessions":
-            return float(round(v))
-        return v * boards.CHALLENGE_UNITS[self.unit]
-
-    def _shown(self, target: float) -> str:
-        if self.metric in ("time_s", "sessions"):
-            return boards.challenge_target_text(self.metric, target, None, self.app.units)
-        return boards.challenge_target_text(self.metric, target, self.unit, self.app.units)
-
-    def auto_name(self) -> str:
-        target = self.target_m()
-        if target is None:
-            return ""
-        if self.sport == "cycling" and self.metric in ("distance_m", "ascent_m"):
-            return t(f"ch.auto.{self.metric}", v=self._shown(target))
-        return _sport_ch().default_name(self.sport, self.metric, self._shown(target))
-
-    def enter(self) -> None:
-        sc = _sport_ch()
-        target = self.target_m()
-        reading = ""
-        if self.value_text:
-            reading = (f"= {self._shown(target)}" if target is not None else t("ch.invalid"))
-        name_value = (self.name_text + "▏") if self.name_text else \
-            f"({t('ch.name_auto')}: {self.auto_name() or '—'})"
-        if self.deadline is None:
-            dl_value = tr("sem data limite", "no deadline")
-        else:
-            dl_value = self.deadline.strftime("%d/%m/%Y") + "  ·  " + sc.remaining_text(
-                {"deadline": self.deadline.isoformat()})
-        items = [
-            Item(t("ch.type"), value=sc.metric_name(self.metric),
-                 detail="Enter alterna" if len(self.METRICS) > 1 else "",
-                 action=self._toggle_metric),
-            Item(t("ch.value"), value=(self.value_text or "") + "▏",
-                 detail=reading or t("ch.typing"), data="text:value"),
-            Item(t("ch.unit"), value=self.unit, detail="Enter alterna",
-                 action=self._cycle_unit),
-            Item(tr("Data limite", "Deadline"), value=dl_value,
-                 detail=tr("opcional · ←/→ um dia · Shift+←/→ uma semana · Del tira",
-                           "optional · ←/→ one day · Shift+←/→ one week · Del removes"),
-                 action=lambda: self._shift_deadline(30 if self.deadline is None else 0),
-                 data="deadline"),
-            Item(t("ch.name"), value=name_value, detail=t("ch.typing"),
-                 data="text:name"),
-            Item(t("ch.create"), action=self._create, enabled=target is not None,
-                 button=True, primary=True),
-        ]
-        from velo.core import sports as sp
-        self.chrome.set(t("ch.new_title") + f" · {sp.name(self.sport)}", t("ch.typing"),
-                        self.footer())
-        self.list.set_items(items, keep_index=True)
-
-    def _shift_deadline(self, days: int) -> None:
-        from datetime import date as _date, timedelta as _td
-        base = self.deadline or _date.today()
-        if days:
-            self.deadline = max(_date.today(), base + _td(days=days))
-        self.enter()
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        item = self.list.selected
-        if item is not None and item.data == "deadline":
-            if symbol in (key.LEFT, key.RIGHT):
-                step = (7 if modifiers & key.MOD_SHIFT else 1) * (1 if symbol == key.RIGHT
-                                                                   else -1)
-                if self.deadline is None and step < 0:
-                    return True
-                self._shift_deadline(step if self.deadline is not None else max(step, 1))
-                return True
-            if symbol in (key.DELETE, key.BACKSPACE):
-                self.deadline = None
-                self.enter()
-                return True
-        return super().on_key(symbol, modifiers)
-
-    def text_input(self, field: str, text: str) -> None:
-        if field == "value":
-            allowed = "".join(c for c in text if c in "0123456789.,")
-            self.value_text = (self.value_text + allowed)[:16]
-        elif field == "name":
-            self.name_text = (self.name_text + text)[:48]
-        self.enter()
-
-    def text_backspace(self, field: str) -> None:
-        if field == "value":
-            self.value_text = self.value_text[:-1]
-        elif field == "name":
-            self.name_text = self.name_text[:-1]
-        self.enter()
-
-    def _toggle_metric(self) -> None:
-        i = self.METRICS.index(self.metric)
-        self.metric = self.METRICS[(i + 1) % len(self.METRICS)]
-        self.unit = self._units_for()[0]
-        self.enter()
-
-    def _cycle_unit(self) -> None:
-        options = self._units_for()
-        i = options.index(self.unit) if self.unit in options else -1
-        self.unit = options[(i + 1) % len(options)]
-        self.enter()
-
-    def _create(self) -> None:
-        a = self.app
-        target = self.target_m()
-        if target is None:
-            a.message(t("ch.invalid"))
-            return
-        name = self.name_text.strip() or self.auto_name()
-        unit = self.unit if self.metric in ("distance_m", "ascent_m") else None
-        a.db.create_challenge(name, self.metric, target, display_unit=unit, sport=self.sport,
-                              deadline=self.deadline.isoformat() if self.deadline else None)
-        a.message(t("ch.created", name=name))
-        a.pop()
+def _challenge_popup(app: "App", sport: str, challenge: dict | None = None):
+    from velo.ui.challenge_screens import ChallengePopup
+    return ChallengePopup(app, sport, challenge)
 
 
 class ChallengeDetail(Screen):
+    """Um desafio: data limite, a tabela das vezes que o cumpriste. Em baixo,
+    à direita: Recomeçar · Apagar · Editar (abre a janela de edição)."""
+
     HAS_BOARD = True
 
     def __init__(self, app: "App", challenge: dict):
         super().__init__(app)
         self.challenge = challenge
+        self._armed = False
 
     def side_board(self):
         return boards.challenge_board(self.app.db, self.challenge, self.app.units)
 
     def enter(self) -> None:
         a = self.app
-        ch = self.challenge
+        row = next((c for c in a.db.challenges("*") if c["id"] == self.challenge["id"]), None)
+        if row is None:
+            a.pop()
+            return
+        ch = self.challenge = dict(row)
         sc = _sport_ch()
         attempt = sc.refresh(a.db, ch)
         items = []
@@ -3029,21 +2898,24 @@ class ChallengeDetail(Screen):
         board = a.db.challenge_leaderboard(ch["id"])
         if board:
             items.append(Item(t("ch.leaderboard"), enabled=False))
-            for i, row in enumerate(board, start=1):
-                items.append(Item(f"{i}.  {boards.long_duration(row['elapsed_s'])}",
-                                  detail=f"{row['started_at'][:10]} → "
-                                         f"{(row['completed_at'] or '')[:10]}",
+            for i, r in enumerate(board, start=1):
+                items.append(Item(f"{i}.  {boards.long_duration(r['elapsed_s'])}",
+                                  detail=f"{r['started_at'][:10]} → "
+                                         f"{(r['completed_at'] or '')[:10]}",
                                   enabled=False))
         else:
             items.append(Item(t("stats.no_data"), enabled=False))
         items.append(Item(t("ch.reset"), action=self._reset, button=True))
         if not ch["is_default"]:
             items.append(Item(t("ch.delete"), action=self._delete, button=True))
+        items.append(Item(tr("Editar", "Edit"), button=True, primary=True,
+                          action=lambda: a.push(_challenge_popup(
+                              a, ch.get("sport") or "cycling", ch))))
         progress = boards.challenge_progress_text(
             ch["metric"], attempt["progress"], ch["target"], ch.get("display_unit"),
             a.units)
         self.chrome.set(ch["name"], progress + (f" · {left}" if left else ""), self.footer())
-        self.list.set_items(items)
+        self.list.set_items(items, keep_index=True)
 
     def _reset(self) -> None:
         self.app.db.reset_attempt(self.challenge["id"])
@@ -3051,6 +2923,10 @@ class ChallengeDetail(Screen):
         self.enter()
 
     def _delete(self) -> None:
+        if not self._armed:
+            self._armed = True
+            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
+            return
         self.app.db.delete_challenge(self.challenge["id"])
         self.app.pop()
 
@@ -3740,6 +3616,8 @@ class App:
         Sair e guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
         def leave() -> None:
             self.pop()                     # a pergunta
+            if hasattr(editor, "discard"):
+                editor.discard()           # repõe o que estava (janelas de um treino)
             self.pop(force=True)           # o editor, sem gravar
 
         def stay() -> None:

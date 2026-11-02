@@ -237,6 +237,82 @@ class EditPopup(PopupMixin, EditScreen):
         return super().on_key(symbol, modifiers)
 
 
+class LiveEditPopup(PopupMixin, EditScreen):
+    """Editar, numa janela, uma parte de um treino que se está a construir (um
+    passo, um exercício do plano). As mudanças veem-se logo no treino; em
+    baixo, à direita: Cancelar (repõe o que estava) e Guardar e sair.
+    Cancelar ou Esc com alterações perguntam primeiro."""
+
+    W, H = 860, 600
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.back_button = None
+        self._init_popup()
+        self._snap = None
+
+    # para redefinir: o objeto editado (no editor de cima) e como repô-lo
+    def live_get(self):
+        return None
+
+    def live_set(self, value) -> None: ...
+
+    def _start_live(self) -> None:
+        import copy
+        self._snap = copy.deepcopy(self.live_get())
+        self._parent_dirty = getattr(self._parent(), "dirty", None)
+
+    def _parent(self):
+        return getattr(self, "editor", None) or getattr(self, "ed", None)
+
+    def has_unsaved(self) -> bool:
+        cur = self.live_get()
+        return self._snap is not None and cur is not None and repr(cur) != repr(self._snap)
+
+    def discard(self) -> None:
+        import copy
+        if self._snap is not None and self.live_get() is not None:
+            self.live_set(copy.deepcopy(self._snap))
+            par = self._parent()
+            if par is not None and self._parent_dirty is not None and \
+                    hasattr(par, "dirty") and not isinstance(type(par).__dict__.get("dirty"),
+                                                             property):
+                par.dirty = self._parent_dirty
+
+    def on_save(self) -> bool:
+        import copy
+        self._snap = copy.deepcopy(self.live_get())
+        return True
+
+    def accept(self) -> None:
+        self.on_save()
+        self.app.pop(force=True)
+
+    def cancel(self) -> None:
+        if self.has_unsaved():
+            self.app.ask_unsaved(self)
+        else:
+            self.app.pop(force=True)
+
+    def close_outside(self) -> None:
+        self.cancel()
+
+    def live_buttons(self, extra: list[Item] | None = None) -> list[Item]:
+        return list(extra or []) + [
+            Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True),
+            Item(tr("Guardar e sair", "Save and close"), action=self.accept, button=True,
+                 primary=True)]
+
+    def fit_rows(self, n: int) -> None:
+        self.set_popup_size(self.W, max(300, min(680, 92 + 96 + n * 38)))
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE:
+            self.cancel()
+            return True
+        return super().on_key(symbol, modifiers)
+
+
 # ================================================================ força
 
 
@@ -1032,14 +1108,21 @@ class StrengthWorkoutEditor(EditScreen):
             self.app.replace(StrengthPreview(self.app, wid))
 
 
-class StrengthItemEditor(EditScreen):
+class StrengthItemEditor(LiveEditPopup):
     """Um exercício do plano: séries, repetições (ou segundos), carga, RPE
-    alvo e descanso."""
+    alvo e descanso — numa janela."""
 
     def __init__(self, editor: StrengthWorkoutEditor, idx: int):
-        super().__init__(editor.app)
         self.editor = editor
         self.idx = idx
+        super().__init__(editor.app)
+        self._start_live()
+
+    def live_get(self):
+        return self.editor.items[self.idx] if self.idx < len(self.editor.items) else None
+
+    def live_set(self, value) -> None:
+        self.editor.items[self.idx] = value
 
     @property
     def it(self) -> dict:
@@ -1047,7 +1130,7 @@ class StrengthItemEditor(EditScreen):
 
     def enter(self) -> None:
         if self.idx >= len(self.editor.items):
-            self.app.pop()
+            self.app.pop(force=True)
             return
         it = self.it
         timed = it.get("measure") == "time"
@@ -1063,10 +1146,10 @@ class StrengthItemEditor(EditScreen):
                  detail=t("str.rpe_hint")),
             Item(t("str.rest"), value=hms(it["rest_s"]), data="num:rest_s"),
             Item(t("str.notes"), value=it.get("notes") or "—", data="text:notes"),
-            Item(t("str.duplicate"), action=self._duplicate),
-            Item(t("str.remove"), action=self._remove),
-            Item(t("str.done"), action=self.app.pop),
         ]
+        self.fit_rows(len(rows))
+        rows += self.live_buttons([Item(t("str.duplicate"), action=self._duplicate, button=True),
+                                   Item(t("str.remove"), action=self._remove, button=True)])
         self.chrome.set(f"{self.idx + 1}. {it['name']}",
                         StrengthWorkoutEditor._target(it), t("str.item_footer"))
         self.list.set_items(rows, keep_index=True)
@@ -1125,7 +1208,8 @@ class StrengthItemEditor(EditScreen):
     def _remove(self) -> None:
         del self.editor.items[self.idx]
         self.editor.dirty = True
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
 
 class ExercisePicker(EditScreen):
@@ -1702,13 +1786,22 @@ class WorkoutEditor(EditScreen):
             self.app.push(ExportScreen(self.app, wid))
 
 
-class StepEditor(EditScreen):
+class StepEditor(LiveEditPopup):
+    """Um passo do treino de ciclismo, numa janela."""
+
     KINDS = ("steady", "ramp", "freeride")
 
     def __init__(self, editor: WorkoutEditor, idx: int):
-        super().__init__(editor.app)
         self.editor = editor
         self.idx = idx
+        super().__init__(editor.app)
+        self._start_live()
+
+    def live_get(self):
+        return self.editor.steps[self.idx] if self.idx < len(self.editor.steps) else None
+
+    def live_set(self, value) -> None:
+        self.editor.steps[self.idx] = value
 
     @property
     def s(self) -> workouts.Step:
@@ -1716,7 +1809,7 @@ class StepEditor(EditScreen):
 
     def enter(self) -> None:
         if self.idx >= len(self.editor.steps):
-            self.app.pop()
+            self.app.pop(force=True)
             return
         s = self.s
         ftp = self.editor.ftp
@@ -1743,10 +1836,10 @@ class StepEditor(EditScreen):
             Item(t("bld.cadence"), value=f"{s.cadence_lo} rpm" if s.cadence_lo else "—",
                  data="num:cad"),
             Item(t("bld.cue"), value=s.text_cue or "—", data="text:cue"),
-            Item(t("str.duplicate"), action=self._duplicate),
-            Item(t("str.remove"), action=self._remove),
-            Item(t("str.done"), action=self.app.pop),
         ]
+        self.fit_rows(len(rows))
+        rows += self.live_buttons([Item(t("str.duplicate"), action=self._duplicate, button=True),
+                                   Item(t("str.remove"), action=self._remove, button=True)])
         self.chrome.set(f"{t('bld.step')} {self.idx + 1}", step_text(s, ftp),
                         t("str.item_footer"))
         self.list.set_items(rows, keep_index=True)
@@ -1828,7 +1921,8 @@ class StepEditor(EditScreen):
     def _remove(self) -> None:
         del self.editor.steps[self.idx]
         self.editor.dirty = True
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
 
 class RepeatEditor(EditScreen):

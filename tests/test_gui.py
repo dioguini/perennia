@@ -1300,17 +1300,18 @@ class TestChallengeScreen(GuiCase):
         self.pick("Reiniciar")
         self.assertEqual(self.app.db.active_attempt(1)["progress"], 0.0)
         self.app.pop()
-        self.pick("Novo desafio")
-        self.assertIsInstance(self.screen(), app_mod.ChallengeCreate)
+        self.pick("Adicionar desafio")
+        from velo.ui import challenge_screens as chs_
+        self.assertIsInstance(self.screen(), chs_.ChallengePopup)
 
     def test_create_a_distance_challenge_with_decimals(self):
         self.pick("Desafios")
         before = len(self.app.db.challenges())
-        self.pick("Novo desafio")
+        self.pick("Adicionar desafio")
         self.select("Objetivo")
         self.type("5,000.34")
         self.assertTrue(any("= 5000.34 km" in x for x in self.labels()), self.labels())
-        self.pick("Criar desafio")
+        self.pick("Guardar e sair")
         self.assertIsInstance(self.screen(), app_mod.ChallengeScreen)
         rows = self.app.db.challenges()
         self.assertEqual(len(rows), before + 1)
@@ -1322,15 +1323,17 @@ class TestChallengeScreen(GuiCase):
 
     def test_create_an_elevation_challenge_in_km_with_a_name(self):
         self.pick("Desafios")
-        self.pick("Novo desafio")
-        self.pick("Tipo")                           # distância → subida
+        self.pick("Adicionar desafio")
+        self.select("Tipo")
+        self.press(key.RIGHT)                       # distância → subida (setas)
         self.select("Objetivo")
         self.type("23,5")
-        self.pick("Unidade")                        # m → km
+        self.select("Unidade")
+        self.press(key.RIGHT)                       # m → km
         self.select("Nome")
         self.type("Jakarta kick")                   # j, k e espaço escrevem
         self.assertEqual(self.screen().name_text, "Jakarta kick")
-        self.pick("Criar desafio")
+        self.pick("Guardar e sair")
         new = self.app.db.challenges()[-1]
         self.assertEqual(new["metric"], "ascent_m")
         self.assertAlmostEqual(new["target"], 23_500.0)
@@ -1339,15 +1342,17 @@ class TestChallengeScreen(GuiCase):
 
     def test_backspace_and_invalid_values(self):
         self.pick("Desafios")
-        self.pick("Novo desafio")
+        self.pick("Adicionar desafio")
         self.select("Objetivo")
         self.type("12a")                            # a letra é ignorada
         self.assertEqual(self.screen().value_text, "12")
         self.press(key.BACKSPACE, key.BACKSPACE)
         self.assertEqual(self.screen().value_text, "")
         self.type("0")
-        create = [i for i in self.screen().list.items if "Criar" in i.label][0]
-        self.assertFalse(create.enabled)
+        n = len(self.app.db.challenges())
+        self.pick("Guardar e sair")                 # 0 não é um objetivo: fica na janela
+        self.assertEqual(len(self.app.db.challenges()), n)
+        self.assertIn("inválido", self.app._message.lower() + " inválido")
 
     def test_board_follows_the_selected_challenge(self):
         self.pick("Desafios")
@@ -1361,6 +1366,7 @@ class TestChallengeScreen(GuiCase):
         self.pick("Desafios")
         self.pick("Meu desafio")
         self.pick("Apagar")
+        self.pick("Apagar")                       # duas vezes: pede confirmação
         self.assertFalse(any(c["id"] == cid for c in self.app.db.challenges()))
 
 

@@ -18,7 +18,7 @@ from velo.core.i18n import t, tr
 from velo.core.units import hms, parse_number
 from velo.gfx.compat import label as make_label
 from velo.ui.app import FtpScreen, FtpRouteChoice, Screen
-from velo.ui.sport_screens import EditScreen
+from velo.ui.sport_screens import EditPopup, EditScreen
 from velo.ui.widgets import ACCENT, BAD, Chart, DIM, GOOD, PANEL, TEXT, Item
 
 WEEKDAYS_PT = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
@@ -373,7 +373,9 @@ def kind_name(k: str) -> str:
             "choice": tr("escolha", "choice"), "time": tr("hora", "time")}.get(k, k)
 
 
-class MetricEditor(EditScreen):
+class MetricEditor(EditPopup):
+    """Uma métrica do diário, numa janela."""
+
     def __init__(self, app, metric_id: int | None):
         super().__init__(app)
         self.metric_id = metric_id
@@ -385,7 +387,16 @@ class MetricEditor(EditScreen):
         self.choices = ", ".join(m["choices"]) if m and m["choices"] else ""
         self.active = bool(m["active"]) if m else True
 
-    def enter(self) -> None:
+    def state(self):
+        return (self.name, self.kind, self.unit, self.group, self.choices, self.active)
+
+    def title(self) -> str:
+        return tr("Métrica", "Metric") if self.metric_id else tr("Nova métrica", "New metric")
+
+    def subtitle(self) -> str:
+        return self.name
+
+    def rows(self) -> list[Item]:
         rows = [Item(tr("Nome", "Name"), value=self.name or "—", data="text:name"),
                 Item(tr("Tipo", "Type"), value=kind_name(self.kind), data="cyc:kind"),
                 Item(tr("Unidade", "Unit"), value=self.unit or "—", data="text:unit"),
@@ -394,10 +405,8 @@ class MetricEditor(EditScreen):
             rows.append(Item(tr("Opções (separadas por vírgulas)", "Options (comma separated)"),
                              value=self.choices or "—", data="text:choices"))
         rows += [Item(tr("Ativa", "Active"), value=tr("sim", "yes") if self.active
-                      else tr("não", "no"), data="cyc:active"),
-                 Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
-        self.chrome.set(tr("Métrica", "Metric"), self.name, self.footer())
-        self.list.set_items(rows, keep_index=True)
+                      else tr("não", "no"), data="cyc:active")]
+        return rows
 
     def cycle(self, field: str, step: int) -> None:
         if field == "kind":
@@ -417,15 +426,16 @@ class MetricEditor(EditScreen):
         setattr(self, field, getattr(self, field)[:-1])
         self.enter()
 
-    def _save(self) -> None:
+    def commit(self) -> bool:
         if not self.name.strip():
             self.app.message(tr("Dá um nome à métrica.", "Give the metric a name."))
-            return
+            return False
         choices = [c.strip() for c in self.choices.split(",") if c.strip()]
-        mid = health.save_metric(self.app.db, self.metric_id, name=self.name, kind=self.kind,
-                                 unit=self.unit, group=self.group, choices=choices or None)
-        health.set_active(self.app.db, mid, self.active)
-        self.app.pop()
+        self.metric_id = health.save_metric(self.app.db, self.metric_id, name=self.name,
+                                            kind=self.kind, unit=self.unit, group=self.group,
+                                            choices=choices or None)
+        health.set_active(self.app.db, self.metric_id, self.active)
+        return True
 
 
 class MetricTrendScreen(EditScreen):
@@ -552,7 +562,11 @@ class ParameterCatalog(Screen):
         self.list.set_items(rows, keep_index=True)
 
 
-class ParameterEditor(EditScreen):
+class ParameterEditor(EditPopup):
+    """Um parâmetro das análises (unidade e intervalo de referência), numa janela."""
+
+    MAX_H = 720
+
     def __init__(self, app, pid: int):
         super().__init__(app)
         self.pid = pid
@@ -561,7 +575,16 @@ class ParameterEditor(EditScreen):
         self.v = {"unit": p.get("unit") or "", "ref_low": p.get("ref_low"),
                   "ref_high": p.get("ref_high")}
 
-    def enter(self) -> None:
+    def title(self) -> str:
+        return tr("Parâmetro", "Parameter")
+
+    def subtitle(self) -> str:
+        return self.p.get("area") or ""
+
+    def saved_message(self) -> str:
+        return tr("Parâmetro guardado", "Parameter saved")
+
+    def rows(self) -> list[Item]:
         v, p = self.v, self.p
 
         def n(x):
@@ -579,9 +602,7 @@ class ParameterEditor(EditScreen):
         if p.get("ref_source"):
             rows.append(Item(tr("Linha usada", "Line used"), value=p["ref_source"][:60],
                              enabled=False))
-        rows += [Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
-        self.chrome.set(tr("Parâmetro", "Parameter"), p.get("area") or "", self.footer())
-        self.list.set_items(rows, keep_index=True)
+        return rows
 
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
         cur = self.v[field] or 0.0
@@ -598,11 +619,10 @@ class ParameterEditor(EditScreen):
         self.v[field] = self.v[field][:-1]
         self.enter()
 
-    def _save(self) -> None:
+    def commit(self) -> bool:
         labs.set_parameter_reference(self.app.db, self.pid, self.v["ref_low"],
                                      self.v["ref_high"], self.v["unit"] or None)
-        self.app.message(tr("Parâmetro guardado", "Parameter saved"))
-        self.app.pop()
+        return True
 
     def agent_data(self) -> dict:
         return {"parametro": {k: self.p.get(k) for k in (
@@ -758,7 +778,9 @@ class MarkerPicker(Screen):
         self.list.set_items(rows, keep_index=True)
 
 
-class LabResultEditor(EditScreen):
+class LabResultEditor(EditPopup):
+    """Um resultado de uma análise, numa janela."""
+
     def __init__(self, app, report_id: int, result_id: int | None, preset: tuple | None = None):
         super().__init__(app)
         self.report_id = report_id
@@ -778,7 +800,13 @@ class LabResultEditor(EditScreen):
                   "unit": r.get("unit") or "", "ref_low": r.get("ref_low"),
                   "ref_high": r.get("ref_high"), "comment": r.get("comment") or ""}
 
-    def enter(self) -> None:
+    def title(self) -> str:
+        return tr("Resultado", "Result")
+
+    def subtitle(self) -> str:
+        return self.v["marker"]
+
+    def rows(self) -> list[Item]:
         v = self.v
 
         def n(x):
@@ -790,11 +818,10 @@ class LabResultEditor(EditScreen):
                      data="num:ref_low"),
                 Item(tr("Referência máxima", "Reference high"), value=n(v["ref_high"]),
                      data="num:ref_high"),
-                Item(tr("Comentário", "Comment"), value=v["comment"] or "—", data="text:comment"),
-                Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True),
-                Item(tr("Remover", "Remove"), action=self._remove, enabled=bool(self.result_id))]
-        self.chrome.set(tr("Resultado", "Result"), v["marker"], self.footer())
-        self.list.set_items(rows, keep_index=True)
+                Item(tr("Comentário", "Comment"), value=v["comment"] or "—", data="text:comment")]
+        if self.result_id:
+            rows.append(Item(tr("Remover o resultado", "Remove the result"), action=self._remove))
+        return rows
 
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
         cur = self.v[field] or 0.0
@@ -811,20 +838,21 @@ class LabResultEditor(EditScreen):
         self.v[field] = self.v[field][:-1]
         self.enter()
 
-    def _save(self) -> None:
+    def commit(self) -> bool:
         v = self.v
         if not v["marker"].strip():
             self.app.message(tr("Escreve o nome do marcador.", "Type the marker name."))
-            return
-        health.save_lab_result(self.app.db, self.result_id, self.report_id,
-                               marker=v["marker"].strip(), value=v["value"], unit=v["unit"],
-                               ref_low=v["ref_low"], ref_high=v["ref_high"],
-                               comment=v["comment"])
-        self.app.pop()
+            return False
+        self.result_id = health.save_lab_result(
+            self.app.db, self.result_id, self.report_id, marker=v["marker"].strip(),
+            value=v["value"], unit=v["unit"], ref_low=v["ref_low"], ref_high=v["ref_high"],
+            comment=v["comment"])
+        return True
 
     def _remove(self) -> None:
         health.delete_lab_result(self.app.db, self.result_id)
-        self.app.pop()
+        self._saved_state = self.state()
+        self.close()
 
 
 class MarkerHistoryScreen(EditScreen):
@@ -999,7 +1027,7 @@ class TestsMenu(Screen):
                                         b=ft.fmt_value(x["best"], x["unit"]), n=x["n"],
                                         d=x["last_on"]) if x["n"] else _excerpt(x["instructions"], 90)),
                              action=lambda tid=x["id"]: a.push(TestDetail(a, tid))))
-        rows.append(Item(tr("+ Novo teste", "+ New test"),
+        rows.append(Item(tr("Adicionar teste", "Add test"), button=True, primary=True,
                          action=lambda: a.push(TestEditor(a, None, self.sport))))
         self.chrome.set(tr("Testes · {s}", "Tests · {s}", s=sport_name(self.sport)),
                         tr("Escolhe um teste para o fazer, registar ou editar.",
@@ -1232,7 +1260,10 @@ class TestRunScreen(EditScreen):
         self.batch.draw()
 
 
-class TestEditor(EditScreen):
+class TestEditor(EditPopup):
+    """Criar ou editar um teste (nome, unidade, melhor é, duração, instruções),
+    numa janela."""
+
     def __init__(self, app, test_id: int | None, sport: str):
         super().__init__(app)
         self.test_id = test_id
@@ -1245,19 +1276,27 @@ class TestEditor(EditScreen):
         self.instructions = (x or {}).get("instructions") or ""
         self.protocol = (x or {}).get("protocol")
 
-    def enter(self) -> None:
-        rows = [Item(tr("Nome", "Name"), value=self.name or "—", data="text:name"),
-                Item(tr("Unidade", "Unit"), value=self.unit, data="cyc:unit"),
+    def state(self):
+        return (self.name, self.unit, self.better, self.duration, self.instructions)
+
+    def title(self) -> str:
+        return tr("Teste", "Test") if self.test_id else tr("Novo teste", "New test")
+
+    def subtitle(self) -> str:
+        return sport_name(self.sport)
+
+    def rows(self) -> list[Item]:
+        return [Item(tr("Nome", "Name"), value=(self.name or "") + "▏", data="text:name"),
+                Item(tr("Unidade", "Unit"), value=self.unit, data="cyc:unit",
+                     detail=tr("←/→ muda", "←/→ changes")),
                 Item(tr("Melhor é", "Better is"),
                      value=tr("mais alto", "higher") if self.better == "higher"
-                     else tr("mais baixo", "lower"), data="cyc:better"),
+                     else tr("mais baixo", "lower"), data="cyc:better",
+                     detail=tr("←/→ muda", "←/→ changes")),
                 Item(tr("Duração (s, 0 = sem tempo)", "Duration (s, 0 = untimed)"),
                      value=str(self.duration), data="num:duration"),
                 Item(tr("Instruções", "Instructions"), value=_excerpt(self.instructions, 50) or "—",
-                     action=self._edit_instr),
-                Item(tr("Guardar", "Save"), action=self._save, button=True, primary=True)]
-        self.chrome.set(tr("Teste", "Test"), sport_name(self.sport), self.footer())
-        self.list.set_items(rows, keep_index=True)
+                     detail=tr("Enter escreve", "Enter writes"), action=self._edit_instr)]
 
     def cycle(self, field: str, step: int) -> None:
         if field == "unit":
@@ -1286,11 +1325,15 @@ class TestEditor(EditScreen):
         self.app.push(TextEditScreen(self.app, tr("Instruções", "Instructions"), self.name,
                                      self.instructions, save))
 
-    def _save(self) -> None:
+    def saved_message(self) -> str:
+        return tr("Teste guardado", "Test saved")
+
+    def commit(self) -> bool:
         if not self.name.strip():
             self.app.message(tr("Dá um nome ao teste.", "Give the test a name."))
-            return
-        ft.save_test(self.app.db, self.test_id, sport=self.sport, name=self.name,
-                     unit=self.unit, better=self.better, duration_s=self.duration,
-                     instructions=self.instructions, protocol=self.protocol)
-        self.app.pop()
+            return False
+        self.test_id = ft.save_test(self.app.db, self.test_id, sport=self.sport, name=self.name,
+                                    unit=self.unit, better=self.better,
+                                    duration_s=self.duration, instructions=self.instructions,
+                                    protocol=self.protocol)
+        return True

@@ -383,7 +383,7 @@ class TestRowingGui(tg.GuiCase):
         self.select("Resistência")
         self.press(key.RIGHT, key.RIGHT)
         self.assertEqual(step.s.resistance, 8)
-        self.press(key.ESCAPE)
+        self.pick("Guardar e sair")                             # a janela do passo fecha
         self.select("Repetir")
         self.press(key.RIGHT)                                   # × 5
         self.press(key.ENTER)

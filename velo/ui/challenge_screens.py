@@ -18,7 +18,14 @@ from velo.core import endurance as en
 from velo.core import sports as sp
 from velo.core.i18n import t, tr
 from velo.core.units import hms
+from datetime import date, timedelta
+
+from pyglet.window import key
+
+from velo.core import sport_challenges as sc
+from velo.core.units import parse_number
 from velo.ui.app import ChallengeScreen, Screen
+from velo.ui.sport_screens import EditPopup
 from velo.ui.widgets import Item
 
 S = en.Step
@@ -266,3 +273,178 @@ class GymSessionPicker(Screen):
         self.chrome.set(tr("Sessão de treino", "Training session") + " · " + sp.name("gym"),
                         tr("Escolhe a modalidade", "Pick the modality"), self.footer())
         self.list.set_items(items, keep_index=True)
+
+
+# ================================================================ desafios
+
+
+class ChallengePopup(EditPopup):
+    """Novo desafio (ou editar um): tipo, objetivo escrito à mão, unidade, data
+    limite e nome. O objetivo aceita decimais nos dois formatos («5000.34» ou
+    «5000,34») e a linha mostra logo como foi lido. A data limite é opcional:
+    ←/→ mudam um dia (Shift: uma semana), Del tira-a."""
+
+    def __init__(self, app, sport: str = "cycling", challenge: dict | None = None):
+        super().__init__(app)
+        self.sport = sport
+        self.cid = challenge["id"] if challenge else None
+        self.METRICS = sc.METRICS.get(sport, ("distance_m",))
+        if challenge:
+            self.metric = challenge["metric"]
+            if self.metric not in self.METRICS:
+                self.METRICS = (self.metric,) + tuple(self.METRICS)
+            self.unit = challenge.get("display_unit") or self._units_for()[0]
+            self.value_text = self._shown_number(challenge["target"])
+            self.name_text = challenge["name"] or ""
+            self.deadline = sc.deadline_of(challenge)
+        else:
+            self.metric = self.METRICS[0]
+            self.unit = self._units_for()[0]
+            self.value_text = ""
+            self.name_text = ""
+            self.deadline = None
+
+    def state(self):
+        return (self.metric, self.unit, self.value_text, self.name_text, self.deadline)
+
+    def title(self) -> str:
+        return (tr("Editar o desafio", "Edit the challenge") if self.cid else t("ch.new_title")) \
+            + f" · {sp.name(self.sport)}"
+
+    def subtitle(self) -> str:
+        return t("ch.typing")
+
+    def _units_for(self) -> tuple[str, ...]:
+        imperial = self.app.units == "imperial"
+        if self.metric == "distance_m":
+            return ("mi", "ft") if imperial else ("km", "m")
+        if self.metric == "ascent_m":
+            return ("ft", "mi") if imperial else ("m", "km")
+        if self.metric == "time_s":
+            return ("h", "min")
+        return ("×",)
+
+    def _shown_number(self, target: float) -> str:
+        if self.metric == "time_s":
+            v = target / (3600.0 if self.unit == "h" else 60.0)
+        elif self.metric == "sessions":
+            v = target
+        else:
+            v = target / boards.CHALLENGE_UNITS.get(self.unit, 1.0)
+        return f"{v:g}"
+
+    def target(self) -> float | None:
+        v = parse_number(self.value_text)
+        if v is None or v <= 0:
+            return None
+        if self.metric == "time_s":
+            return v * (3600.0 if self.unit == "h" else 60.0)
+        if self.metric == "sessions":
+            return float(round(v))
+        return v * boards.CHALLENGE_UNITS[self.unit]
+
+    def _shown(self, target: float) -> str:
+        if self.metric in ("time_s", "sessions"):
+            return boards.challenge_target_text(self.metric, target, None, self.app.units)
+        return boards.challenge_target_text(self.metric, target, self.unit, self.app.units)
+
+    def auto_name(self) -> str:
+        target = self.target()
+        if target is None:
+            return ""
+        if self.sport == "cycling" and self.metric in ("distance_m", "ascent_m"):
+            return t(f"ch.auto.{self.metric}", v=self._shown(target))
+        return sc.default_name(self.sport, self.metric, self._shown(target))
+
+    def rows(self) -> list[Item]:
+        target = self.target()
+        reading = ""
+        if self.value_text:
+            reading = f"= {self._shown(target)}" if target is not None else t("ch.invalid")
+        name_value = (self.name_text + "▏") if self.name_text else \
+            f"({t('ch.name_auto')}: {self.auto_name() or '—'})"
+        if self.deadline is None:
+            dl_value = tr("sem data limite", "no deadline")
+        else:
+            dl_value = self.deadline.strftime("%d/%m/%Y") + "  ·  " + sc.remaining_text(
+                {"deadline": self.deadline.isoformat()})
+        return [
+            Item(t("ch.type"), value=sc.metric_name(self.metric),
+                 detail=tr("←/→ muda", "←/→ changes") if len(self.METRICS) > 1 else "",
+                 data="cyc:metric"),
+            Item(t("ch.value"), value=(self.value_text or "") + "▏",
+                 detail=reading or t("ch.typing"), data="text:value"),
+            Item(t("ch.unit"), value=self.unit, detail=tr("←/→ muda", "←/→ changes"),
+                 data="cyc:unit"),
+            Item(tr("Data limite", "Deadline"), value=dl_value,
+                 detail=tr("opcional · ←/→ um dia · Shift+←/→ uma semana · Del tira",
+                           "optional · ←/→ one day · Shift+←/→ one week · Del removes"),
+                 data="deadline"),
+            Item(t("ch.name"), value=name_value, detail=t("ch.typing"), data="text:name"),
+        ]
+
+    def cycle(self, field: str, step: int) -> None:
+        if field == "metric":
+            i = self.METRICS.index(self.metric)
+            self.metric = self.METRICS[(i + step) % len(self.METRICS)]
+            self.unit = self._units_for()[0]
+        elif field == "unit":
+            opts = self._units_for()
+            i = opts.index(self.unit) if self.unit in opts else -1
+            self.unit = opts[(i + step) % len(opts)]
+
+    def _shift_deadline(self, days: int) -> None:
+        base = self.deadline or date.today()
+        self.deadline = max(date.today(), base + timedelta(days=days))
+        self.enter()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        if item is not None and item.data == "deadline":
+            if symbol in (key.LEFT, key.RIGHT):
+                step = (7 if modifiers & key.MOD_SHIFT else 1) * (1 if symbol == key.RIGHT
+                                                                   else -1)
+                if self.deadline is None and step < 0:
+                    return True
+                self._shift_deadline(step if self.deadline is not None else max(step, 1))
+                return True
+            if symbol in (key.DELETE, key.BACKSPACE):
+                self.deadline = None
+                self.enter()
+                return True
+        return super().on_key(symbol, modifiers)
+
+    def text_input(self, field: str, text: str) -> None:
+        if field == "value":
+            allowed = "".join(c for c in text if c in "0123456789.,")
+            self.value_text = (self.value_text + allowed)[:16]
+        elif field == "name":
+            self.name_text = (self.name_text + text)[:48]
+        self.enter()
+
+    def text_backspace(self, field: str) -> None:
+        if field == "value":
+            self.value_text = self.value_text[:-1]
+        elif field == "name":
+            self.name_text = self.name_text[:-1]
+        self.enter()
+
+    def saved_message(self) -> str:
+        return t("ch.created", name=self.name_text.strip() or self.auto_name())
+
+    def commit(self) -> bool:
+        a = self.app
+        target = self.target()
+        if target is None:
+            a.message(t("ch.invalid"))
+            return False
+        name = self.name_text.strip() or self.auto_name()
+        unit = self.unit if self.metric in ("distance_m", "ascent_m") else None
+        dl = self.deadline.isoformat() if self.deadline else None
+        if self.cid is None:
+            self.cid = a.db.create_challenge(name, self.metric, target, display_unit=unit,
+                                             sport=self.sport, deadline=dl)
+        else:
+            a.db.update_challenge(self.cid, name=name, metric=self.metric, target=target,
+                                  display_unit=unit, deadline=dl)
+        return True

@@ -210,9 +210,9 @@ class TestChallengesWithDeadline(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Desafios")
-        self.pick("Novo desafio")
+        self.pick("Adicionar desafio")
         scr = self.screen()
-        self.assertIsInstance(scr, app_mod.ChallengeCreate)
+        self.assertIsInstance(scr, chs.ChallengePopup)
         self.select("Objetivo")
         self.type("50")
         self.select("Data limite")
@@ -220,7 +220,7 @@ class TestChallengesWithDeadline(tg.GuiCase):
         for _ in range(4):
             self.app._on_key_press(key.RIGHT, key.MOD_SHIFT)  # + 4 semanas
         self.assertEqual(scr.deadline, date.today() + timedelta(days=29))
-        self.pick("Criar")
+        self.pick("Guardar e sair")
         ch = self.app.db.challenges("running")[-1]
         self.assertEqual(ch["deadline"], (date.today() + timedelta(days=29)).isoformat())
         self.assertEqual(ch["target"], 50_000)

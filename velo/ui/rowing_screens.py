@@ -16,7 +16,7 @@ from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from velo.ui.challenge_screens import train_items
-from velo.ui.sport_screens import EditScreen
+from velo.ui.sport_screens import EditScreen, LiveEditPopup
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
                              LapPanel, SessionClock)
@@ -902,11 +902,20 @@ class RowWorkoutEditor(EditScreen):
         self.app.pop(force=True)
 
 
-class RowStepEditor(EditScreen):
+class RowStepEditor(LiveEditPopup):
+    """Um passo do treino de remo, numa janela."""
+
     def __init__(self, app, editor: RowWorkoutEditor, idx: int):
-        super().__init__(app)
         self.ed = editor
         self.idx = idx
+        super().__init__(app)
+        self._start_live()
+
+    def live_get(self):
+        return self.ed.steps[self.idx] if self.idx < len(self.ed.steps) else None
+
+    def live_set(self, value) -> None:
+        self.ed.steps[self.idx] = value
 
     @property
     def s(self) -> rw.Step:
@@ -941,9 +950,10 @@ class RowStepEditor(EditScreen):
                        data="num:resistance",
                        detail=tr("a app põe este nível no início do passo",
                                  "the app sets this level at the start of the step")),
-                  Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue"),
-                  Item(tr("Remover o passo", "Remove the step"), action=self._remove, button=True),
-                  Item(tr("Feito", "Done"), action=self.app.pop, button=True, primary=True)]
+                  Item(tr("Mensagem", "Cue"), value=(s.cue or "") + "▏", data="text:cue")]
+        self.fit_rows(len(items))
+        items += self.live_buttons([Item(tr("Remover o passo", "Remove the step"),
+                                         action=self._remove, button=True)])
         self.chrome.set(tr("Passo {n}", "Step {n}", n=self.idx + 1), "", self.footer())
         self.list.set_items(items, keep_index=True)
 
@@ -999,7 +1009,8 @@ class RowStepEditor(EditScreen):
 
     def _remove(self) -> None:
         del self.ed.steps[self.idx]
-        self.app.pop()
+        self._snap = None
+        self.app.pop(force=True)
 
     def leave(self) -> None:
         self.s.clean() if self.idx < len(self.ed.steps) else None

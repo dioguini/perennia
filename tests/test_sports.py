@@ -514,7 +514,7 @@ class TestSportsGui(tg.GuiCase):
         self.type("KB 16")
         self.select("Peso")
         self.app._on_text("16")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertEqual(inventory.available_kinds(self.app.db), {"kettlebell"})
         self.press(key.ESCAPE)
         self.pick("Exercícios")
@@ -524,7 +524,7 @@ class TestSportsGui(tg.GuiCase):
         e = self.screen()
         self.select("Nome")
         self.type("Sandbag lunge walk")
-        self.pick("Guardar")
+        self.pick("Guardar e sair")
         self.assertIn("Sandbag lunge walk",
                       [x["name"] for x in gym.exercises(self.app.db, "sandbag")])
         self.press(key.ESCAPE)
