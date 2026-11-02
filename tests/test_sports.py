@@ -38,6 +38,7 @@ from velo.ui import gym_screens as gs  # noqa: E402
 from velo.ui import hub_screens as hs  # noqa: E402
 from velo.ui import sport_screens as ss  # noqa: E402
 from velo.ui import stats_screens as sts  # noqa: E402
+from velo.ui import session_setup  # noqa: E402
 
 
 class HR:
@@ -521,8 +522,11 @@ class TestSportsGui(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Sessão de treino")
+        self.assertIn("Carregar treino", [i.label for i in self.screen().list.items])
+        self.pick("Livre")
         opts = self.screen()
-        self.assertIsInstance(opts, app_mod.StartOptions)
+        self.assertIsInstance(opts, session_setup.SessionSetup)
+        self.assertIsNone(opts.route_id)                         # na corrida é opcional
         self.select("Auto lap")
         self.press(key.RIGHT, key.RIGHT)                         # por distância
         self.assertEqual(opts.autolap_cfg()["mode"], "distance")
@@ -664,7 +668,7 @@ class TestSportsGui(tg.GuiCase):
         self.assertTrue(scr)
 
     def test_device_lost_mid_ride_shows_on_the_hud(self):
-        self.pick("Sessão de treino")
+        self.pick("Biblioteca de rotas")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

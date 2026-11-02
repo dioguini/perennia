@@ -513,6 +513,7 @@ class TestLapsInOnePlace(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Sessão de treino")
+        self.pick("Livre")
         self.pick("Começar")
         ses = self.screen()
         self.press(key.SPACE)

@@ -163,8 +163,13 @@ class RowingMenu(SportHub):
         # os campos do ecrã estão em Definições → Ecrã da sessão
         return train_items(a, "rowing", session=Item(
             tr("Sessão de treino", "Training session"),
-            detail=tr("Remo livre, com voltas manuais (L)", "Free row, with manual laps (L)"),
-            action=lambda: self._start({})))
+            detail=tr("Remo livre (com voltas) ou carregar um treino",
+                      "Free row (with laps) or load a workout"),
+            action=lambda: self._ask()))
+
+    def _ask(self) -> None:
+        from velo.ui.session_setup import ask_start
+        ask_start(self.app, "rowing", self)
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -282,20 +287,17 @@ def start_session(app, replace: bool = False, **kw) -> None:
         scr = RowingSessionScreen(app, **kw)
         app.replace(scr) if replace else app.push(scr)
         return
-    title = tr("Remo", "Rowing")
-    if kw.get("workout_id"):
-        w = rw.workout(app.db, kw["workout_id"])
-        title = w["name"] if w else title
-    elif kw.get("game_spec"):
+    title = None
+    if kw.get("game_spec"):
         title = rw.game_title(kw["game_spec"]["key"])
     elif kw.get("protocol"):
         title = tr("Teste", "Test")
-
-    def go(autolap: dict, _opts: dict) -> None:
-        app.replace(RowingSessionScreen(app, autolap=autolap, **kw))
-    opts = StartOptions(app, "rowing", title, go,
-                        lines=[tr("Máquina: {n}", "Machine: {n}", n=app.rower.name)])
-    app.replace(opts) if replace else app.push(opts)
+    from velo.ui.session_setup import SessionSetup
+    kind = "workout" if kw.get("workout_id") else "game" if kw.get("game_spec") else \
+        "test" if kw.get("protocol") else "free"
+    app.push(SessionSetup(app, "rowing", kind=kind, workout_id=kw.get("workout_id"),
+                          protocol=kw.get("protocol"), game_spec=kw.get("game_spec"),
+                          title=title))
 
 
 # ================================================================== sessão
@@ -566,6 +568,8 @@ class RowingSessionScreen(Screen):
             "started": tr("A remar!", "Rowing!"),
             "auto_pause": tr("Pausa automática", "Auto pause"),
             "resistance": tr("Resistência {n}", "Resistance {n}", n=data.get("level")),
+            "resistance_hint": tr("Põe a resistência no {n}", "Set the resistance to {n}",
+                                  n=data.get("level")),
             "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
             "workout_done": tr("Treino concluído!", "Workout done!"),
             "test_done": tr("Teste concluído!", "Test done!"),

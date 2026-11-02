@@ -66,8 +66,31 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   Lista de treinos, Histórico, Estatísticas). Corrida em passadeira e
   natação em piscina com dados à mão, `.fit` e treinos.
 - **Construtor por blocos**: arrastas blocos de zona para um gráfico e
-  mudas a duração e a intensidade com o rato. A vista é por zonas de
-  potência, FC, RPE ou ritmo.
+  mudas a duração e a intensidade com o rato. Cada treino novo é **ERG**
+  (o aparelho segue o treino sozinho) ou **Manual** (a sessão mostra o que
+  pôr no aparelho). Ciclismo ERG: zonas de potência; manual: FC, RPE ou
+  **níveis do rolo** (definidos em Definições → Sessões). Corrida: ritmo,
+  e no manual a velocidade e a inclinação da passadeira. Remo: potência,
+  ritmo, resistência e voga. Cada bloco tem cadência alvo e alvo exato ou
+  com margem (± %); a paleta mostra o nome e o intervalo de cada zona. As
+  listas de treinos mostram a definição e o tipo («Potência · ERG»).
+- **Preparar a sessão numa só janela** (ciclismo, corrida, remo):
+  «Sessão de treino» pergunta *Livre* ou *Carregar treino*. Na janela:
+  aparelhos (emparelhar), rota `.gpx` (uma tua ou uma nova; obrigatória na
+  sessão livre de ciclismo, opcional no resto), segmentos do Strava da rota,
+  modo (sozinho ou comparação), ERG, auto lap. Se o Strava não responder
+  (sem internet), aparece um aviso e escolhes prosseguir sem os segmentos ou
+  cancelar. A ficha de cada treino mostra o gráfico com os objetivos por
+  baixo e, em baixo à direita, **Configurar sessão de treino**. Na corrida
+  com uma rota, a sessão diz a inclinação da estrada a pôr na passadeira.
+- **Detalhe de uma sessão de ciclismo**: picos de potência e
+  **Infográficos de sessão** à maneira do TrainingPeaks (relatório com NP,
+  IF, TSS, VI, EF e desacoplamento Pa:FC; curva de potência; zonas; gráfico
+  de potência, cadência e FC sobrepostas à escolha; picos).
+- **Estatísticas** com o separador **Geral** primeiro (resumo de cada
+  desporto e o total) e **Picos** no ciclismo (melhor potência, FC, cadência
+  e velocidade em cada duração). Entrando por um desporto, o desporto fica
+  fixo.
 - **Ginásio** com 12 modalidades (Força, Pliométricos, Animal Flow, Cardio,
   HIIT, Calisténicos, Argolas, Elásticos, Kettlebell, Sandbag, Longevidade,
   Conditioning). Cada uma tem treino livre (plano primeiro, depois
@@ -99,7 +122,9 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   semana, e **Carga e prontidão** (fitness, fadiga, forma, prontidão, ramp).
 - **Volta automática** por tempo ou distância, opcional antes de cada
   treino, e **Terminar sem guardar**.
-- **Testes de aptidão** de ciclismo, remo, corrida, natação e longevidade, editáveis.
+- **Testes de aptidão** de ciclismo, remo, corrida, natação e longevidade,
+  editáveis. Os do rolo e da máquina de remo abrem a janela da sessão em
+  **Configurar sessão** (Enter); o resultado vem da própria sessão.
 - **Saúde:** diário com métricas tuas e notas, análises clínicas agrupadas
   por área com o comentário do médico e importação do teu Excel (catálogo de
   parâmetros e intervalos de referência), HRV4Training e Garmin.
@@ -125,7 +150,12 @@ teclado — setas, Enter, Esc — porque quem está em cima da bicicleta não
 chega ao rato; a lista de todas as teclas está em **Definições → Atalhos de
 teclado**, e **Ctrl+S** guarda em qualquer ecrã. Não há barras de
 deslocamento (as listas continuam em colunas), os botões de ação ficam em
-baixo à direita e a data e a hora estão na faixa do topo. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
+baixo à direita, adicionar e filtrar ficam em cima à direita, e a data e a
+hora estão na faixa do topo. Acrescentar ou editar (artigos, exercícios,
+desafios, testes, passos) abre uma janela com **Cancelar · Guardar · Guardar
+e sair**; o Guardar só acende quando há alterações, e sair com alterações
+pergunta *Sair sem guardar · Cancelar · Sair e guardar*. **Enter nunca muda
+valores**: as escolhas mudam-se com ←/→. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
 põe em ecrã inteiro. A sessão nunca termina sozinha: ao fim da rota dá a
 volta e conta as voltas; só o botão de parar a fecha.
 
@@ -161,6 +191,8 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   inventory.py       inventário de artigos (equipamento)
   objectives.py      objetivos dos treinos e dos blocos, alvos, resumo
   blocks.py          blocos de um treino (ler/gravar/estimar), para todos os desportos
+  workout_meta.py    tipo de cada treino (ERG ou Manual), níveis do rolo, extras dos blocos
+  peaks.py           picos (melhores médias por duração) e o relatório de uma sessão
   feedback.py        feedback no fim da sessão e a análise que o cruza com o objetivo
   layouts.py         que métricas aparecem no ecrã da sessão de cada desporto
   calendar_view.py   calendário mensal, plano por dia e resumos das semanas
@@ -201,7 +233,9 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      inventários) · builder_screens.py (blocos) ·
                      endurance_screens.py (corrida, natação) ·
                      gym_screens.py (modalidades) · stats_screens.py ·
-                     brief.py (resumo do treino) · feedback_screens.py ·
+                     brief.py (ficha do treino) · session_setup.py (a janela
+                     que prepara a sessão) · ride_report_screens.py
+                     (infográficos) · feedback_screens.py ·
                      layout_screens.py (ecrã da sessão) · calendar_screens.py ·
                      load_screens.py (carga e prontidão) ·
                      strength_builder_screens.py · strength_analysis_screens.py ·
@@ -212,7 +246,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               560 testes: núcleo, protocolos, força, remo, saúde,
+tests/               582 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

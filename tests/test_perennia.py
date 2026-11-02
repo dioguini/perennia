@@ -34,6 +34,7 @@ from velo.ui import app as app_mod  # noqa: E402
 from velo.ui import brief as br  # noqa: E402
 from velo.ui import calendar_screens as cs  # noqa: E402
 from velo.ui import feedback_screens as fs  # noqa: E402
+from velo.ui import session_setup  # noqa: E402
 from velo.ui import layout_screens as ls  # noqa: E402
 from velo.ui import widgets  # noqa: E402
 
@@ -196,8 +197,8 @@ class TestBriefScreens(tg.GuiCase):
         self.assertIsInstance(scr, br.CyclingBrief)
         self.app._on_draw()
         self.assertTrue(any("Alvo" in x for x in self.labels()))
-        self.pick("Começar")
-        self.assertIsInstance(self.screen(), app_mod.WorkoutRouteChoice)
+        self.pick("Configurar sessão")
+        self.assertIsInstance(self.screen(), session_setup.SessionSetup)
 
     def test_goal_editor_writes_the_goal(self):
         self.pick("Lista de treinos")
@@ -215,8 +216,9 @@ class TestBriefScreens(tg.GuiCase):
     def test_ride_hud_shows_the_block_goal(self):
         self.pick("Lista de treinos")
         self.pick("Limiar 2×20")
-        self.pick("Começar")
-        self.pick("Serra de Teste")
+        self.pick("Configurar sessão")
+        self.select("Rota (.gpx)")
+        self.press(key.RIGHT)                   # com a Serra de Teste
         self.pick("Começar")
         ride = self.screen()
         ride.world.build_all()
@@ -250,8 +252,7 @@ class TestFeedback(tg.GuiCase):
     def _ride_workout(self, name: str, seconds: float):
         self.pick("Lista de treinos")
         self.pick(name)
-        self.pick("Começar")
-        self.pick("Sem rota")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ride = self.screen()
         ride.preparing = False

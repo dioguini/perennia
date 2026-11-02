@@ -444,9 +444,13 @@ class MainMenu(SportHub):
         from velo.ui.challenge_screens import train_items
         return train_items(a, "cycling", Item(
             tr("Sessão de treino", "Training session"),
-            detail=tr("Pedalar: escolhe uma rota (ou sem rota)",
-                      "Ride: pick a route (or no route)"),
-            action=lambda: a.push(RouteLibrary(a)), data="ride"))
+            detail=tr("Livre (com uma rota .gpx) ou carregar um treino",
+                      "Free (with a .gpx route) or load a workout"),
+            action=lambda: _setup().ask_start(a, "cycling", self), data="ride")) + [
+            Item(t("menu.library"), value=str(len(a.db.routes())) or "",
+                 detail=tr("As tuas rotas (.gpx): subidas, classificações, favoritas",
+                           "Your routes (.gpx): climbs, leaderboards, favourites"),
+                 action=lambda: a.push(RouteLibrary(a)), data="library")]
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -994,6 +998,10 @@ class GpxPicker(Screen):
     SEARCH = ("gpx", ".", "~/Downloads", "~/Documents", "~/Transferências",
               "~/Área de Trabalho", "~/Desktop")
 
+    def __init__(self, app: "App", on_pick: Callable | None = None):
+        super().__init__(app)
+        self.on_pick = on_pick          # chamado com o id da rota nova (e fecha-se)
+
     def enter(self) -> None:
         a = self.app
         found: list[Path] = []
@@ -1033,7 +1041,10 @@ class GpxPicker(Screen):
             a.message(f"«{name}» importada — {points[-1].dist_m / 1000.0:.1f} km, "
                       f"{len(found)} subidas")
             a.pop()
-            a.push(RouteDetail(a, route_id))
+            if self.on_pick is not None:
+                self.on_pick(route_id)
+            else:
+                a.push(RouteDetail(a, route_id))
         except Exception as e:
             a.message(f"{t('common.error')}: {e}")
 
@@ -1063,7 +1074,8 @@ class RouteDetail(Screen):
                         f"máx {row['max_grade_pct']:.1f} % · "
                         f"{row['times_ridden']}× {t('lib.times_ridden').lower()}",
                         self.footer())
-        items = [Item(t("mode.start"), action=lambda: a.push(RideSetup(a, self.route_id)))]
+        items = [Item(t("mode.start"), action=lambda: a.push(_setup().SessionSetup(
+            a, "cycling", kind="free", route_id=self.route_id)))]
         for c in a.db.climbs(self.route_id):
             board = a.db.climb_leaderboard(c.id or -1, limit=1)
             best = hms(board[0]["elapsed_s"]) if board else "—"
@@ -1229,111 +1241,14 @@ class StartOptions(AutoLapOptions, Screen):
         self.start_fn(dict(self.autolap_cfg()), dict(self.options))
 
 
-class RideSetup(AutoLapOptions, Screen):
-    HAS_BOARD = True
-
-    def __init__(self, app: "App", route_id: str | None, workout_id: str | None = None,
-                 kind: str = "route", ftp_protocol: str | None = None,
-                 chase_level: str | None = None):
-        super().__init__(app)
-        self.route_id = route_id
-        self.workout_id = workout_id
-        self.kind = kind
-        self.ftp_protocol = ftp_protocol
-        self.chase_level = chase_level
-        self.comparison = False
-        self.erg = True
-        self.ghosts: set[str] = set()
-
-    def enter(self) -> None:
-        a = self.app
-        row = a.db.route(self.route_id) if self.route_id else None
-        preset = a.db.get("render_preset", "low")
-        past = a.db.rides(self.route_id) if self.route_id else []
-
-        items = [
-            Item(t("mode.start"), action=self._start),
-            Item(t("mode.title"),
-                 value=t("mode.comparison") if self.comparison else t("mode.alone"),
-                 detail=tr("←/→ muda", "←/→ changes"), data="mode"),
-        ]
-        if self.workout_id:
-            items.append(Item(t("mode.erg"),
-                              value=t("common.on") if self.erg else t("common.off"),
-                              detail=tr("←/→ muda", "←/→ changes"), data="erg"))
-        items += self.autolap_items()
-        if self.comparison:
-            if past:
-                items.append(Item(t("mode.pick_ghosts"), enabled=False))
-            for r in past[:12]:
-                chosen = r["id"] in self.ghosts
-                items.append(Item(
-                    ("✓ " if chosen else "   ") + str(r["started_at"])[:16].replace("T", " "),
-                    value=hms(r["elapsed_s"] or 0),
-                    detail=(f"{r['avg_power_w']:.0f} W" if r["avg_power_w"] else ""),
-                    action=lambda rid=r["id"]: self._toggle_ghost(rid)))
-            if not past:
-                items.append(Item("Sem sessões anteriores nesta rota", enabled=False))
-
-        if self.chase_level:
-            subtitle = (f"{t('chase.title')} · {t(f'chase.level.{self.chase_level}')}"
-                        + (f" · {row['name']}" if row else ""))
-        else:
-            subtitle = row["name"] if row else (t("menu.ftp_test") if self.ftp_protocol
-                                                else t("menu.workouts"))
-        self.chrome.set(t("mode.title"), subtitle, self.footer())
-        self.list.set_items(items, keep_index=True)
-
-    def side_board(self):
-        db = self.app.db
-        if self.chase_level:
-            return boards.chase_board(db, self.chase_level, self.route_id)
-        if self.workout_id:
-            name = next((w["name"] for w in db.workouts() if w["id"] == self.workout_id), "")
-            return boards.workout_board(db, self.workout_id, name)
-        if self.ftp_protocol:
-            return boards.ftp_board(db)
-        return boards.route_board(db, self.route_id)
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.autolap_key(symbol):
-            return True
-        item = self.list.selected
-        if item is not None and symbol in (key.LEFT, key.RIGHT):
-            if item.data == "mode":
-                self._toggle_mode()
-                return True
-            if item.data == "erg":
-                self._toggle_erg()
-                return True
-        return super().on_key(symbol, modifiers)
-
-    def _toggle_mode(self) -> None:
-        self.comparison = not self.comparison
-        if not self.comparison:
-            self.ghosts.clear()
-        self.enter()
-
-    def _toggle_erg(self) -> None:
-        self.erg = not self.erg
-        self.enter()
-
-    def _toggle_ghost(self, ride_id: str) -> None:
-        self.ghosts.symmetric_difference_update({ride_id})
-        self.enter()
-
-    def _cycle_preset(self) -> None:
-        current = self.app.db.get("render_preset", "low")
-        nxt = PRESET_ORDER[(PRESET_ORDER.index(current) + 1) % len(PRESET_ORDER)]
-        self.app.db.set("render_preset", nxt)
-        self.enter()
-
-    def _start(self) -> None:
-        self.app.replace(RideScreen(
-            self.app, route_id=self.route_id, workout_id=self.workout_id,
-            kind=self.kind, ghosts=sorted(self.ghosts), erg=self.erg,
-            ftp_protocol=self.ftp_protocol, chase_level=self.chase_level,
-            autolap=dict(self.autolap_cfg())))
+def RideSetup(app: "App", route_id: str | None, workout_id: str | None = None,  # noqa: N802
+              kind: str = "route", ftp_protocol: str | None = None,
+              chase_level: str | None = None):
+    """Compatibilidade: a preparação da sessão é agora uma janela
+    (`session_setup.SessionSetup`)."""
+    return _setup().SessionSetup(app, "cycling", kind="free" if kind == "route" else kind,
+                                 route_id=route_id, workout_id=workout_id,
+                                 ftp_protocol=ftp_protocol, chase_level=chase_level)
 
 
 # ----------------------------------------------------------------- sessão
@@ -2843,24 +2758,9 @@ class WorkoutLibrary(Screen):
             a.message(f"{t('common.error')}: {e}")
 
 
-class WorkoutRouteChoice(Screen):
-    """Em ERG a rota é só paisagem, mas continua a ser escolhida (req. 21)."""
-
-    def __init__(self, app: "App", workout_id: str):
-        super().__init__(app)
-        self.workout_id = workout_id
-
-    def enter(self) -> None:
-        a = self.app
-        items = [Item(f"{r['name']}", value=f"{r['distance_m'] / 1000.0:.1f} km",
-                      action=lambda rid=r["id"]: a.push(RideSetup(
-                          a, rid, self.workout_id, kind="workout")))
-                 for r in a.db.routes()]
-        items.append(Item("Sem rota (apenas o treino)",
-                          action=lambda: a.push(RideSetup(
-                              a, None, self.workout_id, kind="workout"))))
-        self.chrome.set(t("menu.workouts"), t("menu.library"), self.footer())
-        self.list.set_items(items)
+def WorkoutRouteChoice(app: "App", workout_id: str):            # noqa: N802
+    """«Configurar sessão de treino»: a janela da sessão, com a rota opcional."""
+    return _setup().SessionSetup(app, "cycling", kind="workout", workout_id=workout_id)
 
 
 class FtpScreen(Screen):
@@ -2886,22 +2786,10 @@ class FtpScreen(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-class FtpRouteChoice(Screen):
-    def __init__(self, app: "App", protocol: str):
-        super().__init__(app)
-        self.protocol = protocol
-
-    def enter(self) -> None:
-        a = self.app
-        items = [Item(f"{r['name']}", value=f"{r['distance_m'] / 1000.0:.1f} km",
-                      action=lambda rid=r["id"]: a.push(RideSetup(
-                          a, rid, None, kind="ftp_test", ftp_protocol=self.protocol)))
-                 for r in a.db.routes()]
-        items.append(Item("Sem rota", action=lambda: a.push(RideSetup(
-            a, None, None, kind="ftp_test", ftp_protocol=self.protocol))))
-        self.chrome.set(t("menu.ftp_test"), t(ftp_mod.CATALOG[self.protocol].label_key),
-                        self.footer())
-        self.list.set_items(items)
+def FtpRouteChoice(app: "App", protocol: str):                  # noqa: N802
+    """Um teste de FTP: a janela da sessão (rota opcional)."""
+    return _setup().SessionSetup(app, "cycling", kind="ftp_test", ftp_protocol=protocol,
+                                 title=t(ftp_mod.CATALOG[protocol].label_key))
 
 
 # ---------------------------------------------------------------- desafios
@@ -3077,39 +2965,9 @@ class ChaseScreen(Screen):
         self.app.push(ChaseRouteChoice(self.app, level))
 
 
-class ChaseRouteChoice(Screen):
-    """O pelotão anda na mesma estrada; sem rota, é tudo plano."""
-
-    HAS_BOARD = True
-
-    def __init__(self, app: "App", level: str):
-        super().__init__(app)
-        self.level = level
-
-    def side_board(self):
-        item = self.list.selected
-        route_id = item.data if item is not None and isinstance(item.data, str) else None
-        return boards.chase_board(self.app.db, self.level, route_id)
-
-    def enter(self) -> None:
-        a = self.app
-
-        def best(route_id):
-            rows = a.db.chase_leaderboard(self.level, route_id, limit=1)
-            return hms(rows[0]["survived_s"]) if rows else "—"
-
-        items = [Item(t("board.no_route"), value=best(None), detail=t("chase.flat"),
-                      action=lambda: a.push(RideSetup(
-                          a, None, None, kind="chase", chase_level=self.level)))]
-        for r in a.db.routes():
-            items.append(Item(r["name"], value=best(r["id"]),
-                              detail=f"{r['distance_m'] / 1000.0:.1f} km · "
-                                     f"↑ {r['ascent_m']:.0f} m",
-                              action=lambda rid=r["id"]: a.push(RideSetup(
-                                  a, rid, None, kind="chase", chase_level=self.level)),
-                              data=r["id"]))
-        self.chrome.set(t("chase.title"), t(f"chase.level.{self.level}"), self.footer())
-        self.list.set_items(items)
+def ChaseRouteChoice(app: "App", level: str):                   # noqa: N802
+    """A fuga: a janela da sessão (sem rota, é tudo plano)."""
+    return _setup().SessionSetup(app, "cycling", kind="chase", chase_level=level)
 
 
 # -------------------------------------------------------------- estatísticas
@@ -4395,6 +4253,11 @@ def _pretty(name) -> str:
 def _feedback():
     from velo.ui import feedback_screens
     return feedback_screens
+
+
+def _setup():
+    from velo.ui import session_setup
+    return session_setup
 
 
 def _ride_report():

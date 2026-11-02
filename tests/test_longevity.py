@@ -309,8 +309,7 @@ class TestTestsGui(tg.GuiCase):
     def test_cycling_5min_test_records_vo2max(self):
         self.pick("Testes")
         self.pick("5 minutos")
-        self.pick("Fazer o teste")
-        self.pick("Sem rota")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ride = self.screen()
         for _ in range(int(1500 / 1.0)):
@@ -688,7 +687,7 @@ class TestAgent(tg.GuiCase):
         self.assertIn("O que almocei", ctx["diario"])
 
     def test_no_agent_during_a_ride(self):
-        self.pick("Sessão de treino")
+        self.pick("Biblioteca de rotas")
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

@@ -1043,6 +1043,7 @@ class TestDetail(Screen):
         super().__init__(app)
         self.test_id = test_id
         self._armed = None
+        self._configure = None
         from velo.ui.brief import BriefPanel
         self.panel = BriefPanel()
         self.brief = None
@@ -1095,22 +1096,28 @@ class TestDetail(Screen):
             self.panel.set(self.brief)
         s = ft.summary(a.db, x)
         rows = []
-        if x["protocol"] and str(x["protocol"]).startswith("row_"):
-            from velo.ui import rowing_screens as rs
-            rows.append(Item(tr("▶ Fazer o teste na máquina de remo",
-                                "▶ Run the test on the rowing machine"),
-                             action=lambda: rs.start_session(a, protocol=x["protocol"])))
-        elif x["protocol"]:
-            rows.append(Item(tr("▶ Fazer o teste no rolo", "▶ Run the test on the trainer"),
-                             action=lambda: a.push(FtpRouteChoice(a, x["protocol"]))))
+        buttons = []
+        self._configure = None
+        if x["protocol"]:
+            # teste no rolo ou na máquina de remo: o resultado vem da sessão.
+            # Em baixo, à direita: Editar o teste · Configurar sessão (Enter)
+            if str(x["protocol"]).startswith("row_"):
+                from velo.ui import rowing_screens as rs
+                self._configure = lambda: rs.start_session(a, protocol=x["protocol"])
+            else:
+                self._configure = lambda: a.push(FtpRouteChoice(a, x["protocol"]))
+            buttons = [Item(tr("Editar o teste", "Edit the test"), button=True,
+                            action=lambda: a.push(TestEditor(a, self.test_id, x["sport"]))),
+                       Item(tr("Configurar sessão", "Set up the session"), button=True,
+                            primary=True, action=self._configure)]
         else:
             rows.append(Item(tr("▶ Fazer o teste", "▶ Run the test"),
                              detail=tr("com cronómetro", "with a timer"),
                              action=lambda: a.push(TestRunScreen(a, self.test_id))))
-        rows += [Item(tr("Registar um resultado", "Log a result"),
-                      action=lambda: a.push(TestRunScreen(a, self.test_id, timer=False))),
-                 Item(tr("Editar o teste", "Edit the test"),
-                      action=lambda: a.push(TestEditor(a, self.test_id, x["sport"])))]
+            rows += [Item(tr("Registar um resultado", "Log a result"),
+                          action=lambda: a.push(TestRunScreen(a, self.test_id, timer=False))),
+                     Item(tr("Editar o teste", "Edit the test"),
+                          action=lambda: a.push(TestEditor(a, self.test_id, x["sport"])))]
         if self.brief is None:
             rows.append(Item(tr("Instruções", "Instructions"),
                              detail=_excerpt(x["instructions"], 120), enabled=False))
@@ -1121,10 +1128,14 @@ class TestDetail(Screen):
         self.chrome.set(x["name"], tr("Melhor: {b} · {n} resultados · Del apaga um resultado",
                                       "Best: {b} · {n} results · Del deletes a result",
                                       b=best, n=s["n"]), self.footer())
-        self.list.set_items(rows, keep_index=True)
+        self.list.set_items(rows + buttons, keep_index=True)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
+        if symbol in (key.ENTER, key.RETURN) and self._configure is not None and \
+                (item is None or (item.action is None and not item.button)):
+            self._configure()                  # Enter: configurar a sessão
+            return True
         if symbol == key.DELETE and item is not None and isinstance(item.data, tuple):
             rid = item.data[1]
             if self._armed == rid:

@@ -28,6 +28,13 @@ def pace_unit(sport: str) -> str:
 
 
 def start(app, sport: str, workout_id: str | None = None, replace: bool = False) -> None:
+    """Abre a preparação da sessão. Corrida: a janela da sessão (aparelhos,
+    rota .gpx opcional, velocidade, auto lap). Natação: piscina e auto lap."""
+    if sport == "running":
+        from velo.ui.session_setup import SessionSetup
+        app.push(SessionSetup(app, "running", kind="workout" if workout_id else "free",
+                              workout_id=workout_id))
+        return
     title = sp.name(sport)
     if workout_id:
         w = en.workout(app.db, workout_id)
@@ -69,9 +76,13 @@ class EnduranceHub(SportHub):
             return train_items(a, self.SPORT, None)
         return train_items(a, self.SPORT, Item(
             tr("Sessão de treino", "Training session"),
-            detail=free + " · " + tr("sem plano: tempo, distância, voltas e FC",
-                                     "no plan: time, distance, laps and HR"),
-            action=lambda: start(a, self.SPORT)))
+            detail=free + tr(" ou carregar um treino · com ou sem rota (.gpx)",
+                             " or load a workout · with or without a route (.gpx)"),
+            action=lambda: self._ask()))
+
+    def _ask(self) -> None:
+        from velo.ui.session_setup import ask_start
+        ask_start(self.app, self.SPORT, self)
 
     def items_builder(self) -> list[Item]:
         a = self.app
@@ -167,7 +178,7 @@ class EndurancePreview(BriefScreen):
         return endurance_brief(self.app.db, self.sport, self.wid)
 
     def start(self) -> None:
-        start(self.app, self.sport, self.wid, replace=True)
+        start(self.app, self.sport, self.wid, replace=self.sport != "running")
 
     def extra_actions(self) -> list[Item]:
         a = self.app
@@ -182,9 +193,18 @@ class EnduranceSession(Screen):
 
     def __init__(self, app, sport: str, workout_id: str | None = None,
                  autolap: dict | None = None, pool_m: float = 25.0, speed_kmh: float = 10.0,
-                 resume: dict | None = None):
+                 resume: dict | None = None, route_id: str | None = None):
         super().__init__(app)
         cfg = (resume or {}).get("config", {})
+        # corrida com uma rota (.gpx): segue-se a distância e mostra-se a
+        # inclinação da estrada nesse ponto, para pôr na passadeira
+        self.route_id = route_id
+        self.route_name = ""
+        self.route_pts: list = []
+        if route_id:
+            row = app.db.route(route_id)
+            self.route_name = row["name"] if row else ""
+            self.route_pts = app.db.route_points(route_id)
         self.engine = en.EnduranceEngine(
             app.db, app.db.athlete(), cfg.get("sport", sport), sensors=app.hub,
             workout_id=workout_id or cfg.get("workout_id"),
@@ -395,7 +415,39 @@ class EnduranceSession(Screen):
         return f"{tr('PASSO', 'STEP')} {e.workout.idx + 1}/{len(e.workout.steps)} · " \
                f"{e.workout.remaining_text()}"
 
+    def route_state(self) -> tuple[float, float, float] | None:
+        """(km na rota, comprimento, inclinação %) — a rota repete-se no fim."""
+        pts = self.route_pts
+        if not pts:
+            return None
+        total = pts[-1].dist_m or 1.0
+        d = self.engine.distance_m % total
+        lo, hi = 0, len(pts) - 1
+        while lo < hi:                                   # o primeiro ponto ≥ d
+            mid = (lo + hi) // 2
+            if pts[mid].dist_m < d:
+                lo = mid + 1
+            else:
+                hi = mid
+        return d, total, float(pts[lo].grade_pct or 0.0)
+
+    def route_line(self) -> str:
+        st = self.route_state()
+        if st is None:
+            return ""
+        d, total, grade = st
+        incline = max(0.0, min(15.0, round(grade * 2) / 2))
+        return tr("Rota «{n}» · {a} de {b} km · inclinação da estrada {g} % → põe {i} %",
+                  "Route «{n}» · {a} of {b} km · road gradient {g} % → set {i} %",
+                  n=self.route_name, a=f"{d / 1000:.2f}", b=f"{total / 1000:.1f}",
+                  g=f"{grade:+.1f}", i=f"{incline:g}")
+
     def _plan_text(self) -> str:
+        text = self._plan_body()
+        route = self.route_line()
+        return "\n".join(x for x in (route, text) if x)
+
+    def _plan_body(self) -> str:
         e = self.engine
         if e.workout is None or e.workout.step is None:
             return ""

@@ -27,6 +27,7 @@ tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
 from velo.ui import app as app_mod  # noqa: E402
 from velo.ui import rowing_screens as rs  # noqa: E402
 from velo.ui import sport_screens as ss  # noqa: E402
+from velo.ui import session_setup  # noqa: E402
 
 
 class Clock:
@@ -336,12 +337,19 @@ class TestRowingGui(tg.GuiCase):
     def test_free_row_with_simulated_machine(self):
         self.go_rowing()
         self.pick("Sessão de treino")
+        self.pick("Livre")
+        setup = self.screen()
+        self.assertIsInstance(setup, session_setup.SessionSetup)
+        labels = [i.label for i in setup.list.items]
+        self.assertNotIn("Rota (.gpx)", labels)                  # o remo não tem rota
+        self.pick("Começar")
         dev = self.screen()
         self.assertIsInstance(dev, rs.RowerDeviceScreen)          # pede a máquina
         self.pick("simulada")
         self.assertIsInstance(self.app.rower, rio.SimulatedRower)
-        self.pick("Continuar")
-        self.assertEqual(self.screen().list.items[1].value, "desligado")   # auto lap
+        self.press(key.ESCAPE)                                  # volta à janela da sessão
+        self.assertIs(self.screen(), setup)
+        self.assertEqual(setup.list.items[1].value, "desligado")   # auto lap
         self.pick("Começar")
         ses = self.screen()
         self.assertIsInstance(ses, rs.RowingSessionScreen)
@@ -397,8 +405,8 @@ class TestRowingGui(tg.GuiCase):
         self.screen().enter()
         self.pick("Lista de treinos")
         self.pick("8 × 500 m")
-        self.pick("Começar")
-        self.pick("Começar")                                    # depois das opções
+        self.pick("Configurar sessão")
+        self.pick("Começar")                                    # na janela da sessão
         ses = self.screen()
         self.assertIsInstance(ses, rs.RowingSessionScreen)
         for _ in range(30):
@@ -431,7 +439,7 @@ class TestRowingGui(tg.GuiCase):
         self.go_rowing()
         self.pick("Testes")
         self.pick("500 m")
-        self.pick("máquina de remo")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ses = self.screen()
         self.assertEqual(ses.engine.protocol, "row_500")
@@ -454,6 +462,7 @@ class TestRowingGui(tg.GuiCase):
         self.app.set_rower(rio.SimulatedRower())
         self.go_rowing()
         self.pick("Sessão de treino")
+        self.pick("Livre")
         self.pick("Começar")
         ses = self.screen()
         for _ in range(60):

@@ -1784,7 +1784,7 @@ class WorkoutEditor(EditScreen):
     def _save_and_ride(self) -> None:
         wid = self._save()
         if wid:
-            self.app.push(WorkoutRouteChoice(self.app, wid))
+            self.app.push(WorkoutRouteChoice(self.app, wid))     # a janela da sessão
 
     def _export(self) -> None:
         wid = self._save()
@@ -2228,90 +2228,9 @@ class ChallengeMenu(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-from velo.ui.app import AutoLapOptions  # noqa: E402
-
-
-class GameSetup(AutoLapOptions, EditScreen):
-    """Escolhas antes do jogo: duração, adversários, ERG, rota e auto lap."""
-
-    HAS_BOARD = True
-    BOT_OPTIONS = (0, 1, 3, 5, 7)
-
-    def __init__(self, app, game_key: str):
-        super().__init__(app)
-        from velo.core import games as games_mod
-        self.key = game_key
-        self.cls = games_mod.CLASSES[game_key]
-        self.minutes = self.cls.default_minutes
-        self.bots = 1 if game_key == "tug" else (5 if game_key == "elimination" else 4)
-        self.erg = self.cls.erg_default
-        self.route_idx = 0
-
-    def side_board(self):
-        from velo.core import games as games_mod
-        return games_mod.leaderboard(self.app.db, self.key)
-
-    def routes(self) -> list:
-        return [None] + list(self.app.db.routes())
-
-    def enter(self) -> None:
-        from velo.core.i18n import tr
-        cls = self.cls
-        rs = self.routes()
-        route = rs[self.route_idx % len(rs)]
-        rows = [Item(t("mode.start"), action=self._start)]
-        if cls.has_duration:
-            rows.append(Item(tr("Duração", "Duration"), value=f"{self.minutes} min",
-                             data="cyc:minutes"))
-        if cls.has_bots and self.key != "tug":
-            rows.append(Item(tr("Adversários (bots)", "Opponents (bots)"), value=str(self.bots),
-                             data="cyc:bots"))
-        if self.key in ("adaptive", "ladder"):
-            rows.append(Item(t("mode.erg"), value=t("common.on") if self.erg else t("common.off"),
-                             detail=tr("com ERG o rolo põe os watts; aguentar é manter a cadência",
-                                       "with ERG the trainer sets the watts; hold your cadence"),
-                             data="cyc:erg"))
-        rows.append(Item(tr("Rota", "Route"), value=route["name"] if route else t("board.no_route"),
-                         detail=tr("a estrada é só paisagem; o jogo é igual",
-                                   "the road is scenery; the game is the same"),
-                         data="cyc:route"))
-        rows += self.autolap_items()
-        rows.append(Item(tr("Como se joga", "How it works"), detail=t(f"game.{self.key}.desc"),
-                         enabled=False))
-        self.chrome.set(t(f"game.{self.key}"), f"FTP {self.app.db.athlete().ftp_w} W",
-                        self.footer())
-        self.list.set_items(rows, keep_index=True)
-
-    def cycle(self, field: str, step: int) -> None:
-        if field == "minutes":
-            ds = list(self.cls.durations)
-            i = ds.index(self.minutes) if self.minutes in ds else 0
-            self.minutes = ds[(i + step) % len(ds)]
-        elif field == "bots":
-            bs = list(self.BOT_OPTIONS)
-            i = bs.index(self.bots) if self.bots in bs else 0
-            self.bots = bs[(i + step) % len(bs)]
-        elif field == "erg":
-            self.erg = not self.erg
-        elif field == "route":
-            self.route_idx += step
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.autolap_key(symbol):
-            return True
-        return super().on_key(symbol, modifiers)
-
-    def spec(self) -> dict:
-        return {"key": self.key, "minutes": self.minutes, "bots": self.bots, "erg": self.erg,
-                "seed": int(time.time()) % 100000}
-
-    def _start(self) -> None:
-        rs = self.routes()
-        route = rs[self.route_idx % len(rs)]
-        self.app.replace(RideScreen(self.app, route_id=route["id"] if route else None,
-                                    workout_id=None, kind="game", ghosts=[], erg=self.erg,
-                                    game_spec=self.spec(),
-                                    autolap=dict(self.autolap_cfg())))
+# o Challenge do ciclismo prepara-se na janela da sessão (nome e «como se
+# joga» em cima; duração, bots, rota .gpx com os segmentos do Strava, auto lap)
+from velo.ui.session_setup import GameSetup  # noqa: E402,F401
 
 
 # ======================================================= treino livre / conditioning

@@ -277,10 +277,13 @@ class BriefPanel:
 
 
 class BriefScreen(Screen):
-    """Base: lista curta de ações à esquerda (Começar primeiro) e o cartão do
-    treino à direita. Cada desporto diz como se lê o treino e como começa."""
+    """Base: o cartão do treino a toda a largura — objetivo, gráfico dos blocos
+    e, por baixo, os objetivos de cada bloco — e as ações em baixo, à direita
+    («Configurar sessão de treino» é a principal; Enter também a abre). Cada
+    desporto diz como se lê o treino e como começa."""
 
     SPORT = "cycling"
+    START_LABEL = ("Configurar sessão de treino", "Set up the training session")
 
     def __init__(self, app, wid: str):
         self.wid = wid
@@ -298,12 +301,13 @@ class BriefScreen(Screen):
 
     def _layout_panel(self) -> None:
         w, h = self.app.window.width, self.app.window.height
-        x = 48 + self._list_width(w) + 28
-        self.panel.layout(x, self.content_top(h) + 18, w - 48 - x, 66)
-        lw = self._list_width(w)
-        self.about_title.x, self.about_title.y = 48, self.content_top(h) - 5 * 38 + 4
-        self.about.x, self.about.y = 48, self.about_title.y - 18
-        self.about.width = lw
+        # o cartão ocupa a largura toda; as ações ficam na barra de baixo
+        about_w = max(220, min(300, int(w * 0.24)))
+        self.panel.layout(48, self.content_top(h) + 18, w - 96 - about_w - 24, 66)
+        self.about_title.x, self.about_title.y = w - 48 - about_w, self.content_top(h) + 4
+        self.about.x, self.about.y = self.about_title.x, self.about_title.y - 18
+        self.about.width = about_w
+        self._about_w = about_w
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -326,21 +330,22 @@ class BriefScreen(Screen):
             return
         self.brief_data = b
         self.panel.set(b)
-        w = self.app.window.width
         desc = b.note.split(" · ", 1)[-1] if b.note else ""
         self.about_title.text = tr("Sobre este treino", "About this workout") if desc else ""
-        self.about.text = wrap(desc, self._list_width(w), 10, 9)
-        items = [Item(t("mode.start"), action=self.start,
-                      detail=tr("Começa com este objetivo", "Start with this goal")),
-                 Item(tr("Objetivos do treino e dos blocos", "Workout and block goals"),
-                      detail=tr("Escreve o que este treino deve trabalhar",
-                                "Write what this workout should train"),
+        self.about.text = wrap(desc, getattr(self, "_about_w", 260), 10, 16)
+        items = [Item(tr("Editar objetivos", "Edit goals"), button=True,
                       action=lambda: a.push(_editor().GoalEditor(a, self.SPORT, self.wid, b)))]
-        items += self.extra_actions()
+        for extra in self.extra_actions():
+            extra.button = True                     # tudo na barra de baixo, à direita
+            items.append(extra)
+        items.append(Item(tr(*self.START_LABEL), action=self.start, button=True, primary=True))
         self.chrome.set(sp.name(self.SPORT) if self.SPORT != "gym" else tr("Ginásio", "Gym"),
-                        tr("Objetivo, blocos e alvos antes de começar",
-                           "Goal, blocks and targets before you start"), self.footer())
+                        tr("Objetivo, blocos e alvos antes de começar · Enter configura a sessão",
+                           "Goal, blocks and targets before you start · Enter sets up the "
+                           "session"), self.footer())
         self.list.set_items(items, keep_index=True)
+        self.list.index = len(items) - 1
+        self.list._sync()
 
     def agent_data(self) -> dict:
         return self.brief_data.as_dict() if self.brief_data else {}
@@ -367,18 +372,19 @@ class CyclingBrief(BriefScreen):
         return endurance_brief(self.app.db, "cycling", self.wid)
 
     def start(self) -> None:
-        from velo.ui.app import WorkoutRouteChoice
-        self.app.push(WorkoutRouteChoice(self.app, self.wid))
+        from velo.ui.session_setup import SessionSetup
+        self.app.push(SessionSetup(self.app, "cycling", kind="workout", workout_id=self.wid))
 
     def extra_actions(self) -> list[Item]:
         a = self.app
         from velo.ui.builder_screens import BlockBuilder
-        return [Item(tr("Abrir no construtor", "Open in the builder"),
+        return [Item(tr("Abrir no construtor", "Open in the builder"), button=True,
                      action=lambda: a.push(BlockBuilder(a, "cycling", self.wid)))]
 
 
 class GymBrief(BriefScreen):
     SPORT = "gym"
+    START_LABEL = ("Começar", "Start")
 
     def make_brief(self):
         from velo.core import strength as st
