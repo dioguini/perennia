@@ -22,6 +22,7 @@ import pyglet
 from pyglet.window import key
 
 from velo.core import intensity as it
+from velo.core import workout_meta as wm
 from velo.core.blocks import (Block, block_seconds, estimate, load_blocks,  # noqa: F401
                                save_blocks)
 from velo.core.i18n import tr
@@ -42,16 +43,49 @@ PALETTE = (("Z1", 50), ("Z2", 68), ("Z3", 83), ("Z4", 98), ("Z5", 112), ("Z6", 1
 # ================================================================= ecrã
 
 
+def new_workout(app, sport: str) -> None:
+    """«+ Novo treino»: primeiro pergunta o tipo (ERG ou Manual) — no ciclismo,
+    no remo e na corrida; a natação é sempre manual — e depois abre o
+    construtor já com as vistas desse tipo."""
+    if sport not in wm.ASKS_TYPE:
+        app.push(BlockBuilder(app, sport, None, control="manual"))
+        return
+    from velo.ui.app import ConfirmScreen
+
+    def pick(control: str) -> None:
+        app.pop()
+        app.push(BlockBuilder(app, sport, None, control=control))
+    app.push(ConfirmScreen(
+        app, tr("Que tipo de treino?", "Which kind of workout?"),
+        tr("ERG: {e}.  Manual: {m}.", "ERG: {e}.  Manual: {m}.",
+           e=wm.control_help(sport, "erg"), m=wm.control_help(sport, "manual")),
+        [(tr("Cancelar", "Cancel"), app.pop), (tr("Manual", "Manual"), lambda: pick("manual")),
+         ("ERG", lambda: pick("erg"))], default=2, buttons=True, cancel=app.pop))
+
+
 class BlockBuilder(EditScreen):
+    """Ver o módulo. O tipo do treino (ERG ou Manual) decide as vistas: no
+    ciclismo, ERG é por zonas de potência; manual é por FC, RPE ou níveis do
+    rolo (para os rolos que não aceitam comandos)."""
+
     TABBED = True
     AGENT = True
-    PAL_H = 34
+    PAL_H = 40
 
-    def __init__(self, app, sport: str, wid: str | None):
+    def __init__(self, app, sport: str, wid: str | None, control: str | None = None):
         self.sport = sport
-        self.modes = list(it.SPORT_MODES.get(sport, ("power", "hr", "rpe")))
         self.wid = wid
         self.name, self.desc, mode, self.blocks = load_blocks(app.db, sport, wid)
+        meta = wm.get(app.db, sport, wid)
+        self.control = control or meta["control"]
+        if sport == "swimming":
+            self.control = "manual"
+        self.modes = list(wm.modes(sport, self.control))
+        mode = meta["mode"] or mode
+        for b, extra in zip(self.blocks, meta.get("blocks") or []):
+            if isinstance(extra, dict):
+                b.extra.update({k: v for k, v in extra.items() if v is not None})
+        self.levels = wm.levels(app.db)
         from velo.core import objectives as ob
         saved = ob.stored(app.db, sport, wid)
         self.wgoal = saved.get("goal") or ob.library_goal(self.name)
@@ -72,11 +106,15 @@ class BlockBuilder(EditScreen):
         b = self.batch = pyglet.graphics.Batch()
         self.canvas_bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
         self.pal = []
+        self.pal_notes = []
         for name, pct in PALETTE:
             r = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL2, batch=b)
             lab = make_label(self._pal_text(name), font_size=10, bold=True, color=TEXT,
                              anchor_x="center", anchor_y="center", batch=b)
             self.pal.append((name, pct, r, lab))
+            # por baixo do nome: o nome da zona e o intervalo dela, na vista escolhida
+            self.pal_notes.append(make_label(self._pal_note(name), font_size=8, color=TEXT,
+                                             anchor_x="center", anchor_y="center", batch=b))
         self.ghost = pyglet.shapes.Rectangle(0, 0, 10, 10, color=ACCENT[:3], batch=b)
         self.ghost.opacity = 0
         self.insert_mark = pyglet.shapes.Rectangle(0, 0, 3, 10, color=ACCENT[:3], batch=b)
@@ -98,14 +136,49 @@ class BlockBuilder(EditScreen):
 
     def tab_labels(self) -> list[str]:
         modes = getattr(self, "modes", None) or ["power"]
-        return [it.mode_name(m) for m in modes]
+        return [wm.mode_label(m) if m == "level" else it.mode_name(m) for m in modes]
 
     def on_tab(self) -> None:
         # mudar de vista não mexe no treino: não conta como alteração
         self.mode = self.modes[self.tab % len(self.modes)]
-        for name, pct, r, lab in self.pal:
+        for (name, pct, r, lab), note in zip(self.pal, self.pal_notes):
             lab.text = self._pal_text(name)
+            note.text = self._pal_note(name)
         self.redraw()
+
+    # zonas: limites em % do limiar (como as de potência)
+    ZONE_EDGES = {"Z1": (0, 55), "Z2": (56, 75), "Z3": (76, 90), "Z4": (91, 105),
+                  "Z5": (106, 120), "Z6": (121, 150)}
+
+    def _value(self, pct: float) -> str:
+        """Um valor na vista escolhida (W, bpm, RPE, ritmo ou nível)."""
+        if self.mode == "level":
+            return tr("nível {n}", "level {n}", n=wm.level_of(pct, self.ctx.ftp_w, self.levels))
+        return self.ctx.short(self.mode, pct)
+
+    def _pal_note(self, name: str) -> str:
+        if name not in self.ZONE_EDGES:
+            return {"rest": tr("recuperar", "recover"), "ramp": tr("sobe ou desce", "up or down"),
+                    "free": tr("sem alvo", "no target")}.get(name, "")
+        lo, hi = self.ZONE_EDGES[name]
+        zname = it.zone_name(int(name[1]))
+        mode = getattr(self, "mode", "power")
+        ctx = getattr(self, "ctx", None)
+        if ctx is None:
+            return zname
+        if mode == "power":
+            rng = f"{lo}–{hi} % · {ctx.watts(max(lo, 1))}–{ctx.watts(hi)} W"
+        elif mode == "pace":
+            fast, slow = ctx.short("pace", hi), ctx.short("pace", max(lo, 30))
+            rng = f"{fast}–{slow}"
+        elif mode == "level":
+            rng = tr("níveis {a}–{b}", "levels {a}–{b}",
+                     a=wm.level_of(max(lo, 1), ctx.ftp_w, getattr(self, "levels",
+                                                                  wm.levels(self.app.db))),
+                     b=wm.level_of(hi, ctx.ftp_w, getattr(self, "levels", wm.levels(self.app.db))))
+        else:
+            rng = f"{ctx.short(mode, max(lo, 40))}–{ctx.short(mode, hi)}"
+        return f"{zname} · {rng}"
 
     def _pal_text(self, name: str) -> str:
         if name in ("rest",):
@@ -114,12 +187,7 @@ class BlockBuilder(EditScreen):
             return tr("Rampa", "Ramp")
         if name == "free":
             return tr("Livre", "Free")
-        pct = dict(PALETTE)[name]
-        ctx = getattr(self, "ctx", None)
-        mode = getattr(self, "mode", "power")
-        if ctx is None or mode == "power":
-            return name
-        return f"{name} · {ctx.short(mode, pct)}"
+        return name
 
     # ---------------------------------------------------------------- layout
 
@@ -135,9 +203,11 @@ class BlockBuilder(EditScreen):
         pal_top = h - 98 - 40
         n = len(self.pal)
         pw = (w - 96 - (n - 1) * 6) / n
-        for i, (_n, _p, r, lab) in enumerate(self.pal):
+        for i, ((_n, _p, r, lab), note) in enumerate(zip(self.pal, self.pal_notes)):
             r.x, r.y, r.width, r.height = 48 + i * (pw + 6), pal_top - self.PAL_H, pw, self.PAL_H
-            lab.x, lab.y = r.x + pw / 2, r.y + self.PAL_H / 2
+            lab.x, lab.y = r.x + pw / 2, r.y + self.PAL_H / 2 + 7
+            note.x, note.y = r.x + pw / 2, r.y + 10
+            note.font_size = 8 if pw > 110 else 7
             pct = dict(PALETTE)[_n]
             r.color = it.zone_color(pct)[:3] if pct else PANEL2
         self.cx0, self.cx1 = 96, w - 48
@@ -259,8 +329,7 @@ class BlockBuilder(EditScreen):
                 nl += 1
                 dur = hms(blk.dur) if blk.dur_type == "time" else (
                     f"{blk.dur / 1000:g} km" if blk.dur >= 1000 else f"{blk.dur:.0f} m")
-                inten = tr("livre", "free") if blk.lo is None else self.ctx.short(
-                    self.mode, blk.mid())
+                inten = tr("livre", "free") if blk.lo is None else self._value(blk.mid())
                 lab.text = dur if w < 80 else f"{dur} · {inten}"
                 lab.x, lab.y = x0 + w / 2, self.cy0 + 4
         for r in self._rects[n:]:
@@ -279,7 +348,7 @@ class BlockBuilder(EditScreen):
             y = self.y_of(pct)
             g.x, g.y, g.width, g.opacity = self.cx0, y, self.cx1 - self.cx0, 255
             lab.x, lab.y = self.cx0 - 6, y
-            lab.text = self.ctx.short(self.mode, pct) if self.mode != "power" else f"{pct}%"
+            lab.text = self._value(pct) if self.mode != "power" else f"{pct}%"
         for k, lab in enumerate(self.time_labels):
             secs = total * k / (len(self.time_labels) - 1)
             lab.text = hms(secs)
@@ -299,7 +368,8 @@ class BlockBuilder(EditScreen):
             r.x = x
             r.width = width * secs / tot
             x += r.width
-        self.chrome.subtitle.text = self.summary.text.replace("\n", "  ·  ")
+        self.chrome.subtitle.text = (f"{wm.control_name(self.control)} · " if self.sport != "gym"
+                                     else "") + self.summary.text.replace("\n", "  ·  ")
 
     def draw(self) -> None:
         super().draw()
@@ -334,16 +404,46 @@ class BlockBuilder(EditScreen):
             else:
                 rows.append(Item(tr("Início" if blk.ramp else "Intensidade",
                                     "Start" if blk.ramp else "Intensity"),
-                                 value=self.ctx.text(self.mode, blk.lo), data="num:lo",
+                                 value=self._text(blk.lo), data="num:lo",
                                  detail=f"Z{it.zone(blk.lo)} · {it.zone_name(it.zone(blk.lo))}"))
                 rows.append(Item(tr("Fim (rampa)", "End (ramp)"),
-                                 value=self.ctx.text(self.mode, blk.end_pct) if blk.ramp
+                                 value=self._text(blk.end_pct) if blk.ramp
                                  else tr("igual", "same"), data="num:hi"))
+                tol = blk.extra.get("tol") or 0
+                rows.append(Item(tr("Alvo", "Target"),
+                                 value=tr("exato", "exact") if not tol else
+                                 tr("intervalo ± {t} %", "range ± {t} %", t=f"{tol:g}"),
+                                 detail=tr("←/→ 0 = exato · ±1 a ±15 % deixa oscilar",
+                                           "←/→ 0 = exact · ±1 to ±15 % lets it float"),
+                                 data="num:tol"))
+            if self.sport == "cycling":
+                c = blk.extra.get("cadence_lo")
+                rows.append(Item(tr("Cadência alvo", "Target cadence"),
+                                 value=f"{c} rpm" if c else tr("livre", "free"),
+                                 detail=tr("←/→ ±5 rpm · 0 = livre", "←/→ ±5 rpm · 0 = free"),
+                                 data="num:cad"))
+            if self.sport == "running" and self.control == "manual":
+                sp_ = blk.extra.get("speed_kmh")
+                inc = blk.extra.get("incline_pct")
+                rows.append(Item(tr("Velocidade da passadeira", "Treadmill speed"),
+                                 value=f"{sp_:.1f} km/h" if sp_ else tr("pelo ritmo", "by pace"),
+                                 detail=tr("←/→ ±0,1 · Shift ±1 · muda o ritmo do bloco",
+                                           "←/→ ±0.1 · Shift ±1 · sets the block pace"),
+                                 data="num:speed"))
+                rows.append(Item(tr("Inclinação", "Incline"),
+                                 value=f"{inc:.1f} %" if inc else "0 %",
+                                 detail=tr("←/→ ±0,5 %", "←/→ ±0.5 %"), data="num:incline"))
             if self.sport == "rowing":
                 res = blk.extra.get("resistance")
                 rows.append(Item(tr("Resistência", "Resistance"),
                                  value=str(res) if res else tr("não mexer", "leave it"),
+                                 detail=tr("ERG: a app põe este nível · manual: mostra-o",
+                                           "ERG: the app sets this level · manual: shows it"),
                                  data="num:resistance"))
+                spm = blk.extra.get("rate")
+                rows.append(Item(tr("Voga (remadas/min)", "Stroke rate (spm)"),
+                                 value=f"{spm:.0f}" if spm else tr("livre", "free"),
+                                 data="num:rate"))
             rows += [Item(tr("Objetivo do bloco", "Block goal"), value=(blk.goal or "") + "▏",
                           data="text:goal", detail=tr("O que se treina aqui (aparece na sessão)",
                                                       "What this block trains (shown in session)")),
@@ -365,8 +465,10 @@ class BlockBuilder(EditScreen):
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
                       "running": tr("Corrida", "Running"),
                       "swimming": tr("Natação", "Swimming")}[self.sport]
-        self.chrome.set(tr("Construtor de treinos", "Workout builder") + f" · {sport_name}",
-                        self.summary.text.replace("\n", "  ·  "),
+        self.chrome.set(tr("Construtor de treinos", "Workout builder") + f" · {sport_name}"
+                        + f" · {wm.control_name(self.control)}",
+                        f"{wm.control_name(self.control)} · "
+                        + self.summary.text.replace("\n", "  ·  "),
                         tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
                            "D duplicar · Del apagar · Tab vista",
                            "Drag palette blocks · ←/→ block · ↑↓ row · +/− duration · "
@@ -404,9 +506,54 @@ class BlockBuilder(EditScreen):
         self.dirty = True
         self.redraw()
 
+    def _text(self, pct: float) -> str:
+        if self.mode == "level":
+            lv = wm.level_of(pct, self.ctx.ftp_w, self.levels)
+            return tr("nível {n} · ≈ {w} W", "level {n} · ≈ {w} W", n=lv,
+                      w=f"{wm.level_watts(lv, self.levels):.0f}")
+        return self.ctx.text(self.mode, pct)
+
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
         b = self.block
         if b is None:
+            return
+        if field in ("lo", "hi") and self.mode == "level":
+            cur = (b.lo if field == "lo" else b.end_pct) or 75.0
+            lv = wm.level_of(cur, self.ctx.ftp_w, self.levels) + steps
+            lv = max(1, min(self.levels["n"], lv))
+            v = wm.pct_of_level(lv, self.ctx.ftp_w, self.levels)
+            if field == "lo":
+                b.lo = v
+                if not b.ramp:
+                    b.hi = None
+            else:
+                b.hi = v
+            self.dirty = True
+            self.redraw()
+            return
+        if field == "tol":
+            b.extra["tol"] = max(0, min(15, (b.extra.get("tol") or 0) + steps))
+        elif field == "cad":
+            c = (b.extra.get("cadence_lo") or 85) + steps * 5
+            if not b.extra.get("cadence_lo") and steps < 0:
+                c = 0
+            b.extra["cadence_lo"] = b.extra["cadence_hi"] = None if c < 40 else min(130, c)
+        elif field == "speed":
+            cur = b.extra.get("speed_kmh") or round(3600 / max(1, self.ctx.pace(b.mid()) or 360), 1)
+            v = max(3.0, min(25.0, round(cur + steps * (1.0 if big else 0.1), 1)))
+            b.extra["speed_kmh"] = v
+            # a velocidade dá o ritmo do bloco (e a cor da zona)
+            b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
+            b.hi = None
+        elif field == "incline":
+            b.extra["incline_pct"] = max(0.0, min(15.0, round((b.extra.get("incline_pct") or 0)
+                                                              + steps * 0.5, 1)))
+        elif field == "rate":
+            r = (b.extra.get("rate") or 22) + steps
+            b.extra["rate"] = None if r < 14 else min(40, r)
+        if field in ("tol", "cad", "speed", "incline", "rate"):
+            self.dirty = True
+            self.redraw()
             return
         if field == "dur":
             self._nudge_duration(steps * (6 if big else 1))
@@ -433,13 +580,30 @@ class BlockBuilder(EditScreen):
             # escrito: minutos no tempo, metros na distância
             b.dur = max(10.0, value * 60) if b.dur_type == "time" else max(25.0, value)
         elif field in ("lo", "hi"):
-            pct = self.ctx.pct_from(self.mode, value) if self.mode != "power" else value
+            if self.mode == "level":
+                lv = max(1, min(self.levels["n"], int(value)))
+                pct = wm.pct_of_level(lv, self.ctx.ftp_w, self.levels)
+            else:
+                pct = self.ctx.pct_from(self.mode, value) if self.mode != "power" else value
             if field == "lo":
                 b.lo = max(30.0, min(200.0, pct))
             else:
                 b.hi = max(30.0, min(200.0, pct))
         elif field == "resistance":
             b.extra["resistance"] = max(1, min(15, int(value)))
+        elif field == "cad":
+            b.extra["cadence_lo"] = b.extra["cadence_hi"] = int(value) if value >= 40 else None
+        elif field == "tol":
+            b.extra["tol"] = max(0, min(15, float(value)))
+        elif field == "speed":
+            v = max(3.0, min(25.0, float(value)))
+            b.extra["speed_kmh"] = v
+            b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
+            b.hi = None
+        elif field == "incline":
+            b.extra["incline_pct"] = max(0.0, min(15.0, float(value)))
+        elif field == "rate":
+            b.extra["rate"] = int(value) if value >= 14 else None
         self.dirty = True
         self.redraw()
 
@@ -521,12 +685,42 @@ class BlockBuilder(EditScreen):
         self.sel = min(self.sel, len(self.blocks) - 1)
         self.changed()
 
+    def _manual_cue(self, b) -> str:
+        """No treino manual, o que pôr no aparelho vai na mensagem do bloco
+        (aparece na sessão): o nível do rolo, a velocidade e a inclinação, a
+        resistência e a voga."""
+        bits = []
+        if self.sport == "cycling" and self.mode == "level" and b.lo is not None:
+            bits.append(tr("Nível {n}", "Level {n}",
+                           n=wm.level_of(b.mid(), self.ctx.ftp_w, self.levels)))
+        if self.sport == "running" and b.extra.get("speed_kmh"):
+            bits.append(f"{b.extra['speed_kmh']:.1f} km/h")
+        if self.sport == "running" and b.extra.get("incline_pct"):
+            bits.append(tr("inclinação {i} %", "incline {i} %", i=f"{b.extra['incline_pct']:g}"))
+        if self.sport == "rowing" and self.control == "manual" and b.extra.get("resistance"):
+            bits.append(tr("resistência {r}", "resistance {r}", r=b.extra["resistance"]))
+        if self.sport == "rowing" and b.extra.get("rate"):
+            bits.append(f"{b.extra['rate']:.0f} spm")
+        if b.extra.get("tol") and b.lo is not None:
+            bits.append(f"± {b.extra['tol']:g} %")
+        return " · ".join(bits)
+
     def _save(self) -> None:
         if not self.blocks:
             self.app.message(tr("O treino não tem blocos.", "The workout has no blocks."))
             return
+        import copy
+        to_save = copy.deepcopy(self.blocks)
+        for b in to_save:
+            auto = self._manual_cue(b) if (self.control == "manual" or b.extra.get("tol")) \
+                else ""
+            base = (b.cue or "").split("  ·  ")[0] if "  ·  " in (b.cue or "") else (b.cue or "")
+            b.cue = f"{base}  ·  {auto}" if auto and base else (auto or base)
         self.wid = save_blocks(self.app.db, self.sport, self.wid, self.name.strip() or
-                               tr("Treino", "Workout"), self.desc, self.mode, self.blocks)
+                               tr("Treino", "Workout"), self.desc, self.mode, to_save)
+        wm.save(self.app.db, self.sport, self.wid, self.control, self.mode,
+                [{k: b.extra.get(k) for k in ("tol", "speed_kmh", "incline_pct", "rate")}
+                 for b in self.blocks])
         from velo.core import objectives as ob
         ob.save(self.app.db, self.sport, self.wid, self.wgoal.strip(),
                 [{"name": "", "goal": b.goal} for b in self.blocks])

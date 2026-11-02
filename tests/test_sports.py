@@ -340,9 +340,11 @@ class TestBlockBuilderCore(Base):
 
 
 class TestBlockBuilderGui(tg.GuiCase):
-    def open_builder(self):
+    def open_builder(self, control="ERG"):
         self.pick("Construtor de treinos")
         self.pick("Novo treino")
+        self.assertIn("ERG", [i.label for i in self.screen().list.items])
+        self.pick(control)
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
         return b
@@ -395,11 +397,82 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.app._on_mouse_release(int(rest.x + 5), int(rest.y + 5), 1, 0)
         self.assertEqual(b.blocks[1].kind, "rest")
 
-    def test_views_keyboard_and_save(self):
-        b = self.open_builder()
+    def test_erg_is_power_only(self):
+        b = self.open_builder("ERG")
+        self.assertEqual(b.control, "erg")
+        self.assertEqual(b.modes, ["power"])
         b.sel = 1
-        self.assertEqual(b.mode, "power")
-        self.press(key.TAB)                                     # vista FC
+        b.enter()
+        self.assertTrue(any(i.label == "Cadência alvo" for i in b.list.items))
+        self.select("Alvo")
+        self.press(key.RIGHT, key.RIGHT)
+        self.assertEqual(b.block.extra["tol"], 2)
+        self.select("Cadência alvo")
+        self.press(key.RIGHT)
+        self.assertEqual(b.block.extra["cadence_lo"], 90)
+        self.app._on_key_press(key.S, key.MOD_CTRL)
+        from velo.core import workout_meta as wm
+        meta = wm.get(self.app.db, "cycling", b.wid)
+        self.assertEqual(meta["control"], "erg")
+        self.assertEqual(meta["blocks"][1]["tol"], 2)
+        self.assertIn("Potência · ERG", wm.label(self.app.db, "cycling", b.wid))
+
+    def test_manual_trainer_levels(self):
+        b = self.open_builder("Manual")
+        self.assertEqual(b.modes, ["hr", "rpe", "level"])
+        self.press(key.TAB, key.TAB)
+        self.assertEqual(b.mode, "level")
+        b.sel = 1
+        b.enter()
+        self.select("Intensidade")
+        before = b.list.selected.value
+        self.assertIn("nível", before)
+        self.press(key.RIGHT)
+        self.assertNotEqual(b.list.selected.value, before)
+        self.app._on_key_press(key.S, key.MOD_CTRL)
+        from velo.core import workout_meta as wm
+        self.assertEqual(wm.get(self.app.db, "cycling", b.wid)["mode"], "level")
+        self.assertIn("Níveis do rolo · Manual", wm.label(self.app.db, "cycling", b.wid))
+
+    def test_running_manual_treadmill_speed_and_incline(self):
+        self.press(key.ESCAPE)
+        self.pick("Corrida")
+        self.pick("Construtor de treinos")
+        self.pick("Novo treino")
+        self.pick("Manual")
+        b = self.screen()
+        self.assertEqual(b.control, "manual")
+        b.sel = 1
+        b.enter()
+        self.select("Velocidade da passadeira")
+        self.press(key.RIGHT)
+        self.assertIsNotNone(b.block.extra.get("speed_kmh"))
+        self.select("Inclinação")
+        self.press(key.RIGHT)
+        self.assertEqual(b.block.extra["incline_pct"], 0.5)
+        self.app._on_key_press(key.S, key.MOD_CTRL)
+        from velo.core import workout_meta as wm
+        meta = wm.get(self.app.db, "running", b.wid)
+        self.assertEqual(meta["control"], "manual")
+        self.assertEqual(meta["blocks"][1]["incline_pct"], 0.5)
+
+    def test_rowing_manual_has_rate_and_resistance(self):
+        self.press(key.ESCAPE)
+        self.pick("Remo")
+        self.pick("Construtor de treinos")
+        self.pick("Novo treino")
+        self.pick("Manual")
+        b = self.screen()
+        self.assertEqual(b.modes, ["power", "pace", "hr", "rpe"])
+        b.sel = 1
+        b.enter()
+        labels = [i.label for i in b.list.items]
+        self.assertIn("Resistência", labels)
+        self.assertIn("Voga (remadas/min)", labels)
+
+    def test_views_keyboard_and_save(self):
+        b = self.open_builder("Manual")
+        b.sel = 1
         self.assertEqual(b.mode, "hr")
         self.app._on_draw()
         self.assertIn("bpm", b.axis[1].text)
@@ -425,7 +498,7 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.pick("8 × 500 m")
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
-        self.assertEqual(b.tab_labels(), ["Zonas de potência", "Ritmo", "FC", "RPE"])
+        self.assertEqual(b.tab_labels(), ["Zonas de potência", "Ritmo"])      # ERG
         self.assertEqual(len(b.blocks), 18)
         b.sel = 1
         b.enter()

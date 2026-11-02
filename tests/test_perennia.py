@@ -232,6 +232,7 @@ class TestBriefScreens(tg.GuiCase):
     def test_builder_saves_workout_and_block_goals(self):
         self.pick("Construtor de treinos")
         self.pick("Novo treino")
+        self.pick("ERG")
         b = self.screen()
         b.sel = 1
         b.enter()

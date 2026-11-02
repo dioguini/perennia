@@ -97,6 +97,7 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
     def open_builder(self):
         self.pick("Construtor de treinos")
         self.pick("Novo treino")
+        self.pick("ERG")                       # o tipo do treino
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
         return b

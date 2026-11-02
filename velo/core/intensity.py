@@ -33,7 +33,8 @@ RPE_POINTS = ((40, 1.0), (50, 2.0), (60, 3.0), (70, 4.0), (80, 5.0), (88, 6.0), 
 
 def mode_name(mode: str) -> str:
     return {"power": tr("Zonas de potência", "Power zones"), "hr": tr("FC", "Heart rate"),
-            "rpe": "RPE", "pace": tr("Ritmo", "Pace")}[mode]
+            "rpe": "RPE", "pace": tr("Ritmo", "Pace"),
+            "level": tr("Níveis do rolo", "Trainer levels")}.get(mode, mode)
 
 
 def zone(pct: float) -> int:

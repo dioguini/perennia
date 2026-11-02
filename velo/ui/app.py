@@ -451,13 +451,17 @@ class MainMenu(SportHub):
     def items_builder(self) -> list[Item]:
         a = self.app
         b = _builder()
-        items = [Item(tr("+ Novo treino (arrastar blocos)", "+ New workout (drag blocks)"),
-                      action=lambda: a.push(b.BlockBuilder(a, "cycling", None)),
-                      data="workouts")]
+        from velo.core import workout_meta as wm
+        items = [Item(tr("+ Novo treino", "+ New workout"),
+                      detail=tr("primeiro escolhes o tipo: ERG ou Manual",
+                                "first pick the kind: ERG or Manual"),
+                      action=lambda: b.new_workout(a, "cycling"), data="workouts",
+                      button=True, primary=True, top=True)]
         for w in a.db.workouts():
             tss = f" · TSS ≈ {w['est_tss']:.0f}" if w["est_tss"] else ""
             items.append(Item(w["name"], value=hms(w["total_seconds"] or 0),
-                              detail=(w["description"] or w["source_format"] or "") + tss
+                              detail=wm.label(a.db, "cycling", w["id"], "power") + " · "
+                              + (w["description"] or w["source_format"] or "") + tss
                               + tr(" · E exportar · P passos", " · E export · P steps"),
                               action=lambda wid=w["id"]: a.push(b.BlockBuilder(a, "cycling",
                                                                                wid)),
@@ -2167,7 +2171,7 @@ class SettingsScreen(Screen):
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
     GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
               ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "connection",
-               "auto_connect", "boxes", "metrics"),
+               "auto_connect", "boxes", "metrics", "lv_n", "lv_min", "lv_max"),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
               ("@sync",),
@@ -2403,6 +2407,20 @@ class SettingsScreen(Screen):
                             detail=tr("Enter abre · um separador por desporto; arrasta as métricas",
                                       "Enter opens · one tab per sport; drag the metrics"),
                             action=lambda: a.push(_layouts().LayoutEditor(a, "cycling"))),
+            "lv_n": Item(tr("Rolo sem ERG: número de níveis", "Non-ERG trainer: number of levels"),
+                         value=str(self._levels()["n"]),
+                         detail=tr("←/→ · para os treinos manuais «por níveis do rolo»",
+                                   "←/→ · for manual workouts \u00abby trainer levels\u00bb"),
+                         data="lv_n"),
+            "lv_min": Item(tr("Rolo sem ERG: watts no nível 1", "Non-ERG trainer: watts at level 1"),
+                           value=f"{self._levels()['w_min']:.0f} W",
+                           detail=tr("←/→ ±5 W · Shift ±50 · a 90 rpm", "←/→ ±5 W · Shift ±50 · at 90 rpm"),
+                           data="lv_min"),
+            "lv_max": Item(tr("Rolo sem ERG: watts no nível máximo",
+                              "Non-ERG trainer: watts at the top level"),
+                           value=f"{self._levels()['w_max']:.0f} W",
+                           detail=tr("←/→ ±5 W · Shift ±50 · entre eles, em linha reta",
+                                     "←/→ ±5 W · Shift ±50 · linear in between"), data="lv_max"),
             "feedback": Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
                              value=on if self.get("ask_feedback", True) else off,
                              detail=tr("RPE, dores e comentário; fica para o agente treinador",
@@ -2510,6 +2528,14 @@ class SettingsScreen(Screen):
             return True
         return super().on_key(symbol, modifiers)
 
+    def _levels(self) -> dict:
+        from velo.core import workout_meta as wm
+        cur = self.get("trainer_levels", None)
+        base = wm.levels(self.app.db)
+        if isinstance(cur, dict):
+            base.update(cur)
+        return base
+
     def _cycle(self, key_: str, options: list, step: int, default) -> None:
         cur = self.get(key_, default)
         i = options.index(cur) if cur in options else 0
@@ -2531,6 +2557,18 @@ class SettingsScreen(Screen):
             from velo.core import rowing as rw
             self.put("row_ftp_w", max(50, min(800, int(self.get("row_ftp_w", rw.row_ftp(a.db)))
                                          + step)))
+        elif field in ("lv_n", "lv_min", "lv_max"):
+            lv = dict(self._levels())
+            if field == "lv_n":
+                lv["n"] = max(2, min(30, int(lv["n"]) + unit))
+            elif field == "lv_min":
+                lv["w_min"] = max(20.0, min(lv["w_max"] - 10, lv["w_min"] + step * 5))
+            else:
+                lv["w_max"] = max(lv["w_min"] + 10, min(2000.0, lv["w_max"] + step * 5))
+            self.put("trainer_levels", lv)
+            from velo.core import workout_meta as wm
+            if self._orig.get("trainer_levels") is None and lv == wm.levels(a.db):
+                self.draft.pop("trainer_levels", None)      # voltou ao que estava
         elif field == "lookahead":
             self.put("workout_lookahead", max(0, min(4, int(self.get("workout_lookahead", 2))
                                                     + unit)))
