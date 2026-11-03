@@ -47,7 +47,11 @@ class Item:
 
     `button=True`: em vez de uma linha, é um botão de ação na faixa de baixo,
     à direita (Guardar, Cancelar…). Continua na lista para o teclado: ↑↓
-    chegam lá e Enter carrega nele."""
+    chegam lá e Enter carrega nele.
+
+    `header=True`: um título de secção — numa faixa sombreada, a negrito, e
+    as setas saltam-no. As linhas antigas «— Nome —» (desligadas) passam a
+    títulos sozinhas."""
     label: str
     value: str = ""
     action: Callable[[], None] | None = None
@@ -57,10 +61,21 @@ class Item:
     button: bool = False
     primary: bool = False         # o botão principal (Guardar) fica realçado
     top: bool = False             # botão no topo, à direita (Adicionar, filtros)
+    header: bool = False          # título de secção (sombreado, saltado pelas setas)
 
     def __post_init__(self):
         if self.top:
             self.button = True
+        lab = self.label or ""
+        if not self.enabled and not self.button and lab.startswith("— ") and len(lab) > 2:
+            self.header = True
+        if self.header:
+            self.enabled = False
+            self.label = lab.removeprefix("— ").removesuffix(" —").strip()
+
+    @property
+    def selectable(self) -> bool:
+        return not self.header
 
 
 BUTTON_H = 36
@@ -82,6 +97,9 @@ class ListView:
 
     MIN_COL_W = 270
     COL_GAP = 28
+    # a descrição de cada opção fica à frente dela, na mesma linha; nas listas
+    # grandes (em várias colunas) fica por baixo. None: decide sozinha.
+    detail_below: bool | None = None
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
@@ -118,6 +136,9 @@ class ListView:
                                       batch=self.batch)
             detail = make_label("", font_size=11, color=DIM,
                                        anchor_y="center", batch=self.batch)
+            # os títulos de secção: a negrito, numa faixa sombreada (`highlight`)
+            label._head = make_label("", font_size=13, bold=True, color=TEXT,
+                                     anchor_y="center", batch=self.batch)
             self._rows.append((highlight, label, value, detail))
 
     def _add_button(self) -> None:
@@ -134,7 +155,7 @@ class ListView:
             self._add_rows(n - len(self._rows))
         elif n < len(self._rows):
             for highlight, label, value, detail in self._rows[n:]:
-                for obj in (highlight, highlight._bar, label, value, detail):
+                for obj in (highlight, highlight._bar, label, label._head, value, detail):
                     try:
                         obj.delete()
                     except Exception:
@@ -148,7 +169,19 @@ class ListView:
         if not keep_index or self.index >= len(items):
             self.index = 0
             self.scroll = 0
+        if self.items and self.items[self.index].header:
+            self.index = self._next_selectable(self.index, 1)
         self._sync()
+
+    def _next_selectable(self, start: int, step: int) -> int:
+        """O índice seguinte (ou anterior) que não é título; os títulos saltam-se."""
+        n = len(self.items)
+        i = start
+        for _ in range(n):
+            if not self.items[i].header:
+                return i
+            i = (i + (1 if step >= 0 else -1)) % n
+        return start
 
     # ------------------------------------------------------------- arrumar
 
@@ -181,35 +214,71 @@ class ListView:
         if need > len(self._rows):
             self._add_rows(need - len(self._rows))
         col_w = (self.width - self.COL_GAP * (cols - 1)) / cols
+        below = self.detail_below if self.detail_below is not None else cols > 1
+        # à frente das opções: as descrições de uma coluna começam todas no
+        # mesmo sítio, logo a seguir ao rótulo mais comprido (até metade)
+        detail_x: dict[int, float] = {}
+        if not below:
+            for c in range(cols):
+                col = [self.items[i] for i in shown[c * per:(c + 1) * per]]
+                widest = max([len(it.label) * 8.2 for it in col if it.detail and not it.header]
+                             + [0.0])
+                detail_x[c] = min(max(widest + 28, 150.0), col_w * 0.5)
         self._cells = []
         for k, (highlight, label, value, detail) in enumerate(self._rows):
+            head = label._head
             if k >= len(shown):
                 highlight.opacity = highlight._bar.opacity = 0
-                label.text = value.text = detail.text = ""
+                label.text = value.text = detail.text = head.text = ""
                 continue
             idx = shown[k]
             c, r = divmod(k, per)
             x = self.x + c * (col_w + self.COL_GAP)
             row_y = self.y - r * ROW_H
             self._cells.append((idx, x, row_y, col_w))
+            item = self.items[idx]
             highlight.x, highlight.y = x - 10, row_y - ROW_H // 2 + 2
             highlight.width = col_w + 20
-            highlight.opacity = 255 if idx == self.index else 0
+            if item.header:
+                highlight.color = PANEL2
+                highlight.opacity = 255
+                highlight._bar.opacity = 0
+            else:
+                highlight.color = SELECT
+                highlight.opacity = 255 if idx == self.index else 0
+                highlight._bar.opacity = highlight.opacity
             highlight._bar.x, highlight._bar.y = highlight.x, highlight.y
-            highlight._bar.opacity = highlight.opacity
-            item = self.items[idx]
             value.text = item.value
             value.x, value.y = x + col_w, row_y
             # o rótulo e a nota não podem passar por baixo do valor à direita
             free = col_w - len(item.value) * 7.5 - 18
-            label.text = _fit(item.label, free, 14) if cols > 1 else item.label
-            label.x, label.y = x, row_y + (6 if item.detail else 0)
-            label.color = (TEXT if item.enabled else DIM) if idx != self.index \
-                else ACCENT
-            room = int(free / 6.0)
             d = item.detail or ""
-            detail.text = d if len(d) <= room else d[:max(0, room - 1)] + "…"
-            detail.x, detail.y = x, row_y - 12
+            if item.header:
+                label.text = ""
+                head.text = _fit(item.label, free, 13)
+                head.x, head.y = x, row_y + (6 if d and below else 0)
+                head.color = TEXT
+            else:
+                head.text = ""
+                label.color = (TEXT if item.enabled else DIM) if idx != self.index \
+                    else ACCENT
+            if below or not d:
+                if not item.header:
+                    label.text = _fit(item.label, free, 14) if cols > 1 else item.label
+                    label.x, label.y = x, row_y + (6 if d else 0)
+                room = int(free / 6.0)
+                detail.text = d if len(d) <= room else d[:max(0, room - 1)] + "…"
+                detail.x, detail.y = x, row_y - 12
+            else:
+                dx = x + (detail_x.get(c, 150.0) if not item.header
+                          else len(item.label) * 7.8 + 24)
+                if not item.header:
+                    label.text = _fit(item.label, dx - x - 12, 14)
+                    label.x, label.y = x, row_y
+                room = int((x + free - dx) / 6.0)
+                detail.text = "" if room < 6 else (
+                    d if len(d) <= room else d[:max(0, room - 1)] + "…")
+                detail.x, detail.y = dx, row_y
         pages = -(-len(rows) // page) if rows else 1
         self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
                                 if pages > 1 else "")
@@ -281,7 +350,7 @@ class ListView:
     def move(self, step: int) -> None:
         if not self.items:
             return
-        self.index = (self.index + step) % len(self.items)
+        self.index = self._next_selectable((self.index + step) % len(self.items), step)
         self._sync()
 
     def select_data(self, data) -> bool:
@@ -294,7 +363,7 @@ class ListView:
 
     def activate(self) -> None:
         item = self.selected
-        if item is not None and item.enabled and item.action is not None:
+        if item is not None and item.enabled and not item.header and item.action is not None:
             item.action()
 
     def press_button(self, which: str = "primary") -> bool:
@@ -319,6 +388,8 @@ class ListView:
             top = row_y + ROW_H // 2
             bottom = top - ROW_H
             if bottom <= my <= top and x - 10 <= mx <= x + col_w + 10:
+                if self.items[idx].header:
+                    return True                  # um título não se escolhe
                 self.index = idx
                 self._sync()
                 self.activate()

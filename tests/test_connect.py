@@ -501,7 +501,9 @@ class TestLabsGui(tg.GuiCase):
         self.pick("2025-07-23")
         rep = self.screen()
         labels = [i.label for i in rep.list.items]
-        self.assertIn("— Bioquímica · Ferro", labels)
+        self.assertIn("Bioquímica · Ferro", labels)              # um título de secção
+        head = next(i for i in rep.list.items if i.label == "Bioquímica · Ferro")
+        self.assertTrue(head.header)
         self.assertIn("Ferritina ▲", labels)
         self.assertIn("Colesterol HDL ▼", labels)
         self.press(key.ESCAPE)

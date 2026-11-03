@@ -2874,7 +2874,7 @@ class ChallengeDetail(Screen):
                               enabled=False))
         board = a.db.challenge_leaderboard(ch["id"])
         if board:
-            items.append(Item(t("ch.leaderboard"), enabled=False))
+            items.append(Item(t("ch.leaderboard"), header=True))
             for i, r in enumerate(board, start=1):
                 items.append(Item(f"{i}.  {boards.long_duration(r['elapsed_s'])}",
                                   detail=f"{r['started_at'][:10]} → "
