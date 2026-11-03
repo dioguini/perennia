@@ -37,7 +37,7 @@ from velo.io.hub import SensorHub
 from velo.io.sim import SimulatedTrainer
 from velo.ui.widgets import (ACCENT, BAD, BG, BackButton, BoardPanel, Chart, Chrome, DIM,
                              GOOD, Heatmap, Item, ListView, PANEL, Popup, StackedBars,
-                             TabBar, TEXT, Tile, TopBar)
+                             StartCountdown, TabBar, TEXT, Tile, TopBar)
 
 PRESET_ORDER = ("low", "medium", "high")
 
@@ -297,6 +297,26 @@ class Screen:
 
     def go_back(self) -> None:
         """O «Voltar» em baixo (e o Esc). Os resumos levam ao menu do desporto."""
+        self.app.pop()
+
+    # ---- contagem decrescente antes de uma sessão (ver StartCountdown)
+    start_cd: StartCountdown | None = None
+
+    def start_countdown(self, resume=None) -> None:
+        """As sessões chamam isto ao abrir: 15 s antes de começar (retomar
+        uma sessão interrompida não conta outra vez)."""
+        self.start_cd = None if resume is not None else StartCountdown.for_app(self.app)
+
+    @property
+    def counting(self) -> bool:
+        return self.start_cd is not None and self.start_cd.active \
+            and not getattr(self, "preparing", False)
+
+    def countdown_done(self) -> None:
+        """A contagem chegou ao fim: a sessão pode começar."""
+
+    def cancel_countdown(self) -> None:
+        """Esc durante a contagem: não começa (nada fica gravado)."""
         self.app.pop()
 
     def on_mouse(self, x: int, y: int) -> bool:
@@ -1134,15 +1154,25 @@ class AutoLapOptions:
     omissão) e, se ligado, de quanto em quanto tempo ou distância."""
 
     AUTOLAP_SPORT = "cycling"
+    # treino estruturado (um treino, um teste, um plano de voltas): sem auto
+    # lap à escolha — a volta fecha-se sozinha no fim de cada bloco
+    structured = False
 
     def autolap_cfg(self) -> dict:
         cfg = getattr(self, "_autolap", None)
         if cfg is None:
             cfg = self._autolap = {"mode": "off", "value": 0}
+        if self.structured:
+            cfg["mode"], cfg["value"] = "off", 0
         return cfg
 
     def autolap_items(self) -> list[Item]:
         from velo.core import sports as sp
+        if self.structured:
+            return [Item(tr("Voltas", "Laps"), value=tr("uma por bloco", "one per block"),
+                         detail=tr("treino estruturado: cada bloco feito fecha uma volta, "
+                                   "sozinho", "structured workout: each block done closes a "
+                                   "lap by itself"), enabled=False)]
         cfg = self.autolap_cfg()
         mode = cfg["mode"]
         rows = [Item(tr("Auto lap", "Auto lap"),
@@ -1176,6 +1206,8 @@ class AutoLapOptions:
         self.enter()
 
     def autolap_key(self, symbol: int) -> bool:
+        if self.structured:
+            return False
         item = self.list.selected
         if item is not None and item.data in ("autolap_mode", "autolap_value") and \
                 symbol in (key.LEFT, key.RIGHT):
@@ -1191,9 +1223,11 @@ class StartOptions(AutoLapOptions, Screen):
     `start(autolap, options)` abre a sessão."""
 
     def __init__(self, app: "App", sport: str, title: str, start: Callable,
-                 lines: list[str] | None = None, options: dict | None = None):
+                 lines: list[str] | None = None, options: dict | None = None,
+                 structured: bool = False):
         super().__init__(app)
         self.AUTOLAP_SPORT = sport
+        self.structured = structured
         self.title_text = title
         self.start_fn = start
         self.lines = lines or []
@@ -1363,7 +1397,11 @@ class RideScreen(Screen):
             self.world.setup_gl()
         else:
             self.preparing = False
+        self.start_countdown(self.resume)       # depois de preparar a rota
         self.chrome.set("", "", "")
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def update(self, dt: float) -> None:
         a = self.app
@@ -3847,7 +3885,13 @@ class App:
                 below = self._below_modal()
                 if below is not None:
                     below.update(dt)
-            screen.update(dt)
+            if screen.counting:
+                # a contagem antes da sessão: os sensores vivos, a sessão parada
+                self.hub.tick(dt)
+                if screen.start_cd.update(dt):
+                    screen.countdown_done()
+            else:
+                screen.update(dt)
         self._check_devices()
 
     def _below_modal(self):
@@ -3899,6 +3943,13 @@ class App:
                 0, self.window.width, 0, self.window.height, -255, 255)
             self.window.view = pyglet.math.Mat4()
         screen.draw()
+        if screen.counting:
+            if isinstance(screen, RideScreen):
+                self.window.projection = pyglet.math.Mat4.orthogonal_projection(
+                    0, self.window.width, 0, self.window.height, -255, 255)
+                self.window.view = pyglet.math.Mat4()
+                pyglet.gl.glDisable(pyglet.gl.GL_DEPTH_TEST)
+            screen.start_cd.draw()
         if self._message and time.monotonic() - self._message_at < 6.0:
             if not isinstance(screen, RideScreen):
                 screen.chrome.message.text = self._message
@@ -3939,6 +3990,11 @@ class App:
                 self.message(tr("Não há nada para guardar neste ecrã.",
                                 "Nothing to save on this screen."))
             return True
+        if screen is not None and screen.counting:
+            if symbol == key.ESCAPE:
+                screen.start_cd = None
+                screen.cancel_countdown()
+            return True                       # durante a contagem nada mais conta
         if screen is not None:
             return bool(screen.on_key(symbol, modifiers))
         return False
@@ -3963,6 +4019,8 @@ class App:
         if which == "bar":
             return
         screen = self.current
+        if screen is not None and screen.counting:
+            return
         if screen is not None:
             screen.on_mouse(x, y)
 

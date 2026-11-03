@@ -49,7 +49,8 @@ def start(app, sport: str, workout_id: str | None = None, replace: bool = False)
                 "Treadmill: + / − change the speed; T types the display total.")] \
         if sport == "running" else [tr("Na piscina: + conta uma piscina (− corrige).",
                                        "In the pool: + counts a length (− corrects).")]
-    scr = StartOptions(app, sport, title, go, lines=lines, options=opts)
+    scr = StartOptions(app, sport, title, go, lines=lines, options=opts,
+                       structured=bool(workout_id))
     app.replace(scr) if replace else app.push(scr)
 
 
@@ -213,6 +214,7 @@ class EnduranceSession(Screen):
         if resume is None and self.engine.sport == "running":
             self.engine.set_speed(speed_kmh)
         self.session = self.engine
+        self.start_countdown(resume)          # 15 s e começa sozinha
         self.confirming = False
         self.typing: str | None = None
         self.toast = ""
@@ -550,6 +552,13 @@ class EnduranceSession(Screen):
         self.engine.discard()
         self.app.message(tr("Sessão terminada sem guardar.", "Session ended without saving."))
         self.app.pop()
+
+    def countdown_done(self) -> None:
+        if not self.engine.started:
+            self.engine.start()
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def leave(self) -> None:
         if not self.engine.finished:

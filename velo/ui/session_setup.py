@@ -72,6 +72,63 @@ class GpxPickerPopup(PopupMixin, GpxPicker):
         self._init_popup()
 
 
+class RoutePickerPopup(PopupMixin, Screen):
+    """As tuas rotas (.gpx) numa janela: Enter escolhe. «Sem rota» quando a
+    rota é opcional; «Carregar um .gpx novo» em cima, à direita."""
+
+    W, H = 760, 520
+
+    def __init__(self, app, on_pick, optional: bool = True, current: str | None = None,
+                 on_new=None):
+        super().__init__(app)
+        self.on_pick = on_pick
+        self.optional = optional
+        self.current = current
+        self.on_new = on_new
+        self._init_popup()
+
+    def enter(self) -> None:
+        a = self.app
+        items = []
+        if self.optional:
+            items.append(Item(tr("Sem rota", "No route"),
+                              detail=tr("só o treino; sem estrada", "just the workout; no road"),
+                              value="✓" if self.current is None else "",
+                              action=lambda: self._choose(None), data=None))
+        for r in a.db.routes():
+            dv = r["distance_m"] / 1000.0
+            bits = [f"↑ {r['ascent_m']:.0f} m", tr("{n} subidas", "{n} climbs",
+                                                   n=r["climb_count"])]
+            if r["times_ridden"]:
+                bits.append(tr("{n}× feita", "done {n}×", n=r["times_ridden"]))
+            items.append(Item(("★ " if r["favorite"] else "") + r["name"],
+                              value=f"{dv:.1f} km" + ("  ✓" if r["id"] == self.current else ""),
+                              detail=" · ".join(bits),
+                              action=lambda rid=r["id"]: self._choose(rid), data=r["id"]))
+        if not a.db.routes():
+            items.append(Item(tr("Ainda não tens rotas", "No routes yet"),
+                              detail=tr("carrega um .gpx (em cima, à direita)",
+                                        "load a .gpx (top right)"), enabled=False))
+        if self.on_new is not None:
+            items.append(Item(tr("+ Carregar um .gpx novo", "+ Load a new .gpx"), top=True,
+                              action=self._new))
+        self.chrome.set(tr("Escolhe a rota", "Pick the route"),
+                        tr("{n} rotas · Enter escolhe · Esc volta", "{n} routes · Enter picks · "
+                           "Esc goes back", n=len(a.db.routes())), "")
+        self.list.set_items(items, keep_index=True)
+        if not self.list.select_data(self.current) and self.current is None and self.optional:
+            self.list.index = 0
+            self.list._sync()
+
+    def _choose(self, route_id: str | None) -> None:
+        self.app.pop()
+        self.on_pick(route_id)
+
+    def _new(self) -> None:
+        self.app.pop()
+        self.on_new()
+
+
 def strava_warning(app, on_proceed, on_cancel, error: str = "") -> ConfirmScreen:
     """O aviso quando o Strava não responde (sem internet, por exemplo)."""
     sub = tr("Sem internet, ou o Strava não respondeu{e}. Podes prosseguir sem os segmentos "
@@ -106,6 +163,8 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
         self.AUTOLAP_SPORT = sport
         self.sport = sport
         self.kind = kind
+        # um treino ou um teste: a volta fecha-se em cada bloco (sem auto lap)
+        self.structured = bool(workout_id or ftp_protocol or protocol)
         self.workout_id = workout_id
         self.ftp_protocol = ftp_protocol
         self.chase_level = chase_level
@@ -230,7 +289,7 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
             value = tr("nenhuma — carrega um .gpx", "none — load a .gpx")
         else:
             value = tr("sem rota", "no route")
-        detail = tr("←/→ outra das tuas rotas", "←/→ another of your routes")
+        detail = tr("Enter abre a lista das tuas rotas", "Enter opens the list of your routes")
         if self.needs_route:
             detail += tr(" · a sessão livre precisa de uma rota", " · a free session needs a route")
         elif self.sport == "running":
@@ -239,7 +298,8 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
         else:
             detail += tr(" · opcional: no treino a estrada é paisagem",
                          " · optional: in a workout the road is scenery")
-        rows = [Item(tr("Rota (.gpx)", "Route (.gpx)"), value=value, detail=detail, data="route"),
+        rows = [Item(tr("Rota (.gpx)", "Route (.gpx)"), value=value, detail=detail, data="route",
+                     action=self._pick_route),
                 Item(tr("Carregar um .gpx novo", "Load a new .gpx"),
                      detail=tr("procura nas pastas gpx, Transferências e Documentos",
                                "looks in the gpx, Downloads and Documents folders"),
@@ -404,6 +464,19 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
 
     def _new_gpx(self) -> None:
         self.app.push(GpxPickerPopup(self.app, self._picked))
+
+    def _pick_route(self) -> None:
+        """A lista das rotas numa janela — escolhe-se ali, sem andar às setas."""
+        self.app.push(RoutePickerPopup(self.app, self._route_chosen,
+                                       optional=not self.needs_route, current=self.route_id,
+                                       on_new=self._new_gpx))
+
+    def _route_chosen(self, route_id: str | None) -> None:
+        if route_id != self.route_id:
+            self.route_id = route_id
+            self.ghosts.clear()
+            self.strava_skipped = False
+        self.enter()
 
     def _picked(self, route_id: str) -> None:
         self.route_id = self.new_route = route_id

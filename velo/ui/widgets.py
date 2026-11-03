@@ -1732,3 +1732,60 @@ class Table:
 
     def draw(self) -> None:
         self.batch.draw()
+
+
+class StartCountdown:
+    """A contagem decrescente antes de qualquer sessão começar (15 s por
+    omissão): um número grande ao centro. A sessão só arranca no fim."""
+
+    SECONDS = 15.0
+
+    def __init__(self, window, seconds: float | None = None):
+        self.window = window
+        self.left = float(self.SECONDS if seconds is None else seconds)
+        b = self.batch = pyglet.graphics.Batch()
+        self.shade = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL, batch=b)
+        self.shade.opacity = 235
+        self.edge = pyglet.shapes.Rectangle(0, 0, 1, 3, color=ACCENT[:3], batch=b)
+        self.cap = make_label("", font_size=16, color=DIM, anchor_x="center",
+                              anchor_y="center", batch=b)
+        self.num = make_label("", font_size=96, bold=True, color=ACCENT, anchor_x="center",
+                              anchor_y="center", batch=b)
+        self.hint = make_label("", font_size=11, color=DIM, anchor_x="center",
+                               anchor_y="center", batch=b)
+
+    @classmethod
+    def for_app(cls, app) -> "StartCountdown":
+        return cls(app.window, float(app.db.get("session_countdown_s", cls.SECONDS)))
+
+    @property
+    def active(self) -> bool:
+        return self.left > 0
+
+    def update(self, dt: float) -> bool:
+        """Desconta o tempo; devolve True no instante em que chega a zero."""
+        if self.left <= 0:
+            return False
+        self.left = max(0.0, self.left - dt)
+        return self.left <= 0
+
+    def text(self) -> str:
+        import math
+        return str(max(1, math.ceil(self.left)))
+
+    def draw(self) -> None:
+        if not self.active:
+            return
+        from velo.core.i18n import tr
+        w, h = self.window.width, self.window.height
+        bw, bh = 420, 260
+        x, y = (w - bw) / 2, (h - bh) / 2
+        self.shade.x, self.shade.y, self.shade.width, self.shade.height = x, y, bw, bh
+        self.edge.x, self.edge.y, self.edge.width = x, y + bh - 3, bw
+        self.cap.text = tr("A sessão começa em", "The session starts in")
+        self.cap.x, self.cap.y = w / 2, y + bh - 36
+        self.num.text = self.text()
+        self.num.x, self.num.y = w / 2, y + bh / 2 - 6
+        self.hint.text = tr("prepara-te · Esc cancela", "get ready · Esc cancels")
+        self.hint.x, self.hint.y = w / 2, y + 24
+        self.batch.draw()

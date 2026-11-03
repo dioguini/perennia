@@ -752,6 +752,8 @@ class RideEngine:
                 self._workout_done = True
                 self._emit("workout_done")
             changed = self.workout.observe(self._t, r.power_w, r.hr_bpm, r.cadence_rpm)
+            if changed is not None and changed > 0:
+                self.lap("workout_step")         # treino estruturado: uma volta por bloco
             if changed is not None:
                 step = self.workout.workout.steps[changed]
                 self._emit("workout_step", idx=changed, total=len(self.workout.workout.steps),

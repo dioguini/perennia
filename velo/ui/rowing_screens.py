@@ -320,6 +320,7 @@ class RowingSessionScreen(Screen):
             protocol=protocol or cfg.get("protocol"),
             game_spec=game_spec or cfg.get("game"), out_dir=a.data_dir / "rowing",
             resume=resume, autolap=autolap)
+        self.start_countdown(resume)          # 15 s; depois conta a partir da 1.ª remada
         self.page = 0
         self.session = self.engine           # o fecho da aplicação trata dela
         self.confirming = False
@@ -629,6 +630,9 @@ class RowingSessionScreen(Screen):
         self.engine.discard()
         self.app.message(tr("Sessão terminada sem guardar.", "Session ended without saving."))
         self.app.pop()
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def on_device_lost(self, name: str) -> None:
         self.toast = tr("⚠ {n} desligou-se", "⚠ {n} disconnected", n=name)

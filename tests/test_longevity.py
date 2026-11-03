@@ -610,7 +610,7 @@ class TestLapSessionGui(tg.GuiCase):
         self.assertEqual([i["kind"] for i in plan.items], ["treadmill", "strength", "rest"])
         self.pick("Começar")                                   # → opções (auto lap)
         opts = self.screen()
-        self.assertEqual(opts.list.items[1].value, "desligado")  # auto lap desligado
+        self.assertEqual(opts.list.items[1].value, "uma por bloco")  # plano: volta por bloco
         self.pick("Começar")
         scr = self.screen()
         self.assertIsInstance(scr, ss.LapSessionScreen)

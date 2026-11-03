@@ -44,6 +44,8 @@ class GuiCase(unittest.TestCase):
         self.app = app_mod.App(data_dir=Path(self.tmp), width=1280, height=760)
         # o feedback no fim das sessões tem testes próprios (test_perennia)
         self.app.db.set("ask_feedback", False)
+        # a contagem de 15 s antes das sessões tem testes próprios (test_session_setup)
+        self.app.db.set("session_countdown_s", 0)
         self.app.db.save_athlete(Athlete(name="Daniel", birth_year=1993,
                                          weight_kg=72.0, ftp_w=250, lthr=165))
         _, raw = gpx.parse_gpx(GPX)

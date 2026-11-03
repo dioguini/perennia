@@ -425,6 +425,7 @@ class StrengthSessionScreen(EditScreen):
         wid = workout_id or (resume or {}).get("config", {}).get("workout_id")
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
                                           out_dir=a.data_dir / "strength", resume=resume)
+        self.start_countdown(resume)
         self.confirming = False
         self._sig = None
         self.batch = pyglet.graphics.Batch()
@@ -672,6 +673,9 @@ class StrengthSessionScreen(EditScreen):
         elif not s.started:
             sub = tr("começa com a 1.ª série", "starts with the 1st set")
         self.clock.set(s.t, sub)
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def _discard(self) -> None:
         s = self.session
@@ -2256,6 +2260,7 @@ class LapSessionScreen(EditScreen):
                                      out_dir=app.data_dir / "strength", resume=resume,
                                      rower=getattr(app, "rower", None), plan=plan,
                                      autolap=autolap)
+        self.start_countdown(resume)
         self.chrome.title.font_size = 18
         self.confirming = False
         self._sig = None
@@ -2407,6 +2412,9 @@ class LapSessionScreen(EditScreen):
     def _next_planned(self) -> None:
         self.session.start_planned()
         self.enter()
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def _discard(self) -> None:
         s = self.session
