@@ -327,8 +327,8 @@ class TestGarminDBGui(tg.GuiCase):
         self.pick("Sincronização")                 # o separador das Definições
         scr = self.screen()
         self.assertIsInstance(scr, app_mod.SettingsScreen)
-        self.assertEqual(scr.list.items[0].value, "GarminDB")
-        self.assertIn("garmin.db ✓", scr.list.items[1].detail)
+        self.assertEqual(scr.sync_tabs.current, "GarminDB")     # a fonte é um separador
+        self.assertIn("garmin.db ✓", scr.list.items[0].detail)
         self.pick("Só importar")
         self.assertEqual(scr.sync.last_report["days"], 2)
 

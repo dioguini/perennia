@@ -53,7 +53,13 @@ def _day(iso: str | None) -> str:
 
 
 class SyncPanel:
-    """As linhas e o comportamento da sincronização, dentro de um ecrã."""
+    """As linhas e o comportamento da sincronização, dentro de um ecrã.
+
+    Cada fonte de dados é um separador (`SOURCES`); por agora só há o
+    GarminDB. Juntar uma fonte é acrescentá-la aqui e escrever as linhas dela
+    (`items_<chave>`)."""
+
+    SOURCES = (("garmindb", "GarminDB"),)
 
     def __init__(self, screen: Screen, runner=None, store=None):
         self.screen = screen
@@ -88,7 +94,13 @@ class SyncPanel:
 
     # ------------------------------------------------------------- linhas
 
-    def items(self) -> list[Item]:
+    def source_labels(self) -> list[str]:
+        return [name for _k, name in self.SOURCES]
+
+    def items(self, source: str = "garmindb") -> list[Item]:
+        return getattr(self, f"items_{source}")()
+
+    def items_garmindb(self) -> list[Item]:
         db = self.app.db
         o = self.opts
         st = gs.status(db)
@@ -99,10 +111,6 @@ class SyncPanel:
             f"garmin.db {yes if st['garmin_db'] else no}",
             f"garmin_activities.db {yes if st['activities_db'] else no}"])
         rows = [
-            Item(tr("Fonte", "Source"), value="GarminDB", data="sync:source",
-                 detail=tr("a única fonte, por agora: lê o que o GarminDB descarregou do "
-                           "Garmin Connect", "the only source for now: reads what GarminDB "
-                           "downloaded from Garmin Connect")),
             Item(tr("Estado", "Status"),
                  value=tr("a sincronizar…", "syncing…") if self.busy else
                  (st["last_sync"] or tr("nunca sincronizado", "never synced")),

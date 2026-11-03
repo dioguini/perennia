@@ -189,6 +189,7 @@ class EndurancePreview(BriefScreen):
 
 
 class EnduranceSession(Screen):
+    KEY_SCOPE = "endurance"
     AGENT = False
     IN_SESSION = True
 

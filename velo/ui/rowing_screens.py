@@ -304,6 +304,7 @@ def start_session(app, replace: bool = False, **kw) -> None:
 
 
 class RowingSessionScreen(Screen):
+    KEY_SCOPE = "rowing"
     AGENT = False
     HAS_BOARD = True
     IN_SESSION = True

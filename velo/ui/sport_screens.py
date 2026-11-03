@@ -412,6 +412,7 @@ class StrengthPreview(GymBrief):
 class StrengthSessionScreen(EditScreen):
     """A sessão de força: lista de ações à esquerda, painel à direita com a
     série, o descanso, a FC e as séries já feitas deste exercício."""
+    KEY_SCOPE = "gym"
 
     AGENT = False
     IN_SESSION = True
@@ -2246,6 +2247,7 @@ from velo.ui.session_setup import GameSetup  # noqa: E402,F401
 class LapSessionScreen(EditScreen):
     """Sessão por voltas. À esquerda: abrir voltas e os campos da volta atual;
     à direita: a volta a contar, a FC e as voltas já feitas."""
+    KEY_SCOPE = "gym"
 
     AGENT = False
     IN_SESSION = True
