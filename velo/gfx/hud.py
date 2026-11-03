@@ -141,6 +141,10 @@ class Hud:
         self.athlete = athlete
         self.units = db.get("units", "metric")
         self.boxes = boxes_mod.load(db, metrics_mod.REGISTRY)
+        # a disposição escolhida (Definições → Ecrã da sessão → Disposição);
+        # None: a de origem, calculada pelo tamanho da janela
+        from velo.core import screen_layout as sl
+        self.arrangement = sl.load(db, "cycling") if sl.is_custom(db, "cycling") else None
         self.lookahead = int(db.get("workout_lookahead", 2))
 
         self.batch = pyglet.graphics.Batch()
@@ -523,6 +527,9 @@ class Hud:
         self._status_bg.y, self._status_bg.height = mid_bottom + 70 - 27, 54
         self._mid_zone = (mid_bottom, mid_top)
 
+        if self.arrangement is not None:
+            self._layout_arranged(w, h, top)
+
         # ---------------- diálogo
         self._confirm_shade.x, self._confirm_shade.y = 0, 0
         self._confirm_shade.width, self._confirm_shade.height = w, h
@@ -540,6 +547,128 @@ class Hud:
         d = self._confirm_discard
         d.x, d.y, d.width, d.height = bx + 30, by + 20, bw - 60, 40
         self._confirm_discard_label.x, self._confirm_discard_label.y = w // 2, by + 40
+
+    def _layout_arranged(self, w: int, h: int, top: float) -> None:
+        """Cada painel no retângulo que lhe deste (velo.core.screen_layout).
+        Um painel fora do ecrã vai para longe (não se vê nem se clica)."""
+        from velo.core import screen_layout as sl
+        pad, off = self.PAD, -20000
+        area = (pad, pad, w - 2 * pad, (top - self.HEADER_H) - pad)
+        arr = self.arrangement
+
+        def rect(k):
+            r = arr.get(k)
+            return sl.to_px(r, area) if r else None
+
+        # caixas
+        r = rect("boxes")
+        n = boxes_mod.N_BOXES
+        rows = self._box_rows()
+        if r is not None:
+            rx, ry, rw, rh = r
+            box_w = (rw - (n - 1) * self.BOX_GAP) / n
+            stacked = rows <= boxes_mod.STACKED_MAX and \
+                self.BOX_TITLE_H + rows * self.BOX_ROW_STACKED + 6 <= rh
+            row_h = self.BOX_ROW_STACKED if stacked else self.BOX_ROW_INLINE
+            box_h = min(rh, self.BOX_TITLE_H + rows * row_h + 6)
+            box_top = ry + rh
+        else:
+            rx, box_w, stacked, row_h, box_h, box_top = off, 100, False, \
+                self.BOX_ROW_INLINE, 60, off
+        big = 17 if box_w >= 185 else 14
+        for i, wid in enumerate(self._box_widgets):
+            x = rx + i * (box_w + self.BOX_GAP)
+            wid["bg"].x, wid["bg"].y = x, box_top - box_h
+            wid["bg"].width, wid["bg"].height = box_w, box_h
+            wid["title"].x, wid["title"].y = x + 10, box_top - 6
+            for k, (label, value) in enumerate(wid["rows"]):
+                y = box_top - self.BOX_TITLE_H - k * row_h
+                label.x, label.y = x + 28, y
+                if stacked:
+                    value.anchor_x = "left"
+                    value.x, value.y = x + 10, y - 12
+                    value.font_size = big
+                else:
+                    value.anchor_x = "right"
+                    value.x, value.y = x + box_w - 10, y + 1
+                    value.font_size = 12
+            self._place_box_icons(i, x, box_top, row_h)
+        self._box_width = box_w
+        self._box_stacked = stacked
+        # zonas de potência e FC
+        r = rect("gauges")
+        gx, gtop, gw = (r[0], r[1] + r[3], r[2]) if r else (off, off, 200)
+        for kind in ("power", "hr"):
+            self._layout_gauge(kind, gx, gtop, gw)
+            gtop -= self.GAUGE_H + 6
+        # plano do treino
+        r = rect("plan")
+        if r is not None:
+            px_, py_, pw, ph = r
+            goal_h = self.GOAL_H if self.brief is not None and ph > 30 + self.GOAL_H + \
+                self.PLAN_ROW + 14 else 0
+            plan_rows = max(1, min(1 + max(0, min(4, self.lookahead)),
+                                   int((ph - 30 - goal_h - 14) // self.PLAN_ROW)))
+            self._goal_h, self._plan_rows_used = goal_h, plan_rows
+            self._layout_plan(px_, py_ + ph, ph, pw)
+        else:
+            self._layout_plan(off, off, 100, 200)
+        # classificação
+        r = rect("board")
+        if r is not None:
+            bx, by, bw, bh = r
+            board_rows = max(2, min(6, int((bh - 58) // self._BoardPanel.ROW)))
+            if board_rows != self.board_panel.max_rows or abs(self.board_panel.width - bw) > 1:
+                old = self.board_panel.board
+                self.board_panel = self._BoardPanel(0, 0, int(bw), max_rows=board_rows,
+                                                    opacity=170)
+                self.board_panel.set(old)
+            self.board_panel.layout(bx, by + bh, int(bw))
+        else:
+            self.board_panel.layout(off, off, 200)
+        # voltas
+        r = rect("laps")
+        if r is not None:
+            lx, ly, lw, lh = r
+            prev = 3
+            while prev > 0 and self._laps_height(prev) > lh:
+                prev -= 1
+            self._layout_laps(lx, ly + lh, prev, lw)
+            for i, lab in enumerate(self._ghost_labels):
+                lab.x, lab.y = lx - 14, ly + lh - 18 - i * 26
+        else:
+            self._layout_laps(off, off, 0, 200)
+        # tempo em cada zona
+        r = rect("tiz")
+        tx, ty, tw, th = r if r else (off, off, 100, 40)
+        self._tiz_geometry = (tx, ty, tw, th)
+        for k, kind in enumerate(("power", "hr")):
+            tz = self._tiz[kind]
+            bar_y = ty + th - 30 - k * (th // 2)
+            tz["title"].x, tz["title"].y = tx, bar_y + 16
+            tz["track"].x, tz["track"].y = tx, bar_y
+            tz["track"].width, tz["track"].height = max(1, tw), 14
+            tz["track"].opacity = 200 if tw > 60 else 0
+            tz["bar_y"] = bar_y
+        # perfil dos próximos 2 km
+        r = rect("profile")
+        qx, qy, qw, qh = r if r else (off, off, 200, 40)
+        self._profile_bg.x, self._profile_bg.y = qx, qy
+        self._profile_bg.width, self._profile_bg.height = qw, qh
+        self._profile_label.x, self._profile_label.y = qx + 8, qy + qh - 16
+        self._profile_marker.x, self._profile_marker.y = qx, qy
+        self._profile_marker.width, self._profile_marker.height = 2, qh
+        self._profile_geometry = (qx, qy, qw, qh)
+        self._build_profile(int(qw))
+        # rota completa
+        r = rect("strip")
+        sx, sy, sw, sh = r if r else (off, off, 200, 30)
+        self._strip_geometry = (sx, sy, sw, sh)
+        self._strip_bg.x, self._strip_bg.y = sx, sy
+        self._strip_bg.width, self._strip_bg.height = sw, sh
+        self._strip_label.x, self._strip_label.y = sx + 8, sy + sh - 4
+        self._strip_legend.x, self._strip_legend.y = sx + sw - 8, sy + sh - 4
+        self._strip_key = None
 
     def _place_box_icons(self, i: int, x: float, box_top: float, row_h: int) -> None:
         wid = self._box_widgets[i]
@@ -561,14 +690,16 @@ class Hud:
         extra = prev_rows * self.LAP_PREV_ROW + 6 if prev_rows else 0
         return 28 + 3 * self.LAP_CELL_H + extra + 4
 
-    def _layout_laps(self, x: float, top: float, prev_rows: int) -> None:
+    def _layout_laps(self, x: float, top: float, prev_rows: int,
+                     width: float | None = None) -> None:
         h = self._laps_height(prev_rows)
+        lw = self.SIDE_W if width is None else width
         for r in (self._laps_bg, self._laps_flash):
-            r.x, r.y, r.width, r.height = x, top - h, self.SIDE_W, h
+            r.x, r.y, r.width, r.height = x, top - h, lw, h
         self._lap_title.x, self._lap_title.y = x + 12, top - 7
         for i, (label, value) in enumerate(self._lap_rows):
             col, row = i % 2, i // 2
-            cx = x + 12 + col * (self.SIDE_W // 2)
+            cx = x + 12 + col * (lw // 2)
             cy = top - 30 - row * self.LAP_CELL_H
             label.x, label.y = cx, cy
             value.x, value.y = cx, cy - 12
@@ -576,16 +707,18 @@ class Hud:
             lab.x = x + 12
             lab.y = top - 30 - 3 * self.LAP_CELL_H - 4 - i * self.LAP_PREV_ROW
         self._lap_prev_rows = prev_rows
-        self._laps_geometry = (x, top - h, self.SIDE_W, h)
+        self._laps_geometry = (x, top - h, lw, h)
 
-    def _layout_gauge(self, kind: str, x: float, top: float) -> None:
+    def _layout_gauge(self, kind: str, x: float, top: float,
+                      width: float | None = None) -> None:
         g = self._gauges[kind]
+        gw = self.SIDE_W if width is None else width
         g["bg"].x, g["bg"].y = x, top - self.GAUGE_H
-        g["bg"].width, g["bg"].height = self.SIDE_W, self.GAUGE_H
+        g["bg"].width, g["bg"].height = gw, self.GAUGE_H
         g["title"].x, g["title"].y = x + 30, top - 6
-        g["value"].x, g["value"].y = x + self.SIDE_W - 10, top - 6
+        g["value"].x, g["value"].y = x + gw - 10, top - 6
         g["range"].x, g["range"].y = x + 10, top - 26
-        g["bar"] = (x + 10, top - self.GAUGE_H + 10, self.SIDE_W - 20, 12)
+        g["bar"] = (x + 10, top - self.GAUGE_H + 10, gw - 20, 12)
         if g["icon"] is not None:
             try:
                 g["icon"].delete()
@@ -594,18 +727,20 @@ class Hud:
         g["icon"] = icons.sprite("zones" if kind == "power" else "heart", x + 10, top - 21,
                                  14, batch=self.batch, opacity=0)
 
-    def _layout_plan(self, x: float, top: float, h: float) -> None:
+    def _layout_plan(self, x: float, top: float, h: float, width: float | None = None) -> None:
+        pw = self._plan_w = self.SIDE_W if width is None else width
+        self._plan_goal.width = int(max(40, pw - 20))
         self._plan_bg.x, self._plan_bg.y = x, top - h
-        self._plan_bg.width, self._plan_bg.height = self.SIDE_W, h
+        self._plan_bg.width, self._plan_bg.height = pw, h
         self._plan_title.x, self._plan_title.y = x + 10, top - 6
         goal_h = getattr(self, "_goal_h", 0)
         self._plan_goal.x, self._plan_goal.y = x + 10, top - 24
         for i, (left, right) in enumerate(self._plan_rows):
             y = top - 28 - goal_h - i * self.PLAN_ROW
             left.x, left.y = x + 10, y
-            right.x, right.y = x + self.SIDE_W - 10, y
+            right.x, right.y = x + pw - 10, y
         self._plan_track.x, self._plan_track.y = x + 10, top - h + 6
-        self._plan_track.width, self._plan_track.height = self.SIDE_W - 20, 6
+        self._plan_track.width, self._plan_track.height = pw - 20, 6
         self._plan_bar.x, self._plan_bar.y = x + 10, top - h + 6
         self._plan_bar.height = 6
         self._plan_geometry = (x, top, h)
@@ -914,7 +1049,8 @@ class Hud:
         compliance = runner.compliance(actual, state.target_power_w)
         self._plan_track.opacity = 200
         self._plan_bar.opacity = 230
-        self._plan_bar.width = max(1.0, (self.SIDE_W - 20) * max(0.0, min(1.0, done)))
+        self._plan_bar.width = max(1.0, (getattr(self, "_plan_w", self.SIDE_W) - 20)
+                                   * max(0.0, min(1.0, done)))
         self._plan_bar.color = (GOOD if compliance == 0 else BAD)[:3]
 
     def set_brief(self, brief) -> None:
@@ -937,7 +1073,7 @@ class Hud:
             return ""
         blk = b.raw_blocks[idx]
         text = f"{blk.name}: {blk.goal}"
-        per = int((self.SIDE_W - 20) / (9 * 0.62))
+        per = int((getattr(self, "_plan_w", self.SIDE_W) - 20) / (9 * 0.62))
         if len(text) > per * 2:
             text = text[:per * 2 - 1].rstrip()
         words, lines, cur = text.split(), [], ""

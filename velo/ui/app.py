@@ -2132,7 +2132,8 @@ class SettingsScreen(Screen):
     TABBED = True
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
     GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
-              ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "connection",
+              ("layouts", "arrangement", "feedback", "difficulty", "lookahead", "auto_pause",
+               "connection",
                "auto_connect", "boxes", "metrics", "lv_n", "lv_min", "lv_max"),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
@@ -2407,6 +2408,11 @@ class SettingsScreen(Screen):
                            value=f"{self._levels()['w_max']:.0f} W",
                            detail=tr("←/→ ±5 W · Shift ±50 · entre eles, em linha reta",
                                      "←/→ ±5 W · Shift ±50 · linear in between"), data="lv_max"),
+            "arrangement": Item(tr("Disposição do ecrã da sessão", "Session screen layout"),
+                                detail=tr("Enter abre · arrasta caixas, voltas, gráficos e tabelas",
+                                          "Enter opens · drag boxes, laps, charts and tables"),
+                                action=lambda: a.push(_arrangement().ArrangementEditor(
+                                    a, "cycling"))),
             "feedback": Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
                              value=on if self.get("ask_feedback", True) else off,
                              detail=tr("RPE, dores e comentário; fica para o agente treinador",
@@ -4426,6 +4432,11 @@ def _pretty(name) -> str:
 def _feedback():
     from velo.ui import feedback_screens
     return feedback_screens
+
+
+def _arrangement():
+    from velo.ui import arrangement_screens
+    return arrangement_screens
 
 
 def _setup():

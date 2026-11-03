@@ -16,6 +16,7 @@ from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from velo.ui.challenge_screens import train_items
+from velo.ui.session_panels import OFF, ArrangedPanels
 from velo.ui.sport_screens import EditScreen, LiveEditPopup
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
@@ -303,7 +304,7 @@ def start_session(app, replace: bool = False, **kw) -> None:
 # ================================================================== sessão
 
 
-class RowingSessionScreen(Screen):
+class RowingSessionScreen(ArrangedPanels, Screen):
     KEY_SCOPE = "rowing"
     AGENT = False
     HAS_BOARD = True
@@ -346,6 +347,7 @@ class RowingSessionScreen(Screen):
         self.clock = SessionClock(app.window, batch=b)
         self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
+        self.arr_load("rowing")             # Definições → Ecrã da sessão → Disposição
         self._layout()
         for kind, data in self.engine.drain_events():
             self._event(kind, data)
@@ -356,17 +358,20 @@ class RowingSessionScreen(Screen):
         return 300
 
     def _layout(self) -> None:
-        w, h = self.app.window.width, self.app.window.height
-        left = 48
-        right = w - 48 - BOARD_W - 24
-        top = h - 128
-        cols = 4
-        gap = 10
-        cw = (right - left - gap * (cols - 1)) / cols
-        ch = max(74, min(108, (h - 390) / 3))
+        cols, gap = 4, 10
+        rows = -(-len(self.cells) // cols)
+        m = self.arr_rect("metrics")
+        if m is not None:
+            mx, my, mw, mh = m
+            cw = (mw - gap * (cols - 1)) / cols
+            ch = max(56.0, min(108.0, (mh - gap * (rows - 1)) / rows))
+            top = my + mh
         for i, (bg, cap, val) in enumerate(self.cells):
+            if m is None:
+                bg.x = cap.x = val.x = OFF
+                continue
             r, c = divmod(i, cols)
-            x = left + c * (cw + gap)
+            x = mx + c * (cw + gap)
             y = top - r * (ch + gap)
             bg.x, bg.y, bg.width, bg.height = x, y - ch, cw, ch
             cap.x, cap.y = x + 12, y - 8
@@ -374,23 +379,40 @@ class RowingSessionScreen(Screen):
             val.font_size = 30 if cw > 220 and ch > 90 else (24 if cw > 150 else 20)
             self._val_size = val.font_size
             cap.font_size = 11 if cw > 170 else 9
-        y2 = top - 3 * (ch + gap) - 4
-        self.status.x, self.status.y = left, y2
-        self.toast_label.x, self.toast_label.y = left + 420, y2
-        self.plan.x, self.plan.y = left, y2 - 30
-        self.plan.width = int(right - left)
-        self.track.x, self.track.y, self.track.width = left, 70, right - left
-        self.bar.x, self.bar.y = left, 70
-        self._bar_w = right - left
+        st = self.arr_rect("status")
+        if st is not None:
+            sx, sy, sw, sh = st
+            self.status.x, self.status.y = sx, sy + sh
+            self.toast_label.x, self.toast_label.y = sx + min(420, sw * 0.55), sy + sh
+            self.plan.x, self.plan.y = sx, sy + sh - 30
+            self.plan.width = int(sw)
+            self.track.x, self.track.y, self.track.width = sx, sy + 4, sw
+            self.bar.x, self.bar.y = sx, sy + 4
+            self._bar_w = sw
+        else:
+            self.status.x = self.toast_label.x = self.plan.x = OFF
+            self.track.x = self.bar.x = OFF
+            self._bar_w = 10
         self.list.y = -1000                                 # a lista fica escondida
         self.clock.layout()
-        rx, rtop = w - 48 - BOARD_W, h - 124
+        bd = self.arr_rect("board")
         if self.board_panel is not None:
-            self.board_panel.layout(rx, rtop, BOARD_W)
-        # com um jogo, a classificação fica em cima e as voltas por baixo
-        laps_top = rtop - (self.board_panel.height + 10 if self.engine.game is not None
-                           and self.board_panel is not None else 0)
-        self.laps_panel.layout(rx, laps_top, BOARD_W, 70)
+            if bd is not None:
+                self.board_panel.layout(bd[0], bd[1] + bd[3], bd[2])
+            else:
+                self.board_panel.layout(OFF, OFF, BOARD_W)
+        lp = self.arr_rect("laps")
+        lr, br = self.arrangement.get("laps"), self.arrangement.get("board")
+        if lp is not None and self.engine.game is None and br is not None and \
+                (br[0], br[2], br[1]) == (lr[0], lr[2], lr[1] + lr[3]):
+            # sem jogo não há classificação: as voltas ocupam o lugar dela
+            from velo.core import screen_layout as sl
+            lp = sl.to_px((lr[0], lr[1], lr[2], lr[3] + br[3]), self.arr_area())
+        if lp is not None:
+            self.laps_panel.layout(lp[0], lp[1] + lp[3], lp[2], lp[1])
+        else:
+            self.laps_panel.layout(OFF, OFF + 400, 200, OFF)
+        self.arr_layout_extras()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -497,6 +519,8 @@ class RowingSessionScreen(Screen):
         title, cells, prev = self.lap_data()
         self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
         self.laps_panel.update(time.monotonic())
+        if e.started:
+            self.arr_sample(dt, e.power_w, e.spm, getattr(e, "hr_zone_s", None))
 
     def _plan_title(self) -> str:
         e = self.engine
@@ -660,6 +684,7 @@ class RowingSessionScreen(Screen):
         if self.board_panel is not None and self.engine.game is not None:
             self.board_panel.draw()
         self.laps_panel.draw()
+        self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
 
