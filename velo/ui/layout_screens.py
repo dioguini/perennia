@@ -239,12 +239,23 @@ class LayoutEditor(Screen):
                         tr("Setas lugar · Enter escolher · ,/. trocar · Del esvaziar · R repor · "
                            "PgUp/PgDn página", "Arrows slot · Enter choose · ,/. swap · "
                            "Del clear · R reset · PgUp/PgDn page"))
-        self.list.set_items([
+        items = []
+        from velo.core import screen_layout as sl
+        if self.sport in sl.SPORTS:
+            # onde fica cada painel (caixas, voltas, gráficos, tabelas)
+            items.append(Item(tr("Disposição do ecrã", "Screen layout"), top=True,
+                              action=self._open_arrangement))
+        items += [
             Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True, enabled=self.dirty),
             Item(tr("Guardar", "Save"), action=self.save, button=True, primary=True,
-                 enabled=self.dirty)])
+                 enabled=self.dirty)]
+        self.list.set_items(items)
         self.list.y = -2000
         self._refresh()
+
+    def _open_arrangement(self) -> None:
+        from velo.ui.arrangement_screens import ArrangementEditor
+        self.app.push(ArrangementEditor(self.app, self.sport))
 
     def _refresh(self) -> None:
         P = _theme.P

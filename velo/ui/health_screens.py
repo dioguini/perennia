@@ -17,7 +17,7 @@ from velo.core import labs
 from velo.core.i18n import t, tr
 from velo.core.units import hms, parse_number
 from velo.gfx.compat import label as make_label
-from velo.ui.app import FtpScreen, FtpRouteChoice, Screen
+from velo.ui.app import FtpRouteChoice, Screen
 from velo.ui.sport_screens import EditPopup, EditScreen
 from velo.ui.widgets import ACCENT, BAD, Chart, DIM, GOOD, PANEL, TEXT, Item
 
@@ -1014,10 +1014,7 @@ class TestsMenu(Screen):
             from velo.core import endurance as en
             en.seed(a.db)
         rows = []
-        if self.sport == "cycling":
-            rows.append(Item(t("menu.ftp_test"), value=f"FTP {a.db.athlete().ftp_w} W",
-                             detail=tr("os três protocolos de FTP", "the three FTP protocols"),
-                             action=lambda: a.push(FtpScreen(a))))
+        # os protocolos de FTP (20 min, rampa, 2 × 8 min) são testes como os outros
         for x in ft.tests(a.db, self.sport):
             trend = {"up": " ↑", "down": " ↓", "same": " ="}.get(x["trend"] or "", "")
             rows.append(Item(x["name"], value=(ft.fmt_value(x["last"], x["unit"]) + trend)

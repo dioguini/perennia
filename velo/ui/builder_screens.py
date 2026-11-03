@@ -67,6 +67,7 @@ class BlockBuilder(EditScreen):
     """Ver o módulo. O tipo do treino (ERG ou Manual) decide as vistas: no
     ciclismo, ERG é por zonas de potência; manual é por FC, RPE ou níveis do
     rolo (para os rolos que não aceitam comandos)."""
+    KEY_SCOPE = "builder"
 
     TABBED = True
     AGENT = True

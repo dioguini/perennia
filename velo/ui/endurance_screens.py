@@ -12,8 +12,9 @@ from velo.core import sports as sp
 from velo.core.i18n import t, tr
 from velo.core.units import hms
 from velo.gfx.compat import label as make_label
-from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
+from velo.ui.app import Screen, SportHub, StartOptions
 from velo.ui.brief import BriefScreen, endurance_brief
+from velo.ui.session_panels import OFF, ArrangedPanels
 from velo.ui.widgets import ACCENT, DIM, GOOD, PANEL, TEXT, Item, LapPanel, SessionClock
 
 
@@ -49,7 +50,8 @@ def start(app, sport: str, workout_id: str | None = None, replace: bool = False)
                 "Treadmill: + / − change the speed; T types the display total.")] \
         if sport == "running" else [tr("Na piscina: + conta uma piscina (− corrige).",
                                        "In the pool: + counts a length (− corrects).")]
-    scr = StartOptions(app, sport, title, go, lines=lines, options=opts)
+    scr = StartOptions(app, sport, title, go, lines=lines, options=opts,
+                       structured=bool(workout_id))
     app.replace(scr) if replace else app.push(scr)
 
 
@@ -187,7 +189,8 @@ class EndurancePreview(BriefScreen):
                      action=lambda: a.push(BlockBuilder(a, self.sport, self.wid)))]
 
 
-class EnduranceSession(Screen):
+class EnduranceSession(ArrangedPanels, Screen):
+    KEY_SCOPE = "endurance"
     AGENT = False
     IN_SESSION = True
 
@@ -213,6 +216,7 @@ class EnduranceSession(Screen):
         if resume is None and self.engine.sport == "running":
             self.engine.set_speed(speed_kmh)
         self.session = self.engine
+        self.start_countdown(resume)          # 15 s e começa sozinha
         self.confirming = False
         self.typing: str | None = None
         self.toast = ""
@@ -233,25 +237,43 @@ class EnduranceSession(Screen):
                                       batch=b)
         self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
+        # onde fica cada painel: Definições → Ecrã da sessão → Disposição
+        self.arr_load(self.engine.sport)
         self._layout()
 
     def _layout(self) -> None:
-        w, h = self.app.window.width, self.app.window.height
-        left, right, top = 48, w - 48 - BOARD_W - 24, h - 128
-        self.laps_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W, 70)
         cols, gap = 4, 10
-        cw = (right - left - gap * (cols - 1)) / cols
-        ch = max(80, min(116, (h - 360) / 2))
+        rows = -(-len(self.cells) // cols)
+        m = self.arr_rect("metrics")
+        if m is not None:
+            mx, my, mw, mh = m
+            cw = (mw - gap * (cols - 1)) / cols
+            ch = max(56.0, min(116.0, (mh - gap * (rows - 1)) / rows))
+            top = my + mh
         for i, (bg, cap, val) in enumerate(self.cells):
+            if m is None:
+                bg.x = cap.x = val.x = OFF
+                continue
             r, c = divmod(i, cols)
-            x, y = left + c * (cw + gap), top - r * (ch + gap)
+            x, y = mx + c * (cw + gap), top - r * (ch + gap)
             bg.x, bg.y, bg.width, bg.height = x, y - ch, cw, ch
             cap.x, cap.y = x + 12, y - 8
             val.x, val.y = x + 12, y - 28
-        y2 = top - 2 * (ch + gap) - 6
-        self.status.x, self.status.y = left, y2
-        self.toast_label.x, self.toast_label.y = left + 460, y2
-        self.plan.x, self.plan.y, self.plan.width = left, y2 - 28, int(right - left)
+        st = self.arr_rect("status")
+        if st is not None:
+            sx, sy, sw, sh = st
+            self.status.x, self.status.y = sx, sy + sh
+            self.toast_label.x, self.toast_label.y = sx + min(460, sw * 0.55), sy + sh
+            self.plan.x, self.plan.y, self.plan.width = sx, sy + sh - 28, int(sw)
+        else:
+            self.status.x = self.toast_label.x = self.plan.x = OFF
+        lp = self.arr_rect("laps")
+        if lp is not None:
+            lx, ly, lw, lh = lp
+            self.laps_panel.layout(lx, ly + lh, lw, ly)
+        else:
+            self.laps_panel.layout(OFF, OFF + 400, 200, OFF)
+        self.arr_layout_extras()
         self.list.y = -1000
         self.clock.layout()
 
@@ -380,6 +402,9 @@ class EnduranceSession(Screen):
         title, cells, prev = self.lap_data()
         self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
         self.laps_panel.update(time.monotonic())
+        if e.started:
+            self.arr_sample(dt, e.hr_bpm, e.speed_kmh if e.sport == "running" else None,
+                            e.hr_zone_s)
 
     def lap_data(self) -> tuple[str, list[tuple[str, str]], list[str]]:
         """A volta em curso (seis números) e as já feitas, para o painel."""
@@ -551,6 +576,13 @@ class EnduranceSession(Screen):
         self.app.message(tr("Sessão terminada sem guardar.", "Session ended without saving."))
         self.app.pop()
 
+    def countdown_done(self) -> None:
+        if not self.engine.started:
+            self.engine.start()
+
+    def cancel_countdown(self) -> None:
+        self._discard()
+
     def leave(self) -> None:
         if not self.engine.finished:
             self.engine.suspend()
@@ -562,6 +594,7 @@ class EnduranceSession(Screen):
             return
         self.batch.draw()
         self.laps_panel.draw()
+        self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
 
@@ -597,7 +630,6 @@ class EnduranceSummary(Screen):
         if r.get("fit_path"):
             items.append(Item(".fit", value=r.get("name") or "", detail=r["fit_path"],
                               enabled=False))
-        items.append(Item(tr("Voltar", "Back"), action=self.app.pop))
         self.chrome.set(r.get("title") or sp.name(r["sport"]), r.get("name") or "",
                         self.footer())
         fb_item = _feedback().summary_item(self.app, "endurance", self.result.get("session_id"))

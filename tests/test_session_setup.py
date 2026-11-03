@@ -80,7 +80,10 @@ class TestStartChoice(tg.GuiCase):
         setup = self.screen()
         self.assertEqual(setup.route_id, self.route_id)        # a primeira rota
         self.select("Rota (.gpx)")
-        self.press(key.ENTER)                                  # Enter não muda valores
+        self.press(key.ENTER)                                  # abre a lista das rotas
+        self.assertIsInstance(self.screen(), ss.RoutePickerPopup)
+        self.press(key.ESCAPE)                                 # e não muda nada
+        self.assertIs(self.screen(), setup)
         self.assertEqual(setup.route_id, self.route_id)
         self.pick("Começar")
         ride = self.screen()
@@ -251,6 +254,135 @@ class TestTrainerLevelsSetting(tg.GuiCase):
         self.select("número de níveis")
         self.press(key.RIGHT, key.LEFT)
         self.assertFalse(scr.dirty)
+
+
+class TestRoutePickerPopup(tg.GuiCase):
+    def test_route_row_opens_the_route_list(self):
+        self.pick("Lista de treinos")
+        self.pick("VO2máx 5×4")
+        self.pick("Configurar sessão")
+        setup = self.screen()
+        self.assertIsNone(setup.route_id)
+        self.pick("Rota (.gpx)")                       # Enter abre a lista
+        picker = self.screen()
+        self.assertIsInstance(picker, ss.RoutePickerPopup)
+        self.assertTrue(picker.MODAL)
+        labels = [i.label for i in picker.list.items]
+        self.assertIn("Sem rota", labels)              # num treino a rota é opcional
+        self.assertIn("Serra de Teste", labels)
+        self.assertIn("+ Carregar um .gpx novo", labels)
+        self.pick("Serra de Teste")
+        self.assertIs(self.screen(), setup)
+        self.assertEqual(setup.route_id, self.route_id)
+
+    def test_free_session_list_has_no_no_route(self):
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.pick("Rota (.gpx)")
+        labels = [i.label for i in self.screen().list.items]
+        self.assertNotIn("Sem rota", labels)
+
+    def test_running_uses_the_same_list(self):
+        self.press(key.ESCAPE)
+        self.pick("Corrida")
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.pick("Rota (.gpx)")
+        self.assertIsInstance(self.screen(), ss.RoutePickerPopup)
+
+
+class TestStructuredLaps(tg.GuiCase):
+    def test_workout_has_no_autolap_option(self):
+        self.pick("Lista de treinos")
+        self.pick("VO2máx 5×4")
+        self.pick("Configurar sessão")
+        setup = self.screen()
+        labels = [i.label for i in setup.list.items]
+        self.assertNotIn("Auto lap", labels)
+        laps = next(i for i in setup.list.items if i.label == "Voltas")
+        self.assertFalse(laps.enabled)
+        self.assertEqual(setup.autolap_cfg()["mode"], "off")
+
+    def test_free_session_keeps_autolap(self):
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.assertIn("Auto lap", [i.label for i in self.screen().list.items])
+
+    def test_cycling_workout_laps_at_each_block(self):
+        self.pick("Lista de treinos")
+        self.pick("VO2máx 5×4")
+        self.pick("Configurar sessão")
+        self.pick("Começar")
+        ride = self.screen()
+        ride.preparing = False
+        first = ride.engine.workout.workout.steps[0].duration_s
+        for _ in range(int((first + 30) / 0.5)):
+            self.app.hub.tick(0.5)
+            ride.update(0.5)
+        triggers = [lp.trigger for lp in ride.engine.laps]
+        self.assertIn("workout_step", triggers)
+
+
+class TestStartCountdown(tg.GuiCase):
+    def setUp(self):
+        super().setUp()
+        self.app.db.set("session_countdown_s", 15)
+
+    def _free_run(self):
+        self.press(key.ESCAPE)
+        self.pick("Corrida")
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.pick("Começar")
+        return self.screen()
+
+    def test_running_waits_15_s_then_starts_by_itself(self):
+        ses = self._free_run()
+        self.assertTrue(ses.counting)
+        self.press(key.SPACE)                          # durante a contagem não começa
+        for _ in range(28):                            # 14 s
+            self.app._tick(0.5)
+        self.assertFalse(ses.engine.started)
+        self.app._on_draw()
+        self.assertEqual(ses.start_cd.text(), "1")
+        for _ in range(4):
+            self.app._tick(0.5)
+        self.assertFalse(ses.counting)
+        self.assertTrue(ses.engine.started)
+
+    def test_escape_during_the_countdown_cancels(self):
+        ses = self._free_run()
+        self.app._tick(1.0)
+        self.press(key.ESCAPE)
+        self.assertNotIn(ses, self.app.stack)
+
+    def test_cycling_counts_after_the_route_is_ready(self):
+        self.pick("Biblioteca de rotas")
+        self.pick("Serra de Teste")
+        self.pick("Começar")
+        self.pick("Começar")
+        ride = self.screen()
+        self.assertTrue(ride.preparing)
+        self.assertFalse(ride.counting)                # primeiro prepara a rota
+        ride.world.build_all()
+        ride.preparing = False
+        self.assertTrue(ride.counting)
+        t0 = ride.engine._t
+        for _ in range(20):
+            self.app._tick(0.5)
+        self.assertEqual(ride.engine._t, t0)           # a sessão ainda não andou
+        for _ in range(12):
+            self.app._tick(0.5)
+        self.assertFalse(ride.counting)
+
+    def test_rowing_and_gym_count_too(self):
+        self.app.set_rower(rio.SimulatedRower())
+        self.press(key.ESCAPE)
+        self.pick("Remo")
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.pick("Começar")
+        self.assertTrue(self.screen().counting)
 
 
 if __name__ == "__main__":

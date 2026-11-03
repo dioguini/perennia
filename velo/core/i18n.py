@@ -160,7 +160,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "dev.calibrate_hint": "Pedala até {speed} e depois para de pedalar.",
         "dev.calibrate_ok": "Calibração concluída",
         "dev.calibrate_fail": "Calibração falhou",
-        "dev.simulated": "Trainer simulado (sem hardware)",
+        "dev.simulated": "SEM HARDWARE - Trainer",
         "dev.none": "Nenhum dispositivo encontrado.",
         "dev.priority": "Prioridade",
         # definições
@@ -525,7 +525,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "dev.calibrate_hint": "Pedal up to {speed} then stop pedalling.",
         "dev.calibrate_ok": "Calibration complete",
         "dev.calibrate_fail": "Calibration failed",
-        "dev.simulated": "Simulated trainer (no hardware)",
+        "dev.simulated": "NO HARDWARE - Trainer",
         "dev.none": "No devices found.",
         "dev.priority": "Priority",
         "set.name": "Name",

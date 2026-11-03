@@ -219,6 +219,7 @@ class ExerciseInventory(Screen):
         self.pick = pick
         self.only_available = False
         super().__init__(app)
+        self.list.detail_below = True        # lista grande: a descrição vai por baixo
         if modality:
             keys = [m.key for m in gym.modalities()]
             self.tab = keys.index(modality) if modality in keys else 0

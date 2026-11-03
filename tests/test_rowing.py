@@ -345,7 +345,7 @@ class TestRowingGui(tg.GuiCase):
         self.pick("Começar")
         dev = self.screen()
         self.assertIsInstance(dev, rs.RowerDeviceScreen)          # pede a máquina
-        self.pick("simulada")
+        self.pick("SEM HARDWARE - Remo")
         self.assertIsInstance(self.app.rower, rio.SimulatedRower)
         self.press(key.ESCAPE)                                  # volta à janela da sessão
         self.assertIs(self.screen(), setup)

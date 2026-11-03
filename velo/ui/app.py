@@ -37,7 +37,7 @@ from velo.io.hub import SensorHub
 from velo.io.sim import SimulatedTrainer
 from velo.ui.widgets import (ACCENT, BAD, BG, BackButton, BoardPanel, Chart, Chrome, DIM,
                              GOOD, Heatmap, Item, ListView, PANEL, Popup, StackedBars,
-                             TabBar, TEXT, Tile, TopBar)
+                             StartCountdown, TabBar, TEXT, Tile, TopBar)
 
 PRESET_ORDER = ("low", "medium", "high")
 
@@ -68,6 +68,7 @@ class Screen:
     MODAL = False         # janela por cima (o ecrã de baixo continua a correr)
     TABBED = False        # separadores por baixo do título (Tab / Shift+Tab)
     _pending_hub = None   # ver `hub`: o menu do desporto por cima deste ecrã
+    KEY_SCOPE: str | None = None   # o âmbito dos atalhos de teclado (ver keymap)
 
     def __init__(self, app: "App"):
         self.app = app
@@ -291,13 +292,37 @@ class Screen:
             self.list.activate()
             return True
         if symbol == key.ESCAPE:
-            self.app.pop()
+            self.go_back()
             return True
         return False
 
+    def go_back(self) -> None:
+        """O «Voltar» em baixo (e o Esc). Os resumos levam ao menu do desporto."""
+        self.app.pop()
+
+    # ---- contagem decrescente antes de uma sessão (ver StartCountdown)
+    start_cd: StartCountdown | None = None
+
+    def start_countdown(self, resume=None) -> None:
+        """As sessões chamam isto ao abrir: 15 s antes de começar (retomar
+        uma sessão interrompida não conta outra vez)."""
+        self.start_cd = None if resume is not None else StartCountdown.for_app(self.app)
+
+    @property
+    def counting(self) -> bool:
+        return self.start_cd is not None and self.start_cd.active \
+            and not getattr(self, "preparing", False)
+
+    def countdown_done(self) -> None:
+        """A contagem chegou ao fim: a sessão pode começar."""
+
+    def cancel_countdown(self) -> None:
+        """Esc durante a contagem: não começa (nada fica gravado)."""
+        self.app.pop()
+
     def on_mouse(self, x: int, y: int) -> bool:
         if self.back_button is not None and self.back_button.hit(x, y):
-            self.app.pop()
+            self.go_back()
             return True
         if self.hub_tabs is not None:
             i = self.hub_tabs.hit(x, y)
@@ -952,6 +977,7 @@ class ComingSoonScreen(Screen):
 
 class RouteLibrary(Screen):
     HAS_BOARD = True
+    KEY_SCOPE = "routes"
 
     def side_board(self):
         item = self.list.selected
@@ -1130,15 +1156,25 @@ class AutoLapOptions:
     omissão) e, se ligado, de quanto em quanto tempo ou distância."""
 
     AUTOLAP_SPORT = "cycling"
+    # treino estruturado (um treino, um teste, um plano de voltas): sem auto
+    # lap à escolha — a volta fecha-se sozinha no fim de cada bloco
+    structured = False
 
     def autolap_cfg(self) -> dict:
         cfg = getattr(self, "_autolap", None)
         if cfg is None:
             cfg = self._autolap = {"mode": "off", "value": 0}
+        if self.structured:
+            cfg["mode"], cfg["value"] = "off", 0
         return cfg
 
     def autolap_items(self) -> list[Item]:
         from velo.core import sports as sp
+        if self.structured:
+            return [Item(tr("Voltas", "Laps"), value=tr("uma por bloco", "one per block"),
+                         detail=tr("treino estruturado: cada bloco feito fecha uma volta, "
+                                   "sozinho", "structured workout: each block done closes a "
+                                   "lap by itself"), enabled=False)]
         cfg = self.autolap_cfg()
         mode = cfg["mode"]
         rows = [Item(tr("Auto lap", "Auto lap"),
@@ -1172,6 +1208,8 @@ class AutoLapOptions:
         self.enter()
 
     def autolap_key(self, symbol: int) -> bool:
+        if self.structured:
+            return False
         item = self.list.selected
         if item is not None and item.data in ("autolap_mode", "autolap_value") and \
                 symbol in (key.LEFT, key.RIGHT):
@@ -1187,9 +1225,11 @@ class StartOptions(AutoLapOptions, Screen):
     `start(autolap, options)` abre a sessão."""
 
     def __init__(self, app: "App", sport: str, title: str, start: Callable,
-                 lines: list[str] | None = None, options: dict | None = None):
+                 lines: list[str] | None = None, options: dict | None = None,
+                 structured: bool = False):
         super().__init__(app)
         self.AUTOLAP_SPORT = sport
+        self.structured = structured
         self.title_text = title
         self.start_fn = start
         self.lines = lines or []
@@ -1257,6 +1297,7 @@ def RideSetup(app: "App", route_id: str | None, workout_id: str | None = None,  
 class RideScreen(Screen):
     """Prepara o mundo, corre a sessão e passa ao resumo."""
 
+    KEY_SCOPE = "ride"
     AGENT = False
     IN_SESSION = True
 
@@ -1359,7 +1400,11 @@ class RideScreen(Screen):
             self.world.setup_gl()
         else:
             self.preparing = False
+        self.start_countdown(self.resume)       # depois de preparar a rota
         self.chrome.set("", "", "")
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def update(self, dt: float) -> None:
         a = self.app
@@ -1544,6 +1589,9 @@ class SummaryScreen(Screen):
         self.ftp_protocol = ftp_protocol
         self.ftp_estimate: tuple[float, int] | None = None
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu()
+
     def enter(self) -> None:
         a = self.app
         s = self.result.get("summary")
@@ -1657,12 +1705,11 @@ class SummaryScreen(Screen):
         fit_path = self.result.get("fit_path")
         subtitle = t("summary.saved_fit", path=fit_path) if fit_path else \
             f"{t('common.error')}: o .fit não foi escrito"
-        # «Fechar» à cabeça: selecionado logo, e o resultado fica todo à vista
-        items.insert(0, Item(t("summary.close"), action=lambda: a.reset_to_menu()))
+        # sem «Fechar» na lista: o «Voltar» de baixo (ou Esc) leva ao menu
         ftp_rows = [i for i in items if i.action == self._accept_ftp]
         for row in ftp_rows:                       # aceitar a FTP também à vista
             items.remove(row)
-            items.insert(1, row)
+            items.insert(0, row)
 
         if self.result.get("name"):
             subtitle = f"{self.result['name']} · {subtitle}"
@@ -1729,7 +1776,7 @@ class PopupMixin:
         self.list.bar_y = p.y + 12
         self.list.top_y = p.y + p.h - 50
         if self.back_button is not None:
-            self.back_button.place(p.x + 16, p.y + 12, tr("Fechar", "Close"))
+            self.back_button.place(p.x + 16, p.y + 12, t("common.back"))
         self.list._sync()
 
     def on_resize(self, w: int, h: int) -> None:
@@ -1882,7 +1929,7 @@ class DeviceScreen(ModalScreen):
         if not any(getattr(s, "device_id", "") == "sim:trainer" for s in a.hub.sources):
             items.append(Item(t("dev.simulated"), action=self._add_sim))
         if a.rower is None or getattr(a.rower, "protocol", "") != "sim":
-            items.append(Item(tr("Máquina de remo simulada", "Simulated rowing machine"),
+            items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
                               detail=tr("para remar sem a máquina (testes, demonstração)",
                                         "to row without the machine (tests, demo)"),
                               action=self._add_sim_rower))
@@ -1964,7 +2011,7 @@ class DeviceScreen(ModalScreen):
     def _add_sim_rower(self) -> None:
         from velo.io import rower as rower_io
         self.app.set_rower(rower_io.SimulatedRower())
-        self.note = tr("Máquina de remo simulada ligada", "Simulated rowing machine connected")
+        self.note = tr("SEM HARDWARE - Remo ligado", "NO HARDWARE - Rower connected")
         self.enter()
 
     def _scan(self) -> None:
@@ -2085,7 +2132,8 @@ class SettingsScreen(Screen):
     TABBED = True
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
     GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
-              ("layouts", "feedback", "difficulty", "lookahead", "auto_pause", "connection",
+              ("layouts", "arrangement", "feedback", "difficulty", "lookahead", "auto_pause",
+               "connection",
                "auto_connect", "boxes", "metrics", "lv_n", "lv_min", "lv_max"),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
@@ -2096,14 +2144,15 @@ class SettingsScreen(Screen):
     def __init__(self, app: "App"):
         super().__init__(app)
         from velo.ui.sync_screens import SyncPanel
-        from velo.ui.widgets import TextColumns
         self.draft: dict = {}
         self._orig: dict = {}
         self.ath = app.db.athlete()
         self._ath0 = self._ath_sig()
         self.sync = SyncPanel(self)
-        self.keys_view = TextColumns()
-        self._layout_keys()
+        # Sincronização: um separador por fonte de dados (por agora, o GarminDB)
+        w, h = app.window.width, app.window.height
+        self.sync_tab = 0
+        self.sync_tabs = TabBar(self.sync.source_labels(), 48, self.content_top(h) + 6, w - 96)
 
     def tab_labels(self) -> list[str]:
         return [tr("Atleta", "Athlete"), tr("Sessões", "Sessions"),
@@ -2113,10 +2162,6 @@ class SettingsScreen(Screen):
 
     def group(self) -> tuple:
         return self.GROUPS[self.tab % len(self.GROUPS)]
-
-    def _layout_keys(self) -> None:
-        w, h = self.app.window.width, self.app.window.height
-        self.keys_view.layout(48, self.content_top(h) + 18, w - 96, 64)
 
     # ------------------------------------------------------------ rascunho
 
@@ -2190,11 +2235,38 @@ class SettingsScreen(Screen):
 
     def cancel(self) -> None:
         """Volta aos valores gravados."""
+        previewing = "theme" in self.draft
         self.draft.clear()
         self._orig.clear()
         self.ath = self.app.db.athlete()
         self._ath0 = self._ath_sig()
+        if previewing:
+            self._preview_theme()               # volta a pôr o tema gravado
+            return
         self.enter()
+
+    def discard(self) -> None:
+        """Sair sem guardar: se o tema estava em pré-visualização, repõe-se."""
+        if "theme" in self.draft:
+            self.draft.clear()
+            self._orig.clear()
+            self._preview_theme()
+
+    def adopt(self, old: "SettingsScreen") -> None:
+        """Depois de mudar as cores (pré-visualização do tema), as Definições
+        novas ficam com o rascunho das antigas."""
+        self.draft, self._orig = old.draft, old._orig
+        self.ath, self._ath0 = old.ath, old._ath0
+        self.sync = old.sync
+        self.sync.screen = self
+        if getattr(self.sync, "store", None) is old:
+            self.sync.store = self
+
+    def _preview_theme(self) -> None:
+        """Mostra já o tema escolhido (ou o gravado), sem o gravar."""
+        from velo.gfx import theme as theme_mod
+        want = self.get("theme", None) or theme_mod.DEFAULT
+        self.app.set_theme(want, persist=False, carry=self)
 
     # -------------------------------------------------------------- linhas
 
@@ -2315,8 +2387,8 @@ class SettingsScreen(Screen):
                               detail=tr("←/→ ±1 s · usado nos treinos de natação",
                                         "←/→ ±1 s · used for swim workouts"), data="swim_pace"),
             "theme": Item(tr("Tema", "Theme"), value=_theme_name_of(self.get("theme", None)),
-                          detail=tr("←/→ · todos claros e profissionais; Ardósia para pouca luz",
-                                    "←/→ · light, professional themes; Slate for low light"),
+                          detail=tr("←/→ vê-se logo · Guardar fixa-o · Ardósia para pouca luz",
+                                    "←/→ shows it now · Save keeps it · Slate for low light"),
                           data="theme"),
             "layouts": Item(tr("Ecrã da sessão, por desporto", "Session screen, per sport"),
                             detail=tr("Enter abre · um separador por desporto; arrasta as métricas",
@@ -2336,6 +2408,11 @@ class SettingsScreen(Screen):
                            value=f"{self._levels()['w_max']:.0f} W",
                            detail=tr("←/→ ±5 W · Shift ±50 · entre eles, em linha reta",
                                      "←/→ ±5 W · Shift ±50 · linear in between"), data="lv_max"),
+            "arrangement": Item(tr("Disposição do ecrã da sessão", "Session screen layout"),
+                                detail=tr("Enter abre · arrasta caixas, voltas, gráficos e tabelas",
+                                          "Enter opens · drag boxes, laps, charts and tables"),
+                                action=lambda: a.push(_arrangement().ArrangementEditor(
+                                    a, "cycling"))),
             "feedback": Item(tr("Feedback no fim de cada sessão", "Feedback after each session"),
                              value=on if self.get("ask_feedback", True) else off,
                              detail=tr("RPE, dores e comentário; fica para o agente treinador",
@@ -2356,33 +2433,116 @@ class SettingsScreen(Screen):
         group = self.group()
         foot = tr("←/→ mudar · Enter abrir · Tab separador · Ctrl+S guardar · Esc voltar",
                   "←/→ change · Enter open · Tab tab · Ctrl+S save · Esc back")
+        h = self.app.window.height
+        self.list.y = self.content_top(h)
         if group == ("@sync",):
-            items = self.sync.items()
+            src = self.sync.SOURCES[self.sync_tab % len(self.sync.SOURCES)][0]
+            self.sync_tabs.set_labels(self.sync.source_labels())
+            self.sync_tabs.select(self.sync_tab)
+            self.list.y = self.content_top(h) - 52          # por baixo dos separadores
+            items = self.sync.items(src)
         elif group == ("@shortcuts",):
-            from velo.ui import shortcuts
-            items = []
-            self.keys_view.set([(tr(gpt, gen), [(k, tr(pt, en)) for k, pt, en in rows])
-                                for gpt, gen, rows in shortcuts.SHORTCUTS])
+            items = self.shortcut_items()
         else:
             rows = self._rows()
             items = [rows[k] for k in group]
         sub = tr("Por guardar: carrega em Guardar (Ctrl+S) ou em Cancelar",
                  "Unsaved: press Save (Ctrl+S) or Cancel") if self.dirty else \
             tr("Tab muda de separador", "Tab switches tabs")
+        if self.capturing:
+            from velo.ui import keymap
+            sub = tr("Carrega na nova tecla para «{a}» · Esc cancela",
+                     "Press the new key for «{a}» · Esc cancels", a=keymap.label(self.capturing))
         self.chrome.set(t("menu.settings"), sub, foot)
         self.list.set_items(items + self.buttons(), keep_index=True)
 
     def update(self, dt: float) -> None:
         self.sync.update()
 
+    # ------------------------------------------------------------ atalhos
+
+    capturing: str | None = None          # a ação à espera da tecla nova
+
+    def shortcut_items(self) -> list[Item]:
+        from velo.ui import keymap
+        raw = self.get("keymap", {}) or {}
+        rows: list[Item] = []
+        for scope, pt, en in keymap.SCOPES:
+            rows.append(Item(tr(pt, en), header=True))
+            for act in keymap.actions_in(scope):
+                b = keymap.binding(raw, act)
+                changed = b != keymap.default(act)
+                rows.append(Item(keymap.label(act), value=keymap.key_text(b),
+                                 detail=(tr("era {k} · ", "was {k} · ",
+                                            k=keymap.key_text(keymap.default(act)))
+                                         if changed else "") + tr("Enter muda a tecla",
+                                                                  "Enter changes the key"),
+                                 action=lambda a=act: self._start_capture(a), data=f"key:{act}"))
+        rows.append(Item(tr("Navegação (fixas)", "Navigation (fixed)"), header=True))
+        for k, pt, en in keymap.FIXED:
+            rows.append(Item(tr(pt, en), value=k, enabled=False))
+        if keymap.custom_map(raw):
+            rows.append(Item(tr("Repor as teclas de origem", "Restore the original keys"),
+                             button=True, action=self._reset_keys))
+        return rows
+
+    def _start_capture(self, action: str) -> None:
+        self.capturing = action
+        self.enter()
+
+    def capture_key(self, symbol: int, modifiers: int) -> bool:
+        from velo.ui import keymap
+        act = self.capturing
+        if symbol == key.ESCAPE:
+            self.capturing = None
+            self.enter()
+            return True
+        name = keymap.name_of(symbol)
+        if name is None:
+            self.app.message(tr("Essa tecla é de navegação: escolhe uma letra, F1–F12 ou o "
+                                "Espaço.", "That key is for navigation: pick a letter, F1–F12 "
+                                "or Space."))
+            return True
+        b = (name, keymap.mods_of(modifiers))
+        raw = dict(keymap.custom_map(self.get("keymap", {}) or {}))
+        why = keymap.problem(raw, act, b)
+        if why is not None:
+            self.app.message(why)
+            return True
+        if b == keymap.default(act):
+            raw.pop(act, None)
+        else:
+            raw[act] = [b[0], list(b[1])]
+        self.put("keymap", raw)
+        if self._orig.get("keymap") in (None, {}) and not raw:
+            self.draft.pop("keymap", None)       # voltou tudo à origem
+        self.capturing = None
+        self.enter()
+        return True
+
+    def _reset_keys(self) -> None:
+        self.put("keymap", {})
+        if self._orig.get("keymap") in (None, {}):
+            self.draft.pop("keymap", None)
+        self.enter()
+
     def draw(self) -> None:
         super().draw()
-        if self.group() == ("@shortcuts",):
-            self.keys_view.draw()
+        if self.group() == ("@sync",):
+            self.sync_tabs.draw()
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        if self.group() == ("@sync",):
+            i = self.sync_tabs.hit(x, y)
+            if i is not None:
+                self.sync_tab = i
+                self.enter()
+                return True
+        return super().on_mouse(x, y)
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
-        self._layout_keys()
+        self.sync_tabs.layout(48, self.content_top(h) + 6, w - 96)
         self.enter()
 
     # -------------------------------------------------------------- texto
@@ -2463,6 +2623,8 @@ class SettingsScreen(Screen):
         if field == "theme":
             from velo.gfx import theme as theme_mod
             self._cycle("theme", list(theme_mod.names()), step, theme_mod.DEFAULT)
+            self._preview_theme()               # vê-se logo; grava-se com Guardar
+            return
         elif field == "run_pace":
             self.put("run_threshold_pace_s", max(150, min(600, float(
                 self.get("run_threshold_pace_s", 300)) + 5 * unit)))
@@ -2763,29 +2925,6 @@ def WorkoutRouteChoice(app: "App", workout_id: str):            # noqa: N802
     return _setup().SessionSetup(app, "cycling", kind="workout", workout_id=workout_id)
 
 
-class FtpScreen(Screen):
-    HAS_BOARD = True
-
-    def side_board(self):
-        return boards.ftp_board(self.app.db)
-
-    def enter(self) -> None:
-        a = self.app
-        items = []
-        for proto in ftp_mod.PROTOCOLS:
-            info = ftp_mod.CATALOG[proto]
-            items.append(Item(t(info.label_key), detail=info.description_pt,
-                              action=lambda p=proto: a.push(FtpRouteChoice(a, p))))
-        history = a.db.ftp_history()
-        if history:
-            items.append(Item("Histórico", value=f"{len(history)} testes", enabled=False))
-            for h in history[-5:]:
-                items.append(Item(f"  {h['tested_at'][:10]}", value=f"{h['ftp_w']} W",
-                                  detail=h["protocol"], enabled=False))
-        self.chrome.set(t("menu.ftp_test"), t("ftp.pick"), self.footer())
-        self.list.set_items(items, keep_index=True)
-
-
 def FtpRouteChoice(app: "App", protocol: str):                  # noqa: N802
     """Um teste de FTP: a janela da sessão (rota opcional)."""
     return _setup().SessionSetup(app, "cycling", kind="ftp_test", ftp_protocol=protocol,
@@ -2891,7 +3030,7 @@ class ChallengeDetail(Screen):
                               enabled=False))
         board = a.db.challenge_leaderboard(ch["id"])
         if board:
-            items.append(Item(t("ch.leaderboard"), enabled=False))
+            items.append(Item(t("ch.leaderboard"), header=True))
             for i, r in enumerate(board, start=1):
                 items.append(Item(f"{i}.  {boards.long_duration(r['elapsed_s'])}",
                                   detail=f"{r['started_at'][:10]} → "
@@ -3730,11 +3869,16 @@ class App:
 
     # --------------------------------------------------------- faixa do topo
 
-    def set_theme(self, key: str) -> None:
+    def set_theme(self, key: str, persist: bool = True, carry=None) -> None:
         """Muda de tema e volta a construir o que está à vista com as cores
-        novas (só fora das sessões: as Definições estão fechadas durante)."""
+        novas (só fora das sessões: as Definições estão fechadas durante).
+
+        `persist=False` é a pré-visualização das Definições: o tema vê-se logo,
+        mas só fica gravado com Guardar. `carry` são as Definições abertas, cujo
+        rascunho passa para as novas."""
         from velo.gfx import theme as theme_mod
-        self.db.set("theme", key)
+        if persist:
+            self.db.set("theme", key)
         theme_mod.apply(key)
         bg = theme_mod.P.bg
         pyglet.gl.glClearColor(bg[0] / 255, bg[1] / 255, bg[2] / 255, 1.0)
@@ -3752,8 +3896,13 @@ class App:
         self.stack = [HomeScreen(self)]
         settings = SettingsScreen(self)
         self.stack.append(settings)
+        if carry is not None:
+            settings.adopt(carry)
         settings.set_tab(tab if isinstance(top, SettingsScreen) else 0)
         settings.enter()
+        if carry is not None:
+            settings.list.index = min(carry.list.index, max(0, len(settings.list.items) - 1))
+            settings.list._sync()
 
     def _topbar_texts(self) -> None:
         self.topbar.set_texts(tr("Dispositivos", "Devices"), tr("Definições", "Settings"),
@@ -3864,7 +4013,13 @@ class App:
                 below = self._below_modal()
                 if below is not None:
                     below.update(dt)
-            screen.update(dt)
+            if screen.counting:
+                # a contagem antes da sessão: os sensores vivos, a sessão parada
+                self.hub.tick(dt)
+                if screen.start_cd.update(dt):
+                    screen.countdown_done()
+            else:
+                screen.update(dt)
         self._check_devices()
 
     def _below_modal(self):
@@ -3916,6 +4071,13 @@ class App:
                 0, self.window.width, 0, self.window.height, -255, 255)
             self.window.view = pyglet.math.Mat4()
         screen.draw()
+        if screen.counting:
+            if isinstance(screen, RideScreen):
+                self.window.projection = pyglet.math.Mat4.orthogonal_projection(
+                    0, self.window.width, 0, self.window.height, -255, 255)
+                self.window.view = pyglet.math.Mat4()
+                pyglet.gl.glDisable(pyglet.gl.GL_DEPTH_TEST)
+            screen.start_cd.draw()
         if self._message and time.monotonic() - self._message_at < 6.0:
             if not isinstance(screen, RideScreen):
                 screen.chrome.message.text = self._message
@@ -3931,6 +4093,16 @@ class App:
             self._fps.draw()
 
     def _on_key_press(self, symbol: int, modifiers: int) -> bool:
+        screen = self.current
+        if screen is not None and getattr(screen, "capturing", None):
+            # Definições → Atalhos: a tecla seguinte é o atalho novo
+            return bool(screen.capture_key(symbol, modifiers))
+        from velo.ui import keymap
+        mapped = keymap.translate(self.db.get("keymap", {}), getattr(screen, "KEY_SCOPE", None),
+                                  symbol, modifiers)
+        if mapped is None:
+            return True                  # a tecla de origem de um atalho que mudou
+        symbol, modifiers = mapped
         if symbol == key.F11:
             self.set_display(fullscreen=not self.window.fullscreen)
             return True
@@ -3956,6 +4128,11 @@ class App:
                 self.message(tr("Não há nada para guardar neste ecrã.",
                                 "Nothing to save on this screen."))
             return True
+        if screen is not None and screen.counting:
+            if symbol == key.ESCAPE:
+                screen.start_cd = None
+                screen.cancel_countdown()
+            return True                       # durante a contagem nada mais conta
         if screen is not None:
             return bool(screen.on_key(symbol, modifiers))
         return False
@@ -3980,6 +4157,8 @@ class App:
         if which == "bar":
             return
         screen = self.current
+        if screen is not None and screen.counting:
+            return
         if screen is not None:
             screen.on_mouse(x, y)
 
@@ -4253,6 +4432,11 @@ def _pretty(name) -> str:
 def _feedback():
     from velo.ui import feedback_screens
     return feedback_screens
+
+
+def _arrangement():
+    from velo.ui import arrangement_screens
+    return arrangement_screens
 
 
 def _setup():

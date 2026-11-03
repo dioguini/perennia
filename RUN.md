@@ -132,16 +132,16 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    Enter alterna unidades, idioma e pausa automática.
 2. **Dispositivos** (no topo, ou F4) → `Procurar Bluetooth` encontra o trainer, a cinta
    e a máquina de remo; `Procurar ANT+` usa a antena USB.
-   Se ainda não quiseres hardware, escolhe **Trainer simulado** (ou **Máquina de remo
-   simulada**) e podes experimentar a aplicação toda.
+   Se ainda não quiseres hardware, escolhe **SEM HARDWARE - Trainer** (ou
+   **SEM HARDWARE - Remo**) e podes experimentar a aplicação toda.
 3. **Ciclismo** → separador Treinar → **Sessão de treino** → pergunta
    **Livre** ou **Carregar treino**.
    - **Carregar treino** abre a Lista de treinos; a ficha do treino tem, em
      baixo à direita, **Configurar sessão de treino** (Enter).
    - **Livre** abre logo a janela da sessão.
 4. Na **janela da sessão** escolhes tudo de uma vez: **Aparelhos** (Enter
-   abre o emparelhamento), **Rota (.gpx)** com ←/→ ou **Carregar um .gpx
-   novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
+   abre o emparelhamento), **Rota (.gpx)** (Enter abre a lista das tuas
+   rotas numa janela) ou **Carregar um .gpx novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
    e em Documentos), **Segmentos do Strava** dessa rota, **Modo de sessão**
    (sozinho ou comparação), ERG (nos treinos ERG) e **Auto lap**. A sessão
    livre precisa de uma rota; num treino a rota é opcional (é paisagem). A
@@ -166,6 +166,18 @@ sem os segmentos) ou **Cancelar a sessão**.
 | **D** (na pergunta de terminar) | **Terminar sem guardar**: apaga a sessão, sem `.fit` nem histórico |
 | **F4** | janela dos dispositivos, sem parar a sessão |
 | **F11** | ecrã inteiro |
+
+Todas as sessões (ciclismo, corrida, natação, remo, ginásio) começam com uma
+**contagem de 15 s** ao centro do ecrã; a sessão só arranca no fim. **Esc**
+durante a contagem cancela (nada fica gravado). Nos **treinos estruturados**
+(um treino da lista, um teste, um plano de voltas) não há auto lap para
+escolher: **cada bloco feito fecha uma volta**, sozinho.
+
+As teclas destas tabelas são as de origem: em **Definições → Atalhos de
+teclado** mudas qualquer uma (Enter na linha e carrega na tecla nova). A
+aplicação avisa se a tecla já é de outro atalho no mesmo contexto ou se é de
+navegação (setas, Enter, Esc, Tab…, que são fixas). **Guardar** fixa,
+**Cancelar** desfaz, e **Repor as teclas de origem** volta tudo atrás.
 
 O **tempo total** fica em grande, ao centro, no topo de todas as sessões
 (ciclismo, remo, corrida, natação, ginásio). Por baixo aparece o tempo da
@@ -265,8 +277,9 @@ tenha alguma coisa para guardar.
 
 ### Temas
 
-Em **Definições → Ecrã e idioma → Tema**, ←/→ ou Enter mudam o tema. São
-quatro, todos sem preto:
+Em **Definições → Ecrã e idioma → Tema**, ←/→ mudam o tema e **o novo aspeto
+vê-se logo**. Só fica com **Guardar**; **Cancelar** (ou sair sem guardar)
+volta ao tema que estava. São quatro, todos sem preto:
 
 - **Perennia** (o de origem): fundo claro, faixa do topo azul-marinho e
   ações em azul.
@@ -274,8 +287,7 @@ quatro, todos sem preto:
 - **Areia**: claro e quente, com cobre.
 - **Ardósia**: cinzento-azulado médio, para salas com pouca luz.
 
-Ao mudar de tema, a aplicação volta a desenhar o ecrã inicial e as
-Definições com as cores novas. As cores das zonas (verde-água, verde,
+As cores das zonas (verde-água, verde,
 amarelo, laranja, vermelho, roxo) são as mesmas do intervals.icu em todos
 os temas.
 
@@ -458,7 +470,35 @@ realçadas. O tempo total fica sempre ao centro, em cima.
 - **Del** esvazia o lugar;
 - **R** duas vezes repõe o ecrã de origem.
 
-Grava sozinho a cada mudança, e a sessão seguinte já usa o ecrã novo.
+Fica com **Guardar** (em baixo, à direita); **Cancelar** volta ao gravado.
+
+### Disposição do ecrã da sessão (arrastar painéis)
+
+Em **Definições → Sessões → Disposição do ecrã da sessão** (ou no botão
+**Disposição do ecrã**, em cima à direita, no editor das métricas) decides
+**onde fica cada painel** — um separador por desporto (ciclismo, remo,
+corrida, natação). Em cima está o ecrã da sessão em ponto pequeno, numa
+grelha de 24 × 16; o tempo total e os botões ficam sempre em cima.
+
+| Desporto | Painéis |
+|---|---|
+| Ciclismo | caixas de métricas, zonas de potência e FC, plano do treino, classificação, voltas, tempo em cada zona, perfil dos próximos 2 km, rota completa |
+| Remo | quadrados de métricas, estado e plano, voltas, classificação, gráfico ao vivo (potência e voga), tempo em cada zona de FC |
+| Corrida, Natação | quadrados de métricas, estado e plano, voltas, gráfico ao vivo (FC e velocidade), tempo em cada zona de FC |
+
+- **Arrasta** um painel para o mudar de sítio; o **canto de baixo, à
+  direita**, muda o tamanho. Um painel não pode pisar outro.
+- Os painéis que não estão no ecrã ficam por baixo: **arrasta** um para o
+  sítio que queres, ou **clica** nele (fica no primeiro lugar livre; com o
+  ecrã cheio, fica com a parte de baixo do maior painel).
+- Teclado: **,** e **.** escolhem o painel, as **setas** movem-no,
+  **Shift+setas** mudam o tamanho, **Del** tira-o do ecrã, **Enter** põe o
+  primeiro dos que estão fora.
+- **Guardar** grava; **Cancelar** volta ao gravado; **Repor a de origem**.
+
+No remo sem jogo não há classificação: as voltas ocupam também o lugar dela
+(se estiver logo por baixo). No ciclismo, a placa das subidas, a fuga e os
+avisos ficam sempre ao centro.
 
 ### Calendário
 
@@ -1128,7 +1168,7 @@ O cartão **Saúde** tem:
 ### Sincronização (GarminDB)
 
 Em **Definições → Sincronização** trazes os teus dados de uma fonte para a
-base da Perennia. Por agora a fonte é o
+base da Perennia. Cada fonte tem o seu separador; por agora há um, o
 [GarminDB](https://github.com/tcgoetz/GarminDB), que descarrega os dados do
 Garmin Connect para bases locais (`~/HealthData/DBs`). A Perennia **lê essas
 bases** e, se o GarminDB estiver instalado, corre-o por ti. A tua

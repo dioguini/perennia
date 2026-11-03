@@ -35,6 +35,7 @@ def sport_label(sport: str) -> str:
 
 
 class CalendarScreen(Screen):
+    KEY_SCOPE = "calendar"
     AGENT = True
 
     def __init__(self, app, when: date | None = None):

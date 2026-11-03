@@ -26,7 +26,7 @@ Linux / Raspberry Pi: descompacta e corre ./Perennia/Perennia
 
   Definições   → o teu nome, peso e FTP
   Dispositivos → Procurar (Bluetooth) ou Procurar ANT+ (antena USB)
-                 Sem hardware, escolhe "Trainer simulado" para experimentar.
+                 Sem hardware, escolhe "SEM HARDWARE - Trainer" para experimentar.
   Pedalar      → Importar .gpx: põe os teus .gpx na pasta "gpx" ao lado da
                  aplicação (ou em Transferências) e escolhe-os na lista.
 

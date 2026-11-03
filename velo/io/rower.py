@@ -216,7 +216,7 @@ def is_rower(name: str, service_uuids: list[str]) -> str | None:
 class SimulatedRower:
     """Remador virtual: rema a ~24 spm e responde à resistência."""
 
-    name = "Remo simulado"
+    name = "SEM HARDWARE - Remo"
     device_id = "sim:rower"
     protocol = "sim"
     connected = True

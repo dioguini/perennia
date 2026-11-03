@@ -17,7 +17,7 @@ class SimulatedTrainer:
     """Ciclista virtual. Em modo ERG segue o alvo; em simulação, aguenta
     uma potência de base e sobe um pouco quando a estrada inclina."""
 
-    name = "Trainer simulado"
+    name = "SEM HARDWARE - Trainer"
     device_id = "sim:trainer"
     profiles = ("ftms", "cps", "hrs")
     supports_sim = True

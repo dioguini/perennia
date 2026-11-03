@@ -401,7 +401,7 @@ def start_laps(app, mode: str, items: list[dict] | None, replace: bool = False) 
         app.replace(LapSessionScreen(app, mode, plan=items, autolap=autolap))
     lines = [tr("{n} voltas no plano", "{n} laps in the plan", n=len(items or []))] if items \
         else []
-    scr = StartOptions(app, "gym", title, go, lines=lines)
+    scr = StartOptions(app, "gym", title, go, lines=lines, structured=bool(items))
     app.replace(scr) if replace else app.push(scr)
 
 

@@ -264,7 +264,7 @@ class TestDevicesMenu(tg.GuiCase):
         self.assertIn("Procurar Bluetooth", labels)
         self.assertNotIn("Fechar", labels)                    # fica só o botão
         self.assertFalse(any(x.startswith("Máquina de remo…") for x in labels))
-        self.pick("Máquina de remo simulada")
+        self.pick("SEM HARDWARE - Remo")
         self.assertIsInstance(self.app.rower, rio.SimulatedRower)
         labels = [i.label for i in self.screen().list.items]
         self.assertIn(f"✓ {self.app.rower.name}", labels)
@@ -290,19 +290,19 @@ class TestSettingsTabs(tg.GuiCase):
         self.assertFalse(any("Resistência extra" in i.label or "resistência" in i.label.lower()
                              for i in scr.list.items))
 
-    def test_shortcuts_fill_the_screen(self):
+    def test_shortcuts_are_listed_by_context(self):
         self.pick("Definições")
         scr = self.screen()
         scr.tab_named("Atalhos")
         self.app._on_draw()
-        texts = [lab.text for lab in scr.keys_view.labels if lab.text]
-        for k in ("Ctrl+S", "L", "P", "F10", "Guardar", "Marcar volta (lap)"):
-            self.assertIn(k, texts)
-        x, top, width, bottom = scr.keys_view.geometry
-        for lab in scr.keys_view.labels:
-            if lab.text:
-                self.assertGreaterEqual(lab.y, bottom, lab.text)
-                self.assertLessEqual(lab.x, x + width)
+        items = scr.list.items
+        values = [i.value for i in items]
+        labels = [i.label for i in items]
+        for k in ("Ctrl+S", "L", "P", "F10"):
+            self.assertIn(k, values)
+        self.assertIn("Guardar", labels)
+        self.assertIn("Marcar volta (lap)", labels)
+        self.assertTrue(any(i.header and i.label == "Sessão de ciclismo" for i in items))
 
     def test_metrics_are_a_grid(self):
         self.pick("Definições")
@@ -645,7 +645,7 @@ class TestRideInfographics(tg.GuiCase):
 
     def test_cycling_stats_peaks_tab(self):
         self._ride(400)
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.pick("Estatísticas")
         scr = self.screen()
         scr.tab_named("Picos")

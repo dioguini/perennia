@@ -327,8 +327,8 @@ class TestGarminDBGui(tg.GuiCase):
         self.pick("Sincronização")                 # o separador das Definições
         scr = self.screen()
         self.assertIsInstance(scr, app_mod.SettingsScreen)
-        self.assertEqual(scr.list.items[0].value, "GarminDB")
-        self.assertIn("garmin.db ✓", scr.list.items[1].detail)
+        self.assertEqual(scr.sync_tabs.current, "GarminDB")     # a fonte é um separador
+        self.assertIn("garmin.db ✓", scr.list.items[0].detail)
         self.pick("Só importar")
         self.assertEqual(scr.sync.last_report["days"], 2)
 
@@ -501,7 +501,9 @@ class TestLabsGui(tg.GuiCase):
         self.pick("2025-07-23")
         rep = self.screen()
         labels = [i.label for i in rep.list.items]
-        self.assertIn("— Bioquímica · Ferro", labels)
+        self.assertIn("Bioquímica · Ferro", labels)              # um título de secção
+        head = next(i for i in rep.list.items if i.label == "Bioquímica · Ferro")
+        self.assertTrue(head.header)
         self.assertIn("Ferritina ▲", labels)
         self.assertIn("Colesterol HDL ▼", labels)
         self.press(key.ESCAPE)

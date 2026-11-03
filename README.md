@@ -110,7 +110,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   dispositivos que funciona a meio da sessão. Avisa quando um aparelho se
   desliga. Também tem Definições (em separadores) e Desligar, que pede
   confirmação.
-- **Temas profissionais**, todos sem preto: Perennia (azul-marinho),
+- **Contagem de 15 s** antes de qualquer sessão; nos treinos estruturados,
+  uma volta por bloco (sem auto lap).
+- **Atalhos de teclado personalizáveis**, por contexto.
+- **Temas profissionais** (vê-se logo; grava-se com Guardar), todos sem preto: Perennia (azul-marinho),
   Sálvia, Areia e Ardósia (pouca luz).
 - **Objetivo de cada treino e de cada bloco**, com o alvo, num resumo antes
   de começar (gráfico por zonas, repetições agrupadas), e na sessão.
@@ -118,6 +121,8 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   cumprido, comentário), com «prescrito e realizado» e uma análise que diz
   se a sessão foi proveitosa para o objetivo. Fica guardado para o agente.
 - **Editor do ecrã da sessão** de cada desporto: arrastam-se as métricas.
+  E a **disposição** é tua: caixas, voltas, classificação, plano, gráfico
+  ao vivo e tabelas arrastam-se e redimensionam-se numa grelha.
 - **Calendário mensal** com sessões, treinos planeados e o resumo de cada
   semana, e **Carga e prontidão** (fitness, fadiga, forma, prontidão, ramp).
 - **Volta automática** por tempo ou distância, opcional antes de cada
@@ -155,7 +160,12 @@ hora estão na faixa do topo. Acrescentar ou editar (artigos, exercícios,
 desafios, testes, passos) abre uma janela com **Cancelar · Guardar · Guardar
 e sair**; o Guardar só acende quando há alterações, e sair com alterações
 pergunta *Sair sem guardar · Cancelar · Sair e guardar*. **Enter nunca muda
-valores**: as escolhas mudam-se com ←/→. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
+valores**: as escolhas mudam-se com ←/→. Os títulos das listas ficam numa
+faixa sombreada e as setas saltam-nos; a descrição de cada opção fica à
+frente dela (nas listas grandes, como a dos exercícios, fica por baixo). Na
+janela da sessão, a rota escolhe-se numa lista das tuas rotas `.gpx`. Os
+aparelhos de experiência chamam-se **SEM HARDWARE - Trainer** e **SEM
+HARDWARE - Remo**. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
 põe em ecrã inteiro. A sessão nunca termina sozinha: ao fim da rota dá a
 volta e conta as voltas; só o botão de parar a fecha.
 
@@ -192,6 +202,7 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   objectives.py      objetivos dos treinos e dos blocos, alvos, resumo
   blocks.py          blocos de um treino (ler/gravar/estimar), para todos os desportos
   workout_meta.py    tipo de cada treino (ERG ou Manual), níveis do rolo, extras dos blocos
+  screen_layout.py   a disposição do ecrã da sessão: onde fica cada painel (grelha 24 × 16)
   peaks.py           picos (melhores médias por duração) e o relatório de uma sessão
   feedback.py        feedback no fim da sessão e a análise que o cruza com o objetivo
   layouts.py         que métricas aparecem no ecrã da sessão de cada desporto
@@ -227,7 +238,9 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      Challenge, estatísticas gerais, recuperação) ·
                      health_screens.py (saúde, testes, agente) ·
                      rowing_screens.py (remo) · connect_screens.py (Strava) ·
-                     sync_screens.py (Sincronização) · shortcuts.py (atalhos) ·
+                     sync_screens.py (Sincronização) · keymap.py (atalhos
+                     personalizáveis) · arrangement_screens.py (disposição) ·
+                     session_panels.py (painéis das sessões) ·
                      challenge_screens.py (separador Treinar, Challenge da
                      corrida, natação e ginásio) · hub_screens.py (menus dos desportos,
                      inventários) · builder_screens.py (blocos) ·
@@ -246,7 +259,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               582 testes: núcleo, protocolos, força, remo, saúde,
+tests/               621 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

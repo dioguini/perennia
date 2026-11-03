@@ -412,6 +412,7 @@ class StrengthPreview(GymBrief):
 class StrengthSessionScreen(EditScreen):
     """A sessão de força: lista de ações à esquerda, painel à direita com a
     série, o descanso, a FC e as séries já feitas deste exercício."""
+    KEY_SCOPE = "gym"
 
     AGENT = False
     IN_SESSION = True
@@ -425,6 +426,7 @@ class StrengthSessionScreen(EditScreen):
         wid = workout_id or (resume or {}).get("config", {}).get("workout_id")
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
                                           out_dir=a.data_dir / "strength", resume=resume)
+        self.start_countdown(resume)
         self.confirming = False
         self._sig = None
         self.batch = pyglet.graphics.Batch()
@@ -673,6 +675,9 @@ class StrengthSessionScreen(EditScreen):
             sub = tr("começa com a 1.ª série", "starts with the 1st set")
         self.clock.set(s.t, sub)
 
+    def cancel_countdown(self) -> None:
+        self._discard()
+
     def _discard(self) -> None:
         s = self.session
         try:
@@ -841,13 +846,16 @@ class StrengthSummaryScreen(Screen):
         super().__init__(app)
         self.result = result
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu(_gym_hub())
+
     def enter(self) -> None:
         a = self.app
         r = self.result
         if not r:
             a.reset_to_menu(_gym_hub())
             return
-        items = [Item(t("summary.close"), action=lambda: a.reset_to_menu(_gym_hub()))]
+        items = []                 # «Voltar» (em baixo) leva ao menu do ginásio
 
         def add(label: str, value: str) -> None:
             items.append(Item(label, value=value, enabled=False))
@@ -2239,6 +2247,7 @@ from velo.ui.session_setup import GameSetup  # noqa: E402,F401
 class LapSessionScreen(EditScreen):
     """Sessão por voltas. À esquerda: abrir voltas e os campos da volta atual;
     à direita: a volta a contar, a FC e as voltas já feitas."""
+    KEY_SCOPE = "gym"
 
     AGENT = False
     IN_SESSION = True
@@ -2253,6 +2262,7 @@ class LapSessionScreen(EditScreen):
                                      out_dir=app.data_dir / "strength", resume=resume,
                                      rower=getattr(app, "rower", None), plan=plan,
                                      autolap=autolap)
+        self.start_countdown(resume)
         self.chrome.title.font_size = 18
         self.confirming = False
         self._sig = None
@@ -2404,6 +2414,9 @@ class LapSessionScreen(EditScreen):
     def _next_planned(self) -> None:
         self.session.start_planned()
         self.enter()
+
+    def cancel_countdown(self) -> None:
+        self._discard()
 
     def _discard(self) -> None:
         s = self.session
@@ -2628,6 +2641,9 @@ class LapSummaryScreen(Screen):
         super().__init__(app)
         self.result = result
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu(_gym_hub())
+
     def enter(self) -> None:
         from velo.core.i18n import tr
         a = self.app
@@ -2635,7 +2651,7 @@ class LapSummaryScreen(Screen):
         if not r:
             a.reset_to_menu(_gym_hub())
             return
-        items = [Item(t("summary.close"), action=lambda: a.reset_to_menu(_gym_hub()))]
+        items = []                 # «Voltar» (em baixo) leva ao menu do ginásio
 
         def add(label, value):
             items.append(Item(label, value=value, enabled=False))

@@ -610,7 +610,7 @@ class TestLapSessionGui(tg.GuiCase):
         self.assertEqual([i["kind"] for i in plan.items], ["treadmill", "strength", "rest"])
         self.pick("Começar")                                   # → opções (auto lap)
         opts = self.screen()
-        self.assertEqual(opts.list.items[1].value, "desligado")  # auto lap desligado
+        self.assertEqual(opts.list.items[1].value, "uma por bloco")  # plano: volta por bloco
         self.pick("Começar")
         scr = self.screen()
         self.assertIsInstance(scr, ss.LapSessionScreen)
@@ -639,7 +639,7 @@ class TestLapSessionGui(tg.GuiCase):
         summ = self.screen()
         self.assertIsInstance(summ, ss.LapSummaryScreen)
         self.assertTrue(Path(summ.result["fit_path"]).exists())
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.assertIsInstance(self.screen(), gs.GymHub)
 
     def test_free_laps_discard_leaves_nothing(self):
