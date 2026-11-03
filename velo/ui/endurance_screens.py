@@ -597,7 +597,6 @@ class EnduranceSummary(Screen):
         if r.get("fit_path"):
             items.append(Item(".fit", value=r.get("name") or "", detail=r["fit_path"],
                               enabled=False))
-        items.append(Item(tr("Voltar", "Back"), action=self.app.pop))
         self.chrome.set(r.get("title") or sp.name(r["sport"]), r.get("name") or "",
                         self.footer())
         fb_item = _feedback().summary_item(self.app, "endurance", self.result.get("session_id"))

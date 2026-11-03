@@ -571,7 +571,7 @@ class TestDeviceScreen(GuiCase):
     def test_lists_the_connected_trainer_with_capabilities(self):
         self.pick("Dispositivos")
         labels = self.labels()
-        self.assertTrue(any("Trainer simulado" in x for x in labels), labels)
+        self.assertTrue(any("SEM HARDWARE - Trainer" in x for x in labels), labels)
         self.assertTrue(any("declive" in x for x in labels), labels)
 
     def test_shows_live_readings(self):
@@ -851,7 +851,7 @@ class TestRideFlow(GuiCase):
             self.app.hub.tick(0.25)
             ride.update(0.25)
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def _run(self, ride, seconds: float) -> None:
@@ -1209,7 +1209,7 @@ class TestRideFlow(GuiCase):
             ride.update(0.25)
             guard += 1
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
         self.pick("Biblioteca de rotas")
         self.pick("Serra de Teste")
@@ -1267,11 +1267,12 @@ class TestWorkoutAndFtpScreens(GuiCase):
 
     def test_ftp_protocols_are_listed_and_startable(self):
         self.pick("Testes")
-        self.pick("Teste de FTP")
-        labels = self.labels()
-        for proto in ("20 minutos", "Rampa", "8 minutos"):
-            self.assertTrue(any(proto in x for x in labels), f"falta {proto}")
-        self.pick("Rampa")
+        labels = [i.label for i in self.screen().list.items]
+        self.assertNotIn("Teste de FTP", labels)         # os protocolos são testes
+        for proto in ("FTP — 20 minutos", "FTP — rampa", "FTP — 2 × 8 minutos"):
+            self.assertIn(proto, labels)
+        self.pick("FTP — rampa")
+        self.pick("Configurar sessão")
         self.assertIsInstance(self.screen(), session_setup.SessionSetup)
         self.pick("Começar")
         ride = self.screen()
@@ -1283,8 +1284,8 @@ class TestWorkoutAndFtpScreens(GuiCase):
 
     def test_ftp_result_is_offered_and_accepted(self):
         self.pick("Testes")
-        self.pick("Teste de FTP")
-        self.pick("20 minutos")
+        self.pick("FTP — 20 minutos")
+        self.pick("Configurar sessão")
         self.pick("Começar")
         ride = self.screen()
         for _ in range(60):
@@ -1536,7 +1537,7 @@ class TestHomeScreen(GuiCase):
         self.app._tick(0.01)
         self.app._on_draw()
         # aparelhos sempre à vista, com o estado
-        self.assertEqual(bar.devices, [("Trainer simulado", "ok")])
+        self.assertEqual(bar.devices, [("SEM HARDWARE - Trainer", "ok")])
         r = bar.buttons["devices"][0]
         self.app._on_mouse_press(int(r.x + 5), int(r.y + 5), 1, 0)
         self.assertIsInstance(self.screen(), app_mod.DeviceScreen)
@@ -1608,7 +1609,7 @@ class TestStatsExplorer(GuiCase):
             self.app.hub.tick(0.5)
             ride.update(0.5)
         self.press(key.F10, key.ENTER)
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
     def test_power_curve_shows_values_and_the_date_of_a_point(self):
         self._ride()
@@ -1721,7 +1722,7 @@ class TestStatsScreen(GuiCase):
             self.app.hub.tick(0.5)
             ride.update(0.5)
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
         self.pick("Estatísticas")
         screen = self.screen()

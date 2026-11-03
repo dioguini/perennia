@@ -264,7 +264,7 @@ class TestDevicesMenu(tg.GuiCase):
         self.assertIn("Procurar Bluetooth", labels)
         self.assertNotIn("Fechar", labels)                    # fica só o botão
         self.assertFalse(any(x.startswith("Máquina de remo…") for x in labels))
-        self.pick("Máquina de remo simulada")
+        self.pick("SEM HARDWARE - Remo")
         self.assertIsInstance(self.app.rower, rio.SimulatedRower)
         labels = [i.label for i in self.screen().list.items]
         self.assertIn(f"✓ {self.app.rower.name}", labels)
@@ -645,7 +645,7 @@ class TestRideInfographics(tg.GuiCase):
 
     def test_cycling_stats_peaks_tab(self):
         self._ride(400)
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.pick("Estatísticas")
         scr = self.screen()
         scr.tab_named("Picos")

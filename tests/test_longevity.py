@@ -639,7 +639,7 @@ class TestLapSessionGui(tg.GuiCase):
         summ = self.screen()
         self.assertIsInstance(summ, ss.LapSummaryScreen)
         self.assertTrue(Path(summ.result["fit_path"]).exists())
-        self.pick("Fechar")
+        self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.assertIsInstance(self.screen(), gs.GymHub)
 
     def test_free_laps_discard_leaves_nothing(self):

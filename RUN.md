@@ -132,8 +132,8 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    Enter alterna unidades, idioma e pausa automática.
 2. **Dispositivos** (no topo, ou F4) → `Procurar Bluetooth` encontra o trainer, a cinta
    e a máquina de remo; `Procurar ANT+` usa a antena USB.
-   Se ainda não quiseres hardware, escolhe **Trainer simulado** (ou **Máquina de remo
-   simulada**) e podes experimentar a aplicação toda.
+   Se ainda não quiseres hardware, escolhe **SEM HARDWARE - Trainer** (ou
+   **SEM HARDWARE - Remo**) e podes experimentar a aplicação toda.
 3. **Ciclismo** → separador Treinar → **Sessão de treino** → pergunta
    **Livre** ou **Carregar treino**.
    - **Carregar treino** abre a Lista de treinos; a ficha do treino tem, em

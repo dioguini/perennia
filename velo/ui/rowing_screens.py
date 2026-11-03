@@ -1241,7 +1241,7 @@ class RowerDeviceScreen(Screen):
             items.append(Item(name, value=proto.upper(), detail=addr,
                               action=lambda ad=addr, n=name, p=proto: self._connect(ad, n, p)))
         if cur is None or cur.protocol != "sim":
-            items.append(Item(tr("Usar a máquina simulada", "Use the simulated machine"),
+            items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
                               action=self._sim))
         items.append(Item(tr("A FC", "Heart rate"), enabled=False,
                           detail=tr("Vem da banda ou do relógio (Dispositivos); senão, da "
@@ -1297,7 +1297,7 @@ class RowerDeviceScreen(Screen):
 
     def _sim(self) -> None:
         self.app.set_rower(rower_io.SimulatedRower())
-        self.note = tr("Máquina simulada ligada", "Simulated machine connected")
+        self.note = tr("SEM HARDWARE - Remo ligado", "NO HARDWARE - Rower connected")
         self.enter()
 
     def _disconnect(self) -> None:

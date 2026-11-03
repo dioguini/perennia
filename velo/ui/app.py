@@ -291,13 +291,17 @@ class Screen:
             self.list.activate()
             return True
         if symbol == key.ESCAPE:
-            self.app.pop()
+            self.go_back()
             return True
         return False
 
+    def go_back(self) -> None:
+        """O «Voltar» em baixo (e o Esc). Os resumos levam ao menu do desporto."""
+        self.app.pop()
+
     def on_mouse(self, x: int, y: int) -> bool:
         if self.back_button is not None and self.back_button.hit(x, y):
-            self.app.pop()
+            self.go_back()
             return True
         if self.hub_tabs is not None:
             i = self.hub_tabs.hit(x, y)
@@ -1544,6 +1548,9 @@ class SummaryScreen(Screen):
         self.ftp_protocol = ftp_protocol
         self.ftp_estimate: tuple[float, int] | None = None
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu()
+
     def enter(self) -> None:
         a = self.app
         s = self.result.get("summary")
@@ -1657,12 +1664,11 @@ class SummaryScreen(Screen):
         fit_path = self.result.get("fit_path")
         subtitle = t("summary.saved_fit", path=fit_path) if fit_path else \
             f"{t('common.error')}: o .fit não foi escrito"
-        # «Fechar» à cabeça: selecionado logo, e o resultado fica todo à vista
-        items.insert(0, Item(t("summary.close"), action=lambda: a.reset_to_menu()))
+        # sem «Fechar» na lista: o «Voltar» de baixo (ou Esc) leva ao menu
         ftp_rows = [i for i in items if i.action == self._accept_ftp]
         for row in ftp_rows:                       # aceitar a FTP também à vista
             items.remove(row)
-            items.insert(1, row)
+            items.insert(0, row)
 
         if self.result.get("name"):
             subtitle = f"{self.result['name']} · {subtitle}"
@@ -1729,7 +1735,7 @@ class PopupMixin:
         self.list.bar_y = p.y + 12
         self.list.top_y = p.y + p.h - 50
         if self.back_button is not None:
-            self.back_button.place(p.x + 16, p.y + 12, tr("Fechar", "Close"))
+            self.back_button.place(p.x + 16, p.y + 12, t("common.back"))
         self.list._sync()
 
     def on_resize(self, w: int, h: int) -> None:
@@ -1882,7 +1888,7 @@ class DeviceScreen(ModalScreen):
         if not any(getattr(s, "device_id", "") == "sim:trainer" for s in a.hub.sources):
             items.append(Item(t("dev.simulated"), action=self._add_sim))
         if a.rower is None or getattr(a.rower, "protocol", "") != "sim":
-            items.append(Item(tr("Máquina de remo simulada", "Simulated rowing machine"),
+            items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
                               detail=tr("para remar sem a máquina (testes, demonstração)",
                                         "to row without the machine (tests, demo)"),
                               action=self._add_sim_rower))
@@ -1964,7 +1970,7 @@ class DeviceScreen(ModalScreen):
     def _add_sim_rower(self) -> None:
         from velo.io import rower as rower_io
         self.app.set_rower(rower_io.SimulatedRower())
-        self.note = tr("Máquina de remo simulada ligada", "Simulated rowing machine connected")
+        self.note = tr("SEM HARDWARE - Remo ligado", "NO HARDWARE - Rower connected")
         self.enter()
 
     def _scan(self) -> None:
@@ -2761,29 +2767,6 @@ class WorkoutLibrary(Screen):
 def WorkoutRouteChoice(app: "App", workout_id: str):            # noqa: N802
     """«Configurar sessão de treino»: a janela da sessão, com a rota opcional."""
     return _setup().SessionSetup(app, "cycling", kind="workout", workout_id=workout_id)
-
-
-class FtpScreen(Screen):
-    HAS_BOARD = True
-
-    def side_board(self):
-        return boards.ftp_board(self.app.db)
-
-    def enter(self) -> None:
-        a = self.app
-        items = []
-        for proto in ftp_mod.PROTOCOLS:
-            info = ftp_mod.CATALOG[proto]
-            items.append(Item(t(info.label_key), detail=info.description_pt,
-                              action=lambda p=proto: a.push(FtpRouteChoice(a, p))))
-        history = a.db.ftp_history()
-        if history:
-            items.append(Item("Histórico", value=f"{len(history)} testes", enabled=False))
-            for h in history[-5:]:
-                items.append(Item(f"  {h['tested_at'][:10]}", value=f"{h['ftp_w']} W",
-                                  detail=h["protocol"], enabled=False))
-        self.chrome.set(t("menu.ftp_test"), t("ftp.pick"), self.footer())
-        self.list.set_items(items, keep_index=True)
 
 
 def FtpRouteChoice(app: "App", protocol: str):                  # noqa: N802

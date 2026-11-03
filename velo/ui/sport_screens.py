@@ -841,13 +841,16 @@ class StrengthSummaryScreen(Screen):
         super().__init__(app)
         self.result = result
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu(_gym_hub())
+
     def enter(self) -> None:
         a = self.app
         r = self.result
         if not r:
             a.reset_to_menu(_gym_hub())
             return
-        items = [Item(t("summary.close"), action=lambda: a.reset_to_menu(_gym_hub()))]
+        items = []                 # «Voltar» (em baixo) leva ao menu do ginásio
 
         def add(label: str, value: str) -> None:
             items.append(Item(label, value=value, enabled=False))
@@ -2628,6 +2631,9 @@ class LapSummaryScreen(Screen):
         super().__init__(app)
         self.result = result
 
+    def go_back(self) -> None:
+        self.app.reset_to_menu(_gym_hub())
+
     def enter(self) -> None:
         from velo.core.i18n import tr
         a = self.app
@@ -2635,7 +2641,7 @@ class LapSummaryScreen(Screen):
         if not r:
             a.reset_to_menu(_gym_hub())
             return
-        items = [Item(t("summary.close"), action=lambda: a.reset_to_menu(_gym_hub()))]
+        items = []                 # «Voltar» (em baixo) leva ao menu do ginásio
 
         def add(label, value):
             items.append(Item(label, value=value, enabled=False))
