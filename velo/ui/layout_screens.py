@@ -621,17 +621,16 @@ class LayoutEditor(Screen):
             self.app.push(MetricPicker(self.app, self, g, i))
             return True
         if symbol == key.R:
-            if self._armed_reset:
+            def reset() -> None:
                 self.drafts[self.sport] = lay.defaults(self.sport)
                 self.groups = self.drafts[self.sport]
-                self._armed_reset = False
                 self.app.message(tr("Ecrã reposto (Guardar para ficar)",
                                     "Screen reset (Save to keep it)"))
                 self.enter()
-            else:
-                self._armed_reset = True
-                self.app.message(tr("R outra vez para repor o ecrã de origem",
-                                    "R again to reset the screen"))
+            self.app.confirm(tr("Repor o ecrã de origem?", "Restore the original screen?"),
+                             tr("As métricas voltam às de origem (só fica com Guardar).",
+                                "Metrics go back to the original ones (kept only with Save)."),
+                             reset, yes=tr("Repor", "Restore"))
             return True
         return super().on_key(symbol, modifiers)
 

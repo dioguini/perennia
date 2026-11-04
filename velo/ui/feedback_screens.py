@@ -21,7 +21,7 @@ from velo.core.units import hms
 from velo.gfx import theme as _theme
 from velo.gfx.compat import label as make_label
 from velo.gfx.compat import line as make_line
-from velo.ui.app import Screen
+from velo.ui.app import Screen, SnapshotUnsaved
 from velo.ui.brief import sport_kind, wrap
 from velo.ui.widgets import Item
 
@@ -55,7 +55,7 @@ def summary_item(app, kind: str, sid: str | None) -> Item | None:
                 action=lambda: app.push(FeedbackScreen(app, kind, sid)))
 
 
-class FeedbackScreen(Screen):
+class FeedbackScreen(SnapshotUnsaved, Screen):
     AGENT = False
     MAX_PTS = 240
 
@@ -73,6 +73,15 @@ class FeedbackScreen(Screen):
         self._build()
         self._layout()
         self._refresh()
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return repr(self.v)
+
+    def on_save(self) -> bool:
+        self.save()
+        self.mark_saved()
+        return True
 
     # ------------------------------------------------------------ construção
 
@@ -471,6 +480,7 @@ class FeedbackScreen(Screen):
         self.saved = True
         self.app.message(tr("Feedback guardado", "Feedback saved"))
         self._refresh()
+        self.mark_saved()
         return res
 
     def set_value(self, key_: str, value) -> None:

@@ -196,13 +196,12 @@ class ItemEditor(EditPopup):
         return True
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        inventory.delete(self.app.db, self.iid)
-        self._saved_state = self.state()
-        self.close()
+        def gone() -> None:
+            inventory.delete(self.app.db, self.iid)
+            self._saved_state = self.state()
+            self.close()
+        self.app.confirm(tr("Apagar este artigo?", "Delete this item?"), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                         yes=tr("Apagar", "Delete"))
 
 
 # =========================================================== exercícios

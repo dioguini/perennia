@@ -383,8 +383,8 @@ class TestLayouts(tg.GuiCase):
         self.save()
         self.assertEqual(lay.load(db, "cycling")[0], g1)
         self.assertEqual(lay.load(db, "cycling")[1], g0)
-        ed._armed_reset = True
-        self.press(key.R)
+        self.press(key.R)                              # pergunta numa janela
+        self.press(key.ENTER)                          # «Repor»
         self.save()
         from velo.core.boxes import DEFAULT_BOXES
         self.assertEqual(lay.load(db, "cycling")[0], DEFAULT_BOXES[0])
@@ -480,6 +480,7 @@ class TestCalendar(tg.GuiCase):
         self.assertTrue(any("Sweet spot 2×20" in i.label for i in day.list.items))
         self.select("Planeado")
         self.press(key.DELETE)
+        self.press(key.ENTER)                          # confirma na janela
         self.assertFalse(any("Planeado" in i.label for i in day.list.items))
         self.app._on_draw()
 

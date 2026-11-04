@@ -990,9 +990,17 @@ class StrengthBuilder(Screen):
             if cid and cid[0] == "cell":
                 self._backspace()
             elif cid and cid[0] in ("bmenu", "handle", "rounds", "brest"):
-                self._remove_block(cid[1])
+                self.app.confirm(tr("Apagar este bloco?", "Delete this block?"),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 lambda bi=cid[1]: self._remove_block(bi),
+                                 yes=tr("Apagar", "Delete"))
             elif cid and cid[0] in ("exname", "exmenu"):
-                self._remove_ex(cid[1], cid[2])
+                self.app.confirm(tr("Tirar este exercício?", "Remove this exercise?"),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 lambda bi=cid[1], ei=cid[2]: self._remove_ex(bi, ei),
+                                 yes=tr("Tirar", "Remove"))
             return True
         if symbol in (key.ENTER, key.RETURN):
             self.activate()

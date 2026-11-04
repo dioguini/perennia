@@ -518,8 +518,15 @@ class LapPlanEditor(EditScreen):
                     self.enter()
                 return True
             if symbol == key.DELETE:
-                del self.items[i]
-                self.enter()
+                def gone(i=i) -> None:
+                    del self.items[i]
+                    self.dirty = True
+                    self.enter()
+                self.app.confirm(tr("Tirar este exercício do plano?",
+                                    "Remove this exercise from the plan?"),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 gone, yes=tr("Tirar", "Remove"))
                 return True
         return super().on_key(symbol, modifiers)
 

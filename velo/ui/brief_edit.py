@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from velo.core import objectives as ob
 from velo.core.i18n import tr
+from velo.ui.app import SnapshotUnsaved
 from velo.ui.brief import wrap
 from velo.ui.sport_screens import EditScreen
 from velo.ui.widgets import Item
 
 
-class GoalEditor(EditScreen):
+class GoalEditor(SnapshotUnsaved, EditScreen):
     """Escrever o objetivo do treino e o de cada bloco (o nome também)."""
 
     def __init__(self, app, sport: str, wid: str, brief: ob.Brief):
@@ -24,6 +25,14 @@ class GoalEditor(EditScreen):
                        for x in sb[:n]]
         self.entries = list(brief.blocks)
         self.brief = brief
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return (self.goal, repr(self.blocks))
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def _indices(self, k: int) -> list[int]:
         """Os blocos reais que este item representa (todos os da repetição)."""
@@ -83,10 +92,12 @@ class GoalEditor(EditScreen):
     def _save(self) -> None:
         ob.save(self.app.db, self.sport, self.wid, self.goal.strip(), self.blocks)
         self.app.message(tr("Objetivos guardados", "Goals saved"))
+        self.mark_saved()
         self.app.pop()
 
     def _reset(self) -> None:
         self.goal = ""
         self.blocks = [{"name": "", "goal": ""} for _ in self.blocks]
         ob.save(self.app.db, self.sport, self.wid, "", self.blocks)
+        self.mark_saved()
         self.app.pop()

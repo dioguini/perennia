@@ -736,6 +736,7 @@ class TestCyclingBuilderGui(tg.GuiCase):
         n = len(ed.steps)
         self.select("2.")
         self.press(key.DELETE)
+        self.press(key.ENTER)                          # confirma na janela
         self.pick("Guardar")
         self.assertEqual(len(self.app.db.workout_steps(ed.workout_id)), n - 1)
 

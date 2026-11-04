@@ -17,7 +17,7 @@ from velo.core import labs
 from velo.core.i18n import t, tr
 from velo.core.units import hms, parse_number
 from velo.gfx.compat import label as make_label
-from velo.ui.app import FtpRouteChoice, Screen
+from velo.ui.app import FtpRouteChoice, Screen, SnapshotUnsaved
 from velo.ui.sport_screens import EditPopup, EditScreen
 from velo.ui.widgets import ACCENT, BAD, Chart, DIM, GOOD, PANEL, TEXT, Item
 
@@ -268,7 +268,7 @@ def group_name(g: str) -> str:
             "other": tr("Outras", "Other")}.get(g, g)
 
 
-class TextEditScreen(Screen):
+class TextEditScreen(SnapshotUnsaved, Screen):
     """Texto livre com várias linhas (notas, comentário do médico).
     Enter muda de linha; Esc guarda e volta."""
 
@@ -278,7 +278,7 @@ class TextEditScreen(Screen):
         super().__init__(app)
         self.title, self.sub = title, subtitle
         self.text = text or ""
-        self.on_save = on_save
+        self._on_text_saved = on_save
         w, h = app.window.width, app.window.height
         self.batch = pyglet.graphics.Batch()
         self.box = pyglet.shapes.Rectangle(40, 100, w - 80, h - 230, color=PANEL,
@@ -286,6 +286,14 @@ class TextEditScreen(Screen):
         self.label = make_label("", font_size=14, color=TEXT, multiline=True,
                                 width=w - 120, anchor_y="top", batch=self.batch)
         self.label.x, self.label.y = 60, h - 150
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return self.text
+
+    def on_save(self) -> bool:
+        self.save()
+        return True
 
     def enter(self) -> None:
         self.chrome.set(self.title, self.sub,
@@ -319,7 +327,8 @@ class TextEditScreen(Screen):
         return True
 
     def save(self) -> None:
-        self.on_save(self.text.strip())
+        self._on_text_saved(self.text.strip())
+        self.mark_saved()
         self.app.pop()
 
     def on_mouse(self, x: int, y: int) -> bool:
@@ -629,7 +638,7 @@ class ParameterEditor(EditPopup):
             "name", "unit", "reference_text", "ref_low", "ref_high", "ideal_low", "ideal_high")}}
 
 
-class LabReportEditor(EditScreen):
+class LabReportEditor(SnapshotUnsaved, EditScreen):
     def __init__(self, app, report_id: int | None):
         super().__init__(app)
         self.report_id = report_id
@@ -639,6 +648,14 @@ class LabReportEditor(EditScreen):
         self.notes = (r or {}).get("notes") or ""
         self.doctor = (r or {}).get("doctor_feedback") or ""
         self._armed = False
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return (self.done_on, self.lab, self.notes, self.doctor)
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     def _ensure(self) -> int:
         self.report_id = health.save_lab_report(self.app.db, self.report_id,
@@ -736,15 +753,15 @@ class LabReportEditor(EditScreen):
             return
         self._ensure()
         self.app.message(tr("Análise guardada", "Report saved"))
+        self.mark_saved()
         self.app.pop()
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        health.delete_lab_report(self.app.db, self.report_id)
-        self.app.pop()
+        def gone() -> None:
+            health.delete_lab_report(self.app.db, self.report_id)
+            self.app.pop(force=True)
+        self.app.confirm(tr("Apagar esta análise?", "Delete this lab report?"), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."),
+                         gone, yes=tr("Apagar", "Delete"))
 
 
 def ref_text(x: dict) -> str:
@@ -1135,17 +1152,18 @@ class TestDetail(Screen):
             return True
         if symbol == key.DELETE and item is not None and isinstance(item.data, tuple):
             rid = item.data[1]
-            if self._armed == rid:
+
+            def gone(rid=rid) -> None:
                 ft.delete_result(self.app.db, rid)
                 self.enter()
-            else:
-                self._armed = rid
-                self.app.message(t("str.delete_again"))
+            self.app.confirm(tr("Apagar o resultado de {d}?", "Delete the result from {d}?",
+                                d=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                             yes=tr("Apagar", "Delete"))
             return True
         return super().on_key(symbol, modifiers)
 
 
-class TestRunScreen(EditScreen):
+class TestRunScreen(SnapshotUnsaved, EditScreen):
     """Cronómetro do teste (contagem decrescente se tiver duração; se o
     resultado for um tempo, o cronómetro dá-o) e registo do resultado."""
 
@@ -1164,6 +1182,14 @@ class TestRunScreen(EditScreen):
         self.big = make_label("", font_size=56, bold=True, color=ACCENT, anchor_x="center",
                               anchor_y="center", batch=self.batch)
         self.hint = make_label("", font_size=13, color=DIM, anchor_x="center", batch=self.batch)
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return (self.value, self.notes, self.done_on)
+
+    def on_save(self) -> bool:
+        self._save()
+        return True
 
     @property
     def countdown(self) -> bool:
@@ -1261,6 +1287,7 @@ class TestRunScreen(EditScreen):
                       notes=self.notes or None, extra=extra)
         self.app.message(tr("Resultado guardado: {v}", "Result saved: {v}",
                             v=ft.fmt_value(self.value, self.test["unit"])))
+        self.mark_saved()
         self.app.pop()
 
     def draw(self) -> None:

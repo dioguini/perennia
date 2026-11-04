@@ -541,13 +541,13 @@ class MainMenu(SportHub):
                 self.app.push(_extra().WorkoutEditor(self.app, wid))
                 return True
             if symbol == key.DELETE:
-                if getattr(self, "_armed", None) == wid:
+                def gone(wid=wid, name=item.label) -> None:
                     self.app.db.delete_workout(wid)
-                    self.app.message(t("str.deleted", name=item.label))
+                    self.app.message(t("str.deleted", name=name))
                     self.enter()
-                else:
-                    self._armed = wid
-                    self.app.message(t("str.delete_again"))
+                self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
+                                    n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                                 yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -998,8 +998,16 @@ class RouteLibrary(Screen):
             self.enter()
             return True
         if symbol == key.DELETE and item is not None and item.data:
-            self.app.db.delete_route(str(item.data))
-            self.enter()
+            rid = str(item.data)
+
+            def gone() -> None:
+                self.app.db.delete_route(rid)
+                self.enter()
+            self.app.confirm(tr("Apagar a rota «{n}»?", "Delete the route «{n}»?",
+                                n=item.label.lstrip("★ ")),
+                             tr("As sessões feitas nela ficam no histórico. Não dá para desfazer.",
+                                "Rides done on it stay in the history. This cannot be undone."),
+                             gone, yes=tr("Apagar", "Delete"))
             return True
         return super().on_key(symbol, modifiers)
 
@@ -1724,6 +1732,23 @@ class SummaryScreen(Screen):
 
 
 # -------------------------------------------------------------- dispositivos
+
+
+class SnapshotUnsaved:
+    """Mistura para os editores: «há alterações?» compara o estado de agora
+    (`snapshot_state`) com o do início ou do último gravado (`mark_saved`).
+    Voltar atrás com alterações pergunta (ver App.ask_unsaved)."""
+
+    def snapshot_state(self):
+        return None
+
+    def mark_saved(self) -> None:
+        self._snap = self.snapshot_state()
+
+    def has_unsaved(self) -> bool:
+        if not hasattr(self, "_snap"):
+            return False
+        return self.snapshot_state() != self._snap
 
 
 class PopupMixin:
@@ -3059,12 +3084,12 @@ class ChallengeDetail(Screen):
         self.enter()
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        self.app.db.delete_challenge(self.challenge["id"])
-        self.app.pop()
+        def gone() -> None:
+            self.app.db.delete_challenge(self.challenge["id"])
+            self.app.pop()
+        self.app.confirm(tr("Apagar o desafio «{n}»?", "Delete the challenge «{n}»?",
+                            n=self.challenge.get("name", "")), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                         yes=tr("Apagar", "Delete"))
 
 
 # --------------------------------------------------------------------- fuga

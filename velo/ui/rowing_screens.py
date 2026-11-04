@@ -923,12 +923,11 @@ class RowWorkoutEditor(EditScreen):
         self.app.message(tr("Exportado: {p}", "Exported: {p}", p=path))
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        rw.delete_workout(self.app.db, self.wid)
-        self.app.pop(force=True)
+        def gone() -> None:
+            rw.delete_workout(self.app.db, self.wid)
+            self.app.pop(force=True)
+        self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?", n=self.name),
+                         tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone, yes=tr("Apagar", "Delete"))
 
 
 class RowStepEditor(LiveEditPopup):
