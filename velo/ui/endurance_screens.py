@@ -96,9 +96,11 @@ class EnduranceHub(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        return [Item(w["name"], value=self._dur(w), detail=w["description"] or "",
-                     action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)))
-                for w in en.workouts(a.db, self.SPORT)]
+        from velo.ui.workout_import import import_item
+        return [import_item(a, self.SPORT, on_done=lambda _w: self.enter())] + [
+            Item(w["name"], value=self._dur(w), detail=w["description"] or "",
+                 action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)))
+            for w in en.workouts(a.db, self.SPORT)]
 
     def items_history(self) -> list[Item]:
         a = self.app

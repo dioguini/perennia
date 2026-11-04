@@ -1627,8 +1627,9 @@ class CyclingBuilder(Screen):
                     self.app.db.delete_workout(wid)
                     self.app.message(t("str.deleted", name=name))
                     self.enter()
+                from velo.ui.builder_screens import DELETE_SUB
                 self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
-                                    n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                                    n=item.label), tr(*DELETE_SUB), gone,
                                  yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)

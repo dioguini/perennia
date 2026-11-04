@@ -178,7 +178,8 @@ class RowingMenu(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        out = []
+        from velo.ui.workout_import import import_item
+        out = [import_item(a, "rowing", on_done=lambda _w: self.enter())]
         for w in rw.workouts(a.db):
             dur = " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
                                          _m(w["total_m"]) if w["total_m"] else "") if x)
@@ -935,8 +936,9 @@ class RowWorkoutEditor(EditScreen):
         def gone() -> None:
             rw.delete_workout(self.app.db, self.wid)
             self.app.pop(force=True)
+        from velo.ui.builder_screens import DELETE_SUB
         self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?", n=self.name),
-                         tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone, yes=tr("Apagar", "Delete"))
+                         tr(*DELETE_SUB), gone, yes=tr("Apagar", "Delete"))
 
 
 class RowStepEditor(LiveEditPopup):

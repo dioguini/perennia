@@ -55,11 +55,19 @@ def ask_start(app, sport: str, hub=None) -> None:
            "rowing": tr("Livre: remo sem plano, com voltas. Carregar treino: abre a lista de "
                         "treinos.", "Free: row with no plan, with laps. Load workout: opens "
                         "the workout list.")}.get(sport, "")
-    app.push(ConfirmScreen(app, tr("Sessão de treino", "Training session") + f" · {sp.name(sport)}",
-                           sub, [(tr("Cancelar", "Cancel"), app.pop),
-                                 (tr("Carregar treino", "Load workout"), load),
-                                 (tr("Livre", "Free"), free)],
-                           default=2, buttons=True, cancel=app.pop))
+    def from_pc() -> None:
+        app.pop()
+        from velo.ui.workout_import import WorkoutFilePopup
+        app.push(WorkoutFilePopup(app, sport, mode="session"))
+    sub += tr(" Do computador: um .zwo ou .fit (pergunta se fica na lista).",
+              " From the computer: a .zwo or .fit (asks whether to keep it in the list).")
+    dlg = ConfirmScreen(app, tr("Sessão de treino", "Training session") + f" · {sp.name(sport)}",
+                        sub, [(tr("Cancelar", "Cancel"), app.pop),
+                              (tr("Do computador", "From the computer"), from_pc),
+                              (tr("Carregar treino", "Load workout"), load),
+                              (tr("Livre", "Free"), free)],
+                        default=3, buttons=True, cancel=app.pop)
+    app.push(dlg)
 
 
 class GpxPickerPopup(PopupMixin, GpxPicker):
@@ -245,7 +253,8 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
     def _workout_name(self) -> str:
         db = self.app.db
         if self.sport == "cycling":
-            return next((w["name"] for w in db.workouts() if w["id"] == self.workout_id), "")
+            row = db.workout(self.workout_id)        # também os que não estão na lista
+            return row["name"] if row is not None else ""
         if self.sport == "rowing":
             from velo.core import rowing as rw
             w = rw.workout(db, self.workout_id)

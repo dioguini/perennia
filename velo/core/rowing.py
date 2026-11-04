@@ -94,6 +94,10 @@ def ensure(db: Database) -> None:
       target TEXT NOT NULL, lo REAL, hi REAL, resistance INTEGER, cue TEXT,
       PRIMARY KEY (workout_id, idx)) WITHOUT ROWID;
     """)
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(row_workouts)")}
+    if "status" not in cols:            # ativo · apagado · só de uma sessão
+        db.conn.execute("ALTER TABLE row_workouts ADD COLUMN status TEXT NOT NULL"
+                        " DEFAULT 'active'")
     db.conn.commit()
 
 
@@ -221,7 +225,8 @@ def seed(db: Database) -> None:
 def workouts(db: Database) -> list[dict]:
     seed(db)
     out = []
-    for r in db.conn.execute("SELECT * FROM row_workouts ORDER BY builtin DESC, sort, name"):
+    for r in db.conn.execute("SELECT * FROM row_workouts WHERE status = 'active'"
+                             " ORDER BY builtin DESC, sort, name"):
         w = dict(r)
         w["steps"] = steps_of(db, w["id"])
         w["total_s"], w["total_m"] = totals(w["steps"])
@@ -272,7 +277,8 @@ def save_workout(db: Database, wid: str | None, name: str, description: str,
 
 
 def delete_workout(db: Database, wid: str) -> None:
-    db.conn.execute("DELETE FROM row_workouts WHERE id = ?", (wid,))
+    """Sai da lista; os passos ficam para as sessões que o usaram."""
+    db.conn.execute("UPDATE row_workouts SET status = 'deleted' WHERE id = ?", (wid,))
     db.conn.commit()
 
 
@@ -713,6 +719,8 @@ class RowEngine:
                  self.game_spec.get("key"), now_iso(), self.ftp,
                  getattr(rower, "name", None)))
             db.conn.commit()
+            from .ride import _keep_workout
+            _keep_workout(db, "row", self.session_id, "rowing", workout_id)
             self._open_lap("start")
             if self.workout is not None:
                 self._apply_step()
@@ -1191,6 +1199,8 @@ class RowEngine:
         self.abort()
         self.db.conn.execute("DELETE FROM row_sessions WHERE id = ?", (self.session_id,))
         self.db.conn.commit()
+        from . import session_workouts as sw
+        sw.forget(self.db, "row", self.session_id)
 
     # ------------------------------------------------------ mais métricas
 

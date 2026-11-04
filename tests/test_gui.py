@@ -194,7 +194,7 @@ class TestShell(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.ConfirmScreen)
 
     def test_every_screen_opens_updates_and_draws(self):
-        for entry in ("Sessão de treino", "Importar treino", "Testes", "Challenge", "Novo treino",
+        for entry in ("Sessão de treino", "Carregar do computador", "Testes", "Challenge", "Novo treino",
                       "Desafios", "Estatísticas", "Dispositivos", "Definições"):
             with self.subTest(ecra=entry):
                 self.app.reset_to_menu()
@@ -1168,8 +1168,9 @@ class TestRideFlow(GuiCase):
         zwo.write_text('<workout_file><name>Longo</name><workout>'
                        '<SteadyState Duration="3600" Power="0.8"/>'
                        '</workout></workout_file>')
-        self.pick("Importar treino")
-        self.screen()._import(zwo)
+        self.pick("Carregar do computador")
+        self.screen().pick(zwo)
+        self.pick("Guardar na lista")
         self.pick("Longo")
         self.pick("Configurar sessão")
         self.select("Rota (.gpx)")
@@ -1234,10 +1235,12 @@ class TestWorkoutAndFtpScreens(GuiCase):
             '<Warmup Duration="300" PowerLow="0.5" PowerHigh="0.7"/>'
             '<SteadyState Duration="600" Power="0.95" Cadence="90"/>'
             '</workout></workout_file>')
-        self.pick("Importar treino")
+        self.pick("Carregar do computador")
         from velo.core.workout_library import WORKOUTS
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS))   # os de origem
-        self.screen()._import(zwo)
+        self.screen().pick(zwo)
+        self.assertIn("Guardar «Teste» na lista", self.screen().title_text)
+        self.pick("Guardar na lista")
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS) + 1)
         self.pick("Teste")
         from velo.ui import brief
@@ -1257,8 +1260,9 @@ class TestWorkoutAndFtpScreens(GuiCase):
         zwo.write_text('<workout_file><name>Limiar 2x20</name><workout>'
                        '<SteadyState Duration="300" Power="0.9"/>'
                        '</workout></workout_file>')
-        self.pick("Importar treino")
-        self.screen()._import(zwo)
+        self.pick("Carregar do computador")
+        self.screen().pick(zwo)
+        self.pick("Guardar na lista")
         self.pick("Limiar 2x20")
         self.pick("Configurar sessão")
         setup = self.screen()
@@ -1527,7 +1531,7 @@ class TestHomeScreen(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def test_every_menu_has_a_back_arrow(self):
-        for name in ("Biblioteca de rotas", "Importar treino", "Desafios", "Definições"):
+        for name in ("Biblioteca de rotas", "Desafios", "Definições"):
             self.app.reset_to_menu()
             self.pick(name)
             self.assertIsNotNone(self.screen().back_button, name)

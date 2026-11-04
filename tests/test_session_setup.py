@@ -47,7 +47,7 @@ class TestStartChoice(tg.GuiCase):
     def test_session_asks_free_or_load_workout(self):
         self.pick("Sessão de treino")
         labels = [i.label for i in self.screen().list.items]
-        self.assertEqual(labels, ["Cancelar", "Carregar treino", "Livre"])
+        self.assertEqual(labels, ["Cancelar", "Do computador", "Carregar treino", "Livre"])
         self.pick("Carregar treino")
         hub = self.screen()
         self.assertIsInstance(hub, app_mod.MainMenu)

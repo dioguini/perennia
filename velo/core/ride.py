@@ -64,6 +64,17 @@ class Reading:
     ps_combined: float | None = None
 
 
+def _keep_workout(db, kind: str, session_id: str, sport: str, workout_id) -> None:
+    """A cópia do treino desta sessão (ver session_workouts)."""
+    if not workout_id:
+        return
+    try:
+        from . import session_workouts as sw
+        sw.record(db, kind, session_id, sport, workout_id)
+    except Exception:
+        pass
+
+
 def estimate_lthr(athlete: Athlete) -> int | None:
     """Limiar cardíaco para as zonas de FC. Sem ele definido, estima-se a
     partir da FC máxima (90 %) ou da idade (90 % de 220 − idade), para as
@@ -319,6 +330,7 @@ class RideEngine:
                 extra=self.extra_resistance, preset=db.get("render_preset", "low"),
             )
             self.start_unix = time.time()
+            _keep_workout(db, "ride", self.ride_id, "cycling", workout_id)
         self.recovered = resume is not None
 
         # estado interno
@@ -1336,6 +1348,8 @@ class RideEngine:
         try:
             self.db.conn.execute("DELETE FROM rides WHERE id = ?", (self.ride_id,))
             self.db.conn.commit()
+            from . import session_workouts as sw
+            sw.forget(self.db, "ride", self.ride_id)
         except Exception:
             pass
 

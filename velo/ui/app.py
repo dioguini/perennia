@@ -428,6 +428,16 @@ class SportHub(Screen):
         self.chrome.set(self.title(), self.subtitle(), self.footer())
         self.list.set_items(items, keep_index=True)
 
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        if symbol == key.DELETE and self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "builder" \
+                and self.SPORT in ("cycling", "rowing", "running", "swimming") and \
+                item is not None and isinstance(item.data, tuple):
+            _builder().delete_workout(self.app, self.SPORT, item.data[1], item.label,
+                                      then=self.enter)
+            return True
+        return super().on_key(symbol, modifiers)
+
     def footer(self) -> str:
         if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "builder" and \
                 self.SPORT in ("cycling", "rowing", "running", "swimming"):
@@ -485,7 +495,8 @@ class MainMenu(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        items = [Item(t("wk.import"), action=lambda: self._import_files())]
+        from velo.ui.workout_import import import_item
+        items = [import_item(a, "cycling", on_done=lambda _w: self.enter())]
         for w in a.db.workouts():
             items.append(Item(w["name"], value=hms(w["total_seconds"] or 0),
                               detail=w["description"] or (w["source_format"] or ""),
@@ -539,15 +550,6 @@ class MainMenu(SportHub):
                 return True
             if symbol == key.P:
                 self.app.push(_extra().WorkoutEditor(self.app, wid))
-                return True
-            if symbol == key.DELETE:
-                def gone(wid=wid, name=item.label) -> None:
-                    self.app.db.delete_workout(wid)
-                    self.app.message(t("str.deleted", name=name))
-                    self.enter()
-                self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
-                                    n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
-                                 yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -1295,8 +1297,8 @@ class RideScreen(Screen):
                 target_type=r["target_type"], target_lo=r["target_lo"],
                 target_hi=r["target_hi"], cadence_lo=r["cadence_lo"],
                 cadence_hi=r["cadence_hi"], text_cue=r["text_cue"]) for r in rows]
-            name = next((w["name"] for w in a.db.workouts()
-                         if w["id"] == self.workout_id), "")
+            row = a.db.workout(self.workout_id)       # também os que não estão na lista
+            name = row["name"] if row is not None else ""
             if steps:
                 runner = WorkoutRunner(workouts.Workout(name, steps), athlete.ftp_w, self.erg)
         game = None
@@ -1778,6 +1780,8 @@ class ConfirmScreen(ModalScreen):
                  options: list[tuple[str, Callable]], default: int = 0,
                  buttons: bool = False, cancel: Callable | None = None):
         self.title_text, self.sub_text, self.options = title, sub, options
+        if buttons and len(options) >= 4:
+            self.W = 820                    # quatro botões cabem lado a lado
         self.default = default
         self.as_buttons = buttons
         self.cancel = cancel
@@ -3600,6 +3604,11 @@ class App:
 
         self.db = Database(_database_path(self.data_dir))
         aborted = self.db.purge_incomplete()
+        try:
+            from velo.core import session_workouts
+            session_workouts.purge(self.db)        # cópias de treinos sem sessão
+        except Exception:
+            pass
         try:
             from velo.core import workout_library
             workout_library.seed(self.db)          # os treinos que vêm com a aplicação

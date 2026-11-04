@@ -161,5 +161,167 @@ class TestTreadmillBuilder(tg.GuiCase):
         self.assertIn(f"{b._total_m() / 1000:.2f} km", b.summary.text)
 
 
+# =============================== treino de cada sessão e treinos apagados
+
+
+class TestSessionWorkoutCopy(Base):
+    def _ride_with(self, wid):
+        rows = self.db.workout_steps(wid)
+        wk = Workout("t", [Step(r["kind"], r["duration_s"], r["target_type"], r["target_lo"],
+                                r["target_hi"]) for r in rows])
+        hub = SensorHub()
+        hub.add_source(SimulatedTrainer(base_power=200), role="trainer", is_trainer=True)
+        return RideEngine(self.db, self.db.athlete(), sensors=hub, trainer=hub,
+                          workout_runner=WorkoutRunner(wk, 250, True), workout_id=wid,
+                          kind="workout", rides_dir=self.tmp)
+
+    def _wid(self):
+        return self.db.insert_workout("Limiar", [Step("steady", 600, "pct_ftp", 95, 95)
+                                                 .as_dict()], "zwo")
+
+    def test_session_keeps_its_own_copy(self):
+        from velo.core import feedback as fbm
+        from velo.core import session_workouts as sw
+        wid = self._wid()
+        e = self._ride_with(wid)
+        link = sw.of_session(self.db, "ride", e.ride_id)
+        self.assertEqual(link["workout_id"], wid)
+        copy = link["copy_id"]
+        self.assertNotEqual(copy, wid)
+        self.assertEqual(sw.status(self.db, "cycling", copy), "session")
+        self.assertNotIn(copy, [w["id"] for w in self.db.workouts()])   # fora da lista
+        # o original muda e depois é apagado: a sessão vê o treino como foi feito
+        self.db.update_workout(wid, "Limiar", [Step("steady", 60, "pct_ftp", 50, 50)
+                                               .as_dict()])
+        self.db.delete_workout(wid)
+        self.assertNotIn(wid, [w["id"] for w in self.db.workouts()])
+        self.assertEqual(sw.status(self.db, "cycling", wid), "deleted")
+        self.assertTrue(self.db.workout_steps(wid))                       # não se perdeu
+        sess = fbm.load_session(self.db, "ride", e.ride_id)
+        self.assertEqual(sess.workout_id, copy)
+        self.assertEqual(sess.origin_workout_id, wid)
+        self.assertEqual(fbm.prescribed(self.db, sess).raw_blocks[0].seconds, 600)
+        self.assertEqual(sw.state(self.db, "ride", e.ride_id, "cycling", wid), "deleted")
+        self.assertIn("Apagado", sw.state_text("deleted"))
+
+    def test_discarded_session_takes_the_copy_with_it(self):
+        from velo.core import session_workouts as sw
+        wid = self._wid()
+        e = self._ride_with(wid)
+        copy = sw.of_session(self.db, "ride", e.ride_id)["copy_id"]
+        e.discard()
+        self.assertIsNone(sw.of_session(self.db, "ride", e.ride_id))
+        self.assertIsNone(sw.status(self.db, "cycling", copy))
+        self.assertEqual(sw.status(self.db, "cycling", wid), "active")
+
+    def test_run_and_row_sessions_copy_too_and_purge_cleans_orphans(self):
+        from velo.core import session_workouts as sw
+        wid = en.save_workout(self.db, None, "running", "T", "",
+                              [en.Step("active", "time", 120, 80, 85)])
+        e = en.EnduranceEngine(self.db, self.db.athlete(), "running", workout_id=wid,
+                               out_dir=self.tmp)
+        self.assertIsNotNone(sw.of_session(self.db, "endurance", e.session_id))
+        rwid = rw.save_workout(self.db, None, "R", "",
+                               [rw.Step("active", "time", 120, "power", 90, 100)])
+        r = rio.ScriptedRower(rio.RowerData(strokes=0, spm=24, pace_s=120.0, source="t"))
+        row = rw.RowEngine(self.db, self.db.athlete(), r, workout_id=rwid, out_dir=self.tmp)
+        self.assertIsNotNone(sw.of_session(self.db, "row", row.session_id))
+        # uma sessão que desaparece sem passar por «descartar»
+        self.db.conn.execute("DELETE FROM endurance_sessions WHERE id = ?", (e.session_id,))
+        self.db.conn.commit()
+        self.assertEqual(sw.purge(self.db), 1)
+        self.assertIsNone(sw.of_session(self.db, "endurance", e.session_id))
+        self.assertIsNotNone(sw.of_session(self.db, "row", row.session_id))
+
+
+class TestWorkoutFiles(Base):
+    def test_fit_and_zwo_for_every_sport(self):
+        from velo.core import fit
+        from velo.core import session_workouts as sw
+        from velo.core import workout_files as wf
+        p = fit.write_row_workout(self.tmp / "r.fit", "Remo X", [
+            {"name": "aq", "seconds": 300, "lo_w": 100, "hi_w": 120, "intensity": "warmup"},
+            {"name": "forte", "meters": 500, "lo_w": 200, "intensity": "active"}])
+        loaded = wf.read(p, "rowing", *wf.context(self.db, "rowing"))
+        self.assertEqual([s.dur_type for s in loaded.steps], ["time", "distance"])
+        self.assertEqual(loaded.steps[0].kind, "warmup")
+        wid = wf.save(self.db, "rowing", loaded, keep=False)
+        self.assertEqual(sw.status(self.db, "rowing", wid), "session")
+        self.assertNotIn(wid, [w["id"] for w in rw.workouts(self.db)])
+        zwo = self.tmp / "run.zwo"
+        zwo.write_text('<workout_file><name>Run Z</name><workout>'
+                       '<Warmup Duration="600" PowerLow="0.6" PowerHigh="0.8"/>'
+                       '<SteadyState Duration="300" Power="1.0"/>'
+                       '<Cooldown Duration="300" PowerLow="0.8" PowerHigh="0.6"/>'
+                       '</workout></workout_file>')
+        run = wf.read(zwo, "running", *wf.context(self.db, "running"))
+        self.assertEqual([s.kind for s in run.steps], ["warmup", "active", "cooldown"])
+        rid = wf.save(self.db, "running", run, keep=True)
+        self.assertEqual(wf.same_in_list(self.db, "running", run), rid)   # sem duplicar
+        self.assertEqual(sorted(p.name for p in wf.scan("running", [str(self.tmp)])),
+                         ["r.fit", "run.zwo"])
+        with self.assertRaises(wf.FileError):
+            wf.read(self.tmp / "x.mrc", "running")
+
+
+class TestLoadFromComputer(tg.GuiCase):
+    def _zwo(self, name="Do PC"):
+        zwo = Path(self.tmp) / "pc.zwo"
+        zwo.write_text(f'<workout_file><name>{name}</name><workout>'
+                       '<SteadyState Duration="300" Power="0.9"/>'
+                       '</workout></workout_file>')
+        return zwo
+
+    def test_start_from_the_computer_just_for_this_session(self):
+        from velo.core import session_workouts as sw
+        from velo.ui import session_setup
+        from velo.ui.workout_import import WorkoutFilePopup
+        zwo = self._zwo()
+        self.pick("Sessão de treino")
+        self.pick("Do computador")
+        pop = self.screen()
+        self.assertIsInstance(pop, WorkoutFilePopup)
+        n0 = len(self.app.db.workouts())
+        pop.pick(zwo)
+        self.assertIn("Guardar «Do PC» na lista de treinos?", self.screen().title_text)
+        self.pick("Só para esta sessão")
+        setup = self.screen()
+        self.assertIsInstance(setup, session_setup.SessionSetup)
+        self.assertEqual(sw.status(self.app.db, "cycling", setup.workout_id), "session")
+        self.assertEqual(len(self.app.db.workouts()), n0)          # a lista não encheu
+        self.assertEqual(setup.title(), "Do PC")
+
+    def test_keep_in_the_list_from_a_running_session(self):
+        from velo.core import session_workouts as sw
+        from velo.ui import session_setup
+        zwo = self._zwo("Corrida PC")
+        self.press(key.ESCAPE)
+        self.pick("Corrida")
+        self.pick("Sessão de treino")
+        self.pick("Do computador")
+        self.screen().pick(zwo)
+        self.pick("Guardar na lista")
+        setup = self.screen()
+        self.assertIsInstance(setup, session_setup.SessionSetup)
+        self.assertEqual(sw.status(self.app.db, "running", setup.workout_id), "active")
+        self.assertIn("Corrida PC", [w["name"] for w in en.workouts(self.app.db, "running")])
+
+    def test_delete_from_any_builder_list_keeps_the_steps(self):
+        from velo.core import session_workouts as sw
+        self.press(key.ESCAPE)
+        self.pick("Remo")
+        hub = self.screen()
+        hub.tab_named("Construtor de treinos")
+        first = next(i for i in hub.list.items if isinstance(i.data, tuple))
+        hub.list.index = hub.list.items.index(first)
+        hub.list._sync()
+        self.press(key.DELETE)
+        self.assertIn("Sai da lista de treinos", self.screen().sub_text)
+        self.pick("Apagar")
+        wid = first.data[1]
+        self.assertEqual(sw.status(self.app.db, "rowing", wid), "deleted")
+        self.assertTrue(rw.steps_of(self.app.db, wid))
+
+
 if __name__ == "__main__":
     unittest.main()

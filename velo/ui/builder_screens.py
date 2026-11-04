@@ -94,7 +94,31 @@ def builder_footer(sport: str) -> str:
     keys = {"cycling": tr(" · E exportar · P passos", " · E export · P steps"),
             "rowing": tr(" · P passos", " · P steps")}.get(sport, "")
     return tr("Tab separador · ↑↓ mover · Enter abrir nos blocos", "Tab next tab · ↑↓ move · "
-              "Enter open in blocks") + keys + tr(" · Esc voltar", " · Esc back")
+              "Enter open in blocks") + keys + tr(" · Del apagar · Esc voltar",
+                                                  " · Del delete · Esc back")
+
+
+DELETE_SUB = ("Sai da lista de treinos. As sessões já feitas com ele guardam a sua cópia.",
+              "It leaves the workout list. Sessions already done with it keep their copy.")
+
+
+def delete_workout(app, sport: str, wid: str, name: str, then=None) -> None:
+    """Apagar um treino da lista (com confirmação). Não se perde nada das
+    sessões: o treino fica marcado como apagado e cada sessão tem a sua cópia."""
+    def gone() -> None:
+        if sport == "cycling":
+            app.db.delete_workout(wid)
+        elif sport == "rowing":
+            from velo.core import rowing as rw
+            rw.delete_workout(app.db, wid)
+        else:
+            from velo.core import endurance as en
+            en.delete_workout(app.db, wid)
+        app.message(tr("«{n}» saiu da lista de treinos", "«{n}» left the workout list", n=name))
+        if then is not None:
+            then()
+    app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?", n=name),
+                tr(*DELETE_SUB), gone, yes=tr("Apagar", "Delete"))
 
 
 def new_workout(app, sport: str) -> None:

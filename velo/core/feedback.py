@@ -67,6 +67,8 @@ class Session:
     planned_sets: int | None = None
     # (t, % do limiar ou None, valor bruto (W ou m/s), FC)
     samples: list = field(default_factory=list)
+    # o treino na lista (quando `workout_id` é a cópia guardada com a sessão)
+    origin_workout_id: str | None = None
 
     @property
     def workout_sport(self) -> str:
@@ -79,7 +81,23 @@ def _row(db, sql: str, args: tuple):
 
 
 def load_session(db, kind: str, sid: str) -> Session | None:
-    """Lê a sessão e as amostras (1 por segundo, ou menos) de qualquer desporto."""
+    """Lê a sessão e as amostras (1 por segundo, ou menos) de qualquer desporto.
+    O treino é a cópia guardada com a sessão (se houver): a análise vê-o como
+    foi feito, mesmo que o original tenha sido editado ou apagado."""
+    sess = _load_session(db, kind, sid)
+    if sess is not None and sess.kind in ("ride", "row", "endurance"):
+        from . import session_workouts as sw
+        try:
+            r = sw.of_session(db, kind, sid)
+        except Exception:
+            r = None
+        if r is not None and r["copy_id"]:
+            sess.origin_workout_id = r["workout_id"]
+            sess.workout_id = r["copy_id"]
+    return sess
+
+
+def _load_session(db, kind: str, sid: str) -> Session | None:
     from .naming import pretty
     ctx_cache: dict[str, it.Context] = {}
 
@@ -200,7 +218,8 @@ def save(db, kind: str, sid: str, rpe: int | None = None, pain: int | None = Non
         " feel=excluded.feel, goal_met=excluded.goal_met, comment=excluded.comment,"
         " useful=excluded.useful, verdict=excluded.verdict, analysis=excluded.analysis,"
         " updated_at=CURRENT_TIMESTAMP",
-        (kind, sid, sess.sport if sess else None, sess.workout_id if sess else None,
+        (kind, sid, sess.sport if sess else None,
+         (sess.origin_workout_id or sess.workout_id) if sess else None,
          (sess.started_at or "")[:10] if sess else None, rpe, pain, feel, goal_met,
          fb["comment"], res.get("useful"), res.get("verdict"),
          json.dumps(res, ensure_ascii=False)))

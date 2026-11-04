@@ -52,6 +52,10 @@ def ensure(db: Database) -> None:
       ON DELETE CASCADE, lap_no INTEGER NOT NULL, trigger TEXT, start_t REAL, end_t REAL,
       distance_m REAL, avg_hr REAL, max_hr INTEGER, lengths INTEGER);
     """)
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_workouts)")}
+    if "status" not in cols:            # ativo · apagado · só de uma sessão
+        db.conn.execute("ALTER TABLE endurance_workouts ADD COLUMN status TEXT NOT NULL"
+                        " DEFAULT 'active'")
     db.conn.commit()
 
 
@@ -177,7 +181,7 @@ def workouts(db: Database, sport: str, challenges: bool = False) -> list[dict]:
     `challenges=True` — não se misturam com a lista de treinos."""
     seed(db)
     out = []
-    cond = "builtin = 2" if challenges else "builtin < 2"
+    cond = ("builtin = 2" if challenges else "builtin < 2") + " AND status = 'active'"
     for r in db.conn.execute(f"SELECT * FROM endurance_workouts WHERE sport = ? AND {cond}"
                              " ORDER BY builtin DESC, sort, name", (sport,)):
         w = dict(r)
@@ -255,7 +259,8 @@ def save_workout(db: Database, wid: str | None, sport: str, name: str, descripti
 
 
 def delete_workout(db: Database, wid: str) -> None:
-    db.conn.execute("DELETE FROM endurance_workouts WHERE id = ?", (wid,))
+    """Sai da lista; os passos ficam para as sessões que o usaram."""
+    db.conn.execute("UPDATE endurance_workouts SET status = 'deleted' WHERE id = ?", (wid,))
     db.conn.commit()
 
 
@@ -415,6 +420,8 @@ class EnduranceEngine:
                 (self.session_id, self.sport, self.title, workout_id, now_iso(),
                  self.pool_m if self.sport == "swimming" else None))
             db.conn.commit()
+            from .ride import _keep_workout
+            _keep_workout(db, "endurance", self.session_id, self.sport, workout_id)
             self.checkpoint()
 
     def drain_events(self) -> list[tuple[str, dict]]:
@@ -747,6 +754,8 @@ class EnduranceEngine:
 
     def discard(self) -> None:
         self.abort(delete=True)
+        from . import session_workouts as sw
+        sw.forget(self.db, "endurance", self.session_id)
 
 
 def sessions(db: Database, sport: str, limit: int = 100) -> list[dict]:
