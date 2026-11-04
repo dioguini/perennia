@@ -173,23 +173,8 @@ class RowingMenu(SportHub):
         ask_start(self.app, "rowing", self)
 
     def items_builder(self) -> list[Item]:
-        a = self.app
         from velo.ui import builder_screens as bs
-        from velo.core import workout_meta as wm
-        items = [Item(tr("+ Novo treino", "+ New workout"),
-                      action=lambda: bs.new_workout(a, "rowing"),
-                      button=True, primary=True, top=True)]
-        for w in rw.workouts(a.db):
-            dur = " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
-                                         _m(w["total_m"]) if w["total_m"] else "") if x)
-            items.append(Item(w["name"], value=dur,
-                              detail=wm.label(a.db, "rowing", w["id"], "power") + " · "
-                              + tr("Enter: blocos · P: passos (resistência, voga)",
-                                   "Enter: blocks · P: steps (resistance, rate)"),
-                              action=lambda wid=w["id"]: a.push(bs.BlockBuilder(a, "rowing",
-                                                                                wid)),
-                              data=("row_workout", w["id"])))
-        return items
+        return bs.builder_items(self.app, "rowing")
 
     def items_library(self) -> list[Item]:
         a = self.app

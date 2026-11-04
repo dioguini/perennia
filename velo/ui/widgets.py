@@ -36,6 +36,53 @@ def P():
 
 ROW_H = 38
 
+# ---------------------------------------------------------- medir o texto
+
+_MEASURE: dict = {}
+_FIT_CACHE: dict = {}
+
+
+def text_px(text: str, size: float, bold: bool = False) -> float:
+    """A largura do texto em píxeis, medida com a letra a sério (sem pyglet
+    real, uma estimativa por excesso, para nunca passar por cima de nada)."""
+    if not text:
+        return 0.0
+    if getattr(pyglet, "version", "") != "0.0-stub":
+        k = (int(size), bool(bold))
+        lab = _MEASURE.get(k)
+        if lab is None:
+            lab = _MEASURE[k] = make_label("", font_size=int(size), bold=bold)
+        lab.text = text
+        w = getattr(lab, "content_width", None)
+        if isinstance(w, (int, float)) and w > 0:
+            return float(w)
+    return len(text) * size * (0.78 if bold else 0.73)
+
+
+def fit_text(text: str, max_px: float, size: float, bold: bool = False) -> str:
+    """Corta o texto (com reticências) para caber em `max_px` píxeis."""
+    if not text or max_px <= 0:
+        return "" if max_px <= 0 else text
+    key_ = (text, int(max_px), int(size), bold)
+    hit = _FIT_CACHE.get(key_)
+    if hit is not None:
+        return hit
+    if text_px(text, size, bold) <= max_px:
+        out = text
+    else:
+        lo, hi = 0, len(text)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if text_px(text[:mid].rstrip() + "…", size, bold) <= max_px:
+                lo = mid
+            else:
+                hi = mid - 1
+        out = (text[:lo].rstrip() + "…") if lo > 0 else ""
+    if len(_FIT_CACHE) > 4000:
+        _FIT_CACHE.clear()
+    _FIT_CACHE[key_] = out
+    return out
+
 
 def _line(x, y, x2, y2, color, batch):
     return _line_compat(x, y, x2, y2, thickness=2, color=color, batch=batch)
@@ -62,6 +109,7 @@ class Item:
     primary: bool = False         # o botão principal (Guardar) fica realçado
     top: bool = False             # botão no topo, à direita (Adicionar, filtros)
     header: bool = False          # título de secção (sombreado, saltado pelas setas)
+    head: bool = False            # numa faixa à parte, por cima (ver ListView.head_y)
 
     def __post_init__(self):
         if self.top:
@@ -84,7 +132,7 @@ TOP_BUTTON_H = 30
 
 
 def button_width(text: str) -> float:
-    return max(110.0, len(text) * 8.2 + 36)
+    return max(110.0, text_px(text, 13, bold=True) + 36)
 
 
 class ListView:
@@ -100,6 +148,11 @@ class ListView:
     # a descrição de cada opção fica à frente dela, na mesma linha; nas listas
     # grandes (em várias colunas) fica por baixo. None: decide sozinha.
     detail_below: bool | None = None
+    # as linhas `head=True` vão lado a lado numa faixa à parte (em `head_y`,
+    # de `head_x` com a largura `head_w`), fora das colunas da lista
+    head_y: float | None = None
+    head_x: float = 48
+    head_w: float = 800
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
@@ -186,7 +239,13 @@ class ListView:
     # ------------------------------------------------------------- arrumar
 
     def row_indices(self) -> list[int]:
-        return [i for i, it in enumerate(self.items) if not it.button]
+        return [i for i, it in enumerate(self.items) if not it.button
+                and not (it.head and self.head_y is not None)]
+
+    def head_indices(self) -> list[int]:
+        if self.head_y is None:
+            return []
+        return [i for i, it in enumerate(self.items) if it.head and not it.button]
 
     def button_indices(self) -> list[int]:
         return [i for i, it in enumerate(self.items) if it.button]
@@ -210,10 +269,22 @@ class ListView:
         self.scroll = max(0, min(self.scroll, max(0, len(rows) - 1)))
         self.scroll -= self.scroll % page
         shown = rows[self.scroll:self.scroll + page]
-        need = len(shown)
+        heads = self.head_indices()
+        need = len(shown) + len(heads)
         if need > len(self._rows):
             self._add_rows(need - len(self._rows))
         col_w = (self.width - self.COL_GAP * (cols - 1)) / cols
+        # onde vai cada linha: (índice, x, y, largura, coluna)
+        slots = []
+        for k, idx in enumerate(shown):
+            c, r = divmod(k, per)
+            slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * ROW_H,
+                          col_w, c))
+        if heads:
+            hw = (self.head_w - self.COL_GAP * (len(heads) - 1)) / len(heads)
+            for j, idx in enumerate(heads):
+                slots.append((idx, self.head_x + j * (hw + self.COL_GAP), self.head_y, hw,
+                              "h"))
         below = self.detail_below if self.detail_below is not None else cols > 1
         # à frente das opções: as descrições de uma coluna começam todas no
         # mesmo sítio, logo a seguir ao rótulo mais comprido (até metade)
@@ -221,20 +292,17 @@ class ListView:
         if not below:
             for c in range(cols):
                 col = [self.items[i] for i in shown[c * per:(c + 1) * per]]
-                widest = max([len(it.label) * 8.2 for it in col if it.detail and not it.header]
-                             + [0.0])
+                widest = max([text_px(it.label, 14) for it in col
+                              if it.detail and not it.header] + [0.0])
                 detail_x[c] = min(max(widest + 28, 150.0), col_w * 0.5)
         self._cells = []
         for k, (highlight, label, value, detail) in enumerate(self._rows):
             head = label._head
-            if k >= len(shown):
+            if k >= len(slots):
                 highlight.opacity = highlight._bar.opacity = 0
                 label.text = value.text = detail.text = head.text = ""
                 continue
-            idx = shown[k]
-            c, r = divmod(k, per)
-            x = self.x + c * (col_w + self.COL_GAP)
-            row_y = self.y - r * ROW_H
+            idx, x, row_y, col_w, c = slots[k]
             self._cells.append((idx, x, row_y, col_w))
             item = self.items[idx]
             highlight.x, highlight.y = x - 10, row_y - ROW_H // 2 + 2
@@ -251,11 +319,11 @@ class ListView:
             value.text = item.value
             value.x, value.y = x + col_w, row_y
             # o rótulo e a nota não podem passar por baixo do valor à direita
-            free = col_w - len(item.value) * 7.5 - 18
+            free = col_w - text_px(item.value, 13) - 18
             d = item.detail or ""
             if item.header:
                 label.text = ""
-                head.text = _fit(item.label, free, 13)
+                head.text = fit_text(item.label, free, 13, bold=True)
                 head.x, head.y = x, row_y + (6 if d and below else 0)
                 head.color = TEXT
             else:
@@ -264,20 +332,19 @@ class ListView:
                     else ACCENT
             if below or not d:
                 if not item.header:
-                    label.text = _fit(item.label, free, 14) if cols > 1 else item.label
+                    label.text = fit_text(item.label, free, 14)
                     label.x, label.y = x, row_y + (6 if d else 0)
-                room = int(free / 6.0)
-                detail.text = d if len(d) <= room else d[:max(0, room - 1)] + "…"
+                detail.text = fit_text(d, free, 11)
                 detail.x, detail.y = x, row_y - 12
             else:
-                dx = x + (detail_x.get(c, 150.0) if not item.header
-                          else len(item.label) * 7.8 + 24)
+                dx = x + (detail_x.get(c, 150.0) if not item.header and c != "h"
+                          else text_px(item.label, 13 if item.header else 14,
+                                       bold=item.header) + 24)
                 if not item.header:
-                    label.text = _fit(item.label, dx - x - 12, 14)
+                    label.text = fit_text(item.label, dx - x - 12, 14)
                     label.x, label.y = x, row_y
-                room = int((x + free - dx) / 6.0)
-                detail.text = "" if room < 6 else (
-                    d if len(d) <= room else d[:max(0, room - 1)] + "…")
+                room = x + free - dx
+                detail.text = fit_text(d, room, 11) if room > 40 else ""
                 detail.x, detail.y = dx, row_y
         pages = -(-len(rows) // page) if rows else 1
         self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
@@ -966,11 +1033,10 @@ class BoardPanel:
 
 
 def _fit(text: str, width_px: float, font_size: int) -> str:
-    """Corta texto que não cabe, com reticências. Estimativa por carácter."""
+    """Corta texto que não cabe, com reticências (medido a sério, ver fit_text)."""
     if not text:
         return ""
-    max_chars = max(4, int(width_px / (font_size * 0.58)))
-    return text if len(text) <= max_chars else text[:max_chars - 1] + "…"
+    return fit_text(text, max(20.0, width_px), font_size)
 
 
 class BackButton:
@@ -1156,7 +1222,7 @@ class TabBar:
         h = self.H - (6 if self.small else 0)
         # largura proporcional ao texto, sem passar do espaço disponível
         size = 11 if self.small else 13
-        want = [len(t) * size * 0.62 + 28 for t in self.labels_text]
+        want = [len(t) * size * 0.74 + 28 for t in self.labels_text]   # letra a negrito
         scale = min(1.0, (width - 4 * (n - 1)) / max(1.0, sum(want)))
         cx = x
         for i, (bg, mark, lab) in enumerate(zip(self.bgs, self.marks, self.labs)):

@@ -87,19 +87,8 @@ class EnduranceHub(SportHub):
         ask_start(self.app, self.SPORT, self)
 
     def items_builder(self) -> list[Item]:
-        a = self.app
         from velo.ui import builder_screens as bs
-        from velo.core import workout_meta as wm
-        items = [Item(tr("+ Novo treino", "+ New workout"),
-                      action=lambda: bs.new_workout(a, self.SPORT),
-                      button=True, primary=True, top=True)]
-        for w in en.workouts(a.db, self.SPORT):
-            items.append(Item(w["name"], value=self._dur(w),
-                              detail=wm.label(a.db, self.SPORT, w["id"], w["mode"]) + " · "
-                              + (w["description"] or ""),
-                              action=lambda wid=w["id"]: a.push(
-                                  bs.BlockBuilder(a, self.SPORT, wid))))
-        return items
+        return bs.builder_items(self.app, self.SPORT)
 
     def _dur(self, w: dict) -> str:
         return " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
