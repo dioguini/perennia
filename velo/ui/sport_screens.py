@@ -920,41 +920,10 @@ class StrengthHistory(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-class StrengthSessionDetail(Screen):
-    def __init__(self, app, session_id: str):
-        super().__init__(app)
-        self.session_id = session_id
-
-    def enter(self) -> None:
-        a = self.app
-        row = a.db.conn.execute("SELECT * FROM strength_sessions WHERE id = ?",
-                                (self.session_id,)).fetchone()
-        items = []
-        for s in st.session_sets(a.db, self.session_id):
-            items.append(Item(f"{s['name']} · {s['set_no']}",
-                              value=f"{s['reps']}" + (f" × {_kg(s['load_kg'])}" if s["load_kg"]
-                                                      else ""),
-                              detail=(f"RPE {_rpe(s['rpe'])} · " if s["rpe"] else "")
-                              + (f"{s['avg_hr']:.0f} bpm · " if s["avg_hr"] else "")
-                              + hms((s["end_t_s"] or 0) - (s["start_t_s"] or 0)),
-                              enabled=False))
-        plan = st.workout(a.db, row["workout_id"]) if row and row["workout_id"] else None
-        title = (plan or {}).get("name") or (row["name"] if row else "")
-        sub = str(row["started_at"])[:16].replace("T", " ") if row else ""
-        if row and row["fit_path"]:
-            sub += f" · {row['fit_path']}"
-        self.chrome.set(title, sub, self.footer())
-        fb_item = _feedback().summary_item(self.app, "strength", self.session_id)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        _sid = self.session_id
-        if _sid:
-            items.insert(1 if fb_item is not None else 0, Item(
-                tr("Análise pós-treino", "Post-workout analysis"),
-                detail=tr("Cumprimento, repetições, volume e 1RM de cada exercício",
-                          "Compliance, reps, volume and 1RM per exercise"),
-                action=lambda: self.app.push(_analysis_screen(self.app, _sid))))
-        self.list.set_items(items or [Item("—", enabled=False)])
+def StrengthSessionDetail(app, session_id: str):          # noqa: N802 — compatibilidade
+    """Uma sessão de ginásio do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "strength", session_id)
 
 
 # ------------------------------------------------------------ construtor

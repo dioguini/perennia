@@ -422,8 +422,8 @@ class DayScreen(Screen):
             from velo.ui.endurance_screens import EnduranceDetail
             a.push(EnduranceDetail(a, e.id))
         else:
-            from velo.ui.strength_analysis_screens import StrengthAnalysisScreen
-            a.push(StrengthAnalysisScreen(a, e.id))
+            from velo.ui.session_analysis import SessionAnalysis
+            a.push(SessionAnalysis(a, "strength", e.id))
 
     def _open_plan(self, e: cv.Entry) -> None:
         a = self.app

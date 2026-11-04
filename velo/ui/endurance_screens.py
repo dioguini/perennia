@@ -628,34 +628,10 @@ class EnduranceSummary(Screen):
         _feedback().maybe_ask(self, "endurance", self.result.get("session_id"))
 
 
-class EnduranceDetail(Screen):
-    def __init__(self, app, sid: str):
-        super().__init__(app)
-        self.sid = sid
-
-    def enter(self) -> None:
-        a = self.app
-        s = a.db.conn.execute("SELECT * FROM endurance_sessions WHERE id = ?",
-                              (self.sid,)).fetchone()
-        if s is None:
-            a.pop()
-            return
-        unit = pace_unit(s["sport"])
-        items = [Item(tr("Distância", "Distance"), value=_m(s["distance_m"]), enabled=False),
-                 Item(tr("Tempo", "Time"), value=hms(s["moving_s"] or 0), enabled=False),
-                 Item(tr("Ritmo médio", "Avg pace"),
-                      value=(hms(s["avg_pace_s"]) + " " + unit) if s["avg_pace_s"] else "—",
-                      enabled=False)]
-        for lp in en.session_laps(a.db, self.sid):
-            items.append(Item(f"  {tr('Volta', 'Lap')} {lp['lap_no']}",
-                              value=hms((lp["end_t"] or 0) - (lp["start_t"] or 0)),
-                              detail=_m(lp["distance_m"]), enabled=False))
-        self.chrome.set(s["name"] or sp.name(s["sport"]), str(s["started_at"])[:16],
-                        self.footer())
-        fb_item = _feedback().summary_item(self.app, "endurance", self.sid)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        self.list.set_items(items, keep_index=True)
+def EnduranceDetail(app, sid: str):                       # noqa: N802 — compatibilidade
+    """Uma sessão de corrida ou natação do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "endurance", sid)
 
 
 def _pretty(name) -> str:

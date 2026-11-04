@@ -552,69 +552,10 @@ class MainMenu(SportHub):
         return super().on_key(symbol, modifiers)
 
 
-class RideDetailScreen(Screen):
-    """Uma sessão de ciclismo do histórico."""
-
-    def __init__(self, app: "App", ride_id: str):
-        super().__init__(app)
-        self.ride_id = ride_id
-
-    def enter(self) -> None:
-        a = self.app
-        r = a.db.conn.execute("SELECT * FROM rides WHERE id = ?", (self.ride_id,)).fetchone()
-        if r is None:
-            a.pop()
-            return
-        dv, du = km(r["distance_m"] or 0, a.units)
-        items = [Item(tr("Tempo", "Time"), value=hms(r["moving_s"] or r["elapsed_s"] or 0),
-                      enabled=False),
-                 Item(tr("Distância", "Distance"), value=f"{dv:.2f} {du}", enabled=False)]
-        for label, col, fmt in ((tr("Potência média", "Avg power"), "avg_power_w", "{:.0f} W"),
-                                ("NP", "np_w", "{:.0f} W"), ("TSS", "tss", "{:.0f}"),
-                                (tr("FC média", "Avg HR"), "avg_hr", "{:.0f} bpm"),
-                                (tr("Cadência média", "Avg cadence"), "avg_cadence",
-                                 "{:.0f} rpm")):
-            try:
-                v = r[col]
-            except (IndexError, KeyError):
-                v = None
-            if v:
-                items.append(Item(label, value=fmt.format(v), enabled=False))
-        for lp in a.db.conn.execute("SELECT * FROM laps WHERE ride_id = ? ORDER BY lap_no",
-                                    (self.ride_id,)).fetchall() if _has_table(a.db, "laps") \
-                else []:
-            items.append(Item(f"  {tr('Volta', 'Lap')} {lp['lap_no']}",
-                              value=hms((lp["end_t_s"] or 0) - (lp["start_t_s"] or 0)),
-                              enabled=False))
-        # os picos de potência da sessão (como no TrainingPeaks)
-        from velo.core import peaks as pk
-        try:
-            power = pk.ride_peaks(a.db, self.ride_id).get("power_w", {})
-        except Exception:
-            power = {}
-        shown = [(d, power[d]) for d in (5, 60, 300, 600, 1200, 3600) if d in power]
-        if shown:
-            items.append(Item(tr("Picos de potência", "Power peaks"),
-                              value="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
-                                                 for d, v in shown[:3]),
-                              detail="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
-                                                  for d, v in shown[3:]), enabled=False))
-        items.insert(0, Item(tr("Infográficos de sessão", "Session infographics"),
-                             detail=tr("Relatório, curva de potência, zonas, gráfico de potência/"
-                                       "cadência/FC, picos e desacoplamento",
-                                       "Report, power curve, zones, power/cadence/HR chart, "
-                                       "peaks and decoupling"),
-                             action=lambda: a.push(_ride_report().RideInfographics(
-                                 a, self.ride_id))))
-        if r["fit_path"]:
-            items.append(Item(".fit", value=r["name"] or "", detail=r["fit_path"],
-                              enabled=False))
-        self.chrome.set(r["name"] or t("home.cycling"), str(r["started_at"])[:16],
-                        self.footer())
-        fb_item = _feedback().summary_item(self.app, "ride", self.ride_id)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        self.list.set_items(items, keep_index=True)
+def RideDetailScreen(app: "App", ride_id: str):            # noqa: N802 — compatibilidade
+    """Uma sessão de ciclismo do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "ride", ride_id)
 
 
 def _has_table(db, name: str) -> bool:

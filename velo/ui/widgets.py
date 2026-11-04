@@ -1770,11 +1770,23 @@ class Table:
         self.head_bg.x, self.head_bg.y = x, y0 - head_h
         self.head_bg.width, self.head_bg.height = width, head_h
         ncols = min(len(columns), self.MAX_COLS)
-        first = min(140.0, width * 0.16)
-        cw = (width - first) / max(1, ncols - 1)
+        # cada coluna com a largura do texto mais largo (medido), e o que sobra
+        # repartido; se não couber, encolhem todas e o texto é cortado
+        need = []
+        for c in range(ncols):
+            vals = [columns[c].upper()] + [
+                str(row[c][0] if isinstance(row[c], tuple) else row[c])
+                for row in rows[:self.MAX_ROWS] if c < len(row)]
+            need.append(max(text_px(v, 12, bold=True) for v in vals) + 24)
+        room = width - 12
+        total = sum(need) or 1.0
+        widths = [w_ * room / total for w_ in need] if total > room else \
+            [w_ + (room - total) / max(1, ncols) for w_ in need]
+        starts = [x + 12 + sum(widths[:c]) for c in range(ncols)]
+        self._widths = widths
 
         def col_x(c: int) -> float:
-            return x + 12 + (0 if c == 0 else first + (c - 1) * cw)
+            return starts[c] if c < ncols else x + width
         for c, lab in enumerate(self.heads):
             lab.text = columns[c].upper() if c < ncols else ""
             lab.x, lab.y = col_x(c), y0 - head_h / 2
@@ -1788,13 +1800,15 @@ class Table:
                     continue
                 v = rows[r][c] if c < len(rows[r]) else ""
                 text, sub = (v if isinstance(v, tuple) else (v, ""))
-                main.text = str(text)
                 main.font_size = 12 if row_h >= 30 else 11
+                main.text = fit_text(str(text), widths[c] - 14, main.font_size, bold=True)
+                mark = main.text[:1]
+                main.color = GOOD if mark == "✓" else BAD if mark == "✗" else \
+                    WARN if mark == "~" else (TEXT if c else DIM)
                 note.text = str(sub) if row_h >= 30 else ""
                 cx = col_x(c)
                 main.x, main.y = cx, ry + row_h / 2 + (5 if note.text else 0)
                 note.x, note.y = cx, ry + row_h / 2 - 9
-                main.color = TEXT if c else DIM
         self.empty.text = empty if not rows else ""
         self.empty.x, self.empty.y = x + 12, y0 - head_h - 10
 

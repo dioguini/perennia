@@ -337,6 +337,12 @@ class TestBuilderGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Histórico")
         self.pick("agachamento")
+        tabs = self.screen()                             # a análise em separadores
+        tabs.tab_named("Análise do treino")
+        self.app._on_draw()
+        cells = [m.text for row in tabs.table.cells for m, _n in row if m.text]
+        self.assertTrue(any("100 %" in c for c in cells), cells)   # cumprido a 100 %
+        self.pick("Análise detalhada")
         an = self.screen()
         self.assertIsInstance(an, sas.StrengthAnalysisScreen)
         self.assertAlmostEqual(an.data["compliance"], 1.0)

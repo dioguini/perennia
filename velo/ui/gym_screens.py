@@ -563,8 +563,10 @@ def _builder(app, mod: str, wid: str | None = None, draft: bool = False):
 
 
 def _analysis(app, sid: str):
-    from velo.ui.strength_analysis_screens import StrengthAnalysisScreen
-    return StrengthAnalysisScreen(app, sid)
+    """Uma sessão do histórico: a análise em separadores (Geral, Feedback,
+    Análise do treino, Infográficos)."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "strength", sid)
 
 
 def _exercise_stats(app, eid: int | None = None):
