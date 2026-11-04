@@ -570,17 +570,18 @@ class HomeScreen(Screen):
     semanas) e o mapa das últimas 16 semanas."""
 
     ROOT = True
-    # Os desportos e o calendário na primeira fila; rotas, segmentos, saúde,
-    # estatísticas e inventários na segunda. Dispositivos, Definições e Sair
-    # estão na faixa do topo (sempre à vista).
+    # Os desportos, o calendário e a saúde na primeira fila; rotas, segmentos,
+    # estatísticas, inventários e backups na segunda (ao centro). Dispositivos,
+    # Definições e Sair estão na faixa do topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
              ("home.gym", "kettlebell", ""),
-             ("home.calendar", "calendar", ""),
+             ("home.calendar", "calendar", ""), ("home.health", "heart", ""),
              ("home.routes", "road", ""), ("home.segments", "flag", ""),
-             ("home.health", "heart", ""), ("home.stats", "stats", ""),
-             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
-    BIG = 6               # cartões por fila
+             ("home.stats", "stats", ""),
+             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""),
+             ("home.backups", "recover", ""))
+    BIG = 7               # cartões por fila
     UPCOMING_DAYS = 14
     UPCOMING_ROWS = 12
 
@@ -632,12 +633,13 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.SportHub(a, "swimming")),
                 lambda: a.push(hub.SportHub(a, "gym")),
                 lambda: a.push(_calendar().CalendarScreen(a)),
+                lambda: a.push(_extra_health().HealthMenu(a)),
                 lambda: a.push(_routes().RoutesScreen(a)),
                 lambda: a.push(_segments_ui().SegmentsScreen(a)),
-                lambda: a.push(_extra_health().HealthMenu(a)),
                 lambda: a.push(hub.stats_screen(a, None)),
                 lambda: a.push(hub.InventoryScreen(a)),
-                lambda: a.push(hub.ExerciseInventory(a))]
+                lambda: a.push(hub.ExerciseInventory(a)),
+                lambda: a.push(_backups().BackupScreen(a))]
 
     def tile_geometry(self, w: int, h: int) -> tuple[float, float, float]:
         """(largura, altura, topo) dos cartões — todos iguais."""
@@ -651,9 +653,13 @@ class HomeScreen(Screen):
         w, h = self.app.window.width, self.app.window.height
         gap = 14
         tw, th, top = self.tile_geometry(w, h)
+        n = len(self.tiles)
         for i, tile in enumerate(self.tiles):
             r, c = divmod(i, self.BIG)
-            tile.layout(48 + c * (tw + gap), top - (r + 1) * th - r * gap, tw, th)
+            # uma fila com menos cartões fica ao centro
+            in_row = min(self.BIG, n - r * self.BIG)
+            shift = (self.BIG - in_row) * (tw + gap) / 2
+            tile.layout(48 + shift + c * (tw + gap), top - (r + 1) * th - r * gap, tw, th)
         span = w - 96
         sy = top - 2 * th - gap - 30          # topo da faixa de baixo
         bottom = 56
@@ -742,7 +748,7 @@ class HomeScreen(Screen):
         self.chrome.set("Perennia", f"{athlete.name or '—'} · {a.device_summary()}",
                         "←→↑↓ escolher · Enter abrir")
         # a lista (invisível) serve o teclado e os testes; os cartões são o que se vê
-        self.list.set_items([Item(tile.title.text, action=act)
+        self.list.set_items([Item(tile.title_text, action=act)
                              for tile, act in zip(self.tiles, self._actions())],
                             keep_index=True)
         self.list.y = -3000
@@ -811,7 +817,7 @@ class HomeScreen(Screen):
                 if self.upcoming and self._up_geo[4]:
                     self._select(self.selected + 1 if in_list else n_tiles)
             else:
-                self._select(self.selected + self.BIG)
+                self._select(min(n_tiles - 1, self.selected + self.BIG))
         elif symbol == key.UP:
             if in_list:
                 self._select(self.selected - 1 if self.selected > n_tiles else self.BIG)
@@ -1666,13 +1672,8 @@ class PopupMixin:
         if getattr(self, "_wrapped_for", None) == (sub.text, maxw):
             return
         self._wrapped_for = (sub.text, maxw)
-        from velo.ui.widgets import text_px
-        long = text_px(sub.text, 13) > maxw
-        try:
-            sub.width = maxw if long else None
-            sub.multiline = long
-        except Exception:
-            pass
+        from velo.ui.widgets import set_wrap, text_px
+        set_wrap(sub, maxw if text_px(sub.text, 13) > maxw else None)
 
     def draw(self) -> None:
         self.popup.draw()
@@ -3575,7 +3576,7 @@ class App:
         width, height = max(width, MIN_SIZE[0]), max(height, MIN_SIZE[1])
         self.window, self.msaa_samples = _make_window(
             width=width, height=height, caption=f"Perennia {__version__}",
-            resizable=True, fullscreen=fullscreen,
+            resizable=True, fullscreen=fullscreen, file_drops=True,
             samples=int(self.db.get("msaa_samples", 4)))
         self._windowed_size = (width, height)
         try:
@@ -3606,7 +3607,8 @@ class App:
             on_mouse_press=self._on_mouse_press, on_mouse_drag=self._on_mouse_drag,
             on_mouse_release=self._on_mouse_release, on_mouse_scroll=self._on_mouse_scroll,
             on_resize=self._on_resize,
-            on_close=self._on_close)
+            on_close=self._on_close,
+            on_file_drop=self._on_file_drop)
         pyglet.clock.schedule_interval(self._tick, 1 / 60.0)
 
         self.push(HomeScreen(self))
@@ -3751,6 +3753,38 @@ class App:
         self.notify(tr("Treino guardado", "Workout saved"),
                     tr("«{n}» está na lista de treinos.", "«{n}» is in the workout list.",
                        n=name or tr("Treino", "Workout")))
+
+    def _on_file_drop(self, x: int, y: int, paths) -> None:
+        """Arrastar um ficheiro para a janela: um backup (.zip) abre a reposição."""
+        try:
+            if not _backups().open_dropped(self, list(paths or [])):
+                self.message(tr("Arrasta um backup da Perennia (.zip) para o repor",
+                                "Drag a Perennia backup (.zip) to restore it"))
+        except Exception as e:
+            self.message(f"{t('common.error')}: {e}")
+
+    def after_restore(self) -> None:
+        """Depois de repor um backup: as definições repostas aplicam-se já
+        (língua, unidades, tema, ligações) e volta-se ao ecrã inicial."""
+        from velo.gfx import theme as theme_mod
+        set_language(self.db.get("language", PT))
+        self.units = self.db.get("units", "metric")
+        theme_mod.apply(str(self.db.get("theme", theme_mod.DEFAULT)))
+        bg = theme_mod.P.bg
+        pyglet.gl.glClearColor(bg[0] / 255, bg[1] / 255, bg[2] / 255, 1.0)
+        self.topbar = TopBar(self.window)
+        self._topbar_texts()
+        for scr in reversed(self.stack):
+            try:
+                scr.leave()
+            except Exception:
+                pass
+        self.stack = [HomeScreen(self)]
+        self.stack[0].enter()
+        try:
+            self.apply_connection_preference()
+        except Exception:
+            pass
 
     def notify(self, title: str, sub: str = "", then: Callable | None = None) -> None:
         """Um aviso numa janela, com OK (Guardado, Importado…)."""
@@ -4307,18 +4341,24 @@ class App:
 def _make_window(samples: int = 4, **kw):
     """Janela com antialiasing (MSAA): suaviza as arestas da estrada, as linhas
     dos gráficos e o contorno do perfil. Se a placa gráfica não aceitar 4×,
-    tenta 2× e depois sem; devolve também o que conseguiu."""
+    tenta 2× e depois sem; devolve também o que conseguiu. Com `file_drops`
+    aceita ficheiros arrastados (os backups); se o sistema não deixar, abre
+    na mesma, sem isso."""
     attempts = [s for s in (samples, 2) if s and s > 1] + [0]
+    options = [kw]
+    if kw.get("file_drops"):
+        options.append({k: v for k, v in kw.items() if k != "file_drops"})
     last_error: Exception | None = None
-    for s in dict.fromkeys(attempts):
-        try:
-            if s:
-                config = pyglet.gl.Config(sample_buffers=1, samples=s, depth_size=24,
-                                          double_buffer=True)
-                return pyglet.window.Window(config=config, **kw), s
-            return pyglet.window.Window(**kw), 0
-        except Exception as e:          # NoSuchConfigException e afins
-            last_error = e
+    for opts in options:
+        for s in dict.fromkeys(attempts):
+            try:
+                if s:
+                    config = pyglet.gl.Config(sample_buffers=1, samples=s, depth_size=24,
+                                              double_buffer=True)
+                    return pyglet.window.Window(config=config, **opts), s
+                return pyglet.window.Window(**opts), 0
+            except Exception as e:          # NoSuchConfigException e afins
+                last_error = e
     raise RuntimeError(f"não foi possível abrir a janela: {last_error}")
 
 
@@ -4347,36 +4387,8 @@ def _layouts():
     return layout_screens
 
 
-def _default_data_dir() -> Path:
-    """Pasta de dados por omissão, respeitando as convenções do sistema."""
-    env = os.environ.get("PERENNIA_DATA_DIR") or os.environ.get("VELO_DATA_DIR")
-    if env:
-        return Path(env)
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA") or str(Path.home()))
-        new, old = base / "Perennia", base / "VeloLocal"
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-        new, old = base / "Perennia", base / "VeloLocal"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share"))
-        new, old = base / "perennia", base / "velolocal"
-    # A aplicação chamava-se VeloLocal: se os teus dados ainda estão na pasta
-    # antiga, continua a usá-la (os caminhos dos .fit gravados apontam para lá).
-    if not new.exists() and old.exists():
-        return old
-    return new
-
-
-def _database_path(data_dir: Path) -> Path:
-    """perennia.db; uma base antiga (velolocal.db) é renomeada uma vez."""
-    new, old = data_dir / "perennia.db", data_dir / "velolocal.db"
-    if not new.exists() and old.exists():
-        try:
-            old.rename(new)
-        except OSError:
-            return old
-    return new
+from velo.datadir import database_path as _database_path  # noqa: E402
+from velo.datadir import default_data_dir as _default_data_dir  # noqa: E402
 
 
 def _extra():
@@ -4414,6 +4426,11 @@ def _routes():
 def _segments_ui():
     from velo.ui import segment_screens
     return segment_screens
+
+
+def _backups():
+    from velo.ui import backup_screens
+    return backup_screens
 
 
 def _segments_mod():

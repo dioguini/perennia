@@ -71,10 +71,23 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=None)
     parser.add_argument("--self-test", action="store_true",
                         help="testa o núcleo e sai, sem abrir janela")
+    parser.add_argument("--backup", nargs="?", const="", default=None, metavar="DESTINO",
+                        help="faz um backup e sai (pasta ou ficheiro .zip; por omissão, "
+                             "a pasta backups dos dados)")
+    parser.add_argument("--restore", default=None, metavar="BACKUP.zip",
+                        help="repõe um backup e sai (antes guarda o que tens agora)")
+    parser.add_argument("--componentes", default=None,
+                        help="só estas componentes, separadas por vírgulas (ex.: rotas,sessoes)")
+    parser.add_argument("--modo", default="substituir", choices=("substituir", "juntar"),
+                        help="na reposição: substituir (cópia exata) ou juntar (acrescenta)")
+    parser.add_argument("--credenciais", action="store_true",
+                        help="no backup, incluir as credenciais (Strava)")
     args = parser.parse_args()
 
     if args.self_test:
         return self_test()
+    if args.backup is not None or args.restore:
+        return backup_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -103,6 +116,31 @@ def main() -> int:
         report_crash(Path(args.data_dir) if args.data_dir else _default_data_dir())
         return 1
     return 0
+
+
+def backup_cli(args) -> int:
+    """Backups pela linha de comandos, sem abrir a janela."""
+    from velo.core import backup
+    from velo.core.db import Database
+    from velo.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    keys = [k.strip() for k in args.componentes.split(",")] if args.componentes else None
+    unknown = [k for k in keys or [] if k not in backup.BY_KEY]
+    if unknown:
+        print("Componentes desconhecidas: " + ", ".join(unknown) + "\nExistem: "
+              + ", ".join(backup.BY_KEY), file=sys.stderr)
+        return 2
+    db = Database(database_path(data_dir))
+    try:
+        if args.restore:
+            return backup.cli_restore(db, data_dir, args.restore, keys,
+                                      "merge" if args.modo == "juntar" else "replace")
+        return backup.cli_export(db, data_dir, args.backup or None, keys, args.credenciais)
+    except backup.BackupError as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
 
 
 def report_crash(data_dir: Path) -> None:

@@ -218,10 +218,12 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Doze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
-(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e o
-**Calendário**, na segunda **Rotas**, **Segmentos**, **Saúde**,
-**Estatísticas gerais**, **Inventário de artigos** e **Exercícios**. O título fica sempre por baixo do ícone, com a
+Treze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), o
+**Calendário** e a **Saúde**; na segunda, ao centro, **Rotas**,
+**Segmentos**, **Estatísticas gerais**, **Inventário de artigos**,
+**Exercícios** e **Backups**. Um título que não caiba numa linha parte-se em
+duas (a letra nunca fica abaixo de 12 px). O título fica sempre por baixo do ícone, com a
 letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
 
@@ -1269,6 +1271,94 @@ Importar outra vez não as duplica.
 
 A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 
+### Backups e reposição (menu do ecrã inicial)
+
+Tudo o que a Perennia guarda — **mesmo tudo** — sai num só ficheiro `.zip`,
+e volta a entrar com um clique. O menu tem dois separadores:
+
+**Exportar** — marca **Tudo (exportação completa)** ou só as componentes que
+quiseres (Enter ou ←/→ marca e desmarca) e carrega em **Exportar** (ou
+Ctrl+S). O ficheiro fica na pasta `backups` dos teus dados, com a data no
+nome: `perennia-backup_2026-11-04_16-30-12_completo.zip` (ou `_parcial`).
+Copia-o para uma pen ou para a nuvem.
+
+| Componente | O que leva |
+|---|---|
+| Perfil do atleta | nome, peso, FTP e limiares |
+| Definições | unidades, tema, zonas, sessões, preferências… |
+| Atalhos de teclado | as teclas que mudaste |
+| Ecrã da sessão | disposição dos painéis e métricas de cada desporto |
+| Aparelhos | dispositivos emparelhados e calibrações |
+| Rotas | os .gpx: pontos, perfil, subidas |
+| Segmentos | os da Perennia e os do Strava |
+| Treinos | as listas de treinos de todos os desportos (com definição, objetivos, planos de voltas e as cópias das sessões) |
+| Ginásio e exercícios | exercícios, treinos de força e as suas estruturas |
+| Inventário de artigos | bicicletas, sapatilhas, peças |
+| Histórico de sessões | todas as sessões, com amostras, voltas, tempos em subidas e segmentos, jogos, sincronizadas — e os `.fit` |
+| Análises e feedback | o feedback e a análise de cada sessão, picos e curvas de potência |
+| Desafios | desafios e tentativas |
+| Testes de aptidão | testes, resultados, testes de FTP |
+| Saúde | valores diários, métricas, análises clínicas |
+| Calendário | treinos planeados e notas do dia |
+| Ficheiros | treinos exportados, importações, a pasta `workouts` |
+| Ligações externas (credenciais) | Strava (chaves e sessão) e GarminDB (pastas) — **só se pedires** |
+
+As credenciais ficam fora por omissão: quem tiver o ficheiro teria as tuas
+chaves do Strava. Liga «Ligações externas» se o backup for só para ti.
+
+**Dentro do .zip, tudo segmentado:** uma pasta por componente
+(`01-perfil/`, `06-rotas/`, `11-sessoes/`…), um ficheiro `.jsonl` por tabela
+(um registo por linha, em JSON — dá para abrir em qualquer editor), os `.fit`
+em `11-sessoes/ficheiros/`, um `manifest.json` com o que lá está (data,
+versão, quantos registos de cada tabela) e um `LEIA-ME.txt`.
+
+**Repor** — a lista mostra os backups que a Perennia encontra na pasta
+`backups`, em Transferências, Documentos e no Ambiente de trabalho. Para
+**trazer um backup** de outro sítio (o «upload»): **arrasta o .zip para a
+janela da Perennia**, em qualquer ecrã, ou põe-no numa dessas pastas.
+Enter abre a janela da reposição:
+
+- marca as componentes a repor (por omissão, todas as que o ficheiro tem);
+- **Como repor**: **Substituir** (os dados dessas componentes passam a ser
+  os do backup — o normal para mudar de computador ou voltar atrás) ou
+  **Juntar** (acrescenta o que falta e deixa o resto: juntar duas vezes o
+  mesmo backup não duplica nada);
+- **Repor** → confirma.
+
+O resto é automático: **antes de mexer, a Perennia guarda um backup do que
+tens agora** (`perennia-antes-de-repor_….zip`, também na lista), repõe tudo
+numa só transação (se algo falhar, nada fica a meio), põe os `.fit` na pasta
+de dados e corrige os caminhos, arruma as referências que ficaram sem
+destino (uma sessão de uma rota que não veio fica sem rota), e volta ao ecrã
+inicial já com as definições repostas (língua, unidades, tema, atalhos). Del
+apaga um ficheiro de backup da lista (com confirmação). Durante uma sessão
+não se repõe nada.
+
+**Pela linha de comandos** (sem abrir a janela, útil para backups
+automáticos):
+
+```bash
+python main.py --backup
+```
+
+```bash
+python main.py --backup /media/pen --componentes rotas,segmentos,sessoes
+```
+
+```bash
+python main.py --restore perennia-backup_2026-11-04_16-30-12_completo.zip
+```
+
+```bash
+python main.py --restore backup.zip --modo juntar --componentes treinos
+```
+
+`--credenciais` inclui as ligações externas no backup; `--data-dir` escolhe a
+pasta de dados, como de costume. Os nomes das componentes são: perfil,
+definicoes, atalhos, ecra, aparelhos, rotas, segmentos, treinos, ginasio,
+inventario, sessoes, analises, desafios, testes, saude, calendario,
+ficheiros, ligacoes.
+
 ### Rotas (menu do ecrã inicial)
 
 O **único sítio onde se carregam ficheiros .gpx**. O ciclismo e a corrida já
@@ -1768,6 +1858,7 @@ Tudo vive em **dois sítios, numa só pasta**:
 | | |
 |---|---|
 | `perennia.db` | base de dados SQLite: rotas, histórico, classificações, desafios, definições |
+| `backups/` | os backups (`.zip`) feitos no menu Backups e as cópias automáticas antes de repor |
 | `rides/*.fit` | um ficheiro `.fit` por sessão de ciclismo, pronto a enviar para onde quiseres |
 | `strength/*.fit` | um `.fit` por treino de força |
 | `exports/` | os treinos que exportas no construtor (`.zwo`, `.erg`, `.mrc`, `.fit`) |
@@ -1792,7 +1883,13 @@ o `perennia.db`. O que a ronda 6 acrescentou:
 | `segment_efforts` | os tempos nos segmentos (Perennia, e Strava na corrida), por sessão e desporto |
 | `endurance_sessions.route_id` | a rota de uma corrida (para as vezes feitas e os segmentos) |
 
-**Para mudar de computador:** copia a pasta inteira. Na máquina nova,
+A ronda 7 (Backups e reposição) **não muda o esquema**: lê e escreve as
+tabelas que já existem.
+
+**Para mudar de computador:** faz um backup completo (menu Backups ou
+`python main.py --backup`), leva o .zip e, no computador novo, arrasta-o para
+a janela da Perennia e escolhe Substituir. Também continua a dar para copiar
+a pasta inteira. Na máquina nova,
 instala a aplicação e põe a pasta no caminho equivalente — abre com todo o
 histórico, as classificações e os recordes intactos. Também podes guardar a
 pasta onde quiseres e correr sempre com `--data-dir /caminho/para/a/pasta`,
