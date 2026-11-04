@@ -1889,6 +1889,11 @@ class DeviceScreen(ModalScreen):
                               action=lambda ch=channel, inf=info: self._connect_ant(ch, inf)))
         if not any(getattr(s, "device_id", "") == "sim:trainer" for s in a.hub.sources):
             items.append(Item(t("dev.simulated"), action=self._add_sim))
+        if not any(getattr(s, "device_id", "") == "sim:hr" for s in a.hub.sources):
+            items.append(Item(tr("SEM HARDWARE - Banda cardíaca", "NO HARDWARE - Heart strap"),
+                              detail=tr("FC simulada que segue o esforço · todos os desportos",
+                                        "simulated HR that follows the effort · every sport"),
+                              action=self._add_sim_hr))
         if a.rower is None or getattr(a.rower, "protocol", "") != "sim":
             items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
                               detail=tr("para remar sem a máquina (testes, demonstração)",
@@ -2064,6 +2069,14 @@ class DeviceScreen(ModalScreen):
     def _add_sim(self) -> None:
         self.app.hub.add_source(SimulatedTrainer(), role="simulated", is_trainer=True)
         self.note = t("dev.simulated")
+        self.enter()
+
+    def _add_sim_hr(self) -> None:
+        from velo.io.sim import SimulatedHeartStrap
+        a = self.app
+        a.hub.add_source(SimulatedHeartStrap(effort=a.effort_now), role="hr_monitor")
+        self.note = tr("SEM HARDWARE - Banda cardíaca ligada",
+                       "NO HARDWARE - Heart strap connected")
         self.enter()
 
     def _calibrate(self) -> None:
@@ -4012,6 +4025,39 @@ class App:
             self.message(f"{data.get('device', '')}: {t('dev.connected')}")
         elif kind == "control_response" and not data.get("ok", True):
             self.message(f"{data.get('device', '')}: {data.get('text', '')}")
+
+    def effort_now(self) -> float | None:
+        """O esforço de agora em fração do limiar (1.0 = no limiar; None =
+        parado), para a banda cardíaca simulada seguir a sessão em curso."""
+        for scr in reversed(self.stack):
+            e = getattr(scr, "engine", None) or getattr(scr, "session", None)
+            if e is None:
+                continue
+            if getattr(e, "paused", False) or getattr(e, "finished", False):
+                return None
+            st = getattr(e, "state", None)
+            if st is not None and hasattr(st, "power_w"):          # ciclismo
+                ftp = getattr(getattr(e, "athlete", None), "ftp_w", 0) or 200
+                return st.power_w / ftp if st.power_w else None
+            sport = getattr(e, "sport", "")
+            if sport in ("running", "swimming"):
+                if not getattr(e, "started", False):
+                    return None
+                if sport == "swimming":
+                    return 0.8
+                if getattr(self, "_thr_kmh", None) is None:
+                    from velo.core import intensity as it
+                    self._thr_kmh = it.Context.from_db(self.db, "running").speed_mps(100) * 3.6
+                return (e.speed_kmh or 0) / max(1.0, self._thr_kmh)
+            if hasattr(e, "power_w") and hasattr(e, "ftp"):        # remo
+                return e.power_w / max(1, e.ftp) if e.power_w else None
+            return 0.6                                             # ginásio e afins
+        # fora de uma sessão: segue a potência (o trainer simulado a pedalar)
+        try:
+            p = self.hub.reading().power_w
+        except Exception:
+            p = None
+        return p / max(1, self.db.athlete().ftp_w) if p else None
 
     def device_summary(self) -> str:
         names = [getattr(s, "name", "?") for s in self.hub.sources]

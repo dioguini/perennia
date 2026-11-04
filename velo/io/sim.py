@@ -138,6 +138,50 @@ class SimulatedTrainer:
         return self._controlled
 
 
+class SimulatedHeartStrap:
+    """Banda cardíaca simulada («SEM HARDWARE - Banda cardíaca»): manda só a
+    FC, como uma banda de peito. A FC segue o esforço da sessão — `effort`
+    devolve o esforço de agora em fração do limiar (1.0 = no limiar; None =
+    parado) — com o atraso de um coração verdadeiro e uma pequena variação.
+    Serve todos os desportos (no ginásio, o esforço vem das séries)."""
+
+    name = "SEM HARDWARE - Banda cardíaca"
+    device_id = "sim:hr"
+    profiles = ("hrs",)
+
+    def __init__(self, effort=None, rest_bpm: int = 62, max_bpm: int = 188,
+                 seed: int | None = 11):
+        self.effort = effort
+        self.rest_bpm = rest_bpm
+        self.max_bpm = max_bpm
+        self._rng = random.Random(seed)
+        self._t = 0.0
+        self._hr = float(rest_bpm + 8)
+
+    def target(self) -> float:
+        try:
+            e = self.effort() if self.effort is not None else None
+        except Exception:
+            e = None
+        if e is None:
+            return self.rest_bpm + 8.0
+        e = max(0.0, min(1.4, float(e)))
+        # ~ 60 % da reserva no Z2, ~ 90 % no limiar, perto do máximo acima
+        reserve = self.max_bpm - self.rest_bpm
+        return self.rest_bpm + reserve * min(1.0, 0.25 + 0.68 * e)
+
+    def tick(self, dt: float) -> None:
+        self._t += dt
+        want = self.target() + 1.5 * math.sin(self._t / 11.0)
+        # o coração sobe mais depressa do que desce
+        rate = 0.09 if want > self._hr else 0.05
+        self._hr += (want - self._hr) * min(1.0, dt * rate)
+        self._hr = max(40.0, min(float(self.max_bpm), self._hr))
+
+    def reading(self) -> Reading:
+        return Reading(hr_bpm=int(round(self._hr + self._rng.uniform(-0.6, 0.6))))
+
+
 class ScriptedSource:
     """Fonte de leituras fixas, para testes determinísticos."""
 

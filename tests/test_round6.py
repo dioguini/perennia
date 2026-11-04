@@ -28,6 +28,7 @@ from velo.io.hub import SensorHub  # noqa: E402
 from velo.io.sim import SimulatedTrainer  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
+from velo.ui import app as app_mod  # noqa: E402
 from velo.ui import builder_screens as bs  # noqa: E402
 from velo.ui import endurance_screens as es  # noqa: E402
 
@@ -321,6 +322,62 @@ class TestLoadFromComputer(tg.GuiCase):
         wid = first.data[1]
         self.assertEqual(sw.status(self.app.db, "rowing", wid), "deleted")
         self.assertTrue(rw.steps_of(self.app.db, wid))
+
+
+# ======================================================= FC simulada
+
+
+class TestSimulatedHeartStrap(unittest.TestCase):
+    def test_hr_follows_the_effort(self):
+        from velo.io.sim import SimulatedHeartStrap
+        effort = {"v": None}
+        strap = SimulatedHeartStrap(effort=lambda: effort["v"])
+        for _ in range(120):
+            strap.tick(1.0)
+        rest = strap.reading().hr_bpm
+        self.assertLess(rest, 80)
+        effort["v"] = 1.0                                   # no limiar
+        for _ in range(300):
+            strap.tick(1.0)
+        hard = strap.reading().hr_bpm
+        self.assertGreater(hard, 160)
+        effort["v"] = 0.5
+        for _ in range(300):
+            strap.tick(1.0)
+        self.assertLess(strap.reading().hr_bpm, hard - 15)
+
+    def test_strap_wins_over_the_trainer_hr(self):
+        from velo.io.sim import SimulatedHeartStrap
+        hub = SensorHub()
+        hub.add_source(SimulatedTrainer(base_power=200), role="simulated", is_trainer=True)
+        hub.add_source(SimulatedHeartStrap(effort=lambda: 1.2), role="hr_monitor")
+        for _ in range(10):
+            hub.tick(1.0)
+        self.assertEqual(hub.source_of("hr"), "SEM HARDWARE - Banda cardíaca")
+
+
+class TestHeartStrapInDevices(tg.GuiCase):
+    def test_add_from_devices_and_run_with_it(self):
+        self.app.push(app_mod.DeviceScreen(self.app))
+        self.pick("SEM HARDWARE - Banda cardíaca")
+        self.assertIn("sim:hr", [getattr(s, "device_id", "") for s in self.app.hub.sources])
+        labels = [i.label for i in self.screen().list.items]
+        self.assertIn("✓ SEM HARDWARE - Banda cardíaca", labels)
+        self.assertNotIn("SEM HARDWARE - Banda cardíaca", labels)   # não se liga duas vezes
+        self.press(key.ESCAPE)
+        self.app.reset_to_menu()
+        self.press(key.ESCAPE)
+        self.pick("Corrida")
+        self.pick("Sessão de treino")
+        self.pick("Livre")
+        self.pick("Começar")
+        run = self.screen()
+        self.assertIsInstance(run, es.EnduranceSession)
+        run.engine.start()
+        for _ in range(60):
+            run.update(1.0)
+        self.assertIsNotNone(run.engine.hr_bpm)
+        self.assertIsNotNone(self.app.effort_now())
 
 
 if __name__ == "__main__":
