@@ -1487,14 +1487,19 @@ class TestHomeScreen(GuiCase):
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
         titles = [tile.title.text for tile in home.tiles]
-        self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
-                                      "Calendário"])
-        self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Saúde", "Estatísticas gerais",
-                                      "Inventário de artigos", "Exercícios"])
+        self.assertEqual(titles[:7], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
+                                      "Calendário", "Saúde"])
+        self.assertEqual(titles[7:], ["Rotas", "Segmentos", "Estatísticas gerais",
+                                      "Inventário de artigos", "Exercícios", "Backups"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
-        self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
-        self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
+        self.assertGreater(home.tiles[0].bg.y, home.tiles[7].bg.y)
+        self.assertEqual(home.tiles[0].bg.y, home.tiles[6].bg.y)
+        # a segunda fila (seis cartões) fica ao centro
+        left = home.tiles[0].bg.x
+        right = home.tiles[6].bg.x + home.tiles[6].bg.width
+        row2 = (home.tiles[7].bg.x + home.tiles[12].bg.x + home.tiles[12].bg.width) / 2
+        self.assertAlmostEqual(row2, (left + right) / 2, delta=1)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
         for tl in home.tiles:                        # o título não fica por baixo do ícone
@@ -1535,8 +1540,8 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.press(key.DOWN)                        # para a fila de baixo
-        self.assertTrue(home.tiles[6].selected)
-        self.press(key.RIGHT, key.RIGHT, key.RIGHT, key.ENTER)
+        self.assertTrue(home.tiles[7].selected)
+        self.press(key.RIGHT, key.RIGHT, key.ENTER)
         self.assertIsInstance(self.screen(), app_mod.StatsScreen)    # as gerais
         self.assertEqual(type(self.screen()).__name__, "GeneralStatsScreen")
         self.press(key.ESCAPE)
