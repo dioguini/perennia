@@ -203,26 +203,30 @@ def folder_of(c: Component) -> str:
 # ------------------------------------------------------------ base de dados
 
 
+# os módulos que criam tabelas quando são precisos (lista explícita: no
+# executável empacotado não se pode ir procurar os módulos à pasta)
+ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "games",
+                  "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
+                  "objectives", "peaks", "rowing", "segments", "session_workouts",
+                  "strength_builder", "workout_meta")
+
+
 def prepare(db) -> None:
     """Cria todas as tabelas que a aplicação conhece (as que nascem quando se
     abre um ecrã também), para exportar e repor sem faltar nenhuma."""
     import importlib
-    import pkgutil
-
-    import velo.core as core_pkg
-    for m in pkgutil.iter_modules(core_pkg.__path__):
-        if m.name in ("backup",):
-            continue
+    for name in ENSURE_MODULES:
         try:
-            mod = importlib.import_module(f"velo.core.{m.name}")
+            mod = importlib.import_module(f"velo.core.{name}")
         except Exception:
             continue
-        fn = getattr(mod, "ensure", None)
-        if callable(fn):
-            try:
-                fn(db)
-            except Exception:
-                pass
+        for attr in ("ensure", "ensure_table"):
+            fn = getattr(mod, attr, None)
+            if callable(fn):
+                try:
+                    fn(db)
+                except Exception:
+                    pass
 
 
 def tables_in(db) -> list[str]:

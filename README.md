@@ -39,6 +39,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   com visão geral e melhores tempos; contam sozinhos nas sessões.
 - Treinos do computador (`.zwo`, `.fit`, `.mrc`, `.erg`) perguntam se ficam
   na lista; cada sessão guarda a sua cópia do treino.
+- **Backups e reposição**: tudo, ou só algumas componentes, num `.zip`
+  segmentado (uma pasta por componente, um `.jsonl` por tabela, os `.fit`);
+  repor é arrastar o ficheiro para a janela (substituir ou juntar), com um
+  backup automático antes. Também por `--backup` / `--restore`.
 - Mostra em tempo real distância, falta, declive, declives médios a 500 m /
   1 / 3 / 5 / 10 km, potência, balanço esquerda/direita, zonas, torque,
   cadência, cardio, carga, velocidades e médias — e **o perfil que vem a

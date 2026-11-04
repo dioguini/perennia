@@ -129,20 +129,15 @@ class BackupScreen(Screen):
                               detail=" · ".join(bits),
                               action=lambda k=c.key: self._toggle(k), data=("comp", c.key)))
         sec = bk.BY_KEY["ligacoes"]
-        items += [Item(tr("Credenciais", "Credentials"), header=True),
-                  Item(tr("Incluir as ligações externas", "Include external connections"),
-                       value=tr("Sim", "Yes") if "ligacoes" in self.chosen else tr("Não", "No"),
-                       detail=sec.description, action=lambda: self._toggle("ligacoes"),
-                       data=("comp", "ligacoes")),
-                  Item(tr("Onde fica", "Where it goes"), value=str(backups_dir(a)),
-                       detail=tr("depois copia o .zip para uma pen ou para a nuvem",
-                                 "then copy the .zip to a pen drive or the cloud"),
-                       enabled=False),
+        items += [Item(sec.name, value=tr("Sim", "Yes") if "ligacoes" in self.chosen
+                       else tr("Não", "No"), detail=sec.description,
+                       action=lambda: self._toggle("ligacoes"), data=("comp", "ligacoes")),
                   Item(tr("Exportar", "Export"), button=True, primary=True,
                        enabled=bool(self.chosen), action=self._export)]
         self.chrome.set(tr("Backups e reposição", "Backups and restore"),
-                        tr("Escolhe o que guardar: tudo, ou só algumas componentes",
-                           "Pick what to keep: everything, or just some components"),
+                        tr("Escolhe o que guardar: tudo, ou só algumas componentes · o .zip "
+                           "fica em {p}", "Pick what to keep: everything, or just some "
+                           "components · the .zip goes to {p}", p=backups_dir(a)),
                         tr("Tab separador · Enter ou ←/→ marca · Ctrl+S exportar · Esc voltar",
                            "Tab next tab · Enter or ←/→ ticks · Ctrl+S export · Esc back"))
         self.list.set_items(items, keep_index=True)

@@ -59,6 +59,20 @@ def text_px(text: str, size: float, bold: bool = False) -> float:
     return len(text) * size * (0.78 if bold else 0.73)
 
 
+def set_wrap(label, width: float | None) -> None:
+    """Liga (com a largura) ou desliga as várias linhas de uma etiqueta. A
+    pyglet quer a largura antes de ligar e sem várias linhas antes de a tirar."""
+    try:
+        if width:
+            label.width = width
+            label.multiline = True
+        else:
+            label.multiline = False
+            label.width = None
+    except Exception:
+        pass
+
+
 def fit_text(text: str, max_px: float, size: float, bold: bool = False) -> str:
     """Corta o texto (com reticências) para caber em `max_px` píxeis."""
     if not text or max_px <= 0:
@@ -1096,6 +1110,7 @@ class Tile:
         self.border.opacity = 0
         self.title = make_label(title, font_size=17, bold=True, color=TEXT,
                                 anchor_x="center", anchor_y="center", batch=batch)
+        self.title_text = title
         self.note = make_label(note, font_size=10, color=DIM, anchor_x="center",
                                anchor_y="center", batch=batch)
         self.icon_name = icon_name
@@ -1107,20 +1122,39 @@ class Tile:
         o = self.outline
         o.x, o.y, o.width, o.height = x - 1, y - 1, w + 2, h + 2
         self.border.x, self.border.y, self.border.width = x, y, w
-        # o título tem de caber no cartão (≈ 0,62 da altura da letra por carácter)
+        # o título tem de caber no cartão; se nem a 12 px couber, parte-se em
+        # duas linhas (a letra não fica ilegível)
         size = 17 if h >= 120 else 15
-        while size > 12 and len(self.title.text) * size * 0.62 > w - 20:
+        text = self.title_text
+        while size > 12 and text_px(text, size, bold=True) > w - 20:
             size -= 1
+        lines = [text]
+        if text_px(text, size, bold=True) > w - 20 and " " in text:
+            words = text.split(" ")
+            cut = min(range(1, len(words)), key=lambda k: abs(
+                text_px(" ".join(words[:k]), size, True) - text_px(" ".join(words[k:]), size,
+                                                                       True)))
+            lines = [" ".join(words[:cut]), " ".join(words[cut:])]
         self.title.font_size = size
-        title_y = y + max(24.0, h * 0.2) + (8 if self.note.text else 0)
+        two = len(lines) > 1
+        set_wrap(self.title, (w - 12) if two else None)
+        self.title.text = "\n".join(lines)
+        if two and hasattr(self.title, "set_style"):
+            try:
+                self.title.set_style("align", "center")
+            except Exception:
+                pass
+        title_y = y + max(24.0, h * 0.2) + (8 if self.note.text else 0) + \
+            (size * 0.7 if two else 0)
         self.title.x, self.title.y = x + w / 2, title_y
         # o ícone fica por cima do título, sem lhe tocar
-        room = (y + h - 12) - (title_y + size * 0.8 + 10)
+        top_of_title = title_y + size * 0.8 + (size * 0.7 if two else 0)
+        room = (y + h - 12) - (top_of_title + 10)
         icon = max(20.0, min(72.0, room, w * 0.5))
         if self.icon is not None:
             self.icon.scale = icon / 64
             self.icon.x = x + (w - icon) / 2
-            self.icon.y = title_y + size * 0.8 + 10 + (room - icon) / 2
+            self.icon.y = top_of_title + 10 + (room - icon) / 2
         self.note.x, self.note.y = x + w / 2, y + 14
 
     def set_selected(self, on: bool) -> None:

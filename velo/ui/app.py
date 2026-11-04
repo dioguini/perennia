@@ -748,7 +748,7 @@ class HomeScreen(Screen):
         self.chrome.set("Perennia", f"{athlete.name or '—'} · {a.device_summary()}",
                         "←→↑↓ escolher · Enter abrir")
         # a lista (invisível) serve o teclado e os testes; os cartões são o que se vê
-        self.list.set_items([Item(tile.title.text, action=act)
+        self.list.set_items([Item(tile.title_text, action=act)
                              for tile, act in zip(self.tiles, self._actions())],
                             keep_index=True)
         self.list.y = -3000
@@ -1672,13 +1672,8 @@ class PopupMixin:
         if getattr(self, "_wrapped_for", None) == (sub.text, maxw):
             return
         self._wrapped_for = (sub.text, maxw)
-        from velo.ui.widgets import text_px
-        long = text_px(sub.text, 13) > maxw
-        try:
-            sub.width = maxw if long else None
-            sub.multiline = long
-        except Exception:
-            pass
+        from velo.ui.widgets import set_wrap, text_px
+        set_wrap(sub, maxw if text_px(sub.text, 13) > maxw else None)
 
     def draw(self) -> None:
         self.popup.draw()

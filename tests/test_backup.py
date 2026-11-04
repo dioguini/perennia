@@ -87,6 +87,16 @@ class TestComponents(Base):
             self.assertEqual(len(owners), 1, (k, owners))
 
 
+    def test_every_module_that_creates_tables_is_prepared(self):
+        core = Path(bk.__file__).parent
+        have = sorted(p.stem for p in core.glob("*.py")
+                      if any(f"\ndef {fn}(" in p.read_text(encoding="utf-8")
+                             for fn in ("ensure", "ensure_table")))
+        self.assertEqual(sorted(bk.ENSURE_MODULES), have)
+        _d, db = self.place()
+        self.assertIn("game_results", bk.tables_in(db))          # nasce no prepare
+
+
 class TestExportAndRestore(Base):
     def test_full_export_is_segmented_and_restores_exactly(self):
         d, db, _rid = self.with_a_ride()

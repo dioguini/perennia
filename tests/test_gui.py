@@ -1486,7 +1486,7 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
-        titles = [tile.title.text for tile in home.tiles]
+        titles = [tile.title_text for tile in home.tiles]
         self.assertEqual(titles[:7], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
                                       "Calendário", "Saúde"])
         self.assertEqual(titles[7:], ["Rotas", "Segmentos", "Estatísticas gerais",
