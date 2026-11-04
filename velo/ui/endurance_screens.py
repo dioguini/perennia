@@ -527,12 +527,18 @@ class EnduranceSession(ArrangedPanels, Screen):
         minus = symbol in (key.MINUS, key.NUM_SUBTRACT)
         if plus or minus:
             if e.sport == "running":
+                if e.speed_locked:
+                    self._locked_toast()
+                    return True
                 e.set_speed(e.speed_kmh + (0.5 if plus else -0.5) *
                             (2 if modifiers & key.MOD_SHIFT else 1))
             else:
                 e.add_length(1 if plus else -1)
             return True
         if symbol == key.T and e.sport == "running":
+            if e.speed_locked:
+                self._locked_toast()
+                return True
             self.typing = ""
             return True
         if symbol == key.L:
@@ -567,6 +573,12 @@ class EnduranceSession(ArrangedPanels, Screen):
             self.app.pop()
             return
         self.app.replace(EnduranceSummary(self.app, e.finish()))
+
+    def _locked_toast(self) -> None:
+        self.toast = tr("A velocidade é a do bloco ({v} km/h): a distância conta por ela",
+                        "The speed is the block's ({v} km/h): distance follows it",
+                        v=f"{self.engine.speed_kmh:.1f}")
+        self._toast_until = time.monotonic() + 4.0
 
     def _discard(self) -> None:
         self.engine.discard()

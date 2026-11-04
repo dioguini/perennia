@@ -71,6 +71,13 @@ def builder_items(app, sport: str) -> list[Item]:
             _hms(w["s"]) if w["s"] else "",
             (f"{w['m'] / 1000:g} km" if w["m"] >= 1000 else f"{w['m']:.0f} m") if w["m"]
             else "") if x)
+        if sport == "running" and w["s"]:
+            # na corrida, a distância total sai das velocidades (ou dos ritmos)
+            from velo.core import endurance as en
+            full = en.workout(db, w["id"])
+            km = en.planned_m(db, sport, full) / 1000 if full else 0
+            if km and km * 1000 > w["m"] + 1:
+                dur += f" · ≈ {km:.2f} km"
         load = (f"TSS ≈ {w['load']:.0f}" if sport == "cycling" else
                 tr("carga ≈ {v}", "load ≈ {v}", v=f"{w['load']:.0f}")) if w["load"] else ""
         detail = " · ".join(x for x in (wm.label(db, sport, w["id"], w["mode"]), w["desc"], load)
@@ -293,6 +300,33 @@ class BlockBuilder(EditScreen):
         lv.y = self._list_top - row_h / 2
         lv.set_visible_rows(rows)
 
+    def _speed_set(self, blk) -> bool:
+        return self.sport == "running" and self.control == "manual" and \
+            bool(blk.extra.get("speed_kmh"))
+
+    def _block_km(self, blk) -> str:
+        """A distância do bloco, pela velocidade da passadeira (ou pelo ritmo)."""
+        return f"{self._block_m(blk) / 1000:.2f} km"
+
+    def _block_m(self, blk) -> float:
+        if blk.dur_type == "distance":
+            return float(blk.dur)
+        v = blk.extra.get("speed_kmh")
+        mps = v / 3.6 if v else self.ctx.speed_mps(blk.mid() if blk.lo is not None else 60)
+        return mps * blk.dur
+
+    def _total_m(self) -> float:
+        """A distância do treino de corrida: a dos blocos por distância e, nos
+        por tempo, a velocidade da passadeira (ou o ritmo) × o tempo."""
+        return sum(self._block_m(b) for b in self.blocks)
+
+    def _to_time(self, b) -> None:
+        """Com velocidade, um bloco por distância passa a tempo (a mesma distância)."""
+        v = b.extra.get("speed_kmh")
+        if v and b.dur_type == "distance":
+            b.dur = max(10.0, round(b.dur / (v / 3.6)))
+            b.dur_type = "time"
+
     def max_rows(self) -> int:
         """As linhas do bloco mais completo (uma rampa) neste desporto."""
         n = 11                    # título, tipo, objetivo, mensagem, duração, início, fim,
@@ -302,7 +336,7 @@ class BlockBuilder(EditScreen):
         if self.sport == "cycling":
             n += 1                # cadência alvo
         if self.sport == "running" and self.control == "manual":
-            n += 2                # velocidade e inclinação
+            n += 3                # velocidade, inclinação e a distância calculada
         if self.sport == "rowing":
             n += 2                # resistência e voga
         return n
@@ -527,7 +561,8 @@ class BlockBuilder(EditScreen):
             lab.text = hms(secs)
             lab.x, lab.y = self.x_of(secs, total), self.cy0 - 4
         est = estimate(self.blocks, self.ctx)
-        dist = f" · {est['meters'] / 1000:.2f} km" if est["meters"] else ""
+        meters = self._total_m() if self.sport == "running" else est["meters"]
+        dist = f" · {meters / 1000:.2f} km" if meters else ""
         load = "TSS" if self.sport == "cycling" else tr("Carga", "Load")
         self.summary.text = (
             f"{tr('Duração', 'Duration')} ≈ {hms(est['seconds'])}{dist}\n"
@@ -569,7 +604,15 @@ class BlockBuilder(EditScreen):
                      detail=tr("aparece na sessão no início do bloco",
                                "shown in the session when the block starts")),
             ]
-            if self.sport != "cycling":
+            locked = self._speed_set(blk)
+            if self.sport != "cycling" and locked:
+                # passadeira manual com velocidade: o bloco é por tempo e a
+                # distância sai da velocidade (não se mexe)
+                rows.append(Item(tr("Duração por", "Duration by"), value=tr("tempo", "time"),
+                                 detail=tr("a distância vem da velocidade do bloco",
+                                           "the distance comes from the block speed"),
+                                 enabled=False))
+            elif self.sport != "cycling":
                 rows.append(Item(tr("Duração por", "Duration by"),
                                  value=tr("tempo", "time") if blk.dur_type == "time"
                                  else tr("distância", "distance"), data="cyc:dur_type"))
@@ -613,6 +656,10 @@ class BlockBuilder(EditScreen):
                 rows.append(Item(tr("Inclinação", "Incline"),
                                  value=f"{inc:.1f} %" if inc else "0 %",
                                  detail=tr("←/→ ±0,5 %", "←/→ ±0.5 %"), data="num:incline"))
+                rows.append(Item(tr("Distância (calculada)", "Distance (worked out)"),
+                                 value=self._block_km(blk),
+                                 detail=tr("velocidade × tempo · ajusta-se sozinha",
+                                           "speed × time · adjusts by itself"), enabled=False))
             if self.sport == "rowing":
                 res = blk.extra.get("resistance")
                 rows.append(Item(tr("Resistência", "Resistance"),
@@ -678,6 +725,8 @@ class BlockBuilder(EditScreen):
             ks = ["warmup", "active", "rest", "cooldown"]
             b.kind = ks[(ks.index(b.kind) + step) % len(ks)] if b.kind in ks else "active"
         elif field == "dur_type":
+            if self._speed_set(b):
+                return            # com velocidade, a distância é calculada
             if b.dur_type == "time":
                 b.dur_type, b.dur = "distance", float(SNAP_M.get(self.sport, 100) * 4)
             else:
@@ -726,6 +775,7 @@ class BlockBuilder(EditScreen):
             # a velocidade dá o ritmo do bloco (e a cor da zona)
             b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
             b.hi = None
+            self._to_time(b)
         elif field == "incline":
             b.extra["incline_pct"] = max(0.0, min(15.0, round((b.extra.get("incline_pct") or 0)
                                                               + steps * 0.5, 1)))
@@ -781,6 +831,7 @@ class BlockBuilder(EditScreen):
             b.extra["speed_kmh"] = v
             b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
             b.hi = None
+            self._to_time(b)
         elif field == "incline":
             b.extra["incline_pct"] = max(0.0, min(15.0, float(value)))
         elif field == "rate":

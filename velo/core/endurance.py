@@ -209,6 +209,31 @@ def totals(steps: list[Step]) -> tuple[float, float]:
             sum(s.dur_value for s in steps if s.dur_type == "distance"))
 
 
+def planned_m(db: Database, sport: str, w: dict) -> float:
+    """A distância prevista do treino: a dos passos por distância e, nos por
+    tempo, a velocidade do bloco (passadeira manual) ou o ritmo × o tempo."""
+    from . import intensity as it
+    from .workout_meta import get as meta_of
+    speeds = []
+    if sport == "running":
+        meta = meta_of(db, sport, w["id"])
+        if meta.get("control") == "manual":
+            speeds = [(b or {}).get("speed_kmh") for b in meta.get("blocks") or []]
+    ctx = None
+    m = 0.0
+    for i, st in enumerate(w["steps"]):
+        if st.dur_type == "distance":
+            m += st.dur_value
+            continue
+        v = speeds[i] if i < len(speeds) else None
+        if v:
+            m += float(v) / 3.6 * st.dur_value
+        elif sport == "running" and st.lo is not None:
+            ctx = ctx or it.Context.from_db(db, sport)
+            m += ctx.speed_mps(st.mid) * st.dur_value
+    return m
+
+
 def save_workout(db: Database, wid: str | None, sport: str, name: str, description: str,
                  steps: list[Step], mode: str = "pace", builtin: bool | int = False,
                  sort: int = 100) -> str:
@@ -346,12 +371,21 @@ class EnduranceEngine:
         self.mode = "pace"
         self.title = tr("Corrida livre", "Free run") if self.sport == "running" else \
             tr("Natação livre", "Free swim")
+        # passadeira num treino manual: a velocidade de cada bloco (do construtor)
+        self.block_speeds: list[float | None] = []
+        self.speed_locked = False
         if workout_id:
             w = workout(db, workout_id)
             if w:
                 self.workout = Runner(w["steps"], w["name"])
                 self.title = w["name"]
                 self.mode = w["mode"]
+                if self.sport == "running":
+                    from .workout_meta import get as meta_of
+                    meta = meta_of(db, "running", workout_id)
+                    if meta["control"] == "manual":
+                        self.block_speeds = [(b or {}).get("speed_kmh")
+                                             for b in meta.get("blocks") or []]
         self.autolap = AutoLap(autolap)
         self.events: list[tuple[str, dict]] = []
         self.started = False
@@ -396,6 +430,7 @@ class EnduranceEngine:
             self.events.append(("started", {}))
             if self.workout is not None and self.workout.step is not None:
                 self.events.append(("step", {"idx": 0, "cue": self.workout.step.cue}))
+                self._block_speed(0)
 
     def toggle_pause(self) -> None:
         if not self.started:
@@ -474,6 +509,16 @@ class EnduranceEngine:
         self.events.append((kind, data))
         if kind == "step_end":
             self.lap("workout_step")
+        elif kind == "step":
+            self._block_speed(int(data.get("idx") or 0))
+
+    def _block_speed(self, idx: int) -> None:
+        """Num treino manual de passadeira, a velocidade é a do bloco: põe-se
+        sozinha e fica presa (a distância conta por ela)."""
+        v = self.block_speeds[idx] if 0 <= idx < len(self.block_speeds) else None
+        self.speed_locked = bool(v)
+        if v:
+            self.set_speed(float(v))
 
     def _sample(self) -> None:
         hr = self.hr_bpm
