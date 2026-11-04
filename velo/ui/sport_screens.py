@@ -117,7 +117,7 @@ class EditScreen(Screen):
 # ====================================================== edição numa janela
 
 
-from velo.ui.app import PopupMixin  # noqa: E402
+from velo.ui.app import PopupMixin, SnapshotUnsaved  # noqa: E402
 
 
 class EditPopup(PopupMixin, EditScreen):
@@ -920,41 +920,10 @@ class StrengthHistory(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-class StrengthSessionDetail(Screen):
-    def __init__(self, app, session_id: str):
-        super().__init__(app)
-        self.session_id = session_id
-
-    def enter(self) -> None:
-        a = self.app
-        row = a.db.conn.execute("SELECT * FROM strength_sessions WHERE id = ?",
-                                (self.session_id,)).fetchone()
-        items = []
-        for s in st.session_sets(a.db, self.session_id):
-            items.append(Item(f"{s['name']} · {s['set_no']}",
-                              value=f"{s['reps']}" + (f" × {_kg(s['load_kg'])}" if s["load_kg"]
-                                                      else ""),
-                              detail=(f"RPE {_rpe(s['rpe'])} · " if s["rpe"] else "")
-                              + (f"{s['avg_hr']:.0f} bpm · " if s["avg_hr"] else "")
-                              + hms((s["end_t_s"] or 0) - (s["start_t_s"] or 0)),
-                              enabled=False))
-        plan = st.workout(a.db, row["workout_id"]) if row and row["workout_id"] else None
-        title = (plan or {}).get("name") or (row["name"] if row else "")
-        sub = str(row["started_at"])[:16].replace("T", " ") if row else ""
-        if row and row["fit_path"]:
-            sub += f" · {row['fit_path']}"
-        self.chrome.set(title, sub, self.footer())
-        fb_item = _feedback().summary_item(self.app, "strength", self.session_id)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        _sid = self.session_id
-        if _sid:
-            items.insert(1 if fb_item is not None else 0, Item(
-                tr("Análise pós-treino", "Post-workout analysis"),
-                detail=tr("Cumprimento, repetições, volume e 1RM de cada exercício",
-                          "Compliance, reps, volume and 1RM per exercise"),
-                action=lambda: self.app.push(_analysis_screen(self.app, _sid))))
-        self.list.set_items(items or [Item("—", enabled=False)])
+def StrengthSessionDetail(app, session_id: str):          # noqa: N802 — compatibilidade
+    """Uma sessão de ginásio do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "strength", session_id)
 
 
 # ------------------------------------------------------------ construtor
@@ -985,13 +954,14 @@ class StrengthBuilder(Screen):
         item = self.list.selected
         if symbol == key.DELETE and item is not None and isinstance(item.data, tuple):
             wid = item.data[1]
-            if getattr(self, "_armed", None) == wid:
+
+            def gone(wid=wid, name=item.label) -> None:
                 st.delete_workout(self.app.db, wid)
-                self.app.message(t("str.deleted", name=item.label))
+                self.app.message(t("str.deleted", name=name))
                 self.enter()
-            else:
-                self._armed = wid
-                self.app.message(t("str.delete_again"))
+            self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
+                                n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                             yes=tr("Apagar", "Delete"))
             return True
         return super().on_key(symbol, modifiers)
 
@@ -1085,9 +1055,15 @@ class StrengthWorkoutEditor(EditScreen):
                 self.enter()
                 return True
             if symbol == key.DELETE:
-                del self.items[idx]
-                self.dirty = True
-                self.enter()
+                def gone(idx=idx) -> None:
+                    del self.items[idx]
+                    self.dirty = True
+                    self.enter()
+                self.app.confirm(tr("Tirar este exercício do treino?",
+                                    "Remove this exercise from the workout?"),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 gone, yes=tr("Tirar", "Remove"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -1098,7 +1074,7 @@ class StrengthWorkoutEditor(EditScreen):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.items:
             self.app.message(t("str.empty_plan"))
             return None
@@ -1106,12 +1082,15 @@ class StrengthWorkoutEditor(EditScreen):
                                           self.description or None, self.items)
         self.dirty = False
         self._esc_armed = False
-        self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if popup:
+            self.app.workout_saved(self.name, self)
+        else:
+            self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _save_and_train(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.replace(StrengthPreview(self.app, wid))
 
@@ -1259,7 +1238,7 @@ class ExercisePicker(EditScreen):
             self.app.pop()               # sai também do seletor
 
 
-class ExerciseCreate(EditScreen):
+class ExerciseCreate(SnapshotUnsaved, EditScreen):
     BW = (0.0, 0.5, 0.65, 1.0)
 
     def __init__(self, app, on_created):
@@ -1269,6 +1248,14 @@ class ExerciseCreate(EditScreen):
         self.group = "full"
         self.measure = "reps"
         self.bw = 0.0
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return (self.name, self.group, self.measure, self.bw)
+
+    def on_save(self) -> bool:
+        self._create()
+        return True
 
     def enter(self) -> None:
         rows = [Item(t("str.name"), value=self.name or "—", data="text:name"),
@@ -1303,6 +1290,7 @@ class ExerciseCreate(EditScreen):
             self.app.message(t("str.need_name"))
             return
         ex_id = st.add_exercise(self.app.db, self.name, self.group, self.bw, self.measure)
+        self.mark_saved()
         self.app.pop()
         self.on_created(ex_id)
 
@@ -1635,13 +1623,13 @@ class CyclingBuilder(Screen):
                 self.app.push(ExportScreen(self.app, wid))
                 return True
             if symbol == key.DELETE:
-                if getattr(self, "_armed", None) == wid:
+                def gone(wid=wid, name=item.label) -> None:
                     self.app.db.delete_workout(wid)
-                    self.app.message(t("str.deleted", name=item.label))
+                    self.app.message(t("str.deleted", name=name))
                     self.enter()
-                else:
-                    self._armed = wid
-                    self.app.message(t("str.delete_again"))
+                self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
+                                    n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                                 yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -1757,9 +1745,14 @@ class WorkoutEditor(EditScreen):
                 self.enter()
                 return True
             if symbol == key.DELETE:
-                del self.steps[idx]
-                self.dirty = True
-                self.enter()
+                def gone(idx=idx) -> None:
+                    del self.steps[idx]
+                    self.dirty = True
+                    self.enter()
+                self.app.confirm(tr("Apagar o passo {n}?", "Delete step {n}?", n=idx + 1),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 gone, yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -1770,7 +1763,7 @@ class WorkoutEditor(EditScreen):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.steps:
             self.app.message(t("bld.empty"))
             return None
@@ -1785,17 +1778,20 @@ class WorkoutEditor(EditScreen):
                                                 self.description or None, tss)
         self.dirty = False
         self._esc_armed = False
-        self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if popup:
+            self.app.workout_saved(self.name, self)
+        else:
+            self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _save_and_ride(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.push(WorkoutRouteChoice(self.app, wid))     # a janela da sessão
 
     def _export(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.push(ExportScreen(self.app, wid))
 

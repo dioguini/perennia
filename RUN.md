@@ -401,6 +401,34 @@ Enter), que abre a janela da sessão.
 - **Remo, corrida e natação:** na zona do passo.
 - **Ginásio:** como «Objetivo:», por baixo das séries.
 
+### Análise de uma sessão (todos os desportos)
+
+No **Histórico** de cada desporto (e no calendário), escolher uma sessão
+abre a análise em quatro separadores (Tab muda):
+
+1. **Geral** — o **tipo de sessão** (sessão livre e a rota, treino e o tipo
+   do treino — por exemplo «Treino: Sweet spot 3×12 · Potência · ERG» —,
+   teste, Challenge), a data, os números da sessão, as voltas e o `.fit`.
+2. **Feedback** — o ecrã do feedback ali mesmo (ver abaixo): RPE, dores,
+   sensação, objetivo cumprido e comentário. Sair com alterações por guardar
+   pergunta.
+3. **Análise do treino** — num treino por blocos, uma linha por bloco: o
+   alvo, o feito (média), a FC, o tempo dentro do alvo e o resultado
+   (**✓ cumprido** com 75 % do tempo no alvo, **~ em parte**, **✗ não
+   cumprido**, **✗ não acabado** ou **— não feito**). A margem é a do bloco
+   (alvo exato ou ± %); nos blocos leves (aquecimento, descanso, retorno à
+   calma) há mais folga. Os blocos seguem as voltas de cada bloco (assim os
+   blocos por distância também batem certo). No ginásio: séries,
+   repetições, volume e cumprimento de cada exercício, com **Análise
+   detalhada** (em baixo, à direita). Numa sessão livre não há blocos para
+   comparar.
+4. **Infográficos** — **Gráfico com os blocos**: as linhas da sessão
+   (potência, FC, cadência; velocidade na corrida; voga no remo), cada uma a
+   ligar e desligar com ←/→, e por baixo os **blocos do treino** com as
+   cores das zonas e a linha do **alvo**. No ciclismo também **Relatório**,
+   **Curva de potência**, **Zonas** e **Picos** (**[** e **]**, ou um clique,
+   mudam de vista).
+
 ### Feedback no fim de cada sessão
 
 Quando uma sessão termina, por cima do resumo aparece **«Como correu esta
@@ -583,6 +611,11 @@ descrição) e tem **+ Novo treino** em baixo, à direita.
   duração e a **cadência alvo**. Num bloco estreito fica só o que cabe; num
   bloco baixo, por cima dele.
 
+- **O bloco escolhido**, por baixo do gráfico, tem o título **«Bloco X de
+  N»** e por baixo o **Tipo** (aquecimento, trabalho, descanso, retorno à
+  calma). A lista fica sempre no mesmo sítio, numa coluna, seja qual for o
+  bloco. **Apagar o bloco** (ou Del) pergunta numa janela; **Guardar**
+  mostra «Treino guardado».
 - **ERG ou Manual.** «+ Novo treino» pergunta primeiro o
   tipo, no ciclismo, no remo e na corrida (a natação é sempre manual):
   - **ERG** — o aparelho segue o treino sozinho (o rolo põe os watts, a

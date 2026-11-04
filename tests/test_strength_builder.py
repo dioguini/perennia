@@ -248,6 +248,8 @@ class TestBuilderGui(tg.GuiCase):
         # gravar (Ctrl+S) e começar
         self.app._on_key_press(key.S, key.MOD_CTRL)
         self.assertFalse(b.dirty)
+        self.assertEqual(self.screen().title_text, "Treino guardado")
+        self.press(key.ENTER)                           # OK
         stored = sb.stored(self.app.db, b.wid)
         self.assertEqual([x["kind"] for x in stored["blocks"]], ["single", "superset"])
         names = [w["name"] for w in gym.workouts(self.app.db, "strength")]
@@ -307,6 +309,7 @@ class TestBuilderGui(tg.GuiCase):
         self.press(key.ESCAPE)                          # Esc = Cancelar: fica a editar
         self.assertIs(self.screen(), b)
         self.app._on_key_press(key.S, key.MOD_CTRL)
+        self.press(key.ENTER)                           # OK do «Treino guardado»
         from datetime import date, timedelta
         from velo.core import calendar_view as cv
         plan = cv.planned_for(self.app.db, date.today() + timedelta(days=1))
@@ -334,6 +337,12 @@ class TestBuilderGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Histórico")
         self.pick("agachamento")
+        tabs = self.screen()                             # a análise em separadores
+        tabs.tab_named("Análise do treino")
+        self.app._on_draw()
+        cells = [m.text for row in tabs.table.cells for m, _n in row if m.text]
+        self.assertTrue(any("100 %" in c for c in cells), cells)   # cumprido a 100 %
+        self.pick("Análise detalhada")
         an = self.screen()
         self.assertIsInstance(an, sas.StrengthAnalysisScreen)
         self.assertAlmostEqual(an.data["compliance"], 1.0)

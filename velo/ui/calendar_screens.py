@@ -422,8 +422,8 @@ class DayScreen(Screen):
             from velo.ui.endurance_screens import EnduranceDetail
             a.push(EnduranceDetail(a, e.id))
         else:
-            from velo.ui.strength_analysis_screens import StrengthAnalysisScreen
-            a.push(StrengthAnalysisScreen(a, e.id))
+            from velo.ui.session_analysis import SessionAnalysis
+            a.push(SessionAnalysis(a, "strength", e.id))
 
     def _open_plan(self, e: cv.Entry) -> None:
         a = self.app
@@ -446,9 +446,17 @@ class DayScreen(Screen):
         item = self.list.selected
         if symbol in (key.DELETE, key.BACKSPACE) and item is not None and \
                 isinstance(item.data, tuple) and item.data[0] == "plan":
-            cv.plan_remove(self.app.db, item.data[1].id)
-            self.app.message(tr("Tirado do plano", "Removed from the plan"))
-            self.enter()
+            pid = item.data[1].id
+
+            def gone() -> None:
+                cv.plan_remove(self.app.db, pid)
+                self.app.message(tr("Tirado do plano", "Removed from the plan"))
+                self.enter()
+            self.app.confirm(tr("Tirar «{n}» do plano?", "Remove «{n}» from the plan?",
+                                n=item.label),
+                             tr("O treino continua na lista; só sai deste dia.",
+                                "The workout stays in the list; it only leaves this day."),
+                             gone, yes=tr("Tirar do plano", "Remove"))
             return True
         return super().on_key(symbol, modifiers)
 

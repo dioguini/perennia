@@ -86,10 +86,17 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   cancelar. A ficha de cada treino mostra o gráfico com os objetivos por
   baixo e, em baixo à direita, **Configurar sessão de treino**. Na corrida
   com uma rota, a sessão diz a inclinação da estrada a pôr na passadeira.
-- **Detalhe de uma sessão de ciclismo**: picos de potência e
-  **Infográficos de sessão** à maneira do TrainingPeaks (relatório com NP,
-  IF, TSS, VI, EF e desacoplamento Pa:FC; curva de potência; zonas; gráfico
-  de potência, cadência e FC sobrepostas à escolha; picos).
+- **Análise de cada sessão** (todos os desportos), em separadores: **Geral**
+  (com o tipo de sessão — livre, treino e o tipo do treino, teste,
+  Challenge), **Feedback** (o próprio ecrã), **Análise do treino** (cada
+  bloco: alvo, feito, tempo no alvo, cumprido ou não; no ginásio, cada
+  exercício) e **Infográficos** (o gráfico da sessão com os blocos e o alvo
+  por baixo; no ciclismo também o relatório à maneira do TrainingPeaks — NP,
+  IF, TSS, VI, EF, desacoplamento —, a curva de potência, as zonas e os
+  picos).
+- **Janelas quando se justificam**: apagar pergunta sempre; voltar atrás
+  com alterações pergunta (Sair sem guardar · Cancelar · Sair e guardar);
+  guardar um treino diz «Treino guardado».
 - **Estatísticas** com o separador **Geral** primeiro (resumo de cada
   desporto e o total) e **Picos** no ciclismo (melhor potência, FC, cadência
   e velocidade em cada duração). Entrando por um desporto, o desporto fica
@@ -206,6 +213,7 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   blocks.py          blocos de um treino (ler/gravar/estimar), para todos os desportos
   workout_meta.py    tipo de cada treino (ERG ou Manual), níveis do rolo, extras dos blocos
   screen_layout.py   a disposição do ecrã da sessão: onde fica cada painel (grelha 24 × 16)
+  session_review.py  análise de uma sessão feita: tipo, cumprimento de cada bloco, séries
   peaks.py           picos (melhores médias por duração) e o relatório de uma sessão
   feedback.py        feedback no fim da sessão e a análise que o cruza com o objetivo
   layouts.py         que métricas aparecem no ecrã da sessão de cada desporto
@@ -249,7 +257,8 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      inventários) · builder_screens.py (blocos) ·
                      endurance_screens.py (corrida, natação) ·
                      gym_screens.py (modalidades) · stats_screens.py ·
-                     brief.py (ficha do treino) · session_setup.py (a janela
+                     brief.py (ficha do treino) · session_analysis.py (a
+                     análise de uma sessão, em separadores) · session_setup.py (a janela
                      que prepara a sessão) · ride_report_screens.py
                      (infográficos) · feedback_screens.py ·
                      layout_screens.py (ecrã da sessão) · calendar_screens.py ·
@@ -262,7 +271,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               631 testes: núcleo, protocolos, força, remo, saúde,
+tests/               649 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

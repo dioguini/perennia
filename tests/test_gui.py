@@ -254,6 +254,7 @@ class TestLibraryAndImport(GuiCase):
         view.index = 1
         view._sync()
         self.press(key.DELETE)
+        self.press(key.ENTER)                          # confirma na janela
         self.assertEqual(len(self.app.db.routes()), 0)
 
 

@@ -21,7 +21,7 @@ from velo.core.units import hms
 from velo.gfx import theme as _theme
 from velo.gfx.compat import label as make_label
 from velo.gfx.compat import line as make_line
-from velo.ui.app import Screen
+from velo.ui.app import Screen, SnapshotUnsaved
 from velo.ui.brief import sport_kind, wrap
 from velo.ui.widgets import Item
 
@@ -55,9 +55,14 @@ def summary_item(app, kind: str, sid: str | None) -> Item | None:
                 action=lambda: app.push(FeedbackScreen(app, kind, sid)))
 
 
-class FeedbackScreen(Screen):
+class FeedbackScreen(SnapshotUnsaved, Screen):
     AGENT = False
     MAX_PTS = 240
+    EMBEDDED = False            # dentro de outro ecrã (o separador Feedback da análise)
+
+    def _area_top(self, h: int) -> float:
+        """Onde começam os cartões (por baixo da faixa do título)."""
+        return h - 26 - 76 - 14
 
     def __init__(self, app, kind: str, sid: str):
         self.kind, self.sid = kind, sid
@@ -73,6 +78,15 @@ class FeedbackScreen(Screen):
         self._build()
         self._layout()
         self._refresh()
+        self.mark_saved()             # voltar com alterações pergunta
+
+    def snapshot_state(self):
+        return repr(self.v)
+
+    def on_save(self) -> bool:
+        self.save()
+        self.mark_saved()
+        return True
 
     # ------------------------------------------------------------ construção
 
@@ -141,11 +155,12 @@ class FeedbackScreen(Screen):
         w, h = self.app.window.width, self.app.window.height
         self.chrome.title.font_size = 18
         self.band.x, self.band.y, self.band.width, self.band.height = 0, h - 26 - 76, w, 76
+        self.band.opacity = 0 if self.EMBEDDED else 255
         self.chrome.title.y, self.chrome.subtitle.y = h - 38, h - 72
         m = self.chrome.message               # o aviso «guardado» fica na faixa do topo
         m.anchor_x, m.x, m.y = "right", w - 48, h - 44
         m.color = _theme.rgba(_theme.P.header_text)
-        top, bottom = h - 26 - 76 - 14, 62
+        top, bottom = self._area_top(h), 62
         lw = int((w - 96 - 20) * 0.56)
         self.left = (48, top, lw)
         rx = 48 + lw + 20
@@ -346,10 +361,14 @@ class FeedbackScreen(Screen):
                 lines = max(1, min(5, room))
                 tl.text = title
                 tl.x, tl.y = x + 14, ty
-                tx.text = wrap(body, width, 10, lines)
+                tx.text = wrap(body, width * 0.9, 10, lines)    # a partir antes da letra
                 tx.width = int(width)
                 tx.x, tx.y = x + 14, ty - 16
-                ty -= 16 + 15 * (tx.text.count("\n") + 1) + 8
+                # a altura a sério (a letra pode partir mais linhas do que a estimativa)
+                hgt = getattr(tx, "content_height", None)
+                if not isinstance(hgt, (int, float)) or hgt <= 0:
+                    hgt = 15 * (tx.text.count("\n") + 1)
+                ty -= 16 + hgt + 8
             else:
                 tl.text = tx.text = ""
         self.an_note.text = "" if self.saved else tr(
@@ -440,7 +459,8 @@ class FeedbackScreen(Screen):
         from velo.ui.widgets import BUTTON_H, BUTTON_Y, button_width
         self.btn_save_l.text = tr("Guardar e reanalisar", "Save and re-analyse") if self.saved \
             else tr("Guardar e analisar", "Save and analyse")
-        self.btn_close_l.text = tr("Fechar", "Close") if self.saved else tr("Agora não", "Not now")
+        self.btn_close_l.text = tr("Voltar", "Back") if self.EMBEDDED else (
+            tr("Fechar", "Close") if self.saved else tr("Agora não", "Not now"))
         bw = button_width(self.btn_save_l.text)
         cw2 = button_width(self.btn_close_l.text)
         right = self.app.window.width - 48
@@ -471,6 +491,7 @@ class FeedbackScreen(Screen):
         self.saved = True
         self.app.message(tr("Feedback guardado", "Feedback saved"))
         self._refresh()
+        self.mark_saved()
         return res
 
     def set_value(self, key_: str, value) -> None:
@@ -589,3 +610,40 @@ class FeedbackScreen(Screen):
         self.chrome.draw()
         if self.back_button is not None:
             self.back_button.draw()
+
+
+class EmbeddedFeedback(FeedbackScreen):
+    """O feedback dentro do separador «Feedback» da análise da sessão: os
+    mesmos cartões, por baixo dos separadores, sem faixa nem título próprios.
+    Tab muda de separador (é do ecrã de cima); ↑↓ mudam de linha."""
+
+    EMBEDDED = True
+
+    def __init__(self, app, kind: str, sid: str, host):
+        self.host = host
+        super().__init__(app, kind, sid)
+
+    def _area_top(self, h: int) -> float:
+        return self.host.content_top(h) + 14
+
+    def _layout(self) -> None:
+        super()._layout()
+        self.chrome.title.font_size = 30          # o título é o do ecrã de cima
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        k = ROWS[self.row]
+        if symbol == key.ESCAPE or (k == "close" and symbol in (key.ENTER, key.RETURN,
+                                                                key.SPACE)):
+            self.host.go_back()
+            return True
+        return super().on_key(symbol, modifiers)
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        r = self.btn_close
+        if r.x <= x <= r.x + r.width and r.y <= y <= r.y + r.height:
+            self.host.go_back()
+            return True
+        return super().on_mouse(x, y)
+
+    def draw_body(self) -> None:
+        self.batch.draw()

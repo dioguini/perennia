@@ -587,15 +587,20 @@ class TestStrengthGui(tg.GuiCase):
         self.assertIn("Força A", self.screen().list.items[0].label)
         self.assertIn("Força", self.screen().list.items[0].detail)
         self.pick("Força A")
+        from velo.ui import session_analysis as sa_ui
         from velo.ui import strength_analysis_screens as sas
-        an = self.screen()                                 # a análise pós-treino
-        self.assertIsInstance(an, sas.StrengthAnalysisScreen)
-        self.assertEqual(an.data["done_sets"], 2)
-        self.press(key.S)                                  # as séries, em lista
-        items = self.screen().list.items                   # feedback + análise + 2 séries
-        self.assertEqual(items[0].label, "Como correu esta sessão?")
-        self.assertEqual(items[1].label, "Análise pós-treino")
-        self.assertEqual(len(items), 4)
+        an = self.screen()                                 # a análise em separadores
+        self.assertIsInstance(an, sa_ui.SessionAnalysis)
+        self.assertEqual(an.tab_labels(), ["Geral", "Feedback", "Análise do treino",
+                                           "Infográficos"])
+        geral = {i.label: i.value for i in an.list.items}
+        self.assertEqual(geral["Séries"], "2")
+        an.tab_named("Análise do treino")
+        self.app._on_draw()
+        self.pick("Análise detalhada")                     # a análise pós-treino completa
+        det = self.screen()
+        self.assertIsInstance(det, sas.StrengthAnalysisScreen)
+        self.assertEqual(det.data["done_sets"], 2)
 
     def test_discard_session(self):
         self.go_strength()
@@ -736,6 +741,7 @@ class TestCyclingBuilderGui(tg.GuiCase):
         n = len(ed.steps)
         self.select("2.")
         self.press(key.DELETE)
+        self.press(key.ENTER)                          # confirma na janela
         self.pick("Guardar")
         self.assertEqual(len(self.app.db.workout_steps(ed.workout_id)), n - 1)
 

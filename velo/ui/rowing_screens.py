@@ -894,8 +894,10 @@ class RowWorkoutEditor(EditScreen):
     def _save(self) -> None:
         self.wid = rw.save_workout(self.app.db, self.wid, self.name, self.desc, self.steps)
         self._saved_state = self._state()
-        self.app.message(tr("Treino guardado", "Workout saved"))
+        leaving = getattr(self, "_leaving", False)
         self.app.pop()
+        if not leaving:
+            self.app.workout_saved(self.name)
 
     def _export(self) -> None:
         from velo.core import fit
@@ -921,12 +923,11 @@ class RowWorkoutEditor(EditScreen):
         self.app.message(tr("Exportado: {p}", "Exported: {p}", p=path))
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        rw.delete_workout(self.app.db, self.wid)
-        self.app.pop(force=True)
+        def gone() -> None:
+            rw.delete_workout(self.app.db, self.wid)
+            self.app.pop(force=True)
+        self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?", n=self.name),
+                         tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone, yes=tr("Apagar", "Delete"))
 
 
 class RowStepEditor(LiveEditPopup):
@@ -1142,43 +1143,10 @@ class RowHistory(Screen):
         self.list.set_items(items, keep_index=True)
 
 
-class RowSessionDetail(Screen):
-    def __init__(self, app, sid: str):
-        super().__init__(app)
-        self.sid = sid
-
-    def enter(self) -> None:
-        a = self.app
-        s = a.db.conn.execute("SELECT * FROM row_sessions WHERE id = ?", (self.sid,)).fetchone()
-        if s is None:
-            a.pop()
-            return
-        items = [Item(tr("Distância", "Distance"), value=_m(s["distance_m"]), enabled=False),
-                 Item(tr("Tempo", "Time"), value=hms(s["moving_s"] or 0), enabled=False),
-                 Item(tr("Ritmo médio", "Avg pace"), value=pace_text(s["avg_pace_s"]),
-                      enabled=False),
-                 Item(tr("Potência média", "Avg power"),
-                      value=f"{s['avg_power_w']:.0f} W" if s["avg_power_w"] else "—",
-                      enabled=False),
-                 Item(tr("Voga média", "Avg stroke rate"),
-                      value=f"{s['avg_spm']:.1f}" if s["avg_spm"] else "—", enabled=False),
-                 Item(tr("Carga", "Load"), value=f"{s['load']:.0f}" if s["load"] else "—",
-                      enabled=False)]
-        for lp in rw.session_laps(a.db, self.sid):
-            if not lp["distance_m"]:
-                continue
-            items.append(Item(f"  {tr('Volta', 'Lap')} {lp['lap_no']}",
-                              value=hms((lp["end_t"] or 0) - (lp["start_t"] or 0)),
-                              detail=f"{_m(lp['distance_m'])} · {pace_text(lp['avg_pace_s'])}"
-                                     + (f" · {lp['avg_power_w']:.0f} W" if lp["avg_power_w"]
-                                        else ""), enabled=False))
-        if s["fit_path"]:
-            items.append(Item(".fit", value=s["name"] or "", detail=s["fit_path"], enabled=False))
-        self.chrome.set(s["name"] or t("home.rowing"), str(s["started_at"])[:16], self.footer())
-        fb_item = _feedback().summary_item(self.app, "row", self.sid)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        self.list.set_items(items, keep_index=True)
+def RowSessionDetail(app, sid: str):                      # noqa: N802 — compatibilidade
+    """Uma sessão de remo do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "row", sid)
 
 
 def RowStatsScreen(app):                     # noqa: N802 — compatibilidade

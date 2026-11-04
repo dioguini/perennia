@@ -102,6 +102,79 @@ class TestBlockList(tg.GuiCase):
         self.assertEqual(b.name, "Teste")
 
 
+class TestBuilderRound5(tg.GuiCase):
+    def setUp(self):
+        super().setUp()
+        win = self.app.window                 # num ecrã baixo (< 900 px) passa a 2 colunas
+        win.width, win.height = 1920, 1080
+        self.app._on_resize(1920, 1080)
+
+    def _open(self, sport="cycling"):
+        b = bs.BlockBuilder(self.app, sport, None, control="erg" if sport != "swimming"
+                            else "manual")
+        self.app.push(b)
+        return b
+
+    def test_block_title_and_kind_row(self):
+        b = self._open()
+        b.sel = 1
+        b.enter()
+        items = b.list.items
+        head = next(i for i in items if i.header)
+        self.assertEqual(head.label, "Bloco 2 de 3")
+        kind = items[items.index(head) + 1]
+        self.assertEqual((kind.label, kind.value), ("Tipo", "Trabalho"))
+
+    def test_list_stays_in_one_column_and_does_not_jump(self):
+        b = self._open()
+        b.sel = 1
+        b.enter()
+        cy0, cols = b.cy0, b.list.columns
+        self.assertEqual(cols, 1)
+        b.add_block("free")                                # o Free ride tem menos linhas
+        b.enter()
+        self.assertEqual(b.cy0, cy0)                        # o gráfico fica igual
+        self.assertEqual(b.list.columns, 1)
+
+    def test_delete_asks_and_cancel_keeps_the_block(self):
+        b = self._open()
+        b.sel = 1
+        b.enter()
+        self.press(key.DELETE)
+        self.assertIn("Apagar o bloco 2 de 3", self.screen().title_text)
+        self.pick("Cancelar")
+        self.assertEqual(len(b.blocks), 3)
+        self.pick("Apagar o bloco (Del)")
+        self.pick("Apagar o bloco")                         # confirma na janela
+        self.assertEqual(len(b.blocks), 2)
+
+    def test_save_shows_a_popup_and_save_and_leave_does_not(self):
+        b = self._open()
+        self.pick("Guardar")
+        pop = self.screen()
+        self.assertEqual(pop.title_text, "Treino guardado")
+        self.assertEqual([i.label for i in pop.list.items], ["OK"])
+        self.press(key.ENTER)
+        self.assertIs(self.screen(), b)
+        b.add_block("Z2")
+        self.press(key.ESCAPE)                              # há alterações: pergunta
+        self.pick("Sair e guardar")
+        self.assertNotIn(b, self.app.stack)                 # saiu, sem janela por cima
+        self.assertFalse(isinstance(self.screen(), app_mod.ConfirmScreen))
+
+    def test_every_sport_uses_the_same_layout(self):
+        for sport in SPORTS:
+            b = self._open(sport)
+            b.sel = 1
+            b.enter()
+            self.assertEqual(b.list.columns, 1, sport)
+            self.assertEqual([b.list.items[i].label for i in b.list.head_indices()],
+                             ["Nome do treino", "Objetivo do treino"], sport)
+            self.assertTrue(b.list.items[[i.header for i in b.list.items].index(True)]
+                            .label.startswith("Bloco 2 de"), sport)
+            self.app.pop(force=True)
+
+
 class TestSameBuilderListEverywhere(tg.GuiCase):
     def test_every_sport_lists_the_same_way(self):
         for sport in SPORTS:

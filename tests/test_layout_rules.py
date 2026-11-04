@@ -153,6 +153,9 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b.add_block("Z2")
         self.app._on_key_press(key.S, key.MOD_CTRL)
         self.assertFalse(b.dirty)
+        self.assertEqual(self.screen().title_text, "Treino guardado")   # o aviso
+        self.press(key.ENTER)                                # OK
+        self.assertIs(self.screen(), b)
         self.press(key.ESCAPE)                               # já está guardado: sai logo
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
@@ -590,7 +593,9 @@ class TestRowingRecords(tg.GuiCase):
         rec = next(i for i in st.list.items if i.label == "Maior distância")
         self.assertIn("em ", rec.detail)
         rec.action()
-        self.assertIsInstance(self.screen(), rs.RowSessionDetail)
+        from velo.ui import session_analysis as sa_ui
+        self.assertIsInstance(self.screen(), sa_ui.SessionAnalysis)
+        self.assertEqual(self.screen().kind, "row")
 
 
 if __name__ == "__main__":
@@ -615,15 +620,20 @@ class TestRideInfographics(tg.GuiCase):
         from velo.core import peaks as pk
         from velo.ui import ride_report_screens as rr
         rid = self._ride()
-        det = app_mod.RideDetailScreen(self.app, rid)
+        det = app_mod.RideDetailScreen(self.app, rid)        # a análise em separadores
         self.app.push(det)
-        labels = [i.label for i in det.list.items]
-        self.assertIn("Infográficos de sessão", labels[:2])
         peaks_row = next(i for i in det.list.items if i.label == "Picos de potência")
         self.assertIn("5 s", peaks_row.value)
-        self.pick("Infográficos de sessão")
-        inf = self.screen()
-        self.assertIsInstance(inf, rr.RideInfographics)
+        det.tab_named("Infográficos")
+        self.assertEqual(det.sub_labels(), ["Gráfico com os blocos", "Relatório",
+                                            "Curva de potência", "Zonas", "Picos"])
+        self.press(key.BRACKETRIGHT)                          # Relatório
+        rep = {i.label: i.value for i in det.ride.inner.list.items}
+        self.assertTrue(rep["Potência normalizada (NP)"].endswith(" W"))
+        self.app._on_draw()
+        # o ecrã completo dos infográficos continua a existir
+        inf = rr.RideInfographics(self.app, rid)
+        self.app.push(inf)
         self.assertEqual(inf.tab_labels(), ["Relatório", "Curva de potência", "Zonas",
                                             "Gráfico", "Picos"])
         rep = {i.label: i.value for i in inf.list.items}

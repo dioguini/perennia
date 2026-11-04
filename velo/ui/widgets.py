@@ -157,6 +157,7 @@ class ListView:
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
         self.visible_rows = visible_rows
+        self.row_h = ROW_H            # a altura de cada linha (o construtor usa menos)
         self.items: list[Item] = []
         self.index = 0
         self.scroll = 0               # primeira linha da página à vista
@@ -278,7 +279,7 @@ class ListView:
         slots = []
         for k, idx in enumerate(shown):
             c, r = divmod(k, per)
-            slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * ROW_H,
+            slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * self.row_h,
                           col_w, c))
         if heads:
             hw = (self.head_w - self.COL_GAP * (len(heads) - 1)) / len(heads)
@@ -305,7 +306,8 @@ class ListView:
             idx, x, row_y, col_w, c = slots[k]
             self._cells.append((idx, x, row_y, col_w))
             item = self.items[idx]
-            highlight.x, highlight.y = x - 10, row_y - ROW_H // 2 + 2
+            highlight.x, highlight.y = x - 10, row_y - self.row_h // 2 + 2
+            highlight.height = highlight._bar.height = self.row_h - 4
             highlight.width = col_w + 20
             if item.header:
                 highlight.color = PANEL2
@@ -350,7 +352,7 @@ class ListView:
         self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
                                 if pages > 1 else "")
         self.page_label.x = self.x + self.width
-        self.page_label.y = self.y - per * ROW_H + ROW_H // 2 - 4
+        self.page_label.y = self.y - per * self.row_h + self.row_h // 2 - 4
         self._sync_buttons()
 
     def _sync_buttons(self) -> None:
@@ -452,8 +454,8 @@ class ListView:
                 self.activate()
                 return True
         for idx, x, row_y, col_w in self._cells:
-            top = row_y + ROW_H // 2
-            bottom = top - ROW_H
+            top = row_y + self.row_h // 2
+            bottom = top - self.row_h
             if bottom <= my <= top and x - 10 <= mx <= x + col_w + 10:
                 if self.items[idx].header:
                     return True                  # um título não se escolhe
@@ -1768,11 +1770,23 @@ class Table:
         self.head_bg.x, self.head_bg.y = x, y0 - head_h
         self.head_bg.width, self.head_bg.height = width, head_h
         ncols = min(len(columns), self.MAX_COLS)
-        first = min(140.0, width * 0.16)
-        cw = (width - first) / max(1, ncols - 1)
+        # cada coluna com a largura do texto mais largo (medido), e o que sobra
+        # repartido; se não couber, encolhem todas e o texto é cortado
+        need = []
+        for c in range(ncols):
+            vals = [columns[c].upper()] + [
+                str(row[c][0] if isinstance(row[c], tuple) else row[c])
+                for row in rows[:self.MAX_ROWS] if c < len(row)]
+            need.append(max(text_px(v, 12, bold=True) for v in vals) + 24)
+        room = width - 12
+        total = sum(need) or 1.0
+        widths = [w_ * room / total for w_ in need] if total > room else \
+            [w_ + (room - total) / max(1, ncols) for w_ in need]
+        starts = [x + 12 + sum(widths[:c]) for c in range(ncols)]
+        self._widths = widths
 
         def col_x(c: int) -> float:
-            return x + 12 + (0 if c == 0 else first + (c - 1) * cw)
+            return starts[c] if c < ncols else x + width
         for c, lab in enumerate(self.heads):
             lab.text = columns[c].upper() if c < ncols else ""
             lab.x, lab.y = col_x(c), y0 - head_h / 2
@@ -1786,13 +1800,15 @@ class Table:
                     continue
                 v = rows[r][c] if c < len(rows[r]) else ""
                 text, sub = (v if isinstance(v, tuple) else (v, ""))
-                main.text = str(text)
                 main.font_size = 12 if row_h >= 30 else 11
+                main.text = fit_text(str(text), widths[c] - 14, main.font_size, bold=True)
+                mark = main.text[:1]
+                main.color = GOOD if mark == "✓" else BAD if mark == "✗" else \
+                    WARN if mark == "~" else (TEXT if c else DIM)
                 note.text = str(sub) if row_h >= 30 else ""
                 cx = col_x(c)
                 main.x, main.y = cx, ry + row_h / 2 + (5 if note.text else 0)
                 note.x, note.y = cx, ry + row_h / 2 - 9
-                main.color = TEXT if c else DIM
         self.empty.text = empty if not rows else ""
         self.empty.x, self.empty.y = x + 12, y0 - head_h - 10
 

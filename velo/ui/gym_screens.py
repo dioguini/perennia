@@ -306,7 +306,7 @@ class GymPlanEditor(StrengthWorkoutEditor):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.items:
             self.app.message(t("str.empty_plan"))
             return None
@@ -315,9 +315,12 @@ class GymPlanEditor(StrengthWorkoutEditor):
                                         hidden=self.draft)
         self.dirty = False
         self._esc_armed = False
-        if not self.draft:
-            self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if not self.draft:
+            if popup:
+                self.app.workout_saved(self.name, self)
+            else:
+                self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _keep(self) -> None:
@@ -515,8 +518,15 @@ class LapPlanEditor(EditScreen):
                     self.enter()
                 return True
             if symbol == key.DELETE:
-                del self.items[i]
-                self.enter()
+                def gone(i=i) -> None:
+                    del self.items[i]
+                    self.dirty = True
+                    self.enter()
+                self.app.confirm(tr("Tirar este exercício do plano?",
+                                    "Remove this exercise from the plan?"),
+                                 tr("Até guardares, sair sem guardar desfaz.",
+                                    "Until you save, leaving without saving undoes it."),
+                                 gone, yes=tr("Tirar", "Remove"))
                 return True
         return super().on_key(symbol, modifiers)
 
@@ -553,8 +563,10 @@ def _builder(app, mod: str, wid: str | None = None, draft: bool = False):
 
 
 def _analysis(app, sid: str):
-    from velo.ui.strength_analysis_screens import StrengthAnalysisScreen
-    return StrengthAnalysisScreen(app, sid)
+    """Uma sessão do histórico: a análise em separadores (Geral, Feedback,
+    Análise do treino, Infográficos)."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "strength", sid)
 
 
 def _exercise_stats(app, eid: int | None = None):

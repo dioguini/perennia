@@ -272,23 +272,40 @@ class BlockBuilder(EditScreen):
         frente das opções: numa coluna ao centro se couber (o gráfico fica com
         o resto), senão em duas colunas a toda a largura."""
         lv = self.list
-        n = len([it for it in lv.items if not it.button and not it.head]) or 11
+        # sempre o mesmo lugar, seja qual for o bloco (o gráfico não salta):
+        # as linhas que o bloco mais completo deste desporto tem
+        n = max(self.max_rows(), len([it for it in lv.items
+                                      if not it.button and not it.head]))
         avail = chart_top - self.LIST_BOTTOM
-        one = n * ROW_H
-        if avail - one - self.BELOW_CHART >= max(250.0, avail * 0.42):
-            cols, rows = 1, n
-            width = min(1000, w - 96)
-        else:
-            cols, rows = 2, -(-n // 2)
-            width = w - 96
-        self._list_top = self.LIST_BOTTOM + rows * ROW_H
+        cols, rows, row_h = 2, -(-n // 2), ROW_H
+        for rh in (32, 29, 26):                    # numa coluna, com linhas mais baixas
+            if avail - n * rh - self.BELOW_CHART >= max(200.0, avail * 0.36):
+                cols, rows, row_h = 1, n, rh
+                break
+        width = min(1000, w - 96) if cols == 1 else w - 96
+        lv.row_h = row_h
+        self._list_top = self.LIST_BOTTOM + rows * row_h
         self._list_w = width
         lv.max_columns = cols
         lv.detail_below = False
         lv.width = width
         lv.x = (w - width) / 2 if cols == 1 else 48
-        lv.y = self._list_top - ROW_H / 2
+        lv.y = self._list_top - row_h / 2
         lv.set_visible_rows(rows)
+
+    def max_rows(self) -> int:
+        """As linhas do bloco mais completo (uma rampa) neste desporto."""
+        n = 11                    # título, tipo, objetivo, mensagem, duração, início, fim,
+        #                           alvo e as 3 ações
+        if self.sport != "cycling":
+            n += 1                # duração por tempo ou distância
+        if self.sport == "cycling":
+            n += 1                # cadência alvo
+        if self.sport == "running" and self.control == "manual":
+            n += 2                # velocidade e inclinação
+        if self.sport == "rowing":
+            n += 2                # resistência e voga
+        return n
 
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
@@ -402,7 +419,8 @@ class BlockBuilder(EditScreen):
         cad = blk.extra.get("cadence_lo")
         out = {"dur": dur, "cad": f"{cad} rpm" if cad else ""}
         if blk.lo is None:
-            out.update(zone="Free ride", value="")
+            out.update(zone=tr("Descanso", "Rest") if blk.kind == "rest" else "Free ride",
+                       value="")
             return out
         z = it.zone(blk.mid())
         out["zone"] = f"Z{z} · " + (tr("média", "avg") if blk.ramp else it.zone_name(z))
@@ -536,13 +554,14 @@ class BlockBuilder(EditScreen):
         blk = self.blocks[self.sel] if 0 <= self.sel < len(self.blocks) else None
         rows: list[Item] = []
         if blk is not None:
-            kinds = {"warmup": tr("Aquecimento", "Warm-up"), "active": tr("Trabalho", "Work"),
-                     "rest": tr("Descanso", "Rest"), "cooldown": tr("Retorno à calma",
-                                                                   "Cool-down")}
+            kinds = self._kind_names()
             rows += [
-                Item(tr("Bloco {i} de {n} · tipo", "Block {i} of {n} · kind",
-                        i=self.sel + 1, n=len(self.blocks)),
-                     value=kinds.get(blk.kind, blk.kind), data="cyc:kind"),
+                Item(tr("Bloco {i} de {n}", "Block {i} of {n}", i=self.sel + 1,
+                        n=len(self.blocks)), header=True,
+                     detail=tr("←/→ outro bloco", "←/→ another block")),
+                Item(tr("Tipo", "Kind"), value=kinds.get(blk.kind, blk.kind), data="cyc:kind",
+                     detail=tr("←/→ aquecimento, trabalho, descanso, retorno à calma",
+                               "←/→ warm-up, work, rest, cool-down")),
                 Item(tr("Objetivo do bloco", "Block goal"), value=(blk.goal or "") + "▏",
                      data="text:goal", detail=tr("o que se treina aqui (aparece na sessão)",
                                                  "what this block trains (shown in session)")),
@@ -841,11 +860,31 @@ class BlockBuilder(EditScreen):
         self.changed()
 
     def _delete(self) -> None:
+        """Apagar o bloco escolhido — pergunta primeiro, numa janela."""
+        blk = self.block
+        if blk is None:
+            return
+        kinds = self._kind_names()
+        dur = hms(blk.dur) if blk.dur_type == "time" else f"{blk.dur:.0f} m"
+        self.app.confirm(
+            tr("Apagar o bloco {i} de {n}?", "Delete block {i} of {n}?", i=self.sel + 1,
+               n=len(self.blocks)),
+            tr("{k} · {d}. Tens a certeza? (até guardares, Cancelar no construtor desfaz tudo)",
+               "{k} · {d}. Are you sure? (until you save, leaving without saving undoes it)",
+               k=kinds.get(blk.kind, blk.kind), d=dur),
+            self._delete_now, yes=tr("Apagar o bloco", "Delete the block"))
+
+    def _delete_now(self) -> None:
         if self.block is None:
             return
         del self.blocks[self.sel]
         self.sel = min(self.sel, len(self.blocks) - 1)
         self.changed()
+
+    @staticmethod
+    def _kind_names() -> dict[str, str]:
+        return {"warmup": tr("Aquecimento", "Warm-up"), "active": tr("Trabalho", "Work"),
+                "rest": tr("Descanso", "Rest"), "cooldown": tr("Retorno à calma", "Cool-down")}
 
     def _manual_cue(self, b) -> str:
         """No treino manual, o que pôr no aparelho vai na mensagem do bloco
@@ -887,8 +926,8 @@ class BlockBuilder(EditScreen):
         ob.save(self.app.db, self.sport, self.wid, self.wgoal.strip(),
                 [{"name": "", "goal": b.goal} for b in self.blocks])
         self.dirty = False
-        self.app.message(tr("Treino guardado", "Workout saved"))
         self.enter()
+        self.app.workout_saved(self.name.strip(), self)
 
     # ----------------------------------------------------------- teclado
 

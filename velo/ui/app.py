@@ -541,80 +541,21 @@ class MainMenu(SportHub):
                 self.app.push(_extra().WorkoutEditor(self.app, wid))
                 return True
             if symbol == key.DELETE:
-                if getattr(self, "_armed", None) == wid:
+                def gone(wid=wid, name=item.label) -> None:
                     self.app.db.delete_workout(wid)
-                    self.app.message(t("str.deleted", name=item.label))
+                    self.app.message(t("str.deleted", name=name))
                     self.enter()
-                else:
-                    self._armed = wid
-                    self.app.message(t("str.delete_again"))
+                self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?",
+                                    n=item.label), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                                 yes=tr("Apagar", "Delete"))
                 return True
         return super().on_key(symbol, modifiers)
 
 
-class RideDetailScreen(Screen):
-    """Uma sessão de ciclismo do histórico."""
-
-    def __init__(self, app: "App", ride_id: str):
-        super().__init__(app)
-        self.ride_id = ride_id
-
-    def enter(self) -> None:
-        a = self.app
-        r = a.db.conn.execute("SELECT * FROM rides WHERE id = ?", (self.ride_id,)).fetchone()
-        if r is None:
-            a.pop()
-            return
-        dv, du = km(r["distance_m"] or 0, a.units)
-        items = [Item(tr("Tempo", "Time"), value=hms(r["moving_s"] or r["elapsed_s"] or 0),
-                      enabled=False),
-                 Item(tr("Distância", "Distance"), value=f"{dv:.2f} {du}", enabled=False)]
-        for label, col, fmt in ((tr("Potência média", "Avg power"), "avg_power_w", "{:.0f} W"),
-                                ("NP", "np_w", "{:.0f} W"), ("TSS", "tss", "{:.0f}"),
-                                (tr("FC média", "Avg HR"), "avg_hr", "{:.0f} bpm"),
-                                (tr("Cadência média", "Avg cadence"), "avg_cadence",
-                                 "{:.0f} rpm")):
-            try:
-                v = r[col]
-            except (IndexError, KeyError):
-                v = None
-            if v:
-                items.append(Item(label, value=fmt.format(v), enabled=False))
-        for lp in a.db.conn.execute("SELECT * FROM laps WHERE ride_id = ? ORDER BY lap_no",
-                                    (self.ride_id,)).fetchall() if _has_table(a.db, "laps") \
-                else []:
-            items.append(Item(f"  {tr('Volta', 'Lap')} {lp['lap_no']}",
-                              value=hms((lp["end_t_s"] or 0) - (lp["start_t_s"] or 0)),
-                              enabled=False))
-        # os picos de potência da sessão (como no TrainingPeaks)
-        from velo.core import peaks as pk
-        try:
-            power = pk.ride_peaks(a.db, self.ride_id).get("power_w", {})
-        except Exception:
-            power = {}
-        shown = [(d, power[d]) for d in (5, 60, 300, 600, 1200, 3600) if d in power]
-        if shown:
-            items.append(Item(tr("Picos de potência", "Power peaks"),
-                              value="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
-                                                 for d, v in shown[:3]),
-                              detail="  ·  ".join(f"{pk.duration_label(d)} {v:.0f} W"
-                                                  for d, v in shown[3:]), enabled=False))
-        items.insert(0, Item(tr("Infográficos de sessão", "Session infographics"),
-                             detail=tr("Relatório, curva de potência, zonas, gráfico de potência/"
-                                       "cadência/FC, picos e desacoplamento",
-                                       "Report, power curve, zones, power/cadence/HR chart, "
-                                       "peaks and decoupling"),
-                             action=lambda: a.push(_ride_report().RideInfographics(
-                                 a, self.ride_id))))
-        if r["fit_path"]:
-            items.append(Item(".fit", value=r["name"] or "", detail=r["fit_path"],
-                              enabled=False))
-        self.chrome.set(r["name"] or t("home.cycling"), str(r["started_at"])[:16],
-                        self.footer())
-        fb_item = _feedback().summary_item(self.app, "ride", self.ride_id)
-        if fb_item is not None:
-            items.insert(0, fb_item)
-        self.list.set_items(items, keep_index=True)
+def RideDetailScreen(app: "App", ride_id: str):            # noqa: N802 — compatibilidade
+    """Uma sessão de ciclismo do histórico: a análise em separadores."""
+    from velo.ui.session_analysis import SessionAnalysis
+    return SessionAnalysis(app, "ride", ride_id)
 
 
 def _has_table(db, name: str) -> bool:
@@ -998,8 +939,16 @@ class RouteLibrary(Screen):
             self.enter()
             return True
         if symbol == key.DELETE and item is not None and item.data:
-            self.app.db.delete_route(str(item.data))
-            self.enter()
+            rid = str(item.data)
+
+            def gone() -> None:
+                self.app.db.delete_route(rid)
+                self.enter()
+            self.app.confirm(tr("Apagar a rota «{n}»?", "Delete the route «{n}»?",
+                                n=item.label.lstrip("★ ")),
+                             tr("As sessões feitas nela ficam no histórico. Não dá para desfazer.",
+                                "Rides done on it stay in the history. This cannot be undone."),
+                             gone, yes=tr("Apagar", "Delete"))
             return True
         return super().on_key(symbol, modifiers)
 
@@ -1724,6 +1673,23 @@ class SummaryScreen(Screen):
 
 
 # -------------------------------------------------------------- dispositivos
+
+
+class SnapshotUnsaved:
+    """Mistura para os editores: «há alterações?» compara o estado de agora
+    (`snapshot_state`) com o do início ou do último gravado (`mark_saved`).
+    Voltar atrás com alterações pergunta (ver App.ask_unsaved)."""
+
+    def snapshot_state(self):
+        return None
+
+    def mark_saved(self) -> None:
+        self._snap = self.snapshot_state()
+
+    def has_unsaved(self) -> bool:
+        if not hasattr(self, "_snap"):
+            return False
+        return self.snapshot_state() != self._snap
 
 
 class PopupMixin:
@@ -3059,12 +3025,12 @@ class ChallengeDetail(Screen):
         self.enter()
 
     def _delete(self) -> None:
-        if not self._armed:
-            self._armed = True
-            self.app.message(tr("Escolhe outra vez para apagar.", "Choose again to delete."))
-            return
-        self.app.db.delete_challenge(self.challenge["id"])
-        self.app.pop()
+        def gone() -> None:
+            self.app.db.delete_challenge(self.challenge["id"])
+            self.app.pop()
+        self.app.confirm(tr("Apagar o desafio «{n}»?", "Delete the challenge «{n}»?",
+                            n=self.challenge.get("name", "")), tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone,
+                         yes=tr("Apagar", "Delete"))
 
 
 # --------------------------------------------------------------------- fuga
@@ -3806,6 +3772,37 @@ class App:
             return                 # a sessão de baixo nunca deixou de correr
         self.stack[-1].enter()
 
+    def confirm(self, title: str, sub: str, on_yes: Callable, yes: str | None = None,
+                no: str | None = None) -> None:
+        """Pergunta antes de fazer (apagar, sair…): Cancelar · <sim>. O sim é
+        o principal; Esc ou clicar fora cancelam."""
+        def go() -> None:
+            self.pop()
+            on_yes()
+        self.push(ConfirmScreen(self, title, sub,
+                                [(no or tr("Cancelar", "Cancel"), self.pop),
+                                 (yes or tr("Sim", "Yes"), go)],
+                                default=1, buttons=True, cancel=self.pop))
+
+    def workout_saved(self, name: str, editor=None) -> None:
+        """«Treino guardado» numa janela (com OK). Ao sair com «Sair e guardar»
+        basta o aviso curto (a janela ficaria por cima do ecrã seguinte)."""
+        if editor is not None and getattr(editor, "_leaving", False):
+            self.message(tr("Treino guardado", "Workout saved"))
+            return
+        self.notify(tr("Treino guardado", "Workout saved"),
+                    tr("«{n}» está na lista de treinos.", "«{n}» is in the workout list.",
+                       n=name or tr("Treino", "Workout")))
+
+    def notify(self, title: str, sub: str = "", then: Callable | None = None) -> None:
+        """Um aviso numa janela, com OK (Guardado, Importado…)."""
+        def ok() -> None:
+            self.pop()
+            if then is not None:
+                then()
+        self.push(ConfirmScreen(self, title, sub, [("OK", ok)], default=0, buttons=True,
+                                cancel=ok))
+
     def ask_unsaved(self, editor: Screen) -> None:
         """Voltar atrás com alterações por guardar: Sair sem guardar · Cancelar ·
         Sair e guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
@@ -3820,7 +3817,9 @@ class App:
 
         def save() -> None:
             self.pop()
+            editor._leaving = True         # ao sair, o «guardado» é só um aviso curto
             editor.on_save()
+            editor._leaving = False
             if not editor.has_unsaved() and self.current is editor:
                 self.pop(force=True)
 
