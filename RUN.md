@@ -570,10 +570,20 @@ inicial.
 ### Construtor de treinos (arrastar blocos)
 
 O construtor desenha o treino como um gráfico: cada bloco é uma barra, a
-largura é a duração e a altura é o esforço. Funciona igual nos quatro
-desportos de resistência.
+largura é a duração e a altura é o esforço. É **igual no ciclismo, no remo,
+na corrida e na natação** (o ginásio tem o seu): o separador Construtor de
+treinos lista os treinos da mesma maneira (duração, definição e tipo,
+descrição) e tem **+ Novo treino** em baixo, à direita.
 
-- **ERG ou Manual.** «+ Novo treino» (em cima à direita) pergunta primeiro o
+- **Em cima**, o nome e o objetivo do treino; por baixo, a paleta e o
+  gráfico; **por baixo do gráfico**, o bloco escolhido, com a descrição de
+  cada opção à frente dela.
+- **No meio de cada bloco**, em letra grande: a zona, o valor na vista
+  escolhida (W, bpm, RPE, ritmo ou nível; numa **rampa, a média**), a
+  duração e a **cadência alvo**. Num bloco estreito fica só o que cabe; num
+  bloco baixo, por cima dele.
+
+- **ERG ou Manual.** «+ Novo treino» pergunta primeiro o
   tipo, no ciclismo, no remo e na corrida (a natação é sempre manual):
   - **ERG** — o aparelho segue o treino sozinho (o rolo põe os watts, a
     máquina de remo muda a resistência). Precisa de um aparelho ligado que
@@ -593,7 +603,8 @@ desportos de resistência.
 - **Cada bloco** tem a **cadência alvo** (ciclismo) e o **alvo**: exato ou
   com margem (± 1 a 15 %, ←/→).
 - **Com o rato:**
-  - arrasta um bloco da paleta (Z1–Z6, Descanso, Rampa, Livre) para o
+  - arrasta um bloco da paleta (Z1–Z6, Descanso, Rampa e, no fim, **Free
+    ride** — sem alvo; no ciclismo o ERG fica desligado nesse bloco) para o
     gráfico; uma linha mostra onde vai entrar;
   - um clique na paleta põe o bloco a seguir ao selecionado;
   - arrastar a aresta direita muda a duração;
