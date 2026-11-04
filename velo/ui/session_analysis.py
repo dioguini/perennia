@@ -37,13 +37,28 @@ def _m(v) -> str:
 # ----------------------------------------------------------- linhas «Geral»
 
 
+def workout_state(db, kind: str, sid: str, sess) -> str:
+    """«Na lista de treinos», «Apagado da lista…», «Carregado do computador…»."""
+    if sess is None or kind not in ("ride", "row", "endurance"):
+        return ""
+    from velo.core import session_workouts as sw
+    try:
+        return sw.state_text(sw.state(db, kind, sid, sess.sport,
+                                      sess.origin_workout_id or sess.workout_id))
+    except Exception:
+        return ""
+
+
 def general_items(app, kind: str, sid: str, sess) -> list[Item]:
     a = app
     db = a.db
     rows = [Item(tr("Tipo de sessão", "Session kind"), value=rv.session_type(db, sess),
-                 enabled=False),
-            Item(tr("Data", "Date"), value=str(sess.started_at or "")[:16].replace("T", " "),
                  enabled=False)]
+    wstate = workout_state(db, kind, sid, sess)
+    if wstate:
+        rows.append(Item(tr("Treino", "Workout"), value=wstate, enabled=False))
+    rows.append(Item(tr("Data", "Date"), value=str(sess.started_at or "")[:16].replace("T", " "),
+                     enabled=False))
     if kind == "ride":
         r = db.conn.execute("SELECT * FROM rides WHERE id = ?", (sid,)).fetchone()
         dv, du = km(r["distance_m"] or 0, a.units)

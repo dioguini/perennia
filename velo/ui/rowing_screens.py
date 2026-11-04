@@ -178,7 +178,8 @@ class RowingMenu(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        out = []
+        from velo.ui.workout_import import import_item
+        out = [import_item(a, "rowing", on_done=lambda _w: self.enter())]
         for w in rw.workouts(a.db):
             dur = " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
                                          _m(w["total_m"]) if w["total_m"] else "") if x)
@@ -434,6 +435,10 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         return tr("Volta {n}", "Lap {n}", n=no), cells, prev
 
     def footer(self) -> str:
+        eng = getattr(self, "engine", None)
+        if eng is not None and not eng.manual_laps:
+            return tr("+/− resistência · V outra página · P pausa · Esc terminar",
+                      "+/− resistance · V other page · P pause · Esc finish")
         return tr("+/− resistência · L volta · V outra página · P pausa · Esc terminar",
                   "+/− resistance · L lap · V other page · P pause · Esc finish")
 
@@ -447,8 +452,9 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         rows = [Row(lp.no, f"{_m(lp.distance_m)} · {pace_text(lp.avg_pace_s)}",
                     hms((lp.end_t or 0) - lp.start_t)) for lp in e.laps[-6:]
                 if lp.trigger != "start" or lp.distance_m > 0]
-        return Board(tr("Voltas", "Laps"), rows, subtitle=e.title,
-                     empty=tr("L marca uma volta", "L marks a lap"))
+        empty = tr("L marca uma volta", "L marks a lap") if e.manual_laps else \
+            tr("cada bloco do treino é uma volta", "each workout block is a lap")
+        return Board(tr("Voltas", "Laps"), rows, subtitle=e.title, empty=empty)
 
     # ---------------------------------------------------------------- ciclo
 
@@ -610,6 +616,10 @@ class RowingSessionScreen(ArrangedPanels, Screen):
             e.adjust_resistance(-1)
             return True
         if symbol == key.L:
+            if not e.manual_laps:
+                self.toast = tr("Num treino, cada bloco é uma volta (voltas à mão só na sessão livre)", "In a workout each block is a lap (manual laps only in a free session)")
+                self._toast_until = time.monotonic() + 4.0
+                return True
             if e.lap("manual") is not None:
                 self.laps_panel.pulse(time.monotonic())
             return True
@@ -926,8 +936,9 @@ class RowWorkoutEditor(EditScreen):
         def gone() -> None:
             rw.delete_workout(self.app.db, self.wid)
             self.app.pop(force=True)
+        from velo.ui.builder_screens import DELETE_SUB
         self.app.confirm(tr("Apagar o treino «{n}»?", "Delete the workout «{n}»?", n=self.name),
-                         tr("Tens a certeza? Não dá para desfazer.", "Are you sure? This cannot be undone."), gone, yes=tr("Apagar", "Delete"))
+                         tr(*DELETE_SUB), gone, yes=tr("Apagar", "Delete"))
 
 
 class RowStepEditor(LiveEditPopup):

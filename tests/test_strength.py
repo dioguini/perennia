@@ -765,7 +765,7 @@ class TestStatsNewViews(tg.GuiCase):
 
 class TestRecoveryGui(tg.GuiCase):
     def test_crash_mid_ride_then_resume(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

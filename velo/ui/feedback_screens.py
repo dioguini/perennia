@@ -230,7 +230,10 @@ class FeedbackScreen(SnapshotUnsaved, Screen):
         P = _theme.P
         s, br = self.sess, self.brief
         self.h_chart.text = tr("Prescrito e realizado", "Prescribed and done")
-        self.h_chart_sub.text = (tr("Prescrito: {w}", "Prescribed: {w}", w=br.title) if br else
+        from velo.ui.session_analysis import workout_state
+        state = workout_state(self.app.db, s.kind, s.id, s) if br else ""
+        self.h_chart_sub.text = ((tr("Prescrito: {w}", "Prescribed: {w}", w=br.title)
+                                  + (f" · {state}" if state else "")) if br else
                                  tr("Sessão livre: sem treino prescrito",
                                     "Free session: no prescribed workout"))
         x, y, w, h = self.chart_rect

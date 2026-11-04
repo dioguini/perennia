@@ -52,6 +52,13 @@ def ensure(db: Database) -> None:
       ON DELETE CASCADE, lap_no INTEGER NOT NULL, trigger TEXT, start_t REAL, end_t REAL,
       distance_m REAL, avg_hr REAL, max_hr INTEGER, lengths INTEGER);
     """)
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_workouts)")}
+    if "status" not in cols:            # ativo · apagado · só de uma sessão
+        db.conn.execute("ALTER TABLE endurance_workouts ADD COLUMN status TEXT NOT NULL"
+                        " DEFAULT 'active'")
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_sessions)")}
+    if "route_id" not in cols:          # corrida numa rota do menu Rotas
+        db.conn.execute("ALTER TABLE endurance_sessions ADD COLUMN route_id TEXT")
     db.conn.commit()
 
 
@@ -177,7 +184,7 @@ def workouts(db: Database, sport: str, challenges: bool = False) -> list[dict]:
     `challenges=True` — não se misturam com a lista de treinos."""
     seed(db)
     out = []
-    cond = "builtin = 2" if challenges else "builtin < 2"
+    cond = ("builtin = 2" if challenges else "builtin < 2") + " AND status = 'active'"
     for r in db.conn.execute(f"SELECT * FROM endurance_workouts WHERE sport = ? AND {cond}"
                              " ORDER BY builtin DESC, sort, name", (sport,)):
         w = dict(r)
@@ -209,6 +216,31 @@ def totals(steps: list[Step]) -> tuple[float, float]:
             sum(s.dur_value for s in steps if s.dur_type == "distance"))
 
 
+def planned_m(db: Database, sport: str, w: dict) -> float:
+    """A distância prevista do treino: a dos passos por distância e, nos por
+    tempo, a velocidade do bloco (passadeira manual) ou o ritmo × o tempo."""
+    from . import intensity as it
+    from .workout_meta import get as meta_of
+    speeds = []
+    if sport == "running":
+        meta = meta_of(db, sport, w["id"])
+        if meta.get("control") == "manual":
+            speeds = [(b or {}).get("speed_kmh") for b in meta.get("blocks") or []]
+    ctx = None
+    m = 0.0
+    for i, st in enumerate(w["steps"]):
+        if st.dur_type == "distance":
+            m += st.dur_value
+            continue
+        v = speeds[i] if i < len(speeds) else None
+        if v:
+            m += float(v) / 3.6 * st.dur_value
+        elif sport == "running" and st.lo is not None:
+            ctx = ctx or it.Context.from_db(db, sport)
+            m += ctx.speed_mps(st.mid) * st.dur_value
+    return m
+
+
 def save_workout(db: Database, wid: str | None, sport: str, name: str, description: str,
                  steps: list[Step], mode: str = "pace", builtin: bool | int = False,
                  sort: int = 100) -> str:
@@ -230,7 +262,8 @@ def save_workout(db: Database, wid: str | None, sport: str, name: str, descripti
 
 
 def delete_workout(db: Database, wid: str) -> None:
-    db.conn.execute("DELETE FROM endurance_workouts WHERE id = ?", (wid,))
+    """Sai da lista; os passos ficam para as sessões que o usaram."""
+    db.conn.execute("UPDATE endurance_workouts SET status = 'deleted' WHERE id = ?", (wid,))
     db.conn.commit()
 
 
@@ -328,8 +361,11 @@ class EnduranceEngine:
     def __init__(self, db: Database, athlete: Athlete, sport: str, *, sensors: Any = None,
                  workout_id: str | None = None, autolap: dict | None = None,
                  pool_m: float = 25.0, out_dir: str | Path = "endurance",
-                 resume: dict | None = None):
+                 resume: dict | None = None, route_id: str | None = None):
         ensure(db)
+        if resume is not None:
+            route_id = resume.get("config", {}).get("route_id", route_id)
+        self.route_id = route_id
         self.db = db
         self.athlete = athlete
         self.sport = sport if sport in SPORTS else "running"
@@ -346,12 +382,21 @@ class EnduranceEngine:
         self.mode = "pace"
         self.title = tr("Corrida livre", "Free run") if self.sport == "running" else \
             tr("Natação livre", "Free swim")
+        # passadeira num treino manual: a velocidade de cada bloco (do construtor)
+        self.block_speeds: list[float | None] = []
+        self.speed_locked = False
         if workout_id:
             w = workout(db, workout_id)
             if w:
                 self.workout = Runner(w["steps"], w["name"])
                 self.title = w["name"]
                 self.mode = w["mode"]
+                if self.sport == "running":
+                    from .workout_meta import get as meta_of
+                    meta = meta_of(db, "running", workout_id)
+                    if meta["control"] == "manual":
+                        self.block_speeds = [(b or {}).get("speed_kmh")
+                                             for b in meta.get("blocks") or []]
         self.autolap = AutoLap(autolap)
         self.events: list[tuple[str, dict]] = []
         self.started = False
@@ -377,10 +422,12 @@ class EnduranceEngine:
             self.start_unix = time.time()
             db.conn.execute(
                 "INSERT INTO endurance_sessions(id, sport, name, status, workout_id, started_at,"
-                " pool_m) VALUES (?,?,?,'recording',?,?,?)",
+                " pool_m, route_id) VALUES (?,?,?,'recording',?,?,?,?)",
                 (self.session_id, self.sport, self.title, workout_id, now_iso(),
-                 self.pool_m if self.sport == "swimming" else None))
+                 self.pool_m if self.sport == "swimming" else None, route_id or None))
             db.conn.commit()
+            from .ride import _keep_workout
+            _keep_workout(db, "endurance", self.session_id, self.sport, workout_id)
             self.checkpoint()
 
     def drain_events(self) -> list[tuple[str, dict]]:
@@ -396,6 +443,7 @@ class EnduranceEngine:
             self.events.append(("started", {}))
             if self.workout is not None and self.workout.step is not None:
                 self.events.append(("step", {"idx": 0, "cue": self.workout.step.cue}))
+                self._block_speed(0)
 
     def toggle_pause(self) -> None:
         if not self.started:
@@ -474,6 +522,16 @@ class EnduranceEngine:
         self.events.append((kind, data))
         if kind == "step_end":
             self.lap("workout_step")
+        elif kind == "step":
+            self._block_speed(int(data.get("idx") or 0))
+
+    def _block_speed(self, idx: int) -> None:
+        """Num treino manual de passadeira, a velocidade é a do bloco: põe-se
+        sozinha e fica presa (a distância conta por ela)."""
+        v = self.block_speeds[idx] if 0 <= idx < len(self.block_speeds) else None
+        self.speed_locked = bool(v)
+        if v:
+            self.set_speed(float(v))
 
     def _sample(self) -> None:
         hr = self.hr_bpm
@@ -500,8 +558,15 @@ class EnduranceEngine:
     def lap_distance_m(self) -> float:
         return self.distance_m - self._lap.start_m
 
+    @property
+    def manual_laps(self) -> bool:
+        """Voltas à mão só na sessão livre: num treino cada bloco é uma volta."""
+        return self.workout is None
+
     def lap(self, trigger: str = "manual") -> Lap | None:
         lp = self._lap
+        if trigger == "manual" and not self.manual_laps:
+            return None
         if self.t - lp.start_t < 1.0 and trigger == "manual":
             return None
         lp.end_t = self.t
@@ -569,6 +634,7 @@ class EnduranceEngine:
             self.db.save_checkpoint(self.session_id, "endurance", {
                 "start_unix": self.start_unix, "sport": self.sport, "name": self.title,
                 "workout_id": self.workout_id, "pool_m": self.pool_m,
+                "route_id": self.route_id,
                 "autolap": self.autolap.as_dict()}, {
                 "t": self.t, "paused_s": self.paused_s, "distance_m": self.distance_m,
                 "lengths": self.lengths, "speed_kmh": self.speed_kmh, "started": self.started,
@@ -695,6 +761,8 @@ class EnduranceEngine:
 
     def discard(self) -> None:
         self.abort(delete=True)
+        from . import session_workouts as sw
+        sw.forget(self.db, "endurance", self.session_id)
 
 
 def sessions(db: Database, sport: str, limit: int = 100) -> list[dict]:

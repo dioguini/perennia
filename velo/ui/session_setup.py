@@ -55,11 +55,19 @@ def ask_start(app, sport: str, hub=None) -> None:
            "rowing": tr("Livre: remo sem plano, com voltas. Carregar treino: abre a lista de "
                         "treinos.", "Free: row with no plan, with laps. Load workout: opens "
                         "the workout list.")}.get(sport, "")
-    app.push(ConfirmScreen(app, tr("Sessão de treino", "Training session") + f" · {sp.name(sport)}",
-                           sub, [(tr("Cancelar", "Cancel"), app.pop),
-                                 (tr("Carregar treino", "Load workout"), load),
-                                 (tr("Livre", "Free"), free)],
-                           default=2, buttons=True, cancel=app.pop))
+    def from_pc() -> None:
+        app.pop()
+        from velo.ui.workout_import import WorkoutFilePopup
+        app.push(WorkoutFilePopup(app, sport, mode="session"))
+    sub += tr(" Do computador: um .zwo ou .fit (pergunta se fica na lista).",
+              " From the computer: a .zwo or .fit (asks whether to keep it in the list).")
+    dlg = ConfirmScreen(app, tr("Sessão de treino", "Training session") + f" · {sp.name(sport)}",
+                        sub, [(tr("Cancelar", "Cancel"), app.pop),
+                              (tr("Do computador", "From the computer"), from_pc),
+                              (tr("Carregar treino", "Load workout"), load),
+                              (tr("Livre", "Free"), free)],
+                        default=3, buttons=True, cancel=app.pop)
+    app.push(dlg)
 
 
 class GpxPickerPopup(PopupMixin, GpxPicker):
@@ -74,7 +82,7 @@ class GpxPickerPopup(PopupMixin, GpxPicker):
 
 class RoutePickerPopup(PopupMixin, Screen):
     """As tuas rotas (.gpx) numa janela: Enter escolhe. «Sem rota» quando a
-    rota é opcional; «Carregar um .gpx novo» em cima, à direita."""
+    rota é opcional. Os .gpx carregam-se só no menu Rotas (ecrã inicial)."""
 
     W, H = 760, 520
 
@@ -99,16 +107,19 @@ class RoutePickerPopup(PopupMixin, Screen):
             dv = r["distance_m"] / 1000.0
             bits = [f"↑ {r['ascent_m']:.0f} m", tr("{n} subidas", "{n} climbs",
                                                    n=r["climb_count"])]
-            if r["times_ridden"]:
-                bits.append(tr("{n}× feita", "done {n}×", n=r["times_ridden"]))
+            from velo.core import routes as routes_mod
+            done = routes_mod.times_done(a.db, r["id"])
+            if done["total"]:
+                bits.append(routes_mod.times_text(done))
             items.append(Item(("★ " if r["favorite"] else "") + r["name"],
                               value=f"{dv:.1f} km" + ("  ✓" if r["id"] == self.current else ""),
                               detail=" · ".join(bits),
                               action=lambda rid=r["id"]: self._choose(rid), data=r["id"]))
         if not a.db.routes():
             items.append(Item(tr("Ainda não tens rotas", "No routes yet"),
-                              detail=tr("carrega um .gpx (em cima, à direita)",
-                                        "load a .gpx (top right)"), enabled=False))
+                              detail=tr("carrega um .gpx no menu Rotas (ecrã inicial)",
+                                        "load a .gpx in the Routes menu (home screen)"),
+                              enabled=False))
         if self.on_new is not None:
             items.append(Item(tr("+ Carregar um .gpx novo", "+ Load a new .gpx"), top=True,
                               action=self._new))
@@ -245,7 +256,8 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
     def _workout_name(self) -> str:
         db = self.app.db
         if self.sport == "cycling":
-            return next((w["name"] for w in db.workouts() if w["id"] == self.workout_id), "")
+            row = db.workout(self.workout_id)        # também os que não estão na lista
+            return row["name"] if row is not None else ""
         if self.sport == "rowing":
             from velo.core import rowing as rw
             w = rw.workout(db, self.workout_id)
@@ -286,10 +298,11 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
         if r is not None:
             value = f"{r['name']} · {r['distance_m'] / 1000:.1f} km"
         elif self.needs_route:
-            value = tr("nenhuma — carrega um .gpx", "none — load a .gpx")
+            value = tr("nenhuma — escolhe uma", "none — pick one")
         else:
             value = tr("sem rota", "no route")
-        detail = tr("Enter abre a lista das tuas rotas", "Enter opens the list of your routes")
+        detail = tr("Enter abre a lista das tuas rotas (carregam-se no menu Rotas)",
+                    "Enter opens the list of your routes (loaded in the Routes menu)")
         if self.needs_route:
             detail += tr(" · a sessão livre precisa de uma rota", " · a free session needs a route")
         elif self.sport == "running":
@@ -299,18 +312,24 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
             detail += tr(" · opcional: no treino a estrada é paisagem",
                          " · optional: in a workout the road is scenery")
         rows = [Item(tr("Rota (.gpx)", "Route (.gpx)"), value=value, detail=detail, data="route",
-                     action=self._pick_route),
-                Item(tr("Carregar um .gpx novo", "Load a new .gpx"),
-                     detail=tr("procura nas pastas gpx, Transferências e Documentos",
-                               "looks in the gpx, Downloads and Documents folders"),
-                     action=self._new_gpx, data="new_gpx")]
+                     action=self._pick_route)]
+        if self.route_id is not None:
+            from velo.core import segments as seg_mod
+            mine = seg_mod.load(self.app.db, self.route_id, sources=("perennia",))
+            if mine:
+                rows.append(Item(tr("Segmentos da Perennia", "Perennia segments"),
+                                 value=str(len(mine)),
+                                 detail=tr("entram sozinhos na sessão (menu Segmentos)",
+                                           "they join the session by themselves (Segments "
+                                           "menu)"), enabled=False, data="perennia_segments"))
         if self.sport == "cycling":
             rows.append(self.strava_item())
         return rows
 
     def strava_item(self) -> Item:
         from velo.core import segments as seg_mod
-        segs = seg_mod.load(self.app.db, self.route_id) if self.route_id else []
+        segs = seg_mod.load(self.app.db, self.route_id, sources=("strava",)) \
+            if self.route_id else []
         busy = self.job is not None and not self.job.done
         label = tr("Segmentos do Strava", "Strava segments")
         if self.route_id is None:
@@ -468,8 +487,7 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
     def _pick_route(self) -> None:
         """A lista das rotas numa janela — escolhe-se ali, sem andar às setas."""
         self.app.push(RoutePickerPopup(self.app, self._route_chosen,
-                                       optional=not self.needs_route, current=self.route_id,
-                                       on_new=self._new_gpx))
+                                       optional=not self.needs_route, current=self.route_id))
 
     def _route_chosen(self, route_id: str | None) -> None:
         if route_id != self.route_id:

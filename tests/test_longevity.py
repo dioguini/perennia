@@ -687,7 +687,7 @@ class TestAgent(tg.GuiCase):
         self.assertIn("O que almocei", ctx["diario"])
 
     def test_no_agent_during_a_ride(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

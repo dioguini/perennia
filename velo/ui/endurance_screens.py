@@ -96,9 +96,11 @@ class EnduranceHub(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        return [Item(w["name"], value=self._dur(w), detail=w["description"] or "",
-                     action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)))
-                for w in en.workouts(a.db, self.SPORT)]
+        from velo.ui.workout_import import import_item
+        return [import_item(a, self.SPORT, on_done=lambda _w: self.enter())] + [
+            Item(w["name"], value=self._dur(w), detail=w["description"] or "",
+                 action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)))
+            for w in en.workouts(a.db, self.SPORT)]
 
     def items_history(self) -> list[Item]:
         a = self.app
@@ -190,18 +192,29 @@ class EnduranceSession(ArrangedPanels, Screen):
         cfg = (resume or {}).get("config", {})
         # corrida com uma rota (.gpx): segue-se a distância e mostra-se a
         # inclinação da estrada nesse ponto, para pôr na passadeira
+        route_id = route_id or cfg.get("route_id")
         self.route_id = route_id
         self.route_name = ""
         self.route_pts: list = []
+        # os segmentos da rota (Perennia e Strava): começam e acabam sozinhos
+        self.segments = None
+        self._route_d = 0.0
         if route_id:
             row = app.db.route(route_id)
             self.route_name = row["name"] if row else ""
             self.route_pts = app.db.route_points(route_id)
+            from velo.core import segments as seg_mod
+            try:
+                segs = seg_mod.load(app.db, route_id)
+            except Exception:
+                segs = []
+            self.segments = seg_mod.SegmentTracker(segs) if segs else None
         self.engine = en.EnduranceEngine(
             app.db, app.db.athlete(), cfg.get("sport", sport), sensors=app.hub,
             workout_id=workout_id or cfg.get("workout_id"),
             autolap=autolap if resume is None else cfg.get("autolap"),
-            pool_m=cfg.get("pool_m", pool_m), out_dir=app.data_dir / "endurance", resume=resume)
+            pool_m=cfg.get("pool_m", pool_m), out_dir=app.data_dir / "endurance", resume=resume,
+            route_id=route_id)
         if resume is None and self.engine.sport == "running":
             self.engine.set_speed(speed_kmh)
         self.session = self.engine
@@ -273,6 +286,10 @@ class EnduranceSession(ArrangedPanels, Screen):
     def footer(self) -> str:
         e = self.engine
         if e.sport == "running":
+            if not e.manual_laps:
+                return tr("Espaço começa · +/− velocidade · T total do visor · P pausa · "
+                          "Esc terminar", "Space starts · +/− speed · T display total · "
+                          "P pause · Esc finish")
             return tr("Espaço começa · +/− velocidade · T total do visor · L volta · P pausa · "
                       "Esc terminar", "Space starts · +/− speed · T display total · L lap · "
                       "P pause · Esc finish")
@@ -394,6 +411,40 @@ class EnduranceSession(ArrangedPanels, Screen):
         if e.started:
             self.arr_sample(dt, e.hr_bpm, e.speed_kmh if e.sport == "running" else None,
                             e.hr_zone_s)
+            self._track_segments()
+
+    def _track_segments(self) -> None:
+        """Os segmentos da rota: o início e o fim pela distância corrida na rota."""
+        if self.segments is None or self.engine.paused:
+            return
+        st = self.route_state()
+        if st is None:
+            return
+        d, total, _g = st
+        if d + total / 2 < self._route_d:          # nova volta à rota
+            self.segments.reset()
+        self._route_d = d
+        e = self.engine
+        from velo.core import segments as seg_mod
+        for kind, data in self.segments.observe(d, e.t):
+            src = "Perennia" if data.get("source") == "perennia" else "Strava"
+            if kind == "strava_start":
+                self.toast = tr("Segmento {s}: {n} · {k} km", "{s} segment: {n} · {k} km",
+                                s=src, n=data["name"], k=f"{data['distance_m'] / 1000:.2f}")
+            else:
+                el = int(data["elapsed_s"])
+                best = data.get("local_best_s")
+                try:
+                    seg_mod.save_effort(self.app.db, e.session_id, data["id"], el,
+                                        source=data.get("source", "strava"), kind="endurance",
+                                        sport=e.sport)
+                except Exception:
+                    pass
+                self.toast = tr("Fim do segmento {n}: {t}", "Segment {n} done: {t}",
+                                n=data["name"], t=hms(el)) + (
+                    tr(" · novo melhor!", " · new best!") if best is None or el < best
+                    else tr(" · melhor {b}", " · best {b}", b=hms(best)))
+            self._toast_until = time.monotonic() + 5.0
 
     def lap_data(self) -> tuple[str, list[tuple[str, str]], list[str]]:
         """A volta em curso (seis números) e as já feitas, para o painel."""
@@ -451,10 +502,16 @@ class EnduranceSession(ArrangedPanels, Screen):
             return ""
         d, total, grade = st
         incline = max(0.0, min(15.0, round(grade * 2) / 2))
-        return tr("Rota «{n}» · {a} de {b} km · inclinação da estrada {g} % → põe {i} %",
+        line = tr("Rota «{n}» · {a} de {b} km · inclinação da estrada {g} % → põe {i} %",
                   "Route «{n}» · {a} of {b} km · road gradient {g} % → set {i} %",
                   n=self.route_name, a=f"{d / 1000:.2f}", b=f"{total / 1000:.1f}",
                   g=f"{grade:+.1f}", i=f"{incline:g}")
+        cur = self.segments.current(d, self.engine.t) if self.segments is not None else None
+        if cur is not None:
+            line += "\n" + tr("Segmento «{n}» · {p} % · {t}", "Segment «{n}» · {p} % · {t}",
+                              n=cur["name"], p=f"{cur['frac'] * 100:.0f}",
+                              t=hms(cur["elapsed_s"]))
+        return line
 
     def _plan_text(self) -> str:
         text = self._plan_body()
@@ -523,15 +580,25 @@ class EnduranceSession(ArrangedPanels, Screen):
         minus = symbol in (key.MINUS, key.NUM_SUBTRACT)
         if plus or minus:
             if e.sport == "running":
+                if e.speed_locked:
+                    self._locked_toast()
+                    return True
                 e.set_speed(e.speed_kmh + (0.5 if plus else -0.5) *
                             (2 if modifiers & key.MOD_SHIFT else 1))
             else:
                 e.add_length(1 if plus else -1)
             return True
         if symbol == key.T and e.sport == "running":
+            if e.speed_locked:
+                self._locked_toast()
+                return True
             self.typing = ""
             return True
         if symbol == key.L:
+            if not e.manual_laps:
+                self.toast = tr("Num treino, cada bloco é uma volta (voltas à mão só na sessão livre)", "In a workout each block is a lap (manual laps only in a free session)")
+                self._toast_until = time.monotonic() + 4.0
+                return True
             e.lap("manual")
             return True
         if symbol == key.P:
@@ -560,8 +627,16 @@ class EnduranceSession(ArrangedPanels, Screen):
             return
         self.app.replace(EnduranceSummary(self.app, e.finish()))
 
+    def _locked_toast(self) -> None:
+        self.toast = tr("A velocidade é a do bloco ({v} km/h): a distância conta por ela",
+                        "The speed is the block's ({v} km/h): distance follows it",
+                        v=f"{self.engine.speed_kmh:.1f}")
+        self._toast_until = time.monotonic() + 4.0
+
     def _discard(self) -> None:
         self.engine.discard()
+        from velo.core import segments as seg_mod
+        seg_mod.forget_session(self.app.db, "endurance", self.engine.session_id)
         self.app.message(tr("Sessão terminada sem guardar.", "Session ended without saving."))
         self.app.pop()
 

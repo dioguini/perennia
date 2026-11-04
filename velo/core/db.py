@@ -639,6 +639,8 @@ class Database:
             "ride_samples": [(k, "REAL") for k in PEDAL_KEYS],
             "laps": [(f"avg_{k}", "REAL") for k in PEDAL_KEYS],
             "rides": [(f"avg_{k}", "REAL") for k in PEDAL_KEYS] + [("name", "TEXT")],
+            # ativo (na lista) · apagado · só de uma sessão (ver session_workouts)
+            "workouts": [("status", "TEXT NOT NULL DEFAULT 'active'")],
         }
         for table, columns in additions.items():
             cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -1052,7 +1054,8 @@ class Database:
         return wid
 
     def workouts(self) -> list[sqlite3.Row]:
-        return self.conn.execute("SELECT * FROM workouts ORDER BY imported_at DESC").fetchall()
+        return self.conn.execute("SELECT * FROM workouts WHERE status = 'active'"
+                                 " ORDER BY imported_at DESC").fetchall()
 
     def workout(self, workout_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM workouts WHERE id = ?",
@@ -1081,7 +1084,8 @@ class Database:
         ).fetchall()
 
     def delete_workout(self, workout_id: str) -> None:
-        self.conn.execute("DELETE FROM workouts WHERE id = ?", (workout_id,))
+        """Sai da lista de treinos; os passos ficam para as sessões que o usaram."""
+        self.conn.execute("UPDATE workouts SET status = 'deleted' WHERE id = ?", (workout_id,))
         self.conn.commit()
 
     def save_step_results(self, ride_id: str, results: Sequence[dict]) -> None:

@@ -69,6 +69,11 @@ class GuiCase(unittest.TestCase):
     def screen(self):
         return self.app.current
 
+    def open_routes(self) -> None:
+        """O menu Rotas (ecrã inicial): é lá que estão as rotas .gpx."""
+        from velo.ui import route_screens
+        self.app.push(route_screens.RoutesScreen(self.app))
+
     def press(self, *symbols: int) -> None:
         for s in symbols:
             self.app._on_key_press(s, 0)
@@ -194,7 +199,7 @@ class TestShell(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.ConfirmScreen)
 
     def test_every_screen_opens_updates_and_draws(self):
-        for entry in ("Sessão de treino", "Importar treino", "Testes", "Challenge", "Novo treino",
+        for entry in ("Sessão de treino", "Carregar do computador", "Testes", "Challenge", "Novo treino",
                       "Desafios", "Estatísticas", "Dispositivos", "Definições"):
             with self.subTest(ecra=entry):
                 self.app.reset_to_menu()
@@ -211,7 +216,7 @@ class TestShell(GuiCase):
 
 class TestLibraryAndImport(GuiCase):
     def test_route_appears_with_distance_and_climbs(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         labels = self.labels()
         self.assertTrue(any("Serra de Teste" in x for x in labels))
         self.assertTrue(any("5.9" in x or "6.0" in x for x in labels),
@@ -219,32 +224,34 @@ class TestLibraryAndImport(GuiCase):
 
     def test_import_a_gpx_from_the_picker(self):
         before = len(self.app.db.routes())
-        self.pick("Biblioteca de rotas")
-        self.pick("Importar")
+        self.open_routes()
+        self.pick("Carregar .gpx")
         self.assertIsInstance(self.screen(), app_mod.GpxPicker)
         # o ficheiro de exemplo está na pasta de testes; aponta o seletor a ela
         picker = self.screen()
         picker._import(GPX)
         self.assertEqual(len(self.app.db.routes()), before + 1)
-        self.assertIsInstance(self.screen(), app_mod.RouteDetail)
+        from velo.ui import route_screens
+        self.assertIsInstance(self.screen(), route_screens.RouteOverview)
 
     def test_import_of_a_broken_file_shows_an_error(self):
-        self.pick("Biblioteca de rotas")
-        self.pick("Importar")
+        self.open_routes()
+        self.pick("Carregar .gpx")
         bad = Path(self.tmp) / "mau.gpx"
         bad.write_text("isto não é xml")
         self.screen()._import(bad)
         self.assertIn("Erro", self.app._message)
 
     def test_route_detail_lists_the_climb_and_its_board(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
-        self.assertIsInstance(self.screen(), app_mod.RouteDetail)
+        from velo.ui import route_screens
+        self.assertIsInstance(self.screen(), route_screens.RouteOverview)
         labels = self.labels()
         self.assertTrue(any("Subida 1" in x for x in labels), labels)
 
     def test_favourite_and_delete_keys(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         view = self.screen().list
         view.index = 1                      # a rota
         view._sync()
@@ -541,7 +548,7 @@ class TestSettingsScreen(GuiCase):
         self.assertEqual(self._boxes()[0]["name"], "")
 
     def test_ride_hud_shows_the_six_boxes(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -708,7 +715,7 @@ class TestDeviceScreen(GuiCase):
 
 class TestRideFlow(GuiCase):
     def _start_ride(self, comparison: bool = False) -> app_mod.RideScreen:
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         setup = self.screen()
@@ -721,13 +728,14 @@ class TestRideFlow(GuiCase):
         return ride
 
     def test_setup_popup_has_devices_route_mode_and_autolap(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         setup = self.screen()
         self.assertTrue(setup.MODAL)
         labels = [i.label for i in setup.list.items]
-        for want in ("Aparelhos", "Rota (.gpx)", "Carregar um .gpx novo", "Segmentos do Strava",
+        self.assertNotIn("Carregar um .gpx novo", labels)       # só no menu Rotas
+        for want in ("Aparelhos", "Rota (.gpx)", "Segmentos do Strava",
                      "Modo de sessão", "Auto lap"):
             self.assertIn(want, labels)
         # a qualidade do 3D já não está aqui (está nas Definições)
@@ -1168,8 +1176,9 @@ class TestRideFlow(GuiCase):
         zwo.write_text('<workout_file><name>Longo</name><workout>'
                        '<SteadyState Duration="3600" Power="0.8"/>'
                        '</workout></workout_file>')
-        self.pick("Importar treino")
-        self.screen()._import(zwo)
+        self.pick("Carregar do computador")
+        self.screen().pick(zwo)
+        self.pick("Guardar na lista")
         self.pick("Longo")
         self.pick("Configurar sessão")
         self.select("Rota (.gpx)")
@@ -1214,7 +1223,7 @@ class TestRideFlow(GuiCase):
         self.press(key.F10, key.ENTER)          # terminar → «Sim»
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.select("Modo de sessão")
@@ -1234,10 +1243,12 @@ class TestWorkoutAndFtpScreens(GuiCase):
             '<Warmup Duration="300" PowerLow="0.5" PowerHigh="0.7"/>'
             '<SteadyState Duration="600" Power="0.95" Cadence="90"/>'
             '</workout></workout_file>')
-        self.pick("Importar treino")
+        self.pick("Carregar do computador")
         from velo.core.workout_library import WORKOUTS
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS))   # os de origem
-        self.screen()._import(zwo)
+        self.screen().pick(zwo)
+        self.assertIn("Guardar «Teste» na lista", self.screen().title_text)
+        self.pick("Guardar na lista")
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS) + 1)
         self.pick("Teste")
         from velo.ui import brief
@@ -1257,8 +1268,9 @@ class TestWorkoutAndFtpScreens(GuiCase):
         zwo.write_text('<workout_file><name>Limiar 2x20</name><workout>'
                        '<SteadyState Duration="300" Power="0.9"/>'
                        '</workout></workout_file>')
-        self.pick("Importar treino")
-        self.screen()._import(zwo)
+        self.pick("Carregar do computador")
+        self.screen().pick(zwo)
+        self.pick("Guardar na lista")
         self.pick("Limiar 2x20")
         self.pick("Configurar sessão")
         setup = self.screen()
@@ -1437,16 +1449,20 @@ class TestBoardsEverywhere(GuiCase):
         self.assertIn("Fuga", self.board_texts())
 
     def test_route_library_and_detail_show_route_board(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.select("Serra de Teste")
-        self.assertIn("Serra de Teste", self.board_texts())
+        self.app._on_draw()
+        scr = self.screen()
+        self.assertEqual(scr.head.text, "Serra de Teste")          # o perfil à direita
+        self.assertTrue(any(b.opacity for b in scr.chart.bars))
         self.pick("Serra de Teste")
-        texts = self.board_texts()
-        self.assertIn("Serra de Teste", texts)
+        self.app._on_draw()
+        self.assertIn("Serra de Teste", self.screen().chrome.title.text)
+        self.assertTrue(any(b.opacity for b in self.screen().chart.bars))
 
     def test_summary_highlights_the_ride_just_done(self):
         ride = None
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1471,12 +1487,14 @@ class TestHomeScreen(GuiCase):
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
         titles = [tile.title.text for tile in home.tiles]
-        self.assertEqual(titles[:5], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"])
-        self.assertEqual(titles[5:], ["Calendário", "Saúde", "Estatísticas gerais",
+        self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
+                                      "Calendário"])
+        self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Saúde", "Estatísticas gerais",
                                       "Inventário de artigos", "Exercícios"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
-        self.assertGreater(home.tiles[0].bg.y, home.tiles[5].bg.y)
+        self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
+        self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
         for tl in home.tiles:                        # o título não fica por baixo do ícone
@@ -1517,8 +1535,8 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.press(key.DOWN)                        # para a fila de baixo
-        self.assertTrue(home.tiles[5].selected)
-        self.press(key.RIGHT, key.RIGHT, key.ENTER)
+        self.assertTrue(home.tiles[6].selected)
+        self.press(key.RIGHT, key.RIGHT, key.RIGHT, key.ENTER)
         self.assertIsInstance(self.screen(), app_mod.StatsScreen)    # as gerais
         self.assertEqual(type(self.screen()).__name__, "GeneralStatsScreen")
         self.press(key.ESCAPE)
@@ -1527,7 +1545,7 @@ class TestHomeScreen(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def test_every_menu_has_a_back_arrow(self):
-        for name in ("Biblioteca de rotas", "Importar treino", "Desafios", "Definições"):
+        for name in ("Desafios", "Definições"):
             self.app.reset_to_menu()
             self.pick(name)
             self.assertIsNotNone(self.screen().back_button, name)
@@ -1559,7 +1577,7 @@ class TestHomeScreen(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
     def test_settings_and_quit_are_off_during_a_session(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1601,7 +1619,7 @@ class TestHomeScreen(GuiCase):
 
 class TestStatsExplorer(GuiCase):
     def _ride(self, seconds=300):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -1714,7 +1732,7 @@ class TestStatsScreen(GuiCase):
         self.assertGreaterEqual(len(titles), len(screen.VIEWS) - 2)
 
     def test_charts_have_data_after_a_ride(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

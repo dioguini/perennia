@@ -30,9 +30,15 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - Envia **declive** em modo de simulação e **watts alvo** em modo ERG, com
   *sensação de declive* ajustável. Dispara o
   **spindown** de calibração.
-- Importa `.gpx`, reamostra a 5 m, suaviza a elevação e **deteta as subidas**,
-  com placas de início, distância ao topo e fim, cronometragem e
-  **classificação local** por subida e por rota.
+- Importa `.gpx` (no menu **Rotas**, o centro das rotas para o ciclismo e a
+  corrida, com o perfil de altimetria e as vezes que fizeste cada uma),
+  reamostra a 5 m, suaviza a elevação e **deteta as subidas**, com placas de
+  início, distância ao topo e fim, cronometragem e **classificação local**
+  por subida e por rota.
+- **Segmentos** da Perennia (km de início e de fim numa rota) e do Strava,
+  com visão geral e melhores tempos; contam sozinhos nas sessões.
+- Treinos do computador (`.zwo`, `.fit`, `.mrc`, `.erg`) perguntam se ficam
+  na lista; cada sessão guarda a sua cópia do treino.
 - Mostra em tempo real distância, falta, declive, declives médios a 500 m /
   1 / 3 / 5 / 10 km, potência, balanço esquerda/direita, zonas, torque,
   cadência, cardio, carga, velocidades e médias — e **o perfil que vem a

@@ -788,7 +788,9 @@ class Hud:
                 bits.append(f"{data['grade']:.1f} %")
             if data.get("pr_s"):
                 bits.append(f"PR {hms(data['pr_s'])}")
-            self.sign = Sign(t("seg.start"), " · ".join(bits), now, 4.0)
+            title = t("seg.start") if data.get("source", "strava") == "strava" else \
+                tr("Segmento Perennia", "Perennia segment")
+            self.sign = Sign(title, " · ".join(bits), now, 4.0)
         elif kind == "strava_end":
             parts = [data.get("name", ""), hms(data.get("elapsed_s", 0))]
             if data.get("pr_s"):

@@ -205,7 +205,7 @@ class TestSessionsFollowTheLayout(tg.GuiCase):
         p["plan"] = (18, 9, 6, 4)         # …e o plano à direita
         p["strip"] = None
         sl.save(self.app.db, "cycling", p)
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

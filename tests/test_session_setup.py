@@ -47,7 +47,7 @@ class TestStartChoice(tg.GuiCase):
     def test_session_asks_free_or_load_workout(self):
         self.pick("Sessão de treino")
         labels = [i.label for i in self.screen().list.items]
-        self.assertEqual(labels, ["Cancelar", "Carregar treino", "Livre"])
+        self.assertEqual(labels, ["Cancelar", "Do computador", "Carregar treino", "Livre"])
         self.pick("Carregar treino")
         hub = self.screen()
         self.assertIsInstance(hub, app_mod.MainMenu)
@@ -62,15 +62,16 @@ class TestStartChoice(tg.GuiCase):
         self.assertIsNone(setup.route_id)
         start = next(i for i in setup.list.items if i.label == "Começar")
         self.assertFalse(start.enabled)
-        # carregar um .gpx novo: a janela do seletor e, depois, a rota escolhida
-        self.pick("Carregar um .gpx novo")
+        # os .gpx carregam-se só no menu Rotas: aqui escolhe-se uma das que há
+        self.assertNotIn("Carregar um .gpx novo", [i.label for i in setup.list.items])
+        rid = self.app.db.insert_route("Outra", self.points, [])
+        self.pick("Rota (.gpx)")
         picker = self.screen()
-        self.assertIsInstance(picker, ss.GpxPickerPopup)
-        self.assertTrue(picker.MODAL)
-        picker._import(tg.GPX)
+        self.assertIsInstance(picker, ss.RoutePickerPopup)
+        self.assertNotIn("+ Carregar um .gpx novo", [i.label for i in picker.list.items])
+        self.pick("Outra")
         self.assertIs(self.screen(), setup)
-        self.assertIsNotNone(setup.route_id)
-        self.assertEqual(setup.new_route, setup.route_id)
+        self.assertEqual(setup.route_id, rid)
         start = next(i for i in setup.list.items if i.label == "Começar")
         self.assertTrue(start.enabled)
 
@@ -177,7 +178,7 @@ class TestChallengeAndTestsPopups(tg.GuiCase):
         self.assertTrue(setup.chrome.subtitle.text.startswith("Como se joga"))
         labels = [i.label for i in setup.list.items]
         self.assertNotIn("Modo ERG", labels)
-        for want in ("Duração", "Rota (.gpx)", "Carregar um .gpx novo", "Segmentos do Strava",
+        for want in ("Duração", "Rota (.gpx)", "Segmentos do Strava",
                      "Auto lap"):
             self.assertIn(want, labels)
 
@@ -270,7 +271,7 @@ class TestRoutePickerPopup(tg.GuiCase):
         labels = [i.label for i in picker.list.items]
         self.assertIn("Sem rota", labels)              # num treino a rota é opcional
         self.assertIn("Serra de Teste", labels)
-        self.assertIn("+ Carregar um .gpx novo", labels)
+        self.assertNotIn("+ Carregar um .gpx novo", labels)   # só no menu Rotas
         self.pick("Serra de Teste")
         self.assertIs(self.screen(), setup)
         self.assertEqual(setup.route_id, self.route_id)
@@ -357,7 +358,7 @@ class TestStartCountdown(tg.GuiCase):
         self.assertNotIn(ses, self.app.stack)
 
     def test_cycling_counts_after_the_route_is_ready(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
