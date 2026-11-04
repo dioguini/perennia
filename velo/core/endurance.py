@@ -500,8 +500,15 @@ class EnduranceEngine:
     def lap_distance_m(self) -> float:
         return self.distance_m - self._lap.start_m
 
+    @property
+    def manual_laps(self) -> bool:
+        """Voltas à mão só na sessão livre: num treino cada bloco é uma volta."""
+        return self.workout is None
+
     def lap(self, trigger: str = "manual") -> Lap | None:
         lp = self._lap
+        if trigger == "manual" and not self.manual_laps:
+            return None
         if self.t - lp.start_t < 1.0 and trigger == "manual":
             return None
         lp.end_t = self.t

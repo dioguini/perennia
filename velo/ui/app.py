@@ -1382,6 +1382,10 @@ class RideScreen(Screen):
         if self.engine is None:
             return True
         if symbol == key.L:                     # volta manual (req. 13)
+            if not self.engine.manual_laps:
+                if self.hud is not None:
+                    self.hud.toast(tr("Num treino, cada bloco é uma volta (voltas à mão só na sessão livre)", "In a workout each block is a lap (manual laps only in a free session)"))
+                return True
             self.engine.lap("manual")
             return True
         if symbol == key.P:
@@ -1494,7 +1498,8 @@ class RideScreen(Screen):
             self.hud.layout(w, h)
 
     def footer(self) -> str:
-        return "L volta · P pausa · +/− resistência · F10 terminar e guardar"
+        lap = "L volta · " if self.engine is None or self.engine.manual_laps else ""
+        return lap + "P pausa · +/− resistência · F10 terminar e guardar"
 
     def on_text(self, text: str) -> bool:
         return True                         # na sessão as teclas não escrevem

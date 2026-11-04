@@ -987,8 +987,16 @@ class RideEngine:
 
     # ------------------------------------------------------------- voltas
 
-    def lap(self, trigger: str = "manual") -> Lap:
+    @property
+    def manual_laps(self) -> bool:
+        """Voltas à mão (tecla L) só na sessão livre: num treino ou num teste
+        cada bloco já é uma volta."""
+        return self.workout is None
+
+    def lap(self, trigger: str = "manual") -> Lap | None:
         """Fecha a volta atual e abre outra. Ligado à tecla L (req. 13)."""
+        if trigger == "manual" and not self.manual_laps:
+            return None
         lap = _lap_finish(self._lap_acc, self.lap_no, trigger, self._lap_start_t,
                           self._t, self._lap_start_dist, self.state.dist_m,
                           max(0.0, self.state.ele_m - self._lap_start_ele))

@@ -273,6 +273,10 @@ class EnduranceSession(ArrangedPanels, Screen):
     def footer(self) -> str:
         e = self.engine
         if e.sport == "running":
+            if not e.manual_laps:
+                return tr("Espaço começa · +/− velocidade · T total do visor · P pausa · "
+                          "Esc terminar", "Space starts · +/− speed · T display total · "
+                          "P pause · Esc finish")
             return tr("Espaço começa · +/− velocidade · T total do visor · L volta · P pausa · "
                       "Esc terminar", "Space starts · +/− speed · T display total · L lap · "
                       "P pause · Esc finish")
@@ -532,6 +536,10 @@ class EnduranceSession(ArrangedPanels, Screen):
             self.typing = ""
             return True
         if symbol == key.L:
+            if not e.manual_laps:
+                self.toast = tr("Num treino, cada bloco é uma volta (voltas à mão só na sessão livre)", "In a workout each block is a lap (manual laps only in a free session)")
+                self._toast_until = time.monotonic() + 4.0
+                return True
             e.lap("manual")
             return True
         if symbol == key.P:

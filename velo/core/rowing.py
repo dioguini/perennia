@@ -954,9 +954,17 @@ class RowEngine:
         self._lap = RowLap(len(self.laps) + 1, self.t, self.distance_m, self.strokes,
                            trigger, step_idx=step_idx)
 
+    @property
+    def manual_laps(self) -> bool:
+        """Voltas à mão só no remo livre (e nos jogos): num treino ou num teste
+        cada bloco já é uma volta."""
+        return self.workout is None and not self.test
+
     def lap(self, trigger: str = "manual", step_idx: int | None = None) -> RowLap | None:
         lp = self._lap
         if lp is None:
+            return None
+        if trigger == "manual" and not self.manual_laps:
             return None
         if self.t - lp.start_t < 1.0 and trigger == "manual":
             return None
