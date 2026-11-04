@@ -933,9 +933,9 @@ class StrengthBuilder(Screen):
         self.dirty = False
         self.saved_at = time.monotonic()
         self._flash_shown = True
-        if not quiet:
-            self.app.message(tr("Guardado", "Saved"))
         self.refresh()
+        if not quiet:
+            self.app.workout_saved(self.name, self)
         return self.wid
 
     def start_session(self) -> None:

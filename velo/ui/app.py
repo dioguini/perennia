@@ -3806,6 +3806,37 @@ class App:
             return                 # a sessão de baixo nunca deixou de correr
         self.stack[-1].enter()
 
+    def confirm(self, title: str, sub: str, on_yes: Callable, yes: str | None = None,
+                no: str | None = None) -> None:
+        """Pergunta antes de fazer (apagar, sair…): Cancelar · <sim>. O sim é
+        o principal; Esc ou clicar fora cancelam."""
+        def go() -> None:
+            self.pop()
+            on_yes()
+        self.push(ConfirmScreen(self, title, sub,
+                                [(no or tr("Cancelar", "Cancel"), self.pop),
+                                 (yes or tr("Sim", "Yes"), go)],
+                                default=1, buttons=True, cancel=self.pop))
+
+    def workout_saved(self, name: str, editor=None) -> None:
+        """«Treino guardado» numa janela (com OK). Ao sair com «Sair e guardar»
+        basta o aviso curto (a janela ficaria por cima do ecrã seguinte)."""
+        if editor is not None and getattr(editor, "_leaving", False):
+            self.message(tr("Treino guardado", "Workout saved"))
+            return
+        self.notify(tr("Treino guardado", "Workout saved"),
+                    tr("«{n}» está na lista de treinos.", "«{n}» is in the workout list.",
+                       n=name or tr("Treino", "Workout")))
+
+    def notify(self, title: str, sub: str = "", then: Callable | None = None) -> None:
+        """Um aviso numa janela, com OK (Guardado, Importado…)."""
+        def ok() -> None:
+            self.pop()
+            if then is not None:
+                then()
+        self.push(ConfirmScreen(self, title, sub, [("OK", ok)], default=0, buttons=True,
+                                cancel=ok))
+
     def ask_unsaved(self, editor: Screen) -> None:
         """Voltar atrás com alterações por guardar: Sair sem guardar · Cancelar ·
         Sair e guardar (Esc ou clicar fora é o mesmo que Cancelar)."""
@@ -3820,7 +3851,9 @@ class App:
 
         def save() -> None:
             self.pop()
+            editor._leaving = True         # ao sair, o «guardado» é só um aviso curto
             editor.on_save()
+            editor._leaving = False
             if not editor.has_unsaved() and self.current is editor:
                 self.pop(force=True)
 

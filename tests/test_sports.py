@@ -486,10 +486,14 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.assertEqual(b.block.lo, lo + 1)
         self.press(key.D)                                       # duplicar
         self.assertEqual(len(b.blocks), 4)
-        self.press(key.DELETE)
+        self.press(key.DELETE)                                  # pergunta primeiro
+        self.assertEqual(len(b.blocks), 4)
+        self.assertIn("Apagar o bloco", self.screen().title_text)
+        self.press(key.ENTER)                                   # «Apagar o bloco»
         self.assertEqual(len(b.blocks), 3)
         self.app._on_key_press(key.S, key.MOD_CTRL)              # Ctrl+S guarda
         self.assertFalse(b.dirty)
+        self.press(key.ENTER)                                   # OK do «Treino guardado»
         self.assertIn("Novo treino", [w["name"] for w in self.app.db.workouts()])
 
     def test_rowing_and_swimming_builders(self):
@@ -567,6 +571,8 @@ class TestSportsGui(tg.GuiCase):
         self.pick("Kettlebell swing")
         self.pick("Guardar como treino")
         self.assertIn(ed.name, [w["name"] for w in gym.workouts(self.app.db, "kettlebell")])
+        self.assertEqual(self.screen().title_text, "Treino guardado")
+        self.press(key.ENTER)                                   # OK
         self.pick("Começar o treino")
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthSessionScreen)

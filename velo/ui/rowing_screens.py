@@ -894,8 +894,10 @@ class RowWorkoutEditor(EditScreen):
     def _save(self) -> None:
         self.wid = rw.save_workout(self.app.db, self.wid, self.name, self.desc, self.steps)
         self._saved_state = self._state()
-        self.app.message(tr("Treino guardado", "Workout saved"))
+        leaving = getattr(self, "_leaving", False)
         self.app.pop()
+        if not leaving:
+            self.app.workout_saved(self.name)
 
     def _export(self) -> None:
         from velo.core import fit

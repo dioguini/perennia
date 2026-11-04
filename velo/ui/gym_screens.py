@@ -306,7 +306,7 @@ class GymPlanEditor(StrengthWorkoutEditor):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.items:
             self.app.message(t("str.empty_plan"))
             return None
@@ -315,9 +315,12 @@ class GymPlanEditor(StrengthWorkoutEditor):
                                         hidden=self.draft)
         self.dirty = False
         self._esc_armed = False
-        if not self.draft:
-            self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if not self.draft:
+            if popup:
+                self.app.workout_saved(self.name, self)
+            else:
+                self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _keep(self) -> None:

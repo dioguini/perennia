@@ -401,6 +401,8 @@ class TestRowingGui(tg.GuiCase):
         self.pick("Guardar")
         names = [w["name"] for w in rw.workouts(self.app.db)]
         self.assertIn("Novo treino", names)
+        self.assertEqual(self.screen().title_text, "Treino guardado")
+        self.press(key.ENTER)                                   # OK
         self.assertIsInstance(self.screen(), rs.RowingMenu)
         self.screen().enter()
         self.pick("Lista de treinos")

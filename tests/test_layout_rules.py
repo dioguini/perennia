@@ -153,6 +153,9 @@ class TestActionButtonsAndUnsaved(tg.GuiCase):
         b.add_block("Z2")
         self.app._on_key_press(key.S, key.MOD_CTRL)
         self.assertFalse(b.dirty)
+        self.assertEqual(self.screen().title_text, "Treino guardado")   # o aviso
+        self.press(key.ENTER)                                # OK
+        self.assertIs(self.screen(), b)
         self.press(key.ESCAPE)                               # já está guardado: sai logo
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 

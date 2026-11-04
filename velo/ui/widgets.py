@@ -157,6 +157,7 @@ class ListView:
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
         self.visible_rows = visible_rows
+        self.row_h = ROW_H            # a altura de cada linha (o construtor usa menos)
         self.items: list[Item] = []
         self.index = 0
         self.scroll = 0               # primeira linha da página à vista
@@ -278,7 +279,7 @@ class ListView:
         slots = []
         for k, idx in enumerate(shown):
             c, r = divmod(k, per)
-            slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * ROW_H,
+            slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * self.row_h,
                           col_w, c))
         if heads:
             hw = (self.head_w - self.COL_GAP * (len(heads) - 1)) / len(heads)
@@ -305,7 +306,8 @@ class ListView:
             idx, x, row_y, col_w, c = slots[k]
             self._cells.append((idx, x, row_y, col_w))
             item = self.items[idx]
-            highlight.x, highlight.y = x - 10, row_y - ROW_H // 2 + 2
+            highlight.x, highlight.y = x - 10, row_y - self.row_h // 2 + 2
+            highlight.height = highlight._bar.height = self.row_h - 4
             highlight.width = col_w + 20
             if item.header:
                 highlight.color = PANEL2
@@ -350,7 +352,7 @@ class ListView:
         self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
                                 if pages > 1 else "")
         self.page_label.x = self.x + self.width
-        self.page_label.y = self.y - per * ROW_H + ROW_H // 2 - 4
+        self.page_label.y = self.y - per * self.row_h + self.row_h // 2 - 4
         self._sync_buttons()
 
     def _sync_buttons(self) -> None:
@@ -452,8 +454,8 @@ class ListView:
                 self.activate()
                 return True
         for idx, x, row_y, col_w in self._cells:
-            top = row_y + ROW_H // 2
-            bottom = top - ROW_H
+            top = row_y + self.row_h // 2
+            bottom = top - self.row_h
             if bottom <= my <= top and x - 10 <= mx <= x + col_w + 10:
                 if self.items[idx].header:
                     return True                  # um título não se escolhe

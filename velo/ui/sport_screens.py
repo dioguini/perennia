@@ -1098,7 +1098,7 @@ class StrengthWorkoutEditor(EditScreen):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.items:
             self.app.message(t("str.empty_plan"))
             return None
@@ -1106,12 +1106,15 @@ class StrengthWorkoutEditor(EditScreen):
                                           self.description or None, self.items)
         self.dirty = False
         self._esc_armed = False
-        self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if popup:
+            self.app.workout_saved(self.name, self)
+        else:
+            self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _save_and_train(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.replace(StrengthPreview(self.app, wid))
 
@@ -1770,7 +1773,7 @@ class WorkoutEditor(EditScreen):
         self._save()
         return True
 
-    def _save(self) -> str | None:
+    def _save(self, popup: bool = True) -> str | None:
         if not self.steps:
             self.app.message(t("bld.empty"))
             return None
@@ -1785,17 +1788,20 @@ class WorkoutEditor(EditScreen):
                                                 self.description or None, tss)
         self.dirty = False
         self._esc_armed = False
-        self.app.message(t("str.saved", name=self.name))
         self.enter()
+        if popup:
+            self.app.workout_saved(self.name, self)
+        else:
+            self.app.message(t("str.saved", name=self.name))
         return self.workout_id
 
     def _save_and_ride(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.push(WorkoutRouteChoice(self.app, wid))     # a janela da sessão
 
     def _export(self) -> None:
-        wid = self._save()
+        wid = self._save(popup=False)
         if wid:
             self.app.push(ExportScreen(self.app, wid))
 
