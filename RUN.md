@@ -218,10 +218,10 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Dez cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
-(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), na segunda
-**Calendário**, **Saúde**, **Estatísticas gerais**, **Inventário de
-artigos** e **Exercícios**. O título fica sempre por baixo do ícone, com a
+Doze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e o
+**Calendário**, na segunda **Rotas**, **Segmentos**, **Saúde**,
+**Estatísticas gerais**, **Inventário de artigos** e **Exercícios**. O título fica sempre por baixo do ícone, com a
 letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
 
@@ -1269,6 +1269,89 @@ Importar outra vez não as duplica.
 
 A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 
+### Rotas (menu do ecrã inicial)
+
+O **único sítio onde se carregam ficheiros .gpx**. O ciclismo e a corrida já
+não carregam rotas: na janela da sessão escolhes uma das rotas que já
+estão aqui (não há distinção de modalidade — a mesma rota serve as duas).
+
+- **A lista** — cada rota com a distância, a subida e **quantas vezes já a
+  fizeste** («feita 3× (2× ciclismo · 1× corrida)»); à direita, o **perfil
+  de altimetria** da rota escolhida (cores pela inclinação: azul a descer,
+  verde plano, amarelo 2–5 %, laranja 5–8 %, vermelho acima) com os
+  segmentos por cima. **+ Carregar .gpx** em cima, à direita. F favorita,
+  Del apaga (com confirmação; as sessões ficam no histórico).
+- **A rota** (Enter) — o perfil em cima; por baixo a distância, a subida e
+  a descida, as altitudes, as vezes feita, o melhor tempo, as subidas
+  detetadas (com a classificação), os **segmentos** (Perennia e Strava, com
+  o melhor tempo), as últimas sessões feitas nela (Enter abre a análise) e
+  os botões **Começar no ciclismo** · **Começar na corrida**.
+
+### Segmentos (menu do ecrã inicial)
+
+Continuas a ter os segmentos do Strava, e passas a poder **definir os teus**:
+
+1. Carrega a rota no menu **Rotas**.
+2. Em **Segmentos → + Novo segmento** (ou na ficha da rota): escolhe a rota
+   (←/→), o nome, o **km de início** e o **km de fim** — ou, em «Fim por»,
+   a **distância a percorrer**. A janela mostra o perfil com o segmento
+   marcado, a inclinação média e a subida.
+3. Os segmentos de uma rota **entram sozinhos nas sessões** feitas nela
+   (ciclismo e corrida): ao passar o km de início começa a contar, no km de
+   fim aparece o tempo e a comparação com o teu melhor, e o tempo fica
+   guardado.
+
+O menu tem três separadores — **Visão geral**, **Perennia**, **Strava** —
+com os segmentos agrupados por rota, o melhor tempo e quantas vezes os
+fizeste; à direita, o perfil da rota com o segmento escolhido. Enter abre o
+segmento: todos os tempos (o melhor primeiro, com o desporto e a sessão) e,
+nos da Perennia, Editar e Apagar.
+
+### Treinos do computador (todos os desportos menos o Ginásio)
+
+Na **Sessão de treino** há agora **Do computador**, e nas listas de treinos
+**+ Carregar do computador**. Lê `.zwo`, `.fit` (treinos Garmin/Wahoo e os
+que a Perennia exporta) e, no ciclismo, `.mrc`/`.erg`, das pastas
+`workouts` (ao lado da aplicação), Transferências e Documentos.
+
+Ao escolher um ficheiro, a Perennia pergunta **«Guardar na lista de
+treinos?»** — para a lista não ir enchendo com treinos que só se fazem uma
+vez:
+
+- **Guardar na lista** — fica na lista de treinos, como os outros;
+- **Só para esta sessão** — não aparece na lista.
+
+Se o mesmo treino (nome e passos) já estiver na lista, usa-se esse, sem
+duplicar. A natação não tem sessão na Perennia: o treino vai para a lista.
+
+**Cada sessão guarda a sua cópia do treino.** Quando uma sessão começa com
+um treino, a Perennia guarda uma cópia (passos, ERG/manual, tolerâncias,
+velocidades, objetivos) só para essa sessão. A análise e o feedback usam a
+cópia — veem o treino como foi feito, mesmo que o original seja editado ou
+apagado — e dizem o estado do treino: **Na lista de treinos**, **Apagado da
+lista · a cópia ficou com a sessão** ou **Carregado do computador · não
+guardado na lista**. Apagar um treino da lista (Del, com confirmação) já não
+apaga os passos: o treino fica marcado como apagado.
+
+### Treinos: voltas e distância
+
+- **Voltas só no modo Livre.** Numa sessão com um treino (carregado da
+  lista ou do computador, em qualquer desporto), **cada bloco é uma volta**
+  e o **L** não cria voltas (aparece um aviso).
+- **Corrida na passadeira (treino manual)**: com a velocidade de cada bloco,
+  a **distância é calculada sozinha** (velocidade × tempo) e não se mexe; o
+  bloco passa a ser por tempo, e a distância de cada bloco e a do treino
+  ajustam-se quando mudas a velocidade. Na sessão, a velocidade de cada
+  bloco põe-se sozinha e fica presa (T e +/− avisam).
+
+### FC simulada: SEM HARDWARE - Banda cardíaca
+
+Em **Dispositivos** há **SEM HARDWARE - Banda cardíaca**: uma banda de peito
+simulada que manda só a FC. A FC **segue o esforço** da sessão em curso —
+a potência no ciclismo e no remo, a velocidade na corrida — com o atraso
+de um coração verdadeiro (sobe mais depressa do que desce). Ganha à FC do
+trainer simulado. Serve todos os desportos, para testar sem cinta.
+
 ### Strava: segmentos das tuas rotas e os teus PR
 
 1. Em <https://www.strava.com/settings/api> cria uma aplicação: nome
@@ -1278,8 +1361,7 @@ A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
    (ficam só neste computador) e escolhe **Autorizar no browser**. Aceita na
    página do Strava; a janela diz "Strava ligado" e podes fechá-la.
 3. Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
-   (**Biblioteca de rotas → a rota → Segmentos do Strava → Atualizar do
-   Strava**): a Perennia procura os segmentos ao longo da rota, fica com os
+   (**Rotas → a rota → Segmentos do Strava → Atualizar do Strava**): a Perennia procura os segmentos ao longo da rota, fica com os
    que a rota percorre no mesmo sentido, e vai buscar o teu **PR** e o número
    de esforços de cada um.
 
@@ -1696,6 +1778,19 @@ A pasta é:
 - **Windows**: `%APPDATA%\Perennia`
 - **macOS**: `~/Library/Application Support/Perennia`
 - **Linux / Raspberry Pi**: `~/.local/share/perennia`
+
+**A base de dados atualiza-se sozinha.** Ao abrir uma versão nova, a
+Perennia acrescenta o que faltar (tabelas e colunas novas) sem tocar no que
+já lá está — não tens de fazer nada. Antes de atualizar, por cautela, copia
+o `perennia.db`. O que a ronda 6 acrescentou:
+
+| Tabela / coluna | Para quê |
+|---|---|
+| `workouts.status`, `row_workouts.status`, `endurance_workouts.status` | `active` (na lista) · `deleted` (apagado, os passos ficam) · `session` (só de uma sessão) |
+| `session_workouts` | a cópia do treino de cada sessão e o original (`workout_id`, vazio quando veio do computador e não ficou na lista) |
+| `perennia_segments` | os teus segmentos: rota, nome, km de início e de fim |
+| `segment_efforts` | os tempos nos segmentos (Perennia, e Strava na corrida), por sessão e desporto |
+| `endurance_sessions.route_id` | a rota de uma corrida (para as vezes feitas e os segmentos) |
 
 **Para mudar de computador:** copia a pasta inteira. Na máquina nova,
 instala a aplicação e põe a pasta no caminho equivalente — abre com todo o

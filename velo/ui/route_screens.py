@@ -26,8 +26,9 @@ from velo.ui.widgets import ACCENT, DIM, PANEL, TEXT, Item, fit_text
 # cores pela inclinação (a descer · plano · 2–5 % · 5–8 % · mais)
 GRADES = ((-0.5, (96, 140, 190)), (2.0, (88, 170, 110)), (5.0, (214, 190, 80)),
           (8.0, (230, 140, 60)), (99.0, (210, 70, 60)))
-PERENNIA_C = (120, 200, 255)
+PERENNIA_C = (40, 120, 220)
 STRAVA_C = (252, 82, 0)
+STRIP_H = 15          # a faixa de cor do segmento, em cima do perfil
 
 
 def grade_color(g: float) -> tuple[int, int, int]:
@@ -52,6 +53,9 @@ class ProfileChart:
                      for _ in range(self.BARS)]
         self.bands = [pyglet.shapes.Rectangle(0, 0, 1, 1, color=PERENNIA_C, batch=b)
                       for _ in range(self.BANDS)]
+        # a cor da fonte (Perennia azul, Strava laranja) numa faixa por cima
+        self.strips = [pyglet.shapes.Rectangle(0, 0, 1, 1, color=PERENNIA_C, batch=b)
+                       for _ in range(self.BANDS)]
         self.band_labels = [make_label("", font_size=9, bold=True, color=TEXT,
                                        anchor_y="bottom", batch=b) for _ in range(self.BANDS)]
         self.top_lab = make_label("", font_size=10, color=DIM, anchor_y="top", batch=b)
@@ -69,7 +73,7 @@ class ProfileChart:
         self.rect = (x, y, w, h)
         self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y, w, h
         if not prof:
-            for r in self.bars + self.bands:
+            for r in self.bars + self.bands + self.strips:
                 r.opacity = 0
             for lab in self.band_labels + self.km_labs:
                 lab.text = ""
@@ -78,7 +82,7 @@ class ProfileChart:
             self.empty.x, self.empty.y = x + w / 2, y + h / 2
             return
         self.empty.text = ""
-        pad_l, pad_b, pad_t = 52, 20, 14
+        pad_l, pad_b, pad_t = 52, 20, 14 + STRIP_H * 2 + 4
         cx, cy, cw, ch = x + pad_l, y + pad_b, w - pad_l - 10, h - pad_b - pad_t
         eles = [e for _d, e, _g in prof]
         lo, hi = min(eles), max(eles)
@@ -106,20 +110,28 @@ class ProfileChart:
             lab.text = f"{d / 1000:.1f} km"
             lab.x, lab.y = cx + cw * k / (len(self.km_labs) - 1), cy - 2
         bands = list(bands or [])[:self.BANDS]
-        for k, (rect, lab) in enumerate(zip(self.bands, self.band_labels)):
+        top = cy + ch + 4
+        for k, (rect, strip, lab) in enumerate(zip(self.bands, self.strips, self.band_labels)):
             if k >= len(bands):
-                rect.opacity = 0
+                rect.opacity = strip.opacity = 0
                 lab.text = ""
                 continue
             a, z, color, text, strong = bands[k]
             x0 = cx + max(0.0, min(1.0, a / total)) * cw
             x1 = cx + max(0.0, min(1.0, z / total)) * cw
+            # por cima das barras, uma sombra leve; a cor forte fica na faixa
             rect.x, rect.y = x0, cy
             rect.width, rect.height = max(2.0, x1 - x0), ch
-            rect.color = color
-            rect.opacity = 110 if strong else 46
-            lab.text = fit_text(text, max(30.0, x1 - x0 + 40), 9, bold=True) if strong else ""
-            lab.x, lab.y = x0 + 2, cy + ch - 14 - (k % 2) * 13
+            rect.color = (255, 255, 255)
+            rect.opacity = 70 if strong else 0
+            row = k % 2                      # duas filas, para não se taparem
+            strip.x, strip.y = x0, top + row * (STRIP_H + 2)
+            strip.width, strip.height = max(3.0, x1 - x0), STRIP_H
+            strip.color = color
+            strip.opacity = 255 if strong else 120
+            lab.text = fit_text(text, max(40.0, x1 - x0), 9, bold=True) if strong else ""
+            lab.color = (255, 255, 255, 255)
+            lab.x, lab.y = x0 + 3, strip.y + 1
 
     def draw(self) -> None:
         self.batch.draw()
@@ -140,6 +152,7 @@ def route_line(row, units: str, done: dict | None = None, climbs: int | None = N
     if climbs is None:
         climbs = row["climb_count"] if "climb_count" in row.keys() else 0
     bits = [f"{dv:.1f} {du}", f"↑ {row['ascent_m']:.0f} m",
+            tr("1 subida", "1 climb") if climbs == 1 else
             tr("{n} subidas", "{n} climbs", n=climbs)]
     if done is not None:
         bits.append(routes_mod.times_text(done))
@@ -188,8 +201,9 @@ class RoutesScreen(Screen):
                               detail=tr("carrega um .gpx (em cima, à direita)",
                                         "load a .gpx (top right)"), enabled=False))
         self.chrome.set(tr("Rotas", "Routes"),
-                        tr("{n} rotas · para o ciclismo e a corrida",
-                           "{n} routes · for cycling and running", n=len(rows)),
+                        (tr("1 rota", "1 route") if len(rows) == 1 else
+                         tr("{n} rotas", "{n} routes", n=len(rows)))
+                        + tr(" · para o ciclismo e a corrida", " · for cycling and running"),
                         tr("Enter abrir · F favorita · Del apagar · Esc voltar",
                            "Enter open · F favourite · Del delete · Esc back"))
         self.list.set_items(items, keep_index=True)
@@ -444,7 +458,8 @@ def segment_item(app, s, show_route: bool = True) -> Item:
     if s.source == "strava" and s.pr_s:
         bits.append(f"PR {hms(s.pr_s)}")
     if s.source == "perennia" and s.effort_count:
-        bits.append(tr("{n} vezes", "{n} times", n=s.effort_count))
+        bits.append(tr("1 vez", "once") if s.effort_count == 1 else
+                    tr("{n} vezes", "{n} times", n=s.effort_count))
     from velo.ui.segment_screens import SegmentDetail
     return Item(s.name, value=hms(best) if best else "—", detail=" · ".join(bits),
                 action=lambda: app.push(SegmentDetail(app, s.source, s.id)),

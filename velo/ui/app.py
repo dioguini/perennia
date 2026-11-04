@@ -1659,8 +1659,24 @@ class PopupMixin:
             return True
         return super().on_mouse(x, y)
 
+    def _wrap_subtitle(self) -> None:
+        """Um subtítulo comprido parte-se em linhas dentro da janela."""
+        sub = self.chrome.subtitle
+        maxw = self.popup.w - 48
+        if getattr(self, "_wrapped_for", None) == (sub.text, maxw):
+            return
+        self._wrapped_for = (sub.text, maxw)
+        from velo.ui.widgets import text_px
+        long = text_px(sub.text, 13) > maxw
+        try:
+            sub.width = maxw if long else None
+            sub.multiline = long
+        except Exception:
+            pass
+
     def draw(self) -> None:
         self.popup.draw()
+        self._wrap_subtitle()
         self.chrome.set_footer_limit(self.list.buttons_left)
         self.chrome.draw()
         self.list.draw()
@@ -1688,8 +1704,13 @@ class ConfirmScreen(ModalScreen):
                  options: list[tuple[str, Callable]], default: int = 0,
                  buttons: bool = False, cancel: Callable | None = None):
         self.title_text, self.sub_text, self.options = title, sub, options
-        if buttons and len(options) >= 4:
-            self.W = 820                    # quatro botões cabem lado a lado
+        # a janela cresce para caber o título e os botões lado a lado
+        from velo.ui.widgets import button_width, text_px
+        need = text_px(title, 20, bold=True) + 64
+        if buttons:
+            need = max(need, sum(button_width(lab) for lab, _a in options)
+                       + 10 * (len(options) - 1) + 48)
+        self.W = int(max(type(self).W, min(1180, need)))
         self.default = default
         self.as_buttons = buttons
         self.cancel = cancel

@@ -57,9 +57,10 @@ class WorkoutFilePopup(PopupMixin, Screen):
                                     "in Downloads or in Documents.", e=exts), enabled=False)]
         self.chrome.set(tr("Carregar treino do computador", "Load a workout from the computer")
                         + f" · {sp.name(self.sport)}",
-                        tr("{n} ficheiros ({e}) · Enter escolhe · Esc volta",
-                           "{n} files ({e}) · Enter picks · Esc goes back",
-                           n=len(self.files), e=exts), "")
+                        (tr("1 ficheiro", "1 file") if len(self.files) == 1 else
+                         tr("{n} ficheiros", "{n} files", n=len(self.files)))
+                        + tr(" ({e}) · Enter escolhe · Esc volta",
+                             " ({e}) · Enter picks · Esc goes back", e=exts), "")
         self.list.set_items(items, keep_index=True)
 
     # ------------------------------------------------------------ escolher
@@ -99,10 +100,11 @@ class WorkoutFilePopup(PopupMixin, Screen):
         a.push(ConfirmScreen(
             a, tr("Guardar «{n}» na lista de treinos?", "Keep «{n}» in the workout list?",
                   n=loaded.name),
-            tr("{k} passos · {f}. Se não o guardares, não aparece na lista — mas a sessão "
-               "guarda sempre a sua cópia do treino.",
-               "{k} steps · {f}. If you don't keep it, it won't show in the list — but the "
-               "session always keeps its own copy of the workout.", k=n, f=path.name),
+            (tr("1 passo", "1 step") if n == 1 else tr("{k} passos", "{k} steps", k=n))
+            + tr(" · {f}. Se não o guardares, não aparece na lista — mas a sessão "
+                 "guarda sempre a sua cópia do treino.",
+                 " · {f}. If you don't keep it, it won't show in the list — but the "
+                 "session always keeps its own copy of the workout.", f=path.name),
             options, default=2, buttons=True, cancel=a.pop))
 
     def _save(self, loaded, keep: bool) -> None:

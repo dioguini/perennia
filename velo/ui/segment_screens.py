@@ -23,7 +23,7 @@ from velo.core.i18n import tr
 from velo.core.units import hms
 from velo.gfx.compat import label as make_label
 from velo.ui.app import Screen
-from velo.ui.route_screens import ProfileChart, route_bands, segment_item
+from velo.ui.route_screens import PERENNIA_C, ProfileChart, route_bands, segment_item
 from velo.ui.sport_screens import EditPopup
 from velo.ui.widgets import ACCENT, TEXT, Item, fit_text
 
@@ -130,8 +130,10 @@ class SegmentsScreen(Screen):
                 ef = seg_mod.efforts(self.app.db, src, int(sid))
                 lines = [f"{seg.name} · {seg.length_m / 1000:.2f} km"
                          + (f" · {seg.avg_grade:.1f} %" if seg.avg_grade is not None else ""),
-                         tr("Melhor: {b} · {n} vezes", "Best: {b} · {n} times",
-                            b=hms(ef[0]["elapsed_s"]) if ef else "—", n=len(ef)),
+                         tr("Melhor: {b} · {n}", "Best: {b} · {n}",
+                            b=hms(ef[0]["elapsed_s"]) if ef else "—",
+                            n=tr("1 vez", "once") if len(ef) == 1 else
+                            tr("{n} vezes", "{n} times", n=len(ef))),
                          (tr("PR no Strava: {p}", "Strava PR: {p}", p=hms(seg.pr_s))
                           if seg.pr_s else "")]
         for k, lab in enumerate(self.info):
@@ -318,7 +320,7 @@ class SegmentEditor(EditPopup):
     def _chart(self) -> None:
         p = self.popup
         rid = self.v["route"]
-        band = [(self.v["start_km"] * 1000, self.v["end_km"] * 1000, (120, 200, 255),
+        band = [(self.v["start_km"] * 1000, self.v["end_km"] * 1000, PERENNIA_C,
                  self.v["name"] or tr("este segmento", "this segment"), True)]
         self.chart.set(routes_mod.profile(self.app.db, rid) if rid else [], p.x + 28,
                        p.y + 66, p.w - 56, self.CHART_H, band)
