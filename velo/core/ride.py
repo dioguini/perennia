@@ -1096,7 +1096,9 @@ class RideEngine:
                 prev = data.get("local_best_s")
                 data["local_pr"] = prev is None or elapsed < prev
                 try:
-                    _segments.save_effort(self.db, self.ride_id, data["id"], elapsed)
+                    _segments.save_effort(self.db, self.ride_id, data["id"], elapsed,
+                                          source=data.get("source", "strava"), kind="ride",
+                                          sport="cycling")
                 except Exception:
                     pass
                 self.strava_results.append(dict(data))
@@ -1350,6 +1352,8 @@ class RideEngine:
             self.db.conn.commit()
             from . import session_workouts as sw
             sw.forget(self.db, "ride", self.ride_id)
+            from . import segments as _segments
+            _segments.forget_session(self.db, "ride", self.ride_id)
         except Exception:
             pass
 

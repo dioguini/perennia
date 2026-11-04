@@ -45,7 +45,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
 
     def test_feedback_form(self):
         # uma sessão de ciclismo curta para ter onde dar feedback
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")
@@ -83,7 +83,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
 
 class TestDeleteAsks(tg.GuiCase):
     def test_route_delete_asks_and_cancel_keeps_it(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.select("Serra de Teste")
         self.press(key.DELETE)
         pop = self.screen()

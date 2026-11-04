@@ -484,11 +484,7 @@ class MainMenu(SportHub):
             tr("Sessão de treino", "Training session"),
             detail=tr("Livre (com uma rota .gpx) ou carregar um treino",
                       "Free (with a .gpx route) or load a workout"),
-            action=lambda: _setup().ask_start(a, "cycling", self), data="ride")) + [
-            Item(t("menu.library"), value=str(len(a.db.routes())) or "",
-                 detail=tr("As tuas rotas (.gpx): subidas, classificações, favoritas",
-                           "Your routes (.gpx): climbs, leaderboards, favourites"),
-                 action=lambda: a.push(RouteLibrary(a)), data="library")]
+            action=lambda: _setup().ask_start(a, "cycling", self), data="ride"))
 
     def items_builder(self) -> list[Item]:
         return _builder().builder_items(self.app, "cycling")
@@ -574,15 +570,17 @@ class HomeScreen(Screen):
     semanas) e o mapa das últimas 16 semanas."""
 
     ROOT = True
-    # Os desportos na primeira fila; saúde, estatísticas e inventários na segunda.
-    # Dispositivos, Definições e Sair estão na faixa do topo (sempre à vista).
+    # Os desportos e o calendário na primeira fila; rotas, segmentos, saúde,
+    # estatísticas e inventários na segunda. Dispositivos, Definições e Sair
+    # estão na faixa do topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
              ("home.gym", "kettlebell", ""),
              ("home.calendar", "calendar", ""),
+             ("home.routes", "road", ""), ("home.segments", "flag", ""),
              ("home.health", "heart", ""), ("home.stats", "stats", ""),
              ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
-    BIG = 5               # cartões por fila
+    BIG = 6               # cartões por fila
     UPCOMING_DAYS = 14
     UPCOMING_ROWS = 12
 
@@ -634,6 +632,8 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.SportHub(a, "swimming")),
                 lambda: a.push(hub.SportHub(a, "gym")),
                 lambda: a.push(_calendar().CalendarScreen(a)),
+                lambda: a.push(_routes().RoutesScreen(a)),
+                lambda: a.push(_segments_ui().SegmentsScreen(a)),
                 lambda: a.push(_extra_health().HealthMenu(a)),
                 lambda: a.push(hub.stats_screen(a, None)),
                 lambda: a.push(hub.InventoryScreen(a)),
@@ -904,55 +904,9 @@ class ComingSoonScreen(Screen):
 # ------------------------------------------------------------- biblioteca
 
 
-class RouteLibrary(Screen):
-    HAS_BOARD = True
-    KEY_SCOPE = "routes"
-
-    def side_board(self):
-        item = self.list.selected
-        if item is not None and item.data:
-            return boards.route_board(self.app.db, str(item.data))
-        return boards.records_board(self.app.db, self.app.units)
-
-    def enter(self) -> None:
-        a = self.app
-        rows = a.db.routes()
-        items = [Item(t("lib.import_gpx"), action=lambda: a.push(GpxPicker(a)))]
-        for row in rows:
-            dv, du = km(row["distance_m"], a.units)
-            detail = (f"↑ {row['ascent_m']:.0f} m · {row['climb_count']} "
-                      f"{t('lib.climbs').lower()} · "
-                      + (f"{row['times_ridden']}× " if row["times_ridden"]
-                         else t("lib.never_ridden")))
-            items.append(Item(
-                ("★ " if row["favorite"] else "") + row["name"],
-                value=f"{dv:.1f} {du}", detail=detail,
-                action=lambda r=row: a.push(RouteDetail(a, r["id"])),
-                data=row["id"]))
-        self.chrome.set(t("menu.library"),
-                        t("lib.empty") if not rows else f"{len(rows)} rotas",
-                        "Enter abrir · F favorita · Del apagar · Esc voltar")
-        self.list.set_items(items, keep_index=True)
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        item = self.list.selected
-        if symbol == key.F and item is not None and item.data:
-            self.app.db.toggle_favorite(str(item.data))
-            self.enter()
-            return True
-        if symbol == key.DELETE and item is not None and item.data:
-            rid = str(item.data)
-
-            def gone() -> None:
-                self.app.db.delete_route(rid)
-                self.enter()
-            self.app.confirm(tr("Apagar a rota «{n}»?", "Delete the route «{n}»?",
-                                n=item.label.lstrip("★ ")),
-                             tr("As sessões feitas nela ficam no histórico. Não dá para desfazer.",
-                                "Rides done on it stay in the history. This cannot be undone."),
-                             gone, yes=tr("Apagar", "Delete"))
-            return True
-        return super().on_key(symbol, modifiers)
+def RouteLibrary(app: "App"):            # noqa: N802 — compatibilidade
+    """As rotas: agora no menu Rotas do ecrã inicial (ver route_screens)."""
+    return _routes().RoutesScreen(app)
 
 
 class GpxPicker(Screen):
@@ -1012,55 +966,9 @@ class GpxPicker(Screen):
             a.message(f"{t('common.error')}: {e}")
 
 
-class RouteDetail(Screen):
-    HAS_BOARD = True
-
-    def __init__(self, app: "App", route_id: str):
-        super().__init__(app)
-        self.route_id = route_id
-
-    def side_board(self):
-        item = self.list.selected
-        if item is not None and isinstance(item.data, tuple) and item.data[0] == "climb":
-            return boards.climb_board(self.app.db, item.data[1], item.data[2])
-        return boards.route_board(self.app.db, self.route_id)
-
-    def enter(self) -> None:
-        a = self.app
-        row = a.db.route(self.route_id)
-        if row is None:
-            a.pop()
-            return
-        dv, du = km(row["distance_m"], a.units)
-        self.chrome.set(row["name"],
-                        f"{dv:.1f} {du} · ↑ {row['ascent_m']:.0f} m · "
-                        f"máx {row['max_grade_pct']:.1f} % · "
-                        f"{row['times_ridden']}× {t('lib.times_ridden').lower()}",
-                        self.footer())
-        items = [Item(t("mode.start"), action=lambda: a.push(_setup().SessionSetup(
-            a, "cycling", kind="free", route_id=self.route_id)))]
-        for c in a.db.climbs(self.route_id):
-            board = a.db.climb_leaderboard(c.id or -1, limit=1)
-            best = hms(board[0]["elapsed_s"]) if board else "—"
-            items.append(Item(
-                f"  {c.name}",
-                value=f"{t('sign.category', cat=c.category)} · {best}",
-                detail=f"{c.length_m / 1000.0:.1f} km @ {c.avg_grade_pct:.1f} % · "
-                       f"↑ {c.gain_m:.0f} m",
-                action=lambda cid=c.id, nm=c.name: a.push(
-                    LeaderboardScreen(a, nm, a.db.climb_leaderboard(cid or -1))),
-                data=("climb", c.id, c.name)))
-        n_seg = len(_segments_mod().load(a.db, self.route_id))
-        items.append(Item(tr("Segmentos do Strava", "Strava segments"),
-                          value=str(n_seg) if n_seg else "",
-                          action=lambda: a.push(_connect().StravaSegmentsScreen(a, self.route_id)),
-                          data=("strava", "list")))
-        board = a.db.route_leaderboard(self.route_id)
-        if board:
-            items.append(Item(t("lib.leaderboard"), value=f"{len(board)}",
-                              action=lambda: a.push(LeaderboardScreen(
-                                  a, row["name"], board))))
-        self.list.set_items(items, keep_index=True)
+def RouteDetail(app: "App", route_id: str):        # noqa: N802 — compatibilidade
+    """Uma rota: a ficha do menu Rotas (perfil, segmentos, sessões)."""
+    return _routes().RouteOverview(app, route_id)
 
 
 class LeaderboardScreen(Screen):
@@ -3620,6 +3528,8 @@ class App:
         try:
             from velo.core import session_workouts
             session_workouts.purge(self.db)        # cópias de treinos sem sessão
+            from velo.core import segments as seg_mod
+            seg_mod.purge(self.db)                 # tempos de sessões descartadas
         except Exception:
             pass
         try:
@@ -4473,6 +4383,16 @@ def _builder():
 def _connect():
     from velo.ui import connect_screens
     return connect_screens
+
+
+def _routes():
+    from velo.ui import route_screens
+    return route_screens
+
+
+def _segments_ui():
+    from velo.ui import segment_screens
+    return segment_screens
 
 
 def _segments_mod():

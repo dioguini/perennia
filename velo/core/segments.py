@@ -1,4 +1,11 @@
-"""Segmentos do Strava numa rota da Perennia.
+"""Segmentos numa rota da Perennia: os do Strava e os da Perennia.
+
+**Perennia**: defines tu, no menu Segmentos, numa rota do menu Rotas — o km
+de início e o km de fim (ou a distância). A inclinação média e a subida
+saem do perfil da rota. Os tempos ficam em `segment_efforts` (ciclismo e
+corrida).
+
+**Strava**: os segmentos do Strava numa rota da Perennia.
 
 Busca os segmentos que cruzam a rota (em janelas de ~3 km ao longo dela),
 encontra o início e o fim de cada um no percurso, e guarda-os com o teu
@@ -50,6 +57,24 @@ def ensure(db: Database) -> None:
       elapsed_s  INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS perennia_segments (
+      id         INTEGER PRIMARY KEY,
+      route_id   TEXT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      start_m    REAL NOT NULL,
+      end_m      REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS segment_efforts (
+      id           INTEGER PRIMARY KEY,
+      source       TEXT NOT NULL,            -- perennia | strava
+      segment_id   INTEGER NOT NULL,
+      session_kind TEXT NOT NULL,            -- ride | endurance
+      session_id   TEXT NOT NULL,
+      sport        TEXT NOT NULL,
+      elapsed_s    INTEGER NOT NULL,
+      created_at   TEXT NOT NULL
+    );
     """)
 
 
@@ -66,10 +91,18 @@ class Segment:
     effort_count: int | None = None
     kom: str | None = None
     local_best_s: int | None = None
+    source: str = "strava"              # strava | perennia
+    route_id: str | None = None
+    gain_m: float | None = None
 
     @property
     def length_m(self) -> float:
         return max(1.0, self.end_m - self.start_m)
+
+    @property
+    def key(self) -> str:
+        """Único entre as duas fontes (os ids do Strava e da Perennia podem bater)."""
+        return f"{self.source}:{self.id}"
 
 
 # ------------------------------------------------------------------ geometria
@@ -184,24 +217,180 @@ def fetch_for_route(db: Database, client, route_id: str, progress=None) -> dict:
     return {"explored": len(found), "matched": len(matched), "tiles": len(boxes)}
 
 
-def load(db: Database, route_id: str | None) -> list[Segment]:
+STRAVA_BEST = ("SELECT MIN(x) FROM (SELECT MIN(elapsed_s) AS x FROM strava_efforts e"
+               " WHERE e.segment_id = s.segment_id UNION ALL SELECT MIN(elapsed_s) FROM"
+               " segment_efforts f WHERE f.source = 'strava' AND f.segment_id = s.segment_id)")
+
+
+def load(db: Database, route_id: str | None, sources: tuple = ("strava", "perennia")
+         ) -> list[Segment]:
+    """Os segmentos da rota (do Strava e da Perennia), pela ordem do percurso."""
     ensure(db)
     if not route_id:
         return []
-    rows = db.conn.execute(
-        "SELECT s.*, (SELECT MIN(elapsed_s) FROM strava_efforts e WHERE e.segment_id ="
-        " s.segment_id) AS best FROM strava_segments s WHERE route_id = ? ORDER BY start_m",
-        (route_id,)).fetchall()
-    return [Segment(r["segment_id"], r["name"], r["start_m"], r["end_m"], r["distance_m"],
-                    r["avg_grade"], r["pr_s"], r["pr_date"], r["effort_count"], r["kom"],
-                    r["best"]) for r in rows]
+    out: list[Segment] = []
+    if "strava" in sources:
+        rows = db.conn.execute(
+            f"SELECT s.*, ({STRAVA_BEST}) AS best FROM strava_segments s WHERE route_id = ?"
+            " ORDER BY start_m", (route_id,)).fetchall()
+        out += [Segment(r["segment_id"], r["name"], r["start_m"], r["end_m"], r["distance_m"],
+                        r["avg_grade"], r["pr_s"], r["pr_date"], r["effort_count"], r["kom"],
+                        r["best"], "strava", route_id) for r in rows]
+    if "perennia" in sources:
+        out += perennia_segments(db, route_id)
+    out.sort(key=lambda x: (x.start_m, x.source))
+    return out
 
 
-def save_effort(db: Database, ride_id: str | None, segment_id: int, elapsed_s: int) -> None:
+def save_effort(db: Database, ride_id: str | None, segment_id: int, elapsed_s: int,
+                source: str = "strava", kind: str = "ride", sport: str = "cycling") -> None:
+    """O tempo num segmento. Os do Strava no ciclismo ficam em `strava_efforts`
+    (como sempre); o resto em `segment_efforts`."""
     ensure(db)
-    db.conn.execute("INSERT INTO strava_efforts(ride_id, segment_id, elapsed_s, created_at)"
-                    " VALUES (?,?,?,?)", (ride_id, segment_id, int(elapsed_s), now_iso()))
+    if source == "strava" and kind == "ride":
+        db.conn.execute("INSERT INTO strava_efforts(ride_id, segment_id, elapsed_s, created_at)"
+                        " VALUES (?,?,?,?)", (ride_id, segment_id, int(elapsed_s), now_iso()))
+    else:
+        db.conn.execute(
+            "INSERT INTO segment_efforts(source, segment_id, session_kind, session_id, sport,"
+            " elapsed_s, created_at) VALUES (?,?,?,?,?,?,?)",
+            (source, segment_id, kind, ride_id or "", sport, int(elapsed_s), now_iso()))
     db.conn.commit()
+
+
+# --------------------------------------------------- segmentos da Perennia
+
+
+def route_stats(points: Sequence, start_m: float, end_m: float) -> dict:
+    """Inclinação média, subida e altitudes entre dois pontos da rota."""
+    if not points:
+        return {"grade": 0.0, "gain_m": 0.0, "ele_a": None, "ele_b": None}
+    a, b = sorted((start_m, end_m))
+
+    def ele_at(d: float) -> float:
+        prev = points[0]
+        for p in points:
+            if p.dist_m >= d:
+                span = max(1e-6, p.dist_m - prev.dist_m)
+                k = (d - prev.dist_m) / span if p is not prev else 0.0
+                return prev.ele_m + (p.ele_m - prev.ele_m) * max(0.0, min(1.0, k))
+            prev = p
+        return points[-1].ele_m
+
+    ea, eb = ele_at(a), ele_at(b)
+    gain = 0.0
+    last = ea
+    for p in points:
+        if a < p.dist_m < b:
+            if p.ele_m > last:
+                gain += p.ele_m - last
+            last = p.ele_m
+    if eb > last:
+        gain += eb - last
+    length = max(1.0, b - a)
+    return {"grade": (eb - ea) / length * 100.0, "gain_m": gain, "ele_a": ea, "ele_b": eb}
+
+
+def perennia_segments(db: Database, route_id: str | None = None) -> list[Segment]:
+    ensure(db)
+    sql = ("SELECT s.*, (SELECT MIN(elapsed_s) FROM segment_efforts e WHERE e.source ="
+           " 'perennia' AND e.segment_id = s.id) AS best FROM perennia_segments s")
+    rows = db.conn.execute(sql + (" WHERE route_id = ? ORDER BY start_m" if route_id
+                                  else " ORDER BY route_id, start_m"),
+                           (route_id,) if route_id else ()).fetchall()
+    out = []
+    pts_cache: dict[str, list] = {}
+    for r in rows:
+        pts = pts_cache.get(r["route_id"])
+        if pts is None:
+            pts = pts_cache[r["route_id"]] = db.route_points(r["route_id"])
+        st = route_stats(pts, r["start_m"], r["end_m"])
+        n = db.conn.execute("SELECT COUNT(*) FROM segment_efforts WHERE source = 'perennia'"
+                            " AND segment_id = ?", (r["id"],)).fetchone()[0]
+        out.append(Segment(r["id"], r["name"], r["start_m"], r["end_m"],
+                           r["end_m"] - r["start_m"], round(st["grade"], 1), None, None, n,
+                           None, r["best"], "perennia", r["route_id"], st["gain_m"]))
+    return out
+
+
+def save_perennia(db: Database, seg_id: int | None, route_id: str, name: str,
+                  start_m: float, end_m: float) -> int:
+    """Cria (ou altera) um segmento da Perennia numa rota."""
+    ensure(db)
+    route = db.route(route_id)
+    if route is None:
+        raise ValueError("rota inexistente")
+    total = float(route["distance_m"])
+    a = max(0.0, min(total, float(start_m)))
+    b = max(0.0, min(total, float(end_m)))
+    if b - a < 50:
+        raise ValueError("o segmento tem de ter pelo menos 50 m")
+    name = (name or "").strip() or f"km {a / 1000:.1f}–{b / 1000:.1f}"
+    if seg_id:
+        db.conn.execute("UPDATE perennia_segments SET route_id=?, name=?, start_m=?, end_m=?"
+                        " WHERE id = ?", (route_id, name, a, b, seg_id))
+    else:
+        cur = db.conn.execute(
+            "INSERT INTO perennia_segments(route_id, name, start_m, end_m, created_at)"
+            " VALUES (?,?,?,?,?)", (route_id, name, a, b, now_iso()))
+        seg_id = int(cur.lastrowid)
+    db.conn.commit()
+    return int(seg_id)
+
+
+def delete_perennia(db: Database, seg_id: int) -> None:
+    ensure(db)
+    db.conn.execute("DELETE FROM perennia_segments WHERE id = ?", (seg_id,))
+    db.conn.execute("DELETE FROM segment_efforts WHERE source = 'perennia' AND segment_id = ?",
+                    (seg_id,))
+    db.conn.commit()
+
+
+def efforts(db: Database, source: str, segment_id: int) -> list[dict]:
+    """Os tempos feitos num segmento, do melhor para o pior (com a data e o desporto)."""
+    ensure(db)
+    rows = [dict(r) for r in db.conn.execute(
+        "SELECT e.elapsed_s, e.created_at, e.sport, e.session_kind AS kind, e.session_id"
+        " FROM segment_efforts e WHERE e.source = ? AND e.segment_id = ?",
+        (source, segment_id))]
+    if source == "strava":
+        rows += [dict(r) for r in db.conn.execute(
+            "SELECT elapsed_s, created_at, 'cycling' AS sport, 'ride' AS kind,"
+            " ride_id AS session_id FROM strava_efforts WHERE segment_id = ?", (segment_id,))]
+    rows.sort(key=lambda r: r["elapsed_s"])
+    return rows
+
+
+def overview(db: Database) -> list[Segment]:
+    """Todos os segmentos de todas as rotas (Perennia e Strava)."""
+    ensure(db)
+    out: list[Segment] = []
+    for r in db.routes():
+        out += load(db, r["id"])
+    return out
+
+
+def forget_session(db: Database, kind: str, session_id: str) -> None:
+    """A sessão foi descartada: os tempos dela nos segmentos vão com ela."""
+    ensure(db)
+    db.conn.execute("DELETE FROM segment_efforts WHERE session_kind = ? AND session_id = ?",
+                    (kind, session_id))
+    db.conn.commit()
+
+
+def purge(db: Database) -> int:
+    """Tempos de sessões que já não existem (descartadas)."""
+    ensure(db)
+    n = 0
+    for kind, table in (("ride", "rides"), ("endurance", "endurance_sessions")):
+        if not db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                               (table,)).fetchone():
+            continue
+        cur = db.conn.execute(f"DELETE FROM segment_efforts WHERE session_kind = ? AND"
+                              f" session_id NOT IN (SELECT id FROM {table})", (kind,))
+        n += cur.rowcount
+    db.conn.commit()
+    return n
 
 
 # --------------------------------------------------------------- ao vivo
@@ -211,7 +400,7 @@ class SegmentTracker:
     def __init__(self, segments: Sequence[Segment]):
         self.segments = list(segments)
         self.active: list[tuple[Segment, float]] = []     # (segmento, início em s)
-        self.done: set[int] = set()
+        self.done: set[str] = set()
 
     def reset(self) -> None:
         """Nova volta à rota: os segmentos voltam a contar."""
@@ -221,21 +410,22 @@ class SegmentTracker:
     def observe(self, pos_m: float, t_s: float) -> list[tuple[str, dict]]:
         ev = []
         for seg in self.segments:
-            if seg.id in self.done or any(s.id == seg.id for s, _ in self.active):
+            if seg.key in self.done or any(s.key == seg.key for s, _ in self.active):
                 continue
             if seg.start_m <= pos_m < seg.start_m + 30 and pos_m < seg.end_m:
                 self.active.append((seg, t_s))
                 ev.append(("strava_start", {"name": seg.name, "pr_s": seg.pr_s,
                                             "distance_m": seg.length_m,
-                                            "grade": seg.avg_grade}))
+                                            "grade": seg.avg_grade, "source": seg.source}))
         still = []
         for seg, t0 in self.active:
             if pos_m >= seg.end_m:
                 elapsed = t_s - t0
-                self.done.add(seg.id)
+                self.done.add(seg.key)
                 ev.append(("strava_end", {"id": seg.id, "name": seg.name,
                                           "elapsed_s": elapsed, "pr_s": seg.pr_s,
-                                          "local_best_s": seg.local_best_s}))
+                                          "local_best_s": seg.local_best_s,
+                                          "source": seg.source}))
                 if seg.local_best_s is None or elapsed < seg.local_best_s:
                     seg.local_best_s = int(elapsed)
             else:
@@ -273,5 +463,6 @@ class SegmentTracker:
                             f"{t('board.me')} · {delta(cur['delta_pr'])}", me=True))
         else:
             rows.append(Row(None, hms(cur["elapsed_s"]), t("board.me"), me=True))
-        sub = f"Strava · {cur['frac'] * 100:.0f} % · {seg.length_m / 1000:.2f} km"
+        src = "Strava" if seg.source == "strava" else "Perennia"
+        sub = f"{src} · {cur['frac'] * 100:.0f} % · {seg.length_m / 1000:.2f} km"
         return Board(seg.name, rows, subtitle=sub)

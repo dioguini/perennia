@@ -380,5 +380,136 @@ class TestHeartStrapInDevices(tg.GuiCase):
         self.assertIsNotNone(self.app.effort_now())
 
 
+# ===================================================== rotas e segmentos
+
+
+class TestRoutesAndSegmentsCore(tg.GuiCase):
+    def test_times_done_profile_and_perennia_segments(self):
+        from velo.core import routes as routes_mod
+        from velo.core import segments as seg_mod
+        db = self.app.db
+        prof = routes_mod.profile(db, self.route_id)
+        self.assertEqual(len(prof), 160)
+        self.assertAlmostEqual(prof[-1][0], self.points[-1].dist_m, delta=1)
+        self.assertEqual(routes_mod.times_done(db, self.route_id)["total"], 0)
+        sid = seg_mod.save_perennia(db, None, self.route_id, "Rampa", 1000, 2500)
+        segs = seg_mod.load(db, self.route_id)
+        mine = [s for s in segs if s.source == "perennia"]
+        self.assertEqual([s.name for s in mine], ["Rampa"])
+        self.assertEqual(mine[0].key, f"perennia:{sid}")
+        self.assertAlmostEqual(mine[0].length_m, 1500)
+        self.assertIsNotNone(mine[0].avg_grade)
+        with self.assertRaises(ValueError):
+            seg_mod.save_perennia(db, None, self.route_id, "Curto", 1000, 1020)
+        # um tempo numa sessão de corrida
+        seg_mod.save_effort(db, "s1", sid, 400, source="perennia", kind="endurance",
+                            sport="running")
+        self.assertEqual(seg_mod.efforts(db, "perennia", sid)[0]["elapsed_s"], 400)
+        self.assertEqual(seg_mod.load(db, self.route_id, ("perennia",))[0].local_best_s, 400)
+        self.assertEqual(seg_mod.purge(db), 1)                # «s1» não existe
+        seg_mod.delete_perennia(db, sid)
+        self.assertEqual(seg_mod.load(db, self.route_id, ("perennia",)), [])
+
+    def test_tracker_keeps_strava_and_perennia_apart(self):
+        from velo.core import segments as seg_mod
+        a = seg_mod.Segment(7, "S", 100, 400, source="strava")
+        b = seg_mod.Segment(7, "P", 100, 300, source="perennia")
+        tr_ = seg_mod.SegmentTracker([a, b])
+        ev = tr_.observe(110, 0)
+        self.assertEqual(len([k for k, _ in ev if k == "strava_start"]), 2)
+        ev = tr_.observe(310, 30)
+        self.assertEqual([(k, d["source"]) for k, d in ev], [("strava_end", "perennia")])
+
+
+class TestRoutesMenu(tg.GuiCase):
+    def setUp(self):
+        super().setUp()
+        win = self.app.window
+        win.width, win.height = 1920, 1080
+        self.app._on_resize(1920, 1080)
+
+    def test_home_tile_opens_routes_with_times_done(self):
+        from velo.ui import route_screens
+        self.press(key.ESCAPE)
+        self.pick("Rotas")
+        scr = self.screen()
+        self.assertIsInstance(scr, route_screens.RoutesScreen)
+        row = next(i for i in scr.list.items if i.label == "Serra de Teste")
+        self.assertIn("ainda não feita", row.detail)
+        self.assertIn("+ Carregar .gpx", [i.label for i in scr.list.items])
+        self.pick("Serra de Teste")
+        ov = self.screen()
+        self.assertIsInstance(ov, route_screens.RouteOverview)
+        labels = [i.label for i in ov.list.items]
+        for want in ("Distância", "Altitude", "Vezes feita", "Segmentos",
+                     "Começar no ciclismo", "Começar na corrida"):
+            self.assertIn(want, labels)
+        self.app._on_draw()
+        self.assertTrue(any(b.opacity for b in ov.chart.bars))
+
+    def test_new_segment_from_the_route_and_the_overview(self):
+        from velo.core import segments as seg_mod
+        from velo.ui import route_screens, segment_screens
+        self.app.push(route_screens.RouteOverview(self.app, self.route_id))
+        self.pick("+ Novo segmento")
+        ed = self.screen()
+        self.assertIsInstance(ed, segment_screens.SegmentEditor)
+        self.select("Nome")
+        self.type("Muro")
+        self.select("Início")
+        self.press(key.RIGHT)                               # km 0,1
+        self.select("Fim por")
+        self.press(key.RIGHT)                               # pela distância
+        self.select("Distância")
+        self.press(key.RIGHT, key.RIGHT)
+        self.assertAlmostEqual(ed.v["end_km"] - ed.v["start_km"], 1.1, places=2)
+        self.pick("Guardar e sair")
+        segs = seg_mod.load(self.app.db, self.route_id, ("perennia",))
+        self.assertEqual([s.name for s in segs], ["Muro"])
+        self.assertAlmostEqual(segs[0].start_m, 100, delta=1)
+        # na visão geral (menu Segmentos), com o tempo e a rota
+        self.app.push(segment_screens.SegmentsScreen(self.app))
+        scr = self.screen()
+        labels = [i.label for i in scr.list.items]
+        self.assertIn("Serra de Teste", labels)                 # o título da rota
+        self.assertIn("Muro", labels)
+        self.select("Muro")
+        self.app._on_draw()
+        self.assertIn("Muro", scr.info[0].text)
+        self.pick("Muro")
+        self.assertIsInstance(self.screen(), segment_screens.SegmentDetail)
+        self.assertIn("Ainda sem tempos", [i.label for i in self.screen().list.items])
+        self.press(key.ESCAPE)
+        self.select("Muro")
+        self.press(key.DELETE)
+        self.assertIn("Apagar o segmento", self.screen().title_text)
+        self.pick("Apagar")
+        self.assertEqual(seg_mod.load(self.app.db, self.route_id, ("perennia",)), [])
+
+    def test_running_on_a_route_times_the_segment(self):
+        from velo.core import routes as routes_mod
+        from velo.core import segments as seg_mod
+        from velo.ui import route_screens
+        sid = seg_mod.save_perennia(self.app.db, None, self.route_id, "Reta", 50, 400)
+        self.app.push(route_screens.RouteOverview(self.app, self.route_id))
+        self.pick("Começar na corrida")
+        setup = self.screen()
+        self.assertEqual((setup.sport, setup.route_id), ("running", self.route_id))
+        self.assertIn("Segmentos da Perennia", [i.label for i in setup.list.items])
+        self.pick("Começar")
+        run = self.screen()
+        self.assertIsInstance(run, es.EnduranceSession)
+        run.engine.start()
+        run.engine.set_speed(18.0)                          # 5 m/s
+        for _ in range(100):
+            run.update(1.0)
+        ef = seg_mod.efforts(self.app.db, "perennia", sid)
+        self.assertEqual(len(ef), 1)
+        self.assertAlmostEqual(ef[0]["elapsed_s"], 70, delta=4)
+        res = run.engine.finish()
+        self.assertEqual(routes_mod.times_done(self.app.db, self.route_id)["running"], 1)
+        self.assertTrue(res)
+
+
 if __name__ == "__main__":
     unittest.main()

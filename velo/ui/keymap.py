@@ -51,7 +51,7 @@ SCOPES = (("global", "Em qualquer ecrã", "On any screen"),
           ("endurance", "Corrida e natação", "Running and swimming"),
           ("gym", "Ginásio (força e voltas)", "Gym (strength and laps)"),
           ("builder", "Construtor de treinos", "Workout builder"),
-          ("routes", "Biblioteca de rotas", "Route library"),
+          ("routes", "Rotas e segmentos", "Routes and segments"),
           ("calendar", "Calendário", "Calendar"))
 
 # teclas fixas (navegação): mostram-se, não se mudam

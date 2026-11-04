@@ -674,7 +674,7 @@ class TestSportsGui(tg.GuiCase):
         self.assertTrue(scr)
 
     def test_device_lost_mid_ride_shows_on_the_hud(self):
-        self.pick("Biblioteca de rotas")
+        self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
         self.pick("Começar")

@@ -56,6 +56,9 @@ def ensure(db: Database) -> None:
     if "status" not in cols:            # ativo · apagado · só de uma sessão
         db.conn.execute("ALTER TABLE endurance_workouts ADD COLUMN status TEXT NOT NULL"
                         " DEFAULT 'active'")
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_sessions)")}
+    if "route_id" not in cols:          # corrida numa rota do menu Rotas
+        db.conn.execute("ALTER TABLE endurance_sessions ADD COLUMN route_id TEXT")
     db.conn.commit()
 
 
@@ -358,8 +361,11 @@ class EnduranceEngine:
     def __init__(self, db: Database, athlete: Athlete, sport: str, *, sensors: Any = None,
                  workout_id: str | None = None, autolap: dict | None = None,
                  pool_m: float = 25.0, out_dir: str | Path = "endurance",
-                 resume: dict | None = None):
+                 resume: dict | None = None, route_id: str | None = None):
         ensure(db)
+        if resume is not None:
+            route_id = resume.get("config", {}).get("route_id", route_id)
+        self.route_id = route_id
         self.db = db
         self.athlete = athlete
         self.sport = sport if sport in SPORTS else "running"
@@ -416,9 +422,9 @@ class EnduranceEngine:
             self.start_unix = time.time()
             db.conn.execute(
                 "INSERT INTO endurance_sessions(id, sport, name, status, workout_id, started_at,"
-                " pool_m) VALUES (?,?,?,'recording',?,?,?)",
+                " pool_m, route_id) VALUES (?,?,?,'recording',?,?,?,?)",
                 (self.session_id, self.sport, self.title, workout_id, now_iso(),
-                 self.pool_m if self.sport == "swimming" else None))
+                 self.pool_m if self.sport == "swimming" else None, route_id or None))
             db.conn.commit()
             from .ride import _keep_workout
             _keep_workout(db, "endurance", self.session_id, self.sport, workout_id)
@@ -628,6 +634,7 @@ class EnduranceEngine:
             self.db.save_checkpoint(self.session_id, "endurance", {
                 "start_unix": self.start_unix, "sport": self.sport, "name": self.title,
                 "workout_id": self.workout_id, "pool_m": self.pool_m,
+                "route_id": self.route_id,
                 "autolap": self.autolap.as_dict()}, {
                 "t": self.t, "paused_s": self.paused_s, "distance_m": self.distance_m,
                 "lengths": self.lengths, "speed_kmh": self.speed_kmh, "started": self.started,
