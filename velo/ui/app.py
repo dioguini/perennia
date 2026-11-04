@@ -429,6 +429,9 @@ class SportHub(Screen):
         self.list.set_items(items, keep_index=True)
 
     def footer(self) -> str:
+        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "builder" and \
+                self.SPORT in ("cycling", "rowing", "running", "swimming"):
+            return _builder().builder_footer(self.SPORT)
         return tr("Tab separador · ↑↓ mover · Enter escolher · Esc voltar",
                   "Tab next tab · ↑↓ move · Enter choose · Esc back")
 
@@ -478,24 +481,7 @@ class MainMenu(SportHub):
                  action=lambda: a.push(RouteLibrary(a)), data="library")]
 
     def items_builder(self) -> list[Item]:
-        a = self.app
-        b = _builder()
-        from velo.core import workout_meta as wm
-        items = [Item(tr("+ Novo treino", "+ New workout"),
-                      detail=tr("primeiro escolhes o tipo: ERG ou Manual",
-                                "first pick the kind: ERG or Manual"),
-                      action=lambda: b.new_workout(a, "cycling"), data="workouts",
-                      button=True, primary=True, top=True)]
-        for w in a.db.workouts():
-            tss = f" · TSS ≈ {w['est_tss']:.0f}" if w["est_tss"] else ""
-            items.append(Item(w["name"], value=hms(w["total_seconds"] or 0),
-                              detail=wm.label(a.db, "cycling", w["id"], "power") + " · "
-                              + (w["description"] or w["source_format"] or "") + tss
-                              + tr(" · E exportar · P passos", " · E export · P steps"),
-                              action=lambda wid=w["id"]: a.push(b.BlockBuilder(a, "cycling",
-                                                                               wid)),
-                              data=("workout", w["id"], w["name"])))
-        return items
+        return _builder().builder_items(self.app, "cycling")
 
     def items_library(self) -> list[Item]:
         a = self.app
@@ -2907,10 +2893,27 @@ class WorkoutLibrary(Screen):
         self.chrome.set(t("wk.import"), f"{len(found)} ficheiros", self.footer())
         self.list.set_items(items)
 
+    def _already_there(self, wk) -> bool:
+        """O mesmo treino (nome e passos iguais) já foi importado?"""
+        want = [(s.kind, int(s.duration_s), s.target_lo, s.target_hi) for s in wk.steps]
+        for w in self.app.db.workouts():
+            if w["name"] != wk.name:
+                continue
+            have = [(r["kind"], int(r["duration_s"] or 0), r["target_lo"], r["target_hi"])
+                    for r in self.app.db.workout_steps(w["id"])]
+            if have == want:
+                return True
+        return False
+
     def _import(self, path: Path) -> None:
         a = self.app
         try:
             wk = workouts.import_workout(path)
+            if self._already_there(wk):
+                a.message(tr("«{n}» já está na lista de treinos (não o importei outra vez)",
+                             "«{n}» is already in the workout list (not imported again)",
+                             n=wk.name))
+                return
             a.db.insert_workout(wk.name, [s.as_dict() for s in wk.steps],
                                 wk.source_format, wk.description,
                                 wk.estimated_tss(a.db.athlete().ftp_w))

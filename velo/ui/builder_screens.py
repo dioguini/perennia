@@ -1,6 +1,6 @@
 """Construtor de treinos interativo: arrastam-se blocos e vê-se o treino.
 
-- Da paleta (Z1…Z6, Descanso, Rampa, Livre) arrasta-se um bloco para o
+- Da paleta (Z1…Z6, Descanso, Rampa, Free ride) arrasta-se um bloco para o
   gráfico; largar entre dois blocos põe-no ali. Um clique na paleta junta-o
   a seguir ao bloco escolhido.
 - No gráfico: arrastar o meio de um bloco muda-o de lugar; a aresta direita
@@ -29,7 +29,7 @@ from velo.core.i18n import tr
 from velo.core.units import hms
 from velo.gfx.compat import label as make_label
 from velo.ui.sport_screens import EditScreen
-from velo.ui.widgets import ACCENT, DIM, GRID, PANEL, PANEL2, TEXT, Item
+from velo.ui.widgets import ACCENT, DIM, GRID, PANEL, PANEL2, ROW_H, TEXT, Item, text_px
 
 SNAP_S = 10
 SNAP_M = {"rowing": 50, "running": 100, "swimming": 25, "cycling": 100}
@@ -41,6 +41,53 @@ PALETTE = (("Z1", 50), ("Z2", 68), ("Z3", 83), ("Z4", 98), ("Z5", 112), ("Z6", 1
 
 
 # ================================================================= ecrã
+
+
+def builder_items(app, sport: str) -> list[Item]:
+    """O separador «Construtor de treinos», igual no ciclismo, no remo, na
+    corrida e na natação: cada treino com a duração, a definição e o tipo
+    («Potência · ERG»), a descrição e a carga; Enter abre-o nos blocos.
+    «+ Novo treino» fica em baixo, à direita."""
+    from velo.core.units import hms as _hms
+    db = app.db
+    rows: list[Item] = []
+    if sport == "cycling":
+        src = [{"id": w["id"], "name": w["name"], "s": w["total_seconds"] or 0, "m": 0,
+                "desc": w["description"] or w["source_format"] or "", "load": w["est_tss"],
+                "mode": "power", "data": ("workout", w["id"], w["name"])}
+               for w in db.workouts()]
+    elif sport == "rowing":
+        from velo.core import rowing as rw
+        src = [{"id": w["id"], "name": w["name"], "s": w["total_s"], "m": w["total_m"],
+                "desc": w.get("description") or "", "load": None, "mode": "power",
+                "data": ("row_workout", w["id"])} for w in rw.workouts(db)]
+    else:
+        from velo.core import endurance as en
+        src = [{"id": w["id"], "name": w["name"], "s": w["total_s"], "m": w["total_m"],
+                "desc": w.get("description") or "", "load": None, "mode": w.get("mode"),
+                "data": ("endurance_workout", w["id"])} for w in en.workouts(db, sport)]
+    for w in src:
+        dur = " + ".join(x for x in (
+            _hms(w["s"]) if w["s"] else "",
+            (f"{w['m'] / 1000:g} km" if w["m"] >= 1000 else f"{w['m']:.0f} m") if w["m"]
+            else "") if x)
+        load = (f"TSS ≈ {w['load']:.0f}" if sport == "cycling" else
+                tr("carga ≈ {v}", "load ≈ {v}", v=f"{w['load']:.0f}")) if w["load"] else ""
+        detail = " · ".join(x for x in (wm.label(db, sport, w["id"], w["mode"]), w["desc"], load)
+                            if x)
+        rows.append(Item(w["name"], value=dur, detail=detail,
+                         action=lambda wid=w["id"]: app.push(BlockBuilder(app, sport, wid)),
+                         data=w["data"]))
+    rows.append(Item(tr("+ Novo treino", "+ New workout"),
+                     action=lambda: new_workout(app, sport), button=True, primary=True))
+    return rows
+
+
+def builder_footer(sport: str) -> str:
+    keys = {"cycling": tr(" · E exportar · P passos", " · E export · P steps"),
+            "rowing": tr(" · P passos", " · P steps")}.get(sport, "")
+    return tr("Tab separador · ↑↓ mover · Enter abrir nos blocos", "Tab next tab · ↑↓ move · "
+              "Enter open in blocks") + keys + tr(" · Esc voltar", " · Esc back")
 
 
 def new_workout(app, sport: str) -> None:
@@ -99,7 +146,7 @@ class BlockBuilder(EditScreen):
         self.repeat_n = 4
         self.dirty = False
         self._rects: list = []
-        self._labels: list = []
+        self._labels: list = []               # as etiquetas de cada bloco (ver _block_label)
         super().__init__(app)
         self.tab = self.modes.index(self.mode)
         if self.tabs is not None:
@@ -144,7 +191,7 @@ class BlockBuilder(EditScreen):
         self.mode = self.modes[self.tab % len(self.modes)]
         for (name, pct, r, lab), note in zip(self.pal, self.pal_notes):
             lab.text = self._pal_text(name)
-            note.text = self._pal_note(name)
+            note.text = self._fit_note(self._pal_note(name), r.width, note.font_size)
         self.redraw()
 
     # zonas: limites em % do limiar (como as de potência)
@@ -160,7 +207,8 @@ class BlockBuilder(EditScreen):
     def _pal_note(self, name: str) -> str:
         if name not in self.ZONE_EDGES:
             return {"rest": tr("recuperar", "recover"), "ramp": tr("sobe ou desce", "up or down"),
-                    "free": tr("sem alvo", "no target")}.get(name, "")
+                    "free": tr("sem alvo · ERG desligado", "no target · ERG off")
+                    if self.sport == "cycling" else tr("sem alvo", "no target")}.get(name, "")
         lo, hi = self.ZONE_EDGES[name]
         zname = it.zone_name(int(name[1]))
         mode = getattr(self, "mode", "power")
@@ -168,7 +216,7 @@ class BlockBuilder(EditScreen):
         if ctx is None:
             return zname
         if mode == "power":
-            rng = f"{lo}–{hi} % · {ctx.watts(max(lo, 1))}–{ctx.watts(hi)} W"
+            rng = f"{ctx.watts(max(lo, 1))}–{ctx.watts(hi)} W"
         elif mode == "pace":
             fast, slow = ctx.short("pace", hi), ctx.short("pace", max(lo, 30))
             rng = f"{fast}–{slow}"
@@ -181,27 +229,73 @@ class BlockBuilder(EditScreen):
             rng = f"{ctx.short(mode, max(lo, 40))}–{ctx.short(mode, hi)}"
         return f"{zname} · {rng}"
 
+    @staticmethod
+    def _fit_note(text: str, width: float, size: int) -> str:
+        """A nota da paleta tem de caber no quadrado: tira primeiro a % e depois
+        o nome da zona."""
+        from velo.ui.widgets import text_px
+
+        def fits(t):
+            return text_px(t, size) <= width - 10
+        if fits(text):
+            return text
+        parts = text.split(" · ")
+        for cand in (" · ".join(p for p in parts if "%" not in p or "W" in p or "bpm" in p),
+                     parts[-1]):
+            if fits(cand):
+                return cand
+        from velo.ui.widgets import fit_text
+        return fit_text(parts[-1], width - 10, size)
+
     def _pal_text(self, name: str) -> str:
         if name in ("rest",):
             return tr("Descanso", "Rest")
         if name == "ramp":
             return tr("Rampa", "Ramp")
         if name == "free":
-            return tr("Livre", "Free")
+            return "Free ride"
         return name
 
     # ---------------------------------------------------------------- layout
 
     def content_top(self, h: int) -> int:
-        return int(h * 0.36)
+        return int(getattr(self, "_list_top", h * 0.36))
 
     def _list_width(self, w: int) -> int:
-        # a lista ocupa a largura toda, em colunas: assim cabe sem páginas
-        return w - 96
+        return int(getattr(self, "_list_w", w - 96))
+
+    LIST_BOTTOM = 76          # acima da faixa de baixo (Voltar, Guardar)
+    BELOW_CHART = 44          # as horas e a barra das zonas, entre o gráfico e a lista
+
+    def _plan_list(self, w: int, h: int, chart_top: float) -> None:
+        """A lista do bloco fica por baixo do gráfico, com as descrições à
+        frente das opções: numa coluna ao centro se couber (o gráfico fica com
+        o resto), senão em duas colunas a toda a largura."""
+        lv = self.list
+        n = len([it for it in lv.items if not it.button and not it.head]) or 11
+        avail = chart_top - self.LIST_BOTTOM
+        one = n * ROW_H
+        if avail - one - self.BELOW_CHART >= max(250.0, avail * 0.42):
+            cols, rows = 1, n
+            width = min(1000, w - 96)
+        else:
+            cols, rows = 2, -(-n // 2)
+            width = w - 96
+        self._list_top = self.LIST_BOTTOM + rows * ROW_H
+        self._list_w = width
+        lv.max_columns = cols
+        lv.detail_below = False
+        lv.width = width
+        lv.x = (w - width) / 2 if cols == 1 else 48
+        lv.y = self._list_top - ROW_H / 2
+        lv.set_visible_rows(rows)
 
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
-        pal_top = h - 98 - 40
+        # em cima, por baixo dos separadores: o nome e o objetivo do treino
+        head_y = h - 98 - 34 - 20
+        self.list.head_y, self.list.head_x, self.list.head_w = head_y, 48, w - 96
+        pal_top = head_y - 24
         n = len(self.pal)
         pw = (w - 96 - (n - 1) * 6) / n
         for i, ((_n, _p, r, lab), note) in enumerate(zip(self.pal, self.pal_notes)):
@@ -209,21 +303,20 @@ class BlockBuilder(EditScreen):
             lab.x, lab.y = r.x + pw / 2, r.y + self.PAL_H / 2 + 7
             note.x, note.y = r.x + pw / 2, r.y + 10
             note.font_size = 8 if pw > 110 else 7
+            note.text = self._fit_note(self._pal_note(_n), pw, note.font_size)
             pct = dict(PALETTE)[_n]
             r.color = it.zone_color(pct)[:3] if pct else PANEL2
         self.cx0, self.cx1 = 96, w - 48
         self.cy1 = pal_top - self.PAL_H - 14
-        self.cy0 = self.content_top(h) + 46
+        self._plan_list(w, h, self.cy1)
+        self.cy0 = self._list_top + self.BELOW_CHART
         self.canvas_bg.x, self.canvas_bg.y = self.cx0, self.cy0
         self.canvas_bg.width, self.canvas_bg.height = self.cx1 - self.cx0, self.cy1 - self.cy0
         # o resumo (duração, carga, IF) vai no subtítulo; a distribuição pelas
         # zonas é uma barra fina logo por baixo do gráfico, da largura dele
         self.summary.x, self.summary.y = -3000, -3000
         for r in self.zone_bar:
-            r.x, r.y, r.height = self.cx0, self.content_top(h) + 20, 6
-        self.list.y = self.content_top(h)
-        self.list.width = self._list_width(w)
-        self.list.set_visible_rows(max(2, (self.content_top(h) - 70) // 38))
+            r.x, r.y, r.height = self.cx0, self._list_top + 12, 6
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -290,12 +383,78 @@ class BlockBuilder(EditScreen):
                                                        batch=self.batch))
         return self._rects[i]
 
-    def _label(self, i: int):
+    # o que se escreve no meio de cada bloco, de cima para baixo (tamanho da letra)
+    LINES = (("zone", 11), ("value", 18), ("dur", 13), ("cad", 11))
+
+    def _block_label(self, i: int) -> dict:
         while len(self._labels) <= i:
-            self._labels.append(make_label("", font_size=9, bold=True, color=(20, 22, 28, 255),
-                                           anchor_x="center", anchor_y="bottom",
-                                           batch=self.batch))
+            self._labels.append({k: make_label("", font_size=size, bold=k in ("zone", "value"),
+                                               color=(20, 22, 28, 255), anchor_x="center",
+                                               anchor_y="top", batch=self.batch)
+                                 for k, size in self.LINES})
         return self._labels[i]
+
+    def block_texts(self, blk) -> dict[str, str]:
+        """O que aparece no meio do bloco: a zona, o valor na vista escolhida
+        (numa rampa, a média), a duração e a cadência alvo."""
+        dur = hms(blk.dur) if blk.dur_type == "time" else (
+            f"{blk.dur / 1000:g} km" if blk.dur >= 1000 else f"{blk.dur:.0f} m")
+        cad = blk.extra.get("cadence_lo")
+        out = {"dur": dur, "cad": f"{cad} rpm" if cad else ""}
+        if blk.lo is None:
+            out.update(zone="Free ride", value="")
+            return out
+        z = it.zone(blk.mid())
+        out["zone"] = f"Z{z} · " + (tr("média", "avg") if blk.ramp else it.zone_name(z))
+        out["value"] = self._value(blk.mid())
+        if self.mode == "pace":                    # o ritmo leva a unidade
+            out["value"] += {"running": " /km", "swimming": " /100 m",
+                             "rowing": " /500 m"}.get(self.sport, "")
+        return out
+
+    def _place_block_label(self, lab: dict, blk, x0: float, w: float) -> None:
+        """Ao centro do bloco, maior; num bloco estreito ou baixo, só o que cabe."""
+        texts = self.block_texts(blk)
+        if w >= 92:
+            keys = ["zone", "value", "dur", "cad"]
+            sizes = {"zone": 11, "value": 18, "dur": 13, "cad": 11}
+        elif w >= 56:
+            keys = ["value", "dur"]
+            sizes = {"value": 13, "dur": 11}
+        elif w >= 30:
+            keys = ["dur"]
+            sizes = {"dur": 10}
+        else:
+            keys, sizes = [], {}
+        keys = [k for k in keys if texts.get(k)]
+        if blk.lo is None and "zone" not in keys and w >= 56:
+            keys.insert(0, "zone")
+            sizes["zone"] = 10
+        for k in keys:                      # a letra encolhe até caber na largura
+            while sizes[k] > 8 and text_px(texts[k], sizes[k], k in ("zone", "value")) > w - 10:
+                sizes[k] -= 1
+        heights = {k: sizes[k] + 7 for k in keys}
+        total = sum(heights.values())
+        lo = blk.lo if blk.lo is not None else 50.0
+        hi = blk.end_pct if blk.lo is not None and blk.ramp else lo
+        inside_top = self.y_of(min(lo, hi or lo))
+        inner = inside_top - self.cy0
+        if total + 8 <= inner:
+            y = self.cy0 + inner / 2 + total / 2           # ao centro do bloco
+            ink = (20, 22, 28, 255)
+        else:
+            y = self.y_of(max(lo, hi or lo)) + total + 6   # não cabe: por cima do bloco
+            y = min(y, self.cy1 - 2)                       # sem passar do gráfico
+            ink = TEXT
+        for k, label in lab.items():
+            if k not in keys:
+                label.text = ""
+                continue
+            label.text = texts[k]
+            label.font_size = sizes[k]
+            label.color = ink
+            label.x, label.y = x0 + w / 2, y
+            y -= heights[k]
 
     def redraw(self) -> None:
         spans, total = self.spans()
@@ -325,19 +484,14 @@ class BlockBuilder(EditScreen):
                 r.width, r.height = max(1.0, sw + (0.5 if k < slices - 1 else 0)), \
                     max(2.0, self.y_of(pct) - self.cy0)
                 r.color, r.opacity = color[:3], 255 if i == self.sel else 225
-            if w > 46:
-                lab = self._label(nl)
-                nl += 1
-                dur = hms(blk.dur) if blk.dur_type == "time" else (
-                    f"{blk.dur / 1000:g} km" if blk.dur >= 1000 else f"{blk.dur:.0f} m")
-                inten = tr("livre", "free") if blk.lo is None else self._value(blk.mid())
-                lab.text = dur if w < 80 else f"{dur} · {inten}"
-                lab.x, lab.y = x0 + w / 2, self.cy0 + 4
+            self._place_block_label(self._block_label(nl), blk, x0, w)
+            nl += 1
         for r in self._rects[n:]:
             r.opacity = 0
             r.width = 0
         for lab in self._labels[nl:]:
-            lab.text = ""
+            for label in lab.values():
+                label.text = ""
         # eixo: limites das zonas na vista escolhida
         ym = self.y_max()
         for k, (g, lab) in enumerate(zip(self.grid, self.axis)):
@@ -389,6 +543,12 @@ class BlockBuilder(EditScreen):
                 Item(tr("Bloco {i} de {n} · tipo", "Block {i} of {n} · kind",
                         i=self.sel + 1, n=len(self.blocks)),
                      value=kinds.get(blk.kind, blk.kind), data="cyc:kind"),
+                Item(tr("Objetivo do bloco", "Block goal"), value=(blk.goal or "") + "▏",
+                     data="text:goal", detail=tr("o que se treina aqui (aparece na sessão)",
+                                                 "what this block trains (shown in session)")),
+                Item(tr("Mensagem", "Cue"), value=(blk.cue or "") + "▏", data="text:cue",
+                     detail=tr("aparece na sessão no início do bloco",
+                               "shown in the session when the block starts")),
             ]
             if self.sport != "cycling":
                 rows.append(Item(tr("Duração por", "Duration by"),
@@ -399,9 +559,9 @@ class BlockBuilder(EditScreen):
                              detail=tr("arrasta a aresta direita, ou ←/→",
                                        "drag the right edge, or ←/→")))
             if blk.lo is None:
-                rows.append(Item(tr("Intensidade", "Intensity"), value=tr("livre", "free"),
-                                 data="cyc:free", detail=tr("←/→ dá-lhe um alvo",
-                                                            "←/→ gives it a target")))
+                rows.append(Item(tr("Intensidade", "Intensity"), value="Free ride",
+                                 data="cyc:free", detail=tr("sem alvo · ←/→ dá-lhe um alvo",
+                                                            "no target · ←/→ gives it a target")))
             else:
                 rows.append(Item(tr("Início" if blk.ramp else "Intensidade",
                                     "Start" if blk.ramp else "Intensity"),
@@ -445,22 +605,20 @@ class BlockBuilder(EditScreen):
                 rows.append(Item(tr("Voga (remadas/min)", "Stroke rate (spm)"),
                                  value=f"{spm:.0f}" if spm else tr("livre", "free"),
                                  data="num:rate"))
-            rows += [Item(tr("Objetivo do bloco", "Block goal"), value=(blk.goal or "") + "▏",
-                          data="text:goal", detail=tr("O que se treina aqui (aparece na sessão)",
-                                                      "What this block trains (shown in session)")),
-                     Item(tr("Mensagem", "Cue"), value=(blk.cue or "") + "▏", data="text:cue"),
-                     Item(tr("Duplicar o bloco (D)", "Duplicate the block (D)"),
+            rows += [Item(tr("Duplicar o bloco (D)", "Duplicate the block (D)"),
                           action=self._duplicate),
                      Item(tr("Repetir os 2 últimos blocos", "Repeat the last 2 blocks"),
                           value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat),
                      Item(tr("Apagar o bloco (Del)", "Delete the block (Del)"),
                           action=self._delete)]
-        rows += [Item(tr("Objetivo do treino", "Workout goal"),
+        # o nome e o objetivo do treino ficam em cima (head), lado a lado
+        rows += [Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
+                      data="text:name", head=True),
+                 Item(tr("Objetivo do treino", "Workout goal"),
                       value=(self.wgoal[:46] + "…" if len(self.wgoal) > 47 else self.wgoal) + "▏",
-                      data="text:wgoal", detail=tr("Numa frase: o que este treino deve trabalhar",
-                                                   "In one sentence: what this workout trains")),
-                 Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
-                      data="text:name"),
+                      data="text:wgoal", head=True,
+                      detail="" if self.wgoal else tr("numa frase: o que este treino trabalha",
+                                                      "in one sentence: what this workout trains")),
                  Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
                       button=True, primary=True)]
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
@@ -475,6 +633,9 @@ class BlockBuilder(EditScreen):
                            "Drag palette blocks · ←/→ block · ↑↓ row · +/− duration · "
                            "D duplicate · Del delete · Tab view"))
         self.list.set_items(rows, keep_index=True)
+        if hasattr(self, "pal"):          # a lista mudou de tamanho: o gráfico acompanha
+            self._layout()
+            self.redraw()
 
     @property
     def block(self) -> Block | None:

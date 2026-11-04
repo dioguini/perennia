@@ -72,8 +72,11 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   **níveis do rolo** (definidos em Definições → Sessões). Corrida: ritmo,
   e no manual a velocidade e a inclinação da passadeira. Remo: potência,
   ritmo, resistência e voga. Cada bloco tem cadência alvo e alvo exato ou
-  com margem (± %); a paleta mostra o nome e o intervalo de cada zona. As
-  listas de treinos mostram a definição e o tipo («Potência · ERG»).
+  com margem (± %); a paleta mostra o nome e o intervalo de cada zona e
+  acaba no **Free ride** (sem alvo). Cada bloco mostra ao centro a zona, o
+  valor (numa rampa, a média), a duração e a cadência. As listas de treinos
+  mostram a definição e o tipo («Potência · ERG») e são iguais em todos os
+  desportos, com **+ Novo treino** em baixo.
 - **Preparar a sessão numa só janela** (ciclismo, corrida, remo):
   «Sessão de treino» pergunta *Livre* ou *Carregar treino*. Na janela:
   aparelhos (emparelhar), rota `.gpx` (uma tua ou uma nova; obrigatória na
@@ -259,7 +262,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               621 testes: núcleo, protocolos, força, remo, saúde,
+tests/               631 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```
