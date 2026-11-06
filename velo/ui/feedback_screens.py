@@ -56,6 +56,7 @@ def summary_item(app, kind: str, sid: str | None) -> Item | None:
 
 
 class FeedbackScreen(SnapshotUnsaved, Screen):
+    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
     AGENT = False
     MAX_PTS = 240
     EMBEDDED = False            # dentro de outro ecrã (o separador Feedback da análise)

@@ -145,11 +145,13 @@ class BlockBuilder(EditScreen):
     """Ver o módulo. O tipo do treino (ERG ou Manual) decide as vistas: no
     ciclismo, ERG é por zonas de potência; manual é por FC, RPE ou níveis do
     rolo (para os rolos que não aceitam comandos)."""
+    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
     KEY_SCOPE = "builder"
 
     TABBED = True
     AGENT = True
     PAL_H = 40
+    HEAD_ROW_H = 30           # a segunda linha do cabeçalho (o objetivo do treino)
 
     def __init__(self, app, sport: str, wid: str | None, control: str | None = None):
         self.sport = sport
@@ -165,6 +167,9 @@ class BlockBuilder(EditScreen):
             if isinstance(extra, dict):
                 b.extra.update({k: v for k, v in extra.items() if v is not None})
         self.levels = wm.levels(app.db)
+        # os aparelhos sem controlo (Definições → Desportos → Sessões Não ERG)
+        self.limits = wm.device_limits(app.db)
+        self._clamp_blocks()
         from velo.core import objectives as ob
         saved = ob.stored(app.db, sport, wid)
         self.wgoal = saved.get("goal") or ob.library_goal(self.name)
@@ -351,10 +356,22 @@ class BlockBuilder(EditScreen):
             b.dur = max(10.0, round(b.dur / (v / 3.6)))
             b.dur_type = "time"
 
+    def _clamp_blocks(self) -> None:
+        """Um treino feito antes de mudar os limites fica dentro deles."""
+        lim = self.limits
+        for b in getattr(self, "blocks", []):
+            ex = b.extra
+            if ex.get("resistance"):
+                ex["resistance"] = max(1, min(lim["rower_levels"], int(ex["resistance"])))
+            if ex.get("speed_kmh"):
+                ex["speed_kmh"] = min(lim["treadmill_max_kmh"], float(ex["speed_kmh"]))
+            if ex.get("incline_pct"):
+                ex["incline_pct"] = min(lim["treadmill_max_incline"], float(ex["incline_pct"]))
+
     def max_rows(self) -> int:
         """As linhas do bloco mais completo (uma rampa) neste desporto."""
-        n = 11                    # título, tipo, objetivo, mensagem, duração, início, fim,
-        #                           alvo e as 3 ações
+        n = 10                    # título, tipo, objetivo, mensagem, duração, início, fim,
+        #                           alvo e as 2 ações (apagar é com Del, no rodapé)
         if self.sport != "cycling":
             n += 1                # duração por tempo ou distância
         if self.sport == "cycling":
@@ -368,9 +385,11 @@ class BlockBuilder(EditScreen):
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
         # em cima, por baixo dos separadores: o nome e o objetivo do treino
+        # o nome e o objetivo do treino: uma linha por baixo da outra
         head_y = h - 98 - 34 - 20
         self.list.head_y, self.list.head_x, self.list.head_w = head_y, 48, w - 96
-        pal_top = head_y - 24
+        self.list.head_stack = True
+        pal_top = head_y - 24 - self.HEAD_ROW_H
         n = len(self.pal)
         pw = (w - 96 - (n - 1) * 6) / n
         for i, ((_n, _p, r, lab), note) in enumerate(zip(self.pal, self.pal_notes)):
@@ -698,10 +717,8 @@ class BlockBuilder(EditScreen):
             rows += [Item(tr("Duplicar o bloco (D)", "Duplicate the block (D)"),
                           action=self._duplicate),
                      Item(tr("Repetir os 2 últimos blocos", "Repeat the last 2 blocks"),
-                          value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat),
-                     Item(tr("Apagar o bloco (Del)", "Delete the block (Del)"),
-                          action=self._delete)]
-        # o nome e o objetivo do treino ficam em cima (head), lado a lado
+                          value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat)]
+        # o nome e o objetivo do treino ficam em cima (head), um por baixo do outro
         rows += [Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name", head=True),
                  Item(tr("Objetivo do treino", "Workout goal"),
@@ -794,14 +811,16 @@ class BlockBuilder(EditScreen):
             b.extra["cadence_lo"] = b.extra["cadence_hi"] = None if c < 40 else min(130, c)
         elif field == "speed":
             cur = b.extra.get("speed_kmh") or round(3600 / max(1, self.ctx.pace(b.mid()) or 360), 1)
-            v = max(3.0, min(25.0, round(cur + steps * (1.0 if big else 0.1), 1)))
+            v = max(3.0, min(self.limits["treadmill_max_kmh"],
+                             round(cur + steps * (1.0 if big else 0.1), 1)))
             b.extra["speed_kmh"] = v
             # a velocidade dá o ritmo do bloco (e a cor da zona)
             b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
             b.hi = None
             self._to_time(b)
         elif field == "incline":
-            b.extra["incline_pct"] = max(0.0, min(15.0, round((b.extra.get("incline_pct") or 0)
+            b.extra["incline_pct"] = max(0.0, min(self.limits["treadmill_max_incline"],
+                                                  round((b.extra.get("incline_pct") or 0)
                                                               + steps * 0.5, 1)))
         elif field == "rate":
             r = (b.extra.get("rate") or 22) + steps
@@ -823,7 +842,7 @@ class BlockBuilder(EditScreen):
                 b.hi = v
         elif field == "resistance":
             cur = b.extra.get("resistance") or 5
-            b.extra["resistance"] = max(1, min(15, cur + steps))
+            b.extra["resistance"] = max(1, min(self.limits["rower_levels"], cur + steps))
         self.dirty = True
         self.redraw()
 
@@ -845,19 +864,20 @@ class BlockBuilder(EditScreen):
             else:
                 b.hi = max(30.0, min(200.0, pct))
         elif field == "resistance":
-            b.extra["resistance"] = max(1, min(15, int(value)))
+            b.extra["resistance"] = max(1, min(self.limits["rower_levels"], int(value)))
         elif field == "cad":
             b.extra["cadence_lo"] = b.extra["cadence_hi"] = int(value) if value >= 40 else None
         elif field == "tol":
             b.extra["tol"] = max(0, min(15, float(value)))
         elif field == "speed":
-            v = max(3.0, min(25.0, float(value)))
+            v = max(3.0, min(self.limits["treadmill_max_kmh"], float(value)))
             b.extra["speed_kmh"] = v
             b.lo = max(30.0, min(200.0, self.ctx.pct_from("pace", 3600 / v)))
             b.hi = None
             self._to_time(b)
         elif field == "incline":
-            b.extra["incline_pct"] = max(0.0, min(15.0, float(value)))
+            b.extra["incline_pct"] = max(0.0, min(self.limits["treadmill_max_incline"],
+                                                  float(value)))
         elif field == "rate":
             b.extra["rate"] = int(value) if value >= 14 else None
         self.dirty = True

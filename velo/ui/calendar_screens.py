@@ -400,8 +400,23 @@ class DayScreen(Screen):
                               detail=(b.goal if b else "") + ("  ·  " + tr(
                                   "Del tira do plano", "Del removes it") if not e.done else ""),
                               action=lambda ee=e: self._open_plan(ee), data=("plan", e)))
-        items.append(Item(tr("+ Planear um treino neste dia", "+ Plan a workout on this day"),
-                          action=lambda: a.push(PlanSportPicker(a, self.day))))
+        # o que se pode acrescentar a um dia: um treino planeado, uma nota, o diário
+        from velo.core import health
+        note = health.day_note(a.db, self.day)
+        done_h, total_h = health.completeness(a.db, self.day)
+        items += [Item(tr("+ Planear um treino neste dia", "+ Plan a workout on this day"),
+                       detail=tr("escolhe o desporto e o treino da lista",
+                                 "pick the sport and the workout from the list"),
+                       action=lambda: a.push(PlanSportPicker(a, self.day))),
+                  Item(tr("Nota do dia", "Day note"), value="" if note else tr("escrever", "write"),
+                       detail=(note[:90] + ("…" if len(note) > 90 else "")) if note else
+                       tr("viagem, doença, como te sentiste…", "travel, illness, how you felt…"),
+                       action=self._edit_note),
+                  Item(tr("Diário de saúde deste dia", "Health log for this day"),
+                       value=f"{done_h}/{total_h}",
+                       detail=tr("sono, peso, energia… (o mesmo da Saúde)",
+                                 "sleep, weight, energy… (the same as Health)"),
+                       action=self._open_log)]
         wd = cv.weekday_name(self.day.weekday())
         self.chrome.set(f"{wd}, {self.day.day} {cv.month_name(self.day.month)} {self.day.year}",
                         tr("Feitas: {a} · planeadas: {b}", "Done: {a} · planned: {b}",
@@ -409,6 +424,18 @@ class DayScreen(Screen):
                         tr("Enter abrir · Del tirar do plano · Esc voltar",
                            "Enter open · Del remove from plan · Esc back"))
         self.list.set_items(items, keep_index=True)
+
+    def _edit_note(self) -> None:
+        from velo.core import health
+        from velo.ui.health_screens import TextEditScreen
+        self.app.push(TextEditScreen(
+            self.app, tr("Nota do dia", "Day note"), self.day.strftime("%d/%m/%Y"),
+            health.day_note(self.app.db, self.day),
+            lambda text: health.set_day_note(self.app.db, self.day, text)))
+
+    def _open_log(self) -> None:
+        from velo.ui.health_screens import DailyLogScreen
+        self.app.push(DailyLogScreen(self.app, self.day))
 
     def _open_session(self, e: cv.Entry) -> None:
         a = self.app
@@ -516,3 +543,141 @@ class PlanWorkoutPicker(Screen):
         self.app.message(tr("«{n}» planeado para {d}", "«{n}» planned for {d}", n=name,
                             d=self.day.strftime("%d/%m")))
         self.app.pop()
+
+
+# ============================================================ no ecrã inicial
+
+
+class MiniCalendar:
+    """O calendário do ecrã inicial (o menu Calendário acabou): o mês em grelha,
+    com uma barra de cor por treino feito (cheia) ou planeado (só o contorno).
+    Setas mudam o dia, PgUp/PgDn o mês, T hoje, Enter (ou um clique) abre o
+    dia — onde se acrescenta um treino planeado ou uma nota."""
+
+    DOTS = 4
+
+    def __init__(self, batch):
+        P = _theme.P
+        txt, dim = _theme.rgba(P.text), _theme.rgba(P.dim)
+        self.batch = batch
+        today = date.today()
+        self.sel = today
+        self.year, self.month = today.year, today.month
+        self.focused = False
+        self.data: dict = {"weeks": [], "by_day": {}}
+        self.title = make_label("", font_size=15, bold=True, color=_theme.rgba(P.accent),
+                                anchor_y="top", batch=batch)
+        self.hint = make_label("", font_size=9, color=dim, anchor_x="right", anchor_y="top",
+                               batch=batch)
+        self.heads = [make_label("", font_size=9, bold=True, color=dim, anchor_x="center",
+                                 anchor_y="center", batch=batch) for _ in range(7)]
+        self.cells = []
+        for _ in range(MAX_WEEKS * 7):
+            bg = pyglet.shapes.Rectangle(0, 0, 1, 1, color=P.panel, batch=batch)
+            num = make_label("", font_size=9, bold=True, color=txt, anchor_x="left",
+                             anchor_y="top", batch=batch)
+            dots = [pyglet.shapes.Rectangle(0, 0, 0, 0, color=P.accent, batch=batch)
+                    for _ in range(self.DOTS)]
+            self.cells.append((bg, num, dots))
+        self.sel_box = [pyglet.shapes.Rectangle(0, 0, 0, 0, color=P.accent, batch=batch)
+                        for _ in range(4)]
+        self.geo = (0.0, 0.0, 10.0, 10.0)
+        self._rects: list[tuple[float, float, float, float, date]] = []
+
+    def load(self, db) -> None:
+        self.db = db
+        try:
+            self.data = cv.month_data(db, self.year, self.month)
+        except Exception:
+            self.data = {"weeks": cv.weeks_of(self.year, self.month), "by_day": {}}
+        self.place()
+
+    def layout(self, x: float, top: float, w: float, h: float) -> None:
+        self.geo = (x, top, w, h)
+        self.place()
+
+    def place(self) -> None:
+        P = _theme.P
+        x, top, w, h = self.geo
+        self.title.text = f"{cv.month_name(self.month).capitalize()} {self.year}"
+        self.title.x, self.title.y = x, top
+        self.hint.text = tr("PgUp/PgDn mês · T hoje · Enter abre o dia",
+                            "PgUp/PgDn month · T today · Enter opens the day") \
+            if self.focused else tr("↓ para escolher um dia", "↓ to pick a day")
+        self.hint.x, self.hint.y = x + w, top - 4
+        weeks = self.data.get("weeks") or cv.weeks_of(self.year, self.month)
+        cw = w / 7
+        gy = top - 26
+        ch = max(16.0, min(44.0, (h - 46) / max(1, len(weeks))))
+        days = tr("S T Q Q S S D", "M T W T F S S").split()
+        for i, lab in enumerate(self.heads):
+            lab.text = days[i]
+            lab.x, lab.y = x + cw * i + cw / 2, gy - 6
+        by_day = self.data.get("by_day") or {}
+        today = date.today()
+        self._rects = []
+        k = 0
+        for wk in weeks:
+            for d in wk:
+                if k >= len(self.cells):
+                    break
+                bg, num, dots = self.cells[k]
+                r, c = divmod(k, 7)
+                cx, cy = x + c * cw, gy - 14 - (r + 1) * ch
+                bg.x, bg.y, bg.width, bg.height = cx + 1, cy + 1, cw - 2, ch - 2
+                bg.color = P.panel2 if d.month != self.month else P.panel
+                bg.opacity = 255
+                num.text = str(d.day)
+                num.x, num.y = cx + 4, cy + ch - 3
+                num.color = _theme.rgba(P.accent) if d == today else (
+                    _theme.rgba(P.text) if d.month == self.month else _theme.rgba(P.dim))
+                entries = by_day.get(d, [])
+                dw = max(4.0, (cw - 10) / self.DOTS - 2)
+                for j, dot in enumerate(dots):
+                    if j < len(entries):
+                        e = entries[j]
+                        dot.x, dot.y = cx + 4 + j * (dw + 2), cy + 4
+                        dot.width, dot.height = dw, max(3.0, min(6.0, ch * 0.18))
+                        dot.color = e.color
+                        dot.opacity = 110 if e.planned and not e.done else 255
+                    else:
+                        dot.width = dot.height = 0
+                self._rects.append((cx, cy, cw, ch, d))
+                k += 1
+        for bg, num, dots in self.cells[k:]:
+            bg.opacity = 0
+            num.text = ""
+            for dot in dots:
+                dot.width = dot.height = 0
+        self._place_sel()
+
+    def _place_sel(self) -> None:
+        rect = next((r for r in self._rects if r[4] == self.sel), None)
+        for b in self.sel_box:
+            b.opacity = 0
+        if rect is None or not self.focused:
+            return
+        x, y, w, h, _d = rect
+        t_ = 2
+        for b, (bx, by, bw, bh) in zip(self.sel_box, ((x, y, w, t_), (x, y + h - t_, w, t_),
+                                                     (x, y, t_, h), (x + w - t_, y, t_, h))):
+            b.x, b.y, b.width, b.height = bx, by, bw, bh
+            b.opacity = 255
+
+    def go(self, d: date) -> None:
+        self.sel = d
+        if (d.year, d.month) != (self.year, self.month):
+            self.year, self.month = d.year, d.month
+            self.load(self.db)
+        else:
+            self._place_sel()
+
+    def first_week(self) -> bool:
+        weeks = self.data.get("weeks") or []
+        return bool(weeks) and self.sel in weeks[0]
+
+    def hit(self, mx: float, my: float) -> date | None:
+        for x, y, w, h, d in self._rects:
+            if x <= mx <= x + w and y <= my <= y + h:
+                return d
+        return None

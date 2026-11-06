@@ -131,6 +131,9 @@ class Screen:
     def set_tab(self, i: int) -> None:
         if self.tabs is None:
             return
+        if self.search_box is not None and self.search_box.text:
+            self.search_box.text = ""             # a pesquisa é da tab
+            self.list.query = ""
         self.tabs.set_labels(self.tab_labels())
         n = len(self.tabs.labels_text)
         if not n:
@@ -184,11 +187,90 @@ class Screen:
             self.board_panel.set(boards.Board(t("common.error"), empty=str(e)))
         self._board_key = (self.list.index, id(self.list.items))
 
+    # ------------------------------------------------------------ pesquisa
+    #
+    # Todas as tabs (e listas) têm uma pesquisa no canto superior direito:
+    # filtra o que está na tab enquanto se escreve. Os ecrãs que não são
+    # listas (o inicial, as sessões, o construtor) põem SEARCH = False.
+
+    SEARCH = True
+    search_box = None
+
+    @property
+    def has_search(self) -> bool:
+        return bool(self.SEARCH) and not self.ROOT and not self.MODAL and \
+            not self.IN_SESSION and self.list.y > 0
+
+    @property
+    def search_active(self) -> bool:
+        return self.search_box is not None and self.search_box.focused
+
+    def search_focus(self, on: bool = True) -> None:
+        if self.search_box is None:
+            from velo.ui.widgets import SearchBox
+            self.search_box = SearchBox()
+        self.search_box.focused = on
+        self._place_search()
+
+    def search_set(self, text: str) -> None:
+        if self.search_box is None:
+            self.search_focus(False)
+        self.search_box.text = text
+        self.list.set_query(text)
+        self._place_search()
+
+    def search_key(self, symbol: int, modifiers: int) -> bool:
+        """As teclas enquanto se escreve na pesquisa (as letras chegam por texto)."""
+        box = self.search_box
+        if symbol == key.ESCAPE:
+            if box.text:
+                self.search_set("")
+            else:
+                self.search_focus(False)
+        elif symbol == key.BACKSPACE:
+            self.search_set(box.text[:-1])
+        elif symbol in (key.ENTER, key.RETURN):
+            self.search_focus(False)
+            if getattr(self, "SEARCH_ENTER_PICKS", False):
+                self.list.activate()
+        elif symbol in (key.DOWN, key.UP):
+            self.list.move(1 if symbol == key.DOWN else -1)
+        elif symbol == key.TAB:
+            self.search_focus(False)
+            return self.on_key(symbol, modifiers)
+        return True
+
+    def search_text(self, text: str) -> None:
+        clean = "".join(c for c in text if c.isprintable() and c not in "\r\n\t")
+        if clean:
+            self.search_set(self.search_box.text + clean)
+
+    def _place_search(self) -> None:
+        if self.search_box is None:
+            return
+        w, h = self.app.window.width, self.app.window.height
+        if self.MODAL and getattr(self, "popup", None) is not None:
+            p = self.popup
+            self.search_box.place(p.x + p.w - 24, p.y + p.h - 16, min(300, p.w * 0.4))
+        else:
+            self.search_box.place(w - 48, h - 40)
+        self.search_box.refresh(self.list.hidden_count)
+
     def draw(self) -> None:
         self.chrome.set_footer_limit(self.list.buttons_left)
+        if self.has_search or getattr(self, "SEARCH_ENTER_PICKS", False):
+            if self.search_box is None:
+                self.search_focus(False)
+            sig = (self.search_box.text, self.search_box.focused, self.list.hidden_count,
+                   self.app.window.width, self.app.window.height)
+            if sig != getattr(self, "_search_sig", None):
+                self._search_sig = sig
+                self._place_search()
+            self.search_box.draw()
         if self.AGENT and not self.MODAL:
             # com botões no topo, à direita, a dica do agente sai dali
-            self.chrome.agent_hint.text = "" if self.list.has_top_buttons else t("agent.hint")
+            # o canto superior direito é da pesquisa
+            self.chrome.agent_hint.text = "" if self.has_search else t("agent.hint")
         self.chrome.draw()
         if self.hub_tabs is not None:
             self.hub_tabs.draw()
@@ -321,6 +403,12 @@ class Screen:
         self.app.pop()
 
     def on_mouse(self, x: int, y: int) -> bool:
+        if self.search_box is not None and self.search_box.hit(x, y) and \
+                (self.has_search or getattr(self, "SEARCH_ENTER_PICKS", False)):
+            self.search_focus(True)
+            return True
+        if self.search_active:
+            self.search_focus(False)
         if self.back_button is not None and self.back_button.hit(x, y):
             self.go_back()
             return True
@@ -566,22 +654,21 @@ def _has_table(db, name: str) -> bool:
 
 class HomeScreen(Screen):
     """Ecrã inicial: os desportos e o resto em cartões todos do mesmo tamanho,
-    e por baixo a sequência de treino, a forma, os próximos treinos (duas
-    semanas) e o mapa das últimas 16 semanas."""
+    e por baixo a sequência de treino, a forma, o calendário do mês (era um
+    menu à parte) e o mapa das últimas 16 semanas."""
 
     ROOT = True
-    # Os desportos, o calendário e a saúde na primeira fila; rotas, segmentos,
-    # estatísticas, inventários e backups na segunda (ao centro). Dispositivos,
-    # Definições e Sair estão na faixa do topo (sempre à vista).
+    # Os desportos e a saúde na primeira fila; rotas, segmentos, estatísticas
+    # e inventários na segunda (ao centro). O calendário está por baixo, no
+    # próprio ecrã. Dispositivos, Backups, Definições e Sair estão na faixa do
+    # topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
-             ("home.gym", "kettlebell", ""),
-             ("home.calendar", "calendar", ""), ("home.health", "heart", ""),
+             ("home.gym", "kettlebell", ""), ("home.health", "heart", ""),
              ("home.routes", "road", ""), ("home.segments", "flag", ""),
              ("home.stats", "stats", ""),
-             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""),
-             ("home.backups", "recover", ""))
-    BIG = 7               # cartões por fila
+             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
+    BIG = 6               # cartões por fila
     UPCOMING_DAYS = 14
     UPCOMING_ROWS = 12
 
@@ -601,23 +688,9 @@ class HomeScreen(Screen):
                                       batch=self.batch) for _ in range(2)]
         self.heat_title = make_label("", font_size=11, color=DIM, anchor_y="top",
                                      batch=self.batch)
-        # próximos treinos (o que está planeado no calendário)
-        self.up_title = make_label("", font_size=15, bold=True, color=ACCENT, anchor_y="top",
-                                   batch=self.batch)
-        self.up_sel = pyglet.shapes.Rectangle(0, 0, 10, 20, color=PANEL, batch=self.batch)
-        self.up_sel.opacity = 0
-        self.up_rows = [(pyglet.shapes.Rectangle(0, 0, 4, 14, color=ACCENT[:3], batch=self.batch),
-                         make_label("", font_size=11, bold=True, color=TEXT, anchor_y="center",
-                                    batch=self.batch),
-                         make_label("", font_size=11, color=TEXT, anchor_y="center",
-                                    batch=self.batch),
-                         make_label("", font_size=10, color=DIM, anchor_x="right",
-                                    anchor_y="center", batch=self.batch))
-                        for _ in range(self.UPCOMING_ROWS)]
-        self.up_empty = make_label("", font_size=11, color=DIM, anchor_y="top",
-                                   batch=self.batch)
+        # o calendário do mês (antes era um menu à parte)
+        self.cal = _calendar().MiniCalendar(self.batch)
         self.upcoming: list = []
-        self._up_rects: list = []
         from velo.gfx import icons
         self.flame = icons.sprite("flame", 0, 0, 24, batch=self.batch, opacity=240)
         self.pulse = icons.sprite("pulse", 0, 0, 24, batch=self.batch, opacity=240)
@@ -632,14 +705,12 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.SportHub(a, "running")),
                 lambda: a.push(hub.SportHub(a, "swimming")),
                 lambda: a.push(hub.SportHub(a, "gym")),
-                lambda: a.push(_calendar().CalendarScreen(a)),
                 lambda: a.push(_extra_health().HealthMenu(a)),
                 lambda: a.push(_routes().RoutesScreen(a)),
                 lambda: a.push(_segments_ui().SegmentsScreen(a)),
                 lambda: a.push(hub.stats_screen(a, None)),
                 lambda: a.push(hub.InventoryScreen(a)),
-                lambda: a.push(hub.ExerciseInventory(a)),
-                lambda: a.push(_backups().BackupScreen(a))]
+                lambda: a.push(hub.ExerciseInventory(a))]
 
     def tile_geometry(self, w: int, h: int) -> tuple[float, float, float]:
         """(largura, altura, topo) dos cartões — todos iguais."""
@@ -681,14 +752,10 @@ class HomeScreen(Screen):
         for lab in self.streak_lines + self.form_lines:
             lab.text = lab.text            # (o texto é cortado em `enter`)
         self._left_w = left_w - 36
-        # centro: próximos treinos
+        # centro: o calendário do mês
         ux = 48 + span * 0.31
         uw = span * 0.40
-        self.up_title.x, self.up_title.y = ux, sy
-        self.up_empty.x, self.up_empty.y = ux, sy - 30
-        row_h = 21
-        rows = max(1, min(self.UPCOMING_ROWS, int((sy - 30 - bottom) // row_h)))
-        self._up_geo = (ux, sy - 30, uw, row_h, rows)
+        self.cal.layout(ux, sy, uw, sy - bottom)
         # direita: as últimas 16 semanas
         hx = 48 + span * 0.73
         hw = w - 48 - hx
@@ -696,51 +763,7 @@ class HomeScreen(Screen):
         self.heat_title.x, self.heat_title.y = hx, sy
         self.heat.layout(hx, sy - 22 - 7 * (cell + 3), cell)
         for i, tile in enumerate(self.tiles):
-            tile.set_selected(i == self.selected)
-        self._place_upcoming()
-
-    def _place_upcoming(self) -> None:
-        ux, uy, uw, row_h, rows = self._up_geo
-        self._up_rects = []
-        shown = self.upcoming[:rows]
-        sel = self.selected - len(self.tiles)
-        self.up_sel.opacity = 0
-        for k, (dot, day, title, dur) in enumerate(self.up_rows):
-            if k >= len(shown):
-                dot.opacity = 0
-                day.text = title.text = dur.text = ""
-                continue
-            e = shown[k]
-            y = uy - k * row_h - row_h / 2
-            dot.x, dot.y = ux, y - 7
-            dot.color = e.color
-            dot.opacity = 255
-            wd = cv_weekday(e.day)
-            day.text = wd
-            day.x, day.y = ux + 12, y
-            from velo.core import sports as sp
-            text = f"{sp.name(e.sport)} · {e.title}" + ("  ✓" if e.done else "")
-            title.text = _fit_text(text, uw - 210, 11)
-            title.x, title.y = ux + 106, y
-            title.color = ACCENT if k == sel else TEXT
-            dur.text = hms(e.seconds) if e.seconds else ""
-            dur.x, dur.y = ux + uw, y
-            self._up_rects.append((ux - 6, y - row_h / 2, uw + 12, row_h))
-            if k == sel:
-                self.up_sel.x, self.up_sel.y = ux - 6, y - row_h / 2 + 1
-                self.up_sel.width, self.up_sel.height = uw + 12, row_h - 2
-                self.up_sel.color = _select_color()
-                self.up_sel.opacity = 255
-        more = len(self.upcoming) - len(shown)
-        if not self.upcoming:
-            self.up_empty.text = tr("Nada planeado. Planeia treinos no Calendário.",
-                                    "Nothing planned. Plan workouts in the Calendar.")
-        elif more > 0:
-            self.up_empty.text = ""
-            dot, day, title, dur = self.up_rows[len(shown) - 1]
-            dur.text = tr("+{n} no calendário", "+{n} in the calendar", n=more)
-        else:
-            self.up_empty.text = ""
+            tile.set_selected(i == self.selected and not self.cal.focused)
 
     def enter(self) -> None:
         a = self.app
@@ -771,9 +794,8 @@ class HomeScreen(Screen):
             lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.heat_title.text = t("home.heatmap")
         self.heat.set(stats.heatmap(a.db, 16))
-        self.up_title.text = tr("Próximos treinos · 2 semanas", "Upcoming · 2 weeks")
+        self.cal.load(a.db)
         self.upcoming = self.upcoming_entries()
-        self._place_upcoming()
 
     def upcoming_entries(self) -> list:
         """O que está planeado de hoje a 13 dias, pela ordem dos dias."""
@@ -789,39 +811,59 @@ class HomeScreen(Screen):
             return []
 
     def _select(self, i: int) -> None:
-        n = len(self.tiles) + min(len(self.upcoming), self._up_geo[4])
-        self.selected = max(0, min(n - 1, i))
-        if self.selected < len(self.tiles):
-            self.list.index = self.selected
+        self.selected = max(0, min(len(self.tiles) - 1, i))
+        self.list.index = self.selected
+        self.cal.focused = False
+        self.cal.place()
         for k, tile in enumerate(self.tiles):
             tile.set_selected(k == self.selected)
-        self._place_upcoming()
+
+    def _focus_calendar(self) -> None:
+        self.cal.focused = True
+        for tile in self.tiles:
+            tile.set_selected(False)
+        self.cal.place()
 
     def _open(self, i: int) -> None:
         if i < len(self.tiles):
             self._actions()[i]()
-            return
-        k = i - len(self.tiles)
-        if 0 <= k < len(self.upcoming):
-            self.app.push(_calendar().DayScreen(self.app, self.upcoming[k].day))
+
+    def open_day(self, d) -> None:
+        self.app.push(_calendar().DayScreen(self.app, d))
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
+        from datetime import date as _date, timedelta as _td
         n_tiles = len(self.tiles)
-        in_list = self.selected >= n_tiles
-        if symbol == key.RIGHT and not in_list:
+        if self.cal.focused:
+            moves = {key.LEFT: -1, key.RIGHT: 1, key.UP: -7, key.DOWN: 7}
+            if symbol == key.UP and self.cal.first_week():
+                self._select(min(n_tiles - 1, self.BIG + 2))      # de volta aos cartões
+            elif symbol in moves:
+                self.cal.go(self.cal.sel + _td(days=moves[symbol]))
+            elif symbol in (key.PAGEUP, key.PAGEDOWN):
+                y, m = _calendar().cv.shift_month(self.cal.year, self.cal.month,
+                                                  1 if symbol == key.PAGEDOWN else -1)
+                self.cal.go(_date(y, m, 1))
+            elif symbol == key.T:
+                self.cal.go(_date.today())
+            elif symbol in (key.ENTER, key.RETURN, key.SPACE):
+                self.open_day(self.cal.sel)
+            elif symbol == key.ESCAPE:
+                self._select(self.selected)
+            else:
+                return False
+            return True
+        if symbol == key.RIGHT:
             self._select(min(n_tiles - 1, self.selected + 1))
-        elif symbol == key.LEFT and not in_list:
+        elif symbol == key.LEFT:
             self._select(max(0, self.selected - 1))
         elif symbol == key.DOWN:
-            if in_list or self.selected >= self.BIG:
-                if self.upcoming and self._up_geo[4]:
-                    self._select(self.selected + 1 if in_list else n_tiles)
+            if self.selected >= self.BIG:
+                self._focus_calendar()
             else:
                 self._select(min(n_tiles - 1, self.selected + self.BIG))
         elif symbol == key.UP:
-            if in_list:
-                self._select(self.selected - 1 if self.selected > n_tiles else self.BIG)
-            elif self.selected >= self.BIG:
+            if self.selected >= self.BIG:
                 self._select(self.selected - self.BIG)
         elif symbol in (key.ENTER, key.RETURN, key.SPACE):
             self._open(self.selected)
@@ -837,11 +879,12 @@ class HomeScreen(Screen):
                 self._select(i)
                 self._open(i)
                 return True
-        for k, (rx, ry, rw, rh) in enumerate(self._up_rects):
-            if rx <= x <= rx + rw and ry <= y <= ry + rh:
-                self._select(len(self.tiles) + k)
-                self._open(len(self.tiles) + k)
-                return True
+        d = self.cal.hit(x, y)
+        if d is not None:
+            self._focus_calendar()
+            self.cal.go(d)
+            self.open_day(d)
+            return True
         return False
 
     def on_resize(self, w: int, h: int) -> None:
@@ -2025,8 +2068,15 @@ class DeviceScreen(ModalScreen):
 
 
 class SettingsScreen(Screen):
-    """Definições por separadores: Atleta · Sessões · Ecrã e idioma · Ligações
-    Externas · Sincronização · Atalhos de teclado.
+    """Definições por separadores: Atleta · Geral · Desportos · Ecrã e idioma ·
+    Ligações Externas · Sincronização · Atalhos de teclado.
+
+    **Desportos** tem um separador por desporto e, em cada um, três: as
+    métricas disponíveis (as desligadas não aparecem no editor do ecrã), o
+    ecrã da sessão (as métricas e a disposição dos painéis) e as sessões não
+    ERG (os aparelhos sem controlo: níveis do rolo, resistências do remo,
+    velocidade e inclinação máximas da passadeira — o construtor não deixa
+    passar destes limites).
 
     Funcionam em **rascunho**: as setas ←/→ mudam os valores (Enter não),
     mas nada fica gravado até carregar em **Guardar** (em baixo, à direita;
@@ -2035,10 +2085,10 @@ class SettingsScreen(Screen):
 
     TABBED = True
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
-    GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace"),
-              ("layouts", "arrangement", "feedback", "difficulty", "lookahead", "auto_pause",
-               "connection",
-               "auto_connect", "boxes", "metrics", "lv_n", "lv_min", "lv_max"),
+    GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace",
+               "@pmc_head", "pmc_ctl0", "pmc_atl0", "pmc_synced"),
+              ("difficulty", "lookahead", "auto_pause", "connection", "auto_connect"),
+              ("@sports",),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
               ("@sync",),
@@ -2057,9 +2107,26 @@ class SettingsScreen(Screen):
         w, h = app.window.width, app.window.height
         self.sync_tab = 0
         self.sync_tabs = TabBar(self.sync.source_labels(), 48, self.content_top(h) + 6, w - 96)
+        # Desportos: um separador por desporto e, em cada um, três secções
+        self.sport_tab = 0
+        self.section_tab = 0
+        self.sport_tabs = TabBar([sport_name(s) for s in self.SPORTS], 48,
+                                 self.content_top(h) + 6, w - 96)
+        self.section_tabs = TabBar(self.section_labels(), 48, self.content_top(h) - 38, w - 96)
+
+    SPORTS = ("cycling", "rowing", "running", "swimming", "gym")
+
+    def section_labels(self) -> list[str]:
+        return [tr("Métricas disponíveis", "Available metrics"),
+                tr("Ecrã da sessão", "Session screen"),
+                tr("Sessões Não ERG", "Non-ERG sessions")]
+
+    @property
+    def sport(self) -> str:
+        return self.SPORTS[self.sport_tab % len(self.SPORTS)]
 
     def tab_labels(self) -> list[str]:
-        return [tr("Atleta", "Athlete"), tr("Sessões", "Sessions"),
+        return [tr("Atleta", "Athlete"), tr("Geral", "General"), tr("Desportos", "Sports"),
                 tr("Ecrã e idioma", "Display & language"),
                 tr("Ligações Externas", "External connections"),
                 tr("Sincronização", "Sync"), tr("Atalhos de teclado", "Keyboard shortcuts")]
@@ -2212,17 +2279,53 @@ class SettingsScreen(Screen):
             "name": Item(t("set.name"), value=(ath.name or "") + "▏", detail=t("set.name_hint"),
                          data="text:name"),
             "age": Item(t("set.age"), value=str(age or "—"),
-                        detail=tr("←/→ ajustar o ano de nascimento",
-                                  "←/→ adjust the year of birth"), data="age"),
+                        detail=tr("estima a FC máxima (220 − idade) quando não há outra · "
+                                  "←/→ ano de nascimento",
+                                  "estimates max HR (220 − age) when there is no other · "
+                                  "←/→ year of birth"), data="age"),
             "weight": Item(t("set.weight"), value=f"{wv:.1f} {wu}",
-                           detail="←/→ ±0,1 · Shift+←/→ ±1", data="weight"),
-            "ftp": Item(t("set.ftp"), value=f"{ath.ftp_w} W", detail="←/→ ±5 W", data="ftp"),
-            "lthr": Item("LTHR", value=str(ath.lthr or "—"), detail="←/→ ±1", data="lthr"),
+                           detail=tr("para os W/kg e a física da estrada (subidas) · ←/→ ±0,1 · "
+                                     "Shift ±1", "for W/kg and the road physics (climbs) · "
+                                     "←/→ ±0.1 · Shift ±1"), data="weight"),
+            "ftp": Item(t("set.ftp"), value=f"{ath.ftp_w} W",
+                        detail=tr("FTP — potência funcional de limiar: a média que aguentas "
+                                  "~1 h; base das zonas, do IF e da TSS · ←/→ ±5 W",
+                                  "FTP — functional threshold power: what you hold for ~1 h; "
+                                  "basis of zones, IF and TSS · ←/→ ±5 W"), data="ftp"),
+            "lthr": Item("LTHR", value=str(ath.lthr or "—"),
+                         detail=tr("FC de limiar (lactato): a FC média de ~1 h no máximo; base "
+                                   "das zonas de FC e do hrTSS · ←/→ ±1",
+                                   "lactate threshold heart rate: your average HR over ~1 h "
+                                   "all-out; basis of HR zones and hrTSS · ←/→ ±1"),
+                         data="lthr"),
             "row_ftp": Item(tr("FTP do remo", "Rowing FTP"),
                             value=f"{int(self.get('row_ftp_w', rw.row_ftp(a.db)))} W",
-                            detail=tr("←/→ ±1 · Shift ±10 · o teste de 2000 m atualiza-a",
+                            detail=tr("a potência de limiar no remo: zonas e carga do remo · "
+                                      "←/→ ±1 · Shift ±10 · o teste de 2000 m atualiza-a",
+                                      "rowing threshold power: rowing zones and load · "
                                       "←/→ ±1 · Shift ±10 · the 2000 m test updates it"),
                             data="row_ftp"),
+            "@pmc_head": Item(tr("Forma, fadiga e fitness (como o TrainingPeaks)",
+                                 "Form, fatigue and fitness (like TrainingPeaks)"), header=True),
+            "pmc_ctl0": Item(tr("CTL inicial (fitness)", "Starting CTL (fitness)"),
+                             value=f"{float(self.get('pmc_ctl0', 0.0)):.0f}",
+                             detail=tr("o fitness antes da primeira atividade; põe o valor do "
+                                       "TrainingPeaks/WKO desse dia · ←/→ ±1 · Shift ±10",
+                                       "fitness before the first activity; use TrainingPeaks/"
+                                       "WKO's value for that day · ←/→ ±1 · Shift ±10"),
+                             data="pmc_ctl0"),
+            "pmc_atl0": Item(tr("ATL inicial (fadiga)", "Starting ATL (fatigue)"),
+                             value=f"{float(self.get('pmc_atl0', 0.0)):.0f}",
+                             detail=tr("a fadiga antes da primeira atividade · ←/→ ±1 · Shift ±10",
+                                       "fatigue before the first activity · ←/→ ±1 · Shift ±10"),
+                             data="pmc_atl0"),
+            "pmc_synced": Item(tr("Contar as atividades importadas", "Count imported activities"),
+                               value=on if self.get("pmc_synced", True) else off,
+                               detail=tr("as do Garmin e do TrainingPeaks entram na carga, sem "
+                                         "duplicar as feitas na Perennia",
+                                         "Garmin and TrainingPeaks ones count in the load, "
+                                         "without duplicating those done in Perennia"),
+                               data="pmc_synced"),
             "units": Item(t("set.units"),
                           value=t("set.units.metric") if units == "metric"
                           else t("set.units.imperial"), detail=arrows, data="units"),
@@ -2283,13 +2386,18 @@ class SettingsScreen(Screen):
                                          "created on save if missing (with a .bak copy)")),
             "run_pace": Item(tr("Ritmo de limiar (corrida)", "Threshold pace (running)"),
                              value=hms(float(self.get("run_threshold_pace_s", 300))) + " /km",
-                             detail=tr("←/→ ±5 s · usado nos treinos e zonas de corrida",
-                                       "←/→ ±5 s · used for running workouts and zones"),
+                             detail=tr("o ritmo que aguentas ~1 h (entre 10 km e meia maratona); "
+                                       "base das zonas e do rTSS · ←/→ ±5 s",
+                                       "the pace you hold for ~1 h (between 10 km and half "
+                                       "marathon); basis of zones and rTSS · ←/→ ±5 s"),
                              data="run_pace"),
             "swim_pace": Item(tr("Ritmo crítico (natação)", "Critical swim speed"),
                               value=hms(float(self.get("swim_css_s", 120))) + " /100 m",
-                              detail=tr("←/→ ±1 s · usado nos treinos de natação",
-                                        "←/→ ±1 s · used for swim workouts"), data="swim_pace"),
+                              detail=tr("CSS: o ritmo /100 m que aguentas sem parar (teste "
+                                        "400 + 200 m); base das zonas e do sTSS · ←/→ ±1 s",
+                                        "CSS: the /100 m pace you can sustain (400 + 200 m "
+                                        "test); basis of zones and sTSS · ←/→ ±1 s"),
+                              data="swim_pace"),
             "theme": Item(tr("Tema", "Theme"), value=_theme_name_of(self.get("theme", None)),
                           detail=tr("←/→ vê-se logo · Guardar fixa-o · Ardósia para pouca luz",
                                     "←/→ shows it now · Save keeps it · Slate for low light"),
@@ -2339,7 +2447,15 @@ class SettingsScreen(Screen):
                   "←/→ change · Enter open · Tab tab · Ctrl+S save · Esc back")
         h = self.app.window.height
         self.list.y = self.content_top(h)
-        if group == ("@sync",):
+        if group == ("@sports",):
+            self.sport_tabs.select(self.sport_tab)
+            self.section_tabs.set_labels(self.section_labels())
+            self.section_tabs.select(self.section_tab)
+            self.list.y = self.content_top(h) - 96          # por baixo das duas filas
+            items = self.sports_items()
+            foot = tr("PgUp/PgDn desporto · Ctrl+←/→ secção · Enter/←/→ muda · Ctrl+S guardar",
+                      "PgUp/PgDn sport · Ctrl+←/→ section · Enter/←/→ changes · Ctrl+S save")
+        elif group == ("@sync",):
             src = self.sync.SOURCES[self.sync_tab % len(self.sync.SOURCES)][0]
             self.sync_tabs.set_labels(self.sync.source_labels())
             self.sync_tabs.select(self.sync_tab)
@@ -2362,6 +2478,116 @@ class SettingsScreen(Screen):
 
     def update(self, dt: float) -> None:
         self.sync.update()
+
+    # ----------------------------------------------------------- desportos
+
+    def sports_items(self) -> list[Item]:
+        a = self.app
+        sport = self.sport
+        sec = self.section_tab % 3
+        from velo.core import layouts as lay
+        from velo.core import workout_meta as wm
+        on, off = t("common.on"), t("common.off")
+        rows: list[Item] = []
+        if sec == 0:
+            k = wm.metrics_key(sport)
+            disabled = set(self.get(k, []) or [])
+            cat = lay.catalog(sport)
+            rows.append(Item(tr("Métricas de sessão de {s}", "{s} session metrics",
+                                s=sport_name(sport)), header=True))
+            for mid, name in cat:
+                rows.append(Item(name, value=off if mid in disabled else on,
+                                 detail=tr("Enter ou ←/→ liga/desliga · as desligadas não "
+                                           "aparecem no editor do ecrã",
+                                           "Enter or ←/→ turns on/off · off ones don't show "
+                                           "in the screen editor"),
+                                 action=lambda m=mid: self._toggle_metric(m),
+                                 data=f"metric:{mid}"))
+        elif sec == 1:
+            shown = [lay.label(sport, x) for x in lay.keys(a.db, sport) if x]
+            rows += [Item(tr("Métricas no ecrã da sessão", "Metrics on the session screen"),
+                          value=str(len(shown)),
+                          detail=(", ".join(shown[:6]) + ("…" if len(shown) > 6 else ""))
+                          or tr("Enter abre e arrasta as métricas", "Enter opens; drag metrics"),
+                          action=lambda: a.push(_layouts().LayoutEditor(a, sport))),
+                     Item(tr("Disposição dos painéis", "Panel layout"),
+                          detail=tr("Enter abre · arrasta caixas, voltas, gráficos e tabelas",
+                                    "Enter opens · drag boxes, laps, charts and tables"),
+                          action=lambda: a.push(_arrangement().ArrangementEditor(a, sport)))]
+        else:
+            lim = self._limits()
+            if sport == "cycling":
+                rows.append(Item(tr("Níveis de resistência do rolo", "Trainer resistance levels"),
+                                 value=str(lim["trainer_levels"]),
+                                 detail=tr("os níveis do teu rolo sem controlo; o construtor não "
+                                           "passa deste número · ←/→ ±1",
+                                           "your non-smart trainer's levels; the builder "
+                                           "won't go past this number · ←/→ ±1"),
+                                 data="lim:trainer_levels"))
+            elif sport == "rowing":
+                rows.append(Item(tr("Níveis de resistência do remo", "Rower resistance levels"),
+                                 value=str(lim["rower_levels"]),
+                                 detail=tr("a resistência máxima da máquina; o construtor não "
+                                           "passa deste número · ←/→ ±1",
+                                           "the machine's top resistance; the builder won't "
+                                           "go past it · ←/→ ±1"),
+                                 data="lim:rower_levels"))
+            elif sport == "running":
+                rows += [Item(tr("Velocidade máxima da passadeira", "Treadmill top speed"),
+                              value=f"{lim['treadmill_max_kmh']:.1f} km/h",
+                              detail=tr("o construtor e a sessão não passam desta velocidade · "
+                                        "←/→ ±0,5", "the builder and the session won't go "
+                                        "past it · ←/→ ±0.5"),
+                              data="lim:treadmill_max_kmh"),
+                         Item(tr("Inclinação máxima da passadeira", "Treadmill top incline"),
+                              value=f"{lim['treadmill_max_incline']:.1f} %",
+                              detail=tr("←/→ ±0,5 %", "←/→ ±0.5 %"),
+                              data="lim:treadmill_max_incline")]
+            else:
+                rows.append(Item(tr("Sem aparelho a configurar", "No device to set up"),
+                                 detail=tr("a natação e o ginásio não usam aparelhos com níveis",
+                                           "swimming and gym don't use devices with levels"),
+                                 enabled=False))
+        return rows
+
+    def _limits(self) -> dict:
+        from velo.core import workout_meta as wm
+        lim = wm.device_limits(self.app.db)
+        for k in wm.DEVICE_DEFAULTS:
+            if k in self.draft:
+                lim[k] = self.draft[k]
+        lv = self.get("trainer_levels", None)
+        if isinstance(lv, dict) and "n" in lv:
+            lim["trainer_levels"] = int(lv["n"])
+        return lim
+
+    def _toggle_metric(self, mid: str) -> None:
+        from velo.core import workout_meta as wm
+        k = wm.metrics_key(self.sport)
+        cur = set(self.get(k, []) or [])
+        cur ^= {mid}
+        self.put(k, sorted(cur))
+        self.enter()
+
+    def _adjust_limit(self, name: str, step: int) -> None:
+        lim = self._limits()
+        unit = 1 if step > 0 else -1
+        if name == "trainer_levels":
+            from velo.core import workout_meta as wm
+            lv = dict(self._levels())
+            lv["n"] = max(2, min(30, int(lv["n"]) + unit))
+            self.put("trainer_levels", lv)
+            if self._orig.get("trainer_levels") is None and lv == wm.levels(self.app.db):
+                self.draft.pop("trainer_levels", None)      # voltou ao que estava
+        elif name == "rower_levels":
+            self.put("rower_levels", max(1, min(30, int(lim["rower_levels"]) + unit)))
+        elif name == "treadmill_max_kmh":
+            self.put("treadmill_max_kmh", max(8.0, min(30.0, lim["treadmill_max_kmh"]
+                                                       + 0.5 * unit)))
+        elif name == "treadmill_max_incline":
+            self.put("treadmill_max_incline", max(0.0, min(40.0, lim["treadmill_max_incline"]
+                                                           + 0.5 * unit)))
+        self.enter()
 
     # ------------------------------------------------------------ atalhos
 
@@ -2434,6 +2660,9 @@ class SettingsScreen(Screen):
         super().draw()
         if self.group() == ("@sync",):
             self.sync_tabs.draw()
+        elif self.group() == ("@sports",):
+            self.sport_tabs.draw()
+            self.section_tabs.draw()
 
     def on_mouse(self, x: int, y: int) -> bool:
         if self.group() == ("@sync",):
@@ -2442,11 +2671,32 @@ class SettingsScreen(Screen):
                 self.sync_tab = i
                 self.enter()
                 return True
+        if self.group() == ("@sports",):
+            i = self.sport_tabs.hit(x, y)
+            if i is not None:
+                self.set_sport(i)
+                return True
+            i = self.section_tabs.hit(x, y)
+            if i is not None:
+                self.set_section(i)
+                return True
         return super().on_mouse(x, y)
+
+    def set_sport(self, i: int) -> None:
+        self.sport_tab = i % len(self.SPORTS)
+        self.list.index = 0
+        self.enter()
+
+    def set_section(self, i: int) -> None:
+        self.section_tab = i % 3
+        self.list.index = 0
+        self.enter()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
         self.sync_tabs.layout(48, self.content_top(h) + 6, w - 96)
+        self.sport_tabs.layout(48, self.content_top(h) + 6, w - 96)
+        self.section_tabs.layout(48, self.content_top(h) - 38, w - 96)
         self.enter()
 
     # -------------------------------------------------------------- texto
@@ -2491,8 +2741,68 @@ class SettingsScreen(Screen):
 
     # -------------------------------------------------------------- setas
 
+    # as linhas de escolha: Enter abre a lista com pesquisa (ou troca, se forem 2)
+    CHOICE_ROWS = ("units", "language", "render", "connection", "msaa", "display",
+                   "auto_pause", "auto_connect", "pmc_synced")
+
+    def _enter_row(self, item) -> bool:
+        d = item.data
+        if d in ("sync:start", "sync:end"):
+            from velo.ui.pickers import pick_date
+            field = d[5:]
+            o = self.sync.opts
+            o.clean()
+
+            def put(iso: str, f=field) -> None:
+                setattr(o, f, iso)
+                if o.start and o.end and o.start > o.end:
+                    if f == "start":
+                        o.end = o.start
+                    else:
+                        o.start = o.end
+                self.sync.save(o)
+                self.enter()
+            pick_date(self.app, item.label, getattr(o, field) or date.today().isoformat(),
+                      put, max_day=date.today())
+            return True
+        if d == "theme":
+            from velo.gfx import theme as theme_mod
+            from velo.ui.pickers import ChoicePopup
+            keys = list(theme_mod.names())
+            cur = self.get("theme", None) or theme_mod.DEFAULT
+
+            def pick_theme(k: int) -> None:
+                self.put("theme", keys[k])
+                self._preview_theme()
+            self.app.push(ChoicePopup(self.app, item.label, [theme_mod.name(k) for k in keys],
+                                      keys.index(cur) if cur in keys else 0, pick_theme))
+            return True
+        from velo.ui.pickers import open_choices
+        if d == "sync:period" or str(d).startswith(("sync:opt:", "sync:stat:")):
+            return open_choices(self, item, lambda s=1, f=d[5:]: self.sync.adjust(f, s, False))
+        if d in self.CHOICE_ROWS:
+            return open_choices(self, item, lambda s=1, f=d: self._adjust(f, s))
+        return False
+
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
+        if self.group() == ("@sports",):
+            if symbol in (key.PAGEUP, key.PAGEDOWN):
+                self.set_sport(self.sport_tab + (1 if symbol == key.PAGEDOWN else -1))
+                return True
+            if symbol in (key.LEFT, key.RIGHT) and modifiers & key.MOD_CTRL:
+                self.set_section(self.section_tab + (1 if symbol == key.RIGHT else -1))
+                return True
+            d = str(item.data) if item is not None and item.data else ""
+            if d.startswith("metric:") and symbol in (key.LEFT, key.RIGHT):
+                self._toggle_metric(d[7:])
+                return True
+            if d.startswith("lim:") and symbol in (key.LEFT, key.RIGHT):
+                self._adjust_limit(d[4:], 1 if symbol == key.RIGHT else -1)
+                return True
+        if item is not None and symbol in (key.ENTER, key.RETURN) and item.action is None \
+                and isinstance(item.data, str) and self._enter_row(item):
+            return True
         if item is not None and isinstance(item.data, str) and item.data.startswith("sync:") \
                 and symbol in (key.LEFT, key.RIGHT):
             self.sync.adjust(item.data[5:], 1 if symbol == key.RIGHT else -1,
@@ -2550,6 +2860,10 @@ class SettingsScreen(Screen):
             from velo.core import workout_meta as wm
             if self._orig.get("trainer_levels") is None and lv == wm.levels(a.db):
                 self.draft.pop("trainer_levels", None)      # voltou ao que estava
+        elif field in ("pmc_ctl0", "pmc_atl0"):
+            self.put(field, max(0.0, min(250.0, float(self.get(field, 0.0)) + step)))
+        elif field == "pmc_synced":
+            self.put("pmc_synced", not self.get("pmc_synced", True))
         elif field == "lookahead":
             self.put("workout_lookahead", max(0, min(4, int(self.get("workout_lookahead", 2))
                                                     + unit)))
@@ -3900,7 +4214,7 @@ class App:
 
     def _topbar_texts(self) -> None:
         self.topbar.set_texts(tr("Dispositivos", "Devices"), tr("Definições", "Settings"),
-                              tr("Desligar", "Power off"))
+                              tr("Desligar", "Power off"), tr("Backups", "Backups"))
 
     @property
     def in_session(self) -> bool:
@@ -3945,6 +4259,19 @@ class App:
             self.pop()
         self.push(SettingsScreen(self))
 
+    def open_backups(self) -> None:
+        """O botão Backups da faixa do topo (fora das sessões)."""
+        if self.in_session:
+            self.message(tr("Os backups não estão disponíveis durante uma sessão de treino.",
+                            "Backups are not available during a workout."))
+            return
+        bs = _backups()
+        if isinstance(self.current, bs.BackupScreen):
+            return
+        while self.current is not None and self.current.MODAL:
+            self.pop()
+        self.push(bs.BackupScreen(self))
+
     def ask_quit(self) -> None:
         if self.in_session:
             self.message(tr("Termina a sessão de treino antes de sair.",
@@ -3978,6 +4305,7 @@ class App:
         self.topbar.set_devices(self.device_states())
         busy = self.in_session
         self.topbar.set_enabled("settings", not busy)
+        self.topbar.set_enabled("backups", not busy)
         self.topbar.set_enabled("quit", not busy)
 
     def on_device_event(self, kind: str, data: dict) -> None:
@@ -4155,6 +4483,15 @@ class App:
                 self.message(tr("Não há nada para guardar neste ecrã.",
                                 "Nothing to save on this screen."))
             return True
+        if screen is not None and screen.search_active:
+            return bool(screen.search_key(symbol, modifiers))
+        if screen is not None and (screen.has_search or getattr(
+                screen, "SEARCH_ENTER_PICKS", False)) and (
+                (symbol == key.F and modifiers & key.MOD_CTRL) or
+                (symbol == getattr(key, "SLASH", -1) and not screen._text_field())):
+            screen.search_focus(True)
+            self._eat_text = symbol == getattr(key, "SLASH", -1)   # o «/» não entra no texto
+            return True
         if screen is not None and screen.counting:
             if symbol == key.ESCAPE:
                 screen.start_cd = None
@@ -4166,6 +4503,13 @@ class App:
 
     def _on_text(self, text: str) -> bool:
         screen = self.current
+        if getattr(self, "_eat_text", False):
+            self._eat_text = False
+            if text == "/":
+                return True
+        if screen is not None and screen.search_active:
+            screen.search_text(text)
+            return True
         if screen is not None:
             return bool(screen.on_text(text))
         return False
@@ -4177,6 +4521,9 @@ class App:
             return
         if which == "settings":
             self.open_settings()
+            return
+        if which == "backups":
+            self.open_backups()
             return
         if which == "quit":
             self.ask_quit()
@@ -4365,6 +4712,11 @@ def _make_window(samples: int = 4, **kw):
 def _theme_name(db) -> str:
     from velo.gfx import theme as theme_mod
     return theme_mod.name(str(db.get("theme", theme_mod.DEFAULT)))
+
+
+def sport_name(sport: str) -> str:
+    from velo.core import sports as sp
+    return sp.name(sport)
 
 
 def _theme_name_of(key_) -> str:

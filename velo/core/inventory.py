@@ -55,6 +55,10 @@ def ensure(db: Database) -> None:
         "CREATE TABLE IF NOT EXISTS equipment_items (id INTEGER PRIMARY KEY,"
         " name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'other', qty INTEGER NOT NULL DEFAULT 1,"
         " weight_kg REAL, notes TEXT, created_at TEXT NOT NULL)")
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(equipment_items)")}
+    for c, decl in (("purchase_date", "TEXT"), ("purchase_price", "REAL")):
+        if c not in cols:                     # data e preço de compra (ronda 8)
+            db.conn.execute(f"ALTER TABLE equipment_items ADD COLUMN {c} {decl}")
     db.conn.commit()
 
 
@@ -79,18 +83,21 @@ def item(db: Database, iid: int) -> dict | None:
 
 
 def save(db: Database, iid: int | None, *, name: str, kind: str = "other", qty: int = 1,
-         weight_kg: float | None = None, notes: str | None = None) -> int:
+         weight_kg: float | None = None, notes: str | None = None,
+         purchase_date: str | None = None, purchase_price: float | None = None) -> int:
     ensure(db)
     name = (name or "").strip() or kind_name(kind)
     qty = max(0, int(qty))
     if iid is None:
         c = db.conn.execute(
-            "INSERT INTO equipment_items(name, kind, qty, weight_kg, notes, created_at)"
-            " VALUES (?,?,?,?,?,?)", (name, kind, qty, weight_kg, notes, now_iso()))
+            "INSERT INTO equipment_items(name, kind, qty, weight_kg, notes, created_at,"
+            " purchase_date, purchase_price) VALUES (?,?,?,?,?,?,?,?)",
+            (name, kind, qty, weight_kg, notes, now_iso(), purchase_date, purchase_price))
         iid = int(c.lastrowid)
     else:
-        db.conn.execute("UPDATE equipment_items SET name=?, kind=?, qty=?, weight_kg=?, notes=?"
-                        " WHERE id = ?", (name, kind, qty, weight_kg, notes, iid))
+        db.conn.execute("UPDATE equipment_items SET name=?, kind=?, qty=?, weight_kg=?, notes=?,"
+                        " purchase_date=?, purchase_price=? WHERE id = ?",
+                        (name, kind, qty, weight_kg, notes, purchase_date, purchase_price, iid))
     db.conn.commit()
     return iid
 

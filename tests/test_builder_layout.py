@@ -144,7 +144,9 @@ class TestBuilderRound5(tg.GuiCase):
         self.assertIn("Apagar o bloco 2 de 3", self.screen().title_text)
         self.pick("Cancelar")
         self.assertEqual(len(b.blocks), 3)
-        self.pick("Apagar o bloco (Del)")
+        self.assertNotIn("Apagar o bloco (Del)", [i.label for i in b.list.items])
+        self.assertIn("Del apagar", b.chrome.footer.text)   # só no rodapé
+        self.press(key.DELETE)
         self.pick("Apagar o bloco")                         # confirma na janela
         self.assertEqual(len(b.blocks), 2)
 

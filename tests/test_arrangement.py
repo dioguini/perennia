@@ -68,8 +68,9 @@ class TestModel(unittest.TestCase):
 class TestEditor(tg.GuiCase):
     def _open(self, sport="running"):
         self.pick("Definições")
-        self.screen().tab_named("Sessões")
-        self.pick("Disposição do ecrã da sessão")
+        self.screen().tab_named("Desportos")
+        self.screen().set_section(1)                    # Ecrã da sessão
+        self.pick("Disposição dos painéis")
         ed = self.screen()
         self.assertIsInstance(ed, ars.ArrangementEditor)
         ed.tab_named({"running": "Corrida", "rowing": "Remo", "cycling": "Ciclismo"}[sport])
@@ -141,8 +142,9 @@ class TestEditor(tg.GuiCase):
 
     def test_layout_editor_links_to_the_arrangement(self):
         self.pick("Definições")
-        self.screen().tab_named("Sessões")
-        self.pick("Ecrã da sessão, por desporto")
+        self.screen().tab_named("Desportos")
+        self.screen().set_section(1)
+        self.pick("Métricas no ecrã da sessão")
         self.pick("Disposição do ecrã")
         self.assertIsInstance(self.screen(), ars.ArrangementEditor)
         self.assertEqual(self.screen().sport, "cycling")

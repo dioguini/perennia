@@ -236,23 +236,37 @@ class TestRunningAndRowing(tg.GuiCase):
 
 
 class TestTrainerLevelsSetting(tg.GuiCase):
-    def test_levels_are_set_in_sessions_tab(self):
+    def _non_erg(self, sport_i: int = 0):
         self.pick("Definições")
         scr = self.screen()
-        self.select("número de níveis")
+        scr.tab_named("Desportos")
+        scr.set_sport(sport_i)
+        scr.set_section(2)
+        return scr
+
+    def test_levels_are_set_in_sessions_tab(self):
+        scr = self._non_erg()
+        self.select("Níveis de resistência do rolo")
         self.press(key.RIGHT)
         self.assertTrue(scr.dirty)
-        self.select("watts no nível máximo")
-        self.app._on_key_press(key.RIGHT, key.MOD_SHIFT)        # +50 W
         self.save()
-        lv = wm.levels(self.app.db)
-        self.assertEqual(lv["n"], 11)
-        self.assertEqual(lv["w_max"], 450.0)
+        self.assertEqual(wm.levels(self.app.db)["n"], 11)
+        self.assertEqual(wm.device_limits(self.app.db)["trainer_levels"], 11)
+
+    def test_treadmill_and_rower_limits(self):
+        scr = self._non_erg(2)                                  # corrida
+        self.select("Velocidade máxima da passadeira")
+        self.press(key.LEFT, key.LEFT)                          # 20 → 19 km/h
+        scr.set_sport(1)                                        # remo
+        self.select("Níveis de resistência do remo")
+        self.press(key.LEFT, key.LEFT, key.LEFT, key.LEFT, key.LEFT)   # 10 → 5
+        self.save()
+        lim = wm.device_limits(self.app.db)
+        self.assertEqual((lim["treadmill_max_kmh"], lim["rower_levels"]), (19.0, 5))
 
     def test_back_to_the_same_value_is_not_a_change(self):
-        self.pick("Definições")
-        scr = self.screen()
-        self.select("número de níveis")
+        scr = self._non_erg()
+        self.select("Níveis de resistência do rolo")
         self.press(key.RIGHT, key.LEFT)
         self.assertFalse(scr.dirty)
 

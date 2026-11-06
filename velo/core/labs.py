@@ -205,7 +205,9 @@ def ensure(db: Database) -> None:
     for table, cols in (("lab_reports", (("kind", "TEXT"),)),
                         ("lab_results", (("parameter_id", "INTEGER"), ("area", "TEXT"),
                                          ("panel", "TEXT"), ("subpanel", "TEXT"),
-                                         ("value_pct", "REAL"), ("qualifier", "TEXT")))):
+                                         ("value_pct", "REAL"), ("qualifier", "TEXT"),
+                                         # o comentário do médico a esta análise
+                                         ("doctor_comment", "TEXT")))):
         have = {r["name"] for r in db.conn.execute(f"PRAGMA table_info({table})")}
         for c, decl in cols:
             if c not in have:
@@ -387,6 +389,22 @@ def grouped_results(db: Database, report_id: int) -> list[tuple[str, str | None,
             out.append((area, panel, []))
         out[-1][2].append(r)
     return out
+
+
+def set_doctor_comment(db: Database, result_id: int, text: str) -> None:
+    ensure(db)
+    db.conn.execute("UPDATE lab_results SET doctor_comment = ? WHERE id = ?",
+                    (text or None, result_id))
+    db.conn.commit()
+
+
+def previous_values(db: Database, marker: str, before: str, n: int = 3) -> list[dict]:
+    """Os `n` valores anteriores do mesmo marcador (os mais recentes primeiro)."""
+    ensure(db)
+    return [dict(r) for r in db.conn.execute(
+        "SELECT x.value, x.value_text, x.unit, r.done_on FROM lab_results x"
+        " JOIN lab_reports r ON r.id = x.report_id WHERE x.marker = ? AND r.done_on < ?"
+        " ORDER BY r.done_on DESC LIMIT ?", (marker, before, n))]
 
 
 def value_text(r: dict) -> str:

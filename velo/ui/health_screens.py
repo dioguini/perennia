@@ -87,42 +87,244 @@ class AgentScreen(Screen):
 # ================================================================== saúde
 
 
+class _ChromeProxy:
+    """O título de um ecrã metido num separador fica o do ecrã de fora."""
+
+    def __init__(self, host):
+        self._host = host
+
+    def set(self, title: str, subtitle: str = "", footer: str = "") -> None:
+        self._host.chrome.set(self._host.TITLE(), (title + " · " + subtitle).strip(" ·"),
+                              footer)
+
+    def __getattr__(self, name):
+        return getattr(self._host.chrome, name)
+
+
 class HealthMenu(Screen):
+    """A Saúde por separadores: Análises (o report de cada colheita) · Testes
+    de longevidade · Diários · Tendências · Métricas."""
+
+    TABBED = True
+    TAB_KEYS = ("labs", "longevity", "diary", "trends", "metrics")
+
+    @staticmethod
+    def TITLE() -> str:
+        return tr("Saúde", "Health")
+
+    def __init__(self, app, tab: int = 0, report_id: int | None = None):
+        super().__init__(app)
+        self.inner = None
+        self.report_id = report_id
+        self.tab = tab
+        if self.tabs is not None:
+            self.tabs.select(tab)
+
+    def tab_labels(self) -> list[str]:
+        return [tr("Análises", "Lab results"), tr("Testes de longevidade", "Longevity tests"),
+                tr("Diários", "Daily logs"), tr("Tendências", "Trends"),
+                tr("Métricas", "Metrics")]
+
+    def on_tab(self) -> None:
+        self.inner = None
+
+    def _embed(self, cls, *args):
+        """Um ecrã de lista dentro do separador: partilha a lista e o título."""
+        if not isinstance(self.inner, cls):
+            inner = cls(self.app, *args)
+            inner.list = self.list
+            inner.chrome = _ChromeProxy(self)
+            inner.back_button = None
+            self.inner = inner
+        return self.inner
+
     def enter(self) -> None:
         a = self.app
         health.seed(a.db)
         ft.seed(a.db)
-        done, total = health.completeness(a.db, date.today())
+        k = self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
+        if k == "labs":
+            self.inner = None
+            self._labs()
+        elif k == "longevity":
+            self._embed(TestsMenu, "longevity").enter()
+        elif k == "diary":
+            self.inner = None
+            self._diary()
+        elif k == "trends":
+            self.inner = None
+            self._trends()
+        else:
+            self._embed(MetricsManager).enter()
+
+    # --------------------------------------------------------- diários
+
+    def _diary(self) -> None:
+        a = self.app
+        today = date.today()
+        rows = [Item(tr("Outro dia…", "Another day…"),
+                     detail=tr("abre o calendário", "opens the calendar"),
+                     action=self._pick_day)]
+        for k in range(21):
+            d = today - timedelta(days=k)
+            done, total = health.completeness(a.db, d)
+            note = health.day_note(a.db, d)
+            rows.append(Item(day_label(d), value=f"{done}/{total}",
+                             detail=_excerpt(note, 80) if note else "",
+                             action=lambda dd=d: a.push(DailyLogScreen(a, dd))))
+        self.chrome.set(self.TITLE(), tr("Os diários dos últimos dias · Enter abre o dia",
+                                         "The last days' logs · Enter opens the day"),
+                        self.footer())
+        self.list.set_items(rows, keep_index=True)
+
+    def _pick_day(self) -> None:
+        from velo.ui.pickers import pick_date
+        pick_date(self.app, tr("Diário de que dia?", "Log for which day?"), date.today(),
+                  lambda iso: self.app.push(DailyLogScreen(self.app, date.fromisoformat(iso))),
+                  max_day=date.today())
+
+    # ------------------------------------------------------- tendências
+
+    def _trends(self) -> None:
+        a = self.app
+        rows = []
+        ms = [m for m in health.metrics(a.db) if m["kind"] in ("number", "scale", "bool")]
+        for i, m in enumerate(ms):
+            pts = health.series(a.db, m["id"], 30)
+            vals = [v for _d, v in pts if v is not None]
+            last = f"{vals[-1]:g}" if vals else "—"
+            rows.append(Item(m["name"], value=last + (f" {m['unit']}" if m["unit"] and vals
+                                                     else ""),
+                             detail=tr("{n} registos nos últimos 30 dias · Enter abre o gráfico",
+                                       "{n} entries in the last 30 days · Enter opens the chart",
+                                       n=len(vals)),
+                             action=lambda k=i: self._open_trend(k)))
+        self.chrome.set(self.TITLE(), tr("A evolução de cada métrica do diário",
+                                         "Each log metric over time"), self.footer())
+        self.list.set_items(rows, keep_index=True)
+
+    def _open_trend(self, k: int) -> None:
+        scr = MetricTrendScreen(self.app)
+        scr.metric_idx = k
+        self.app.push(scr)
+
+    # -------------------------------------------------------- análises
+
+    def _labs(self) -> None:
+        a = self.app
+        labs.ensure(a.db)
         reps = health.lab_reports(a.db)
-        last_lab = reps[0]["done_on"] if reps else "—"
-        self.chrome.set(tr("Saúde", "Health"),
-                        tr("Hoje: {d} de {n} métricas preenchidas",
-                           "Today: {d} of {n} metrics filled", d=done, n=total), self.footer())
-        self.list.set_items([
-            Item(tr("Diário de hoje", "Today's log"), value=f"{done}/{total}",
-                 detail=tr("sono, energia, corpo, alimentação… com notas",
-                           "sleep, energy, body, food… with notes"),
-                 action=lambda: a.push(DailyLogScreen(a, date.today()))),
-            Item(tr("Diário de ontem", "Yesterday's log"),
-                 action=lambda: a.push(DailyLogScreen(a, date.today() - timedelta(days=1)))),
-            Item(tr("Tendências", "Trends"), detail=tr("evolução de cada métrica",
-                                                       "each metric over time"),
-                 action=lambda: a.push(MetricTrendScreen(a))),
-            Item(tr("Análises clínicas", "Lab results"), value=last_lab,
-                 detail=tr("{n} relatórios · comentário do médico", "{n} reports · doctor's notes",
-                           n=len(reps)),
-                 action=lambda: a.push(LabsList(a))),
-            Item(tr("Testes de longevidade", "Longevity tests"),
-                 detail=tr("preensão, flexões, elevações, equilíbrio…",
-                           "grip, push-ups, pull-ups, balance…"),
-                 action=lambda: a.push(TestsMenu(a, "longevity"))),
-            Item(tr("Métricas do diário", "Log metrics"),
-                 detail=tr("escolher, criar e ordenar", "choose, create and order"),
-                 action=lambda: a.push(MetricsManager(a))),
-            Item(tr("Importar dados", "Import data"),
-                 detail="HRV4Training · Garmin · CSV",
-                 action=lambda: a.push(ImportScreen(a))),
-        ], keep_index=True)
+        ids = [r["id"] for r in reps]
+        if self.report_id not in ids:
+            self.report_id = ids[0] if ids else None
+        rows: list[Item] = []
+        r = health.lab_report(a.db, self.report_id) if self.report_id else None
+        if r is None:
+            rows.append(Item(tr("Ainda não há análises", "No lab results yet"),
+                             detail=tr("cria uma (botão em baixo) ou importa do Excel/CSV",
+                                       "create one (button below) or import from Excel/CSV"),
+                             enabled=False))
+        else:
+            n_out = next((x["out_of_range"] for x in reps if x["id"] == r["id"]), 0)
+            rows += [Item(tr("Colheita", "Collection"),
+                          value=f"{r['done_on']}" + (f" · {r['lab']}" if r.get("lab") else ""),
+                          detail=tr("Enter escolhe outra data (lista com pesquisa) · {n} "
+                                    "colheitas", "Enter picks another date (searchable list) · "
+                                    "{n} collections", n=len(reps)),
+                          action=self._pick_report),
+                     Item(tr("Comentário geral do médico", "Doctor's general comment"),
+                          value="" if r.get("doctor_feedback") else tr("escrever", "write"),
+                          detail=_excerpt(r.get("doctor_feedback"), 140) or
+                          tr("Enter escreve o comentário geral desta colheita",
+                             "Enter writes this collection's general comment"),
+                          action=self._edit_general)]
+            for area, panel, results in labs.grouped_results(a.db, r["id"]):
+                head = area if area and area != "—" else tr("Resultados", "Results")
+                rows.append(Item(head + (f" · {panel}" if panel else ""), header=True))
+                for x in results:
+                    rows.append(self._result_row(r, x))
+            if n_out:
+                rows.insert(2, Item(tr("Fora do intervalo", "Out of range"), value=str(n_out),
+                                    detail=tr("marcados com ▲ (alto) ou ▼ (baixo)",
+                                              "marked ▲ (high) or ▼ (low)"), enabled=False))
+        rows += [Item(tr("+ Nova análise", "+ New lab report"), button=True,
+                      action=lambda: a.push(LabReportEditor(a, None))),
+                 Item(tr("Catálogo", "Catalog"), button=True,
+                      action=lambda: a.push(ParameterCatalog(a))),
+                 Item(tr("Editar esta colheita", "Edit this collection"), button=True,
+                      primary=True, enabled=r is not None,
+                      action=lambda: a.push(LabReportEditor(a, self.report_id)))]
+        self.chrome.set(self.TITLE(),
+                        tr("Análises clínicas · valor atual e os 3 anteriores · Enter num "
+                           "resultado escreve o comentário do médico",
+                           "Lab results · current value and the 3 before · Enter on a result "
+                           "writes the doctor's comment"), self.footer())
+        self.list.set_items(rows, keep_index=True)
+
+    def _result_row(self, r: dict, x: dict) -> Item:
+        flag = health.flag(x)
+        mark = {"high": " ▲", "low": " ▼"}.get(flag, "")
+        name = labs.short_name(x["marker"]) if x.get("parameter_id") else x["marker"]
+        prev = labs.previous_values(self.app.db, x["marker"], r["done_on"], 3)
+        bits = []
+        for p in prev:
+            d = str(p["done_on"])
+            bits.append(f"{labs.value_text(p)} ({d[8:10]}/{d[5:7]}/{d[2:4]})")
+        trend = ""
+        if prev and x.get("value") is not None and prev[0].get("value") is not None:
+            diff = x["value"] - prev[0]["value"]
+            trend = " ↑" if diff > 0 else " ↓" if diff < 0 else " ="
+        detail = (tr("antes: ", "before: ") + " · ".join(bits) if bits
+                  else tr("primeira vez", "first time")) + " · " + ref_text(x)
+        if x.get("doctor_comment"):
+            detail = "🩺 " + _excerpt(x["doctor_comment"], 60) + " · " + detail
+        return Item(f"{name}{mark}", value=f"{labs.value_text(x)} {x['unit'] or ''}{trend}",
+                    detail=detail, action=lambda rid=x["id"], nm=name: self._edit_comment(
+                        rid, nm), data=("result", x["id"]))
+
+    def _pick_report(self) -> None:
+        from velo.ui.pickers import ChoicePopup
+        reps = health.lab_reports(self.app.db)
+        names = [f"{x['done_on']}" + (f" · {x['lab']}" if x.get("lab") else "")
+                 + f" · {x['n']} " + tr("análises", "results") for x in reps]
+        cur = next((i for i, x in enumerate(reps) if x["id"] == self.report_id), 0)
+
+        def pick(k: int) -> None:
+            self.report_id = reps[k]["id"]
+            self.list.index = 0
+            self.enter()
+        self.app.push(ChoicePopup(self.app, tr("Colheita", "Collection"), names, cur, pick))
+
+    def _edit_general(self) -> None:
+        r = health.lab_report(self.app.db, self.report_id)
+
+        def save(text: str) -> None:
+            health.save_lab_report(self.app.db, r["id"], done_on=r["done_on"],
+                                   lab=r.get("lab") or "", notes=r.get("notes") or "",
+                                   doctor_feedback=text)
+        self.app.push(TextEditScreen(self.app, tr("Comentário geral do médico",
+                                                  "Doctor's general comment"),
+                                     r["done_on"], r.get("doctor_feedback") or "", save))
+
+    def _edit_comment(self, result_id: int, name: str) -> None:
+        row = self.app.db.conn.execute("SELECT doctor_comment FROM lab_results WHERE id = ?",
+                                       (result_id,)).fetchone()
+        self.app.push(TextEditScreen(self.app, tr("Comentário do médico", "Doctor's comment"),
+                                     name, (row["doctor_comment"] if row else "") or "",
+                                     lambda text: labs.set_doctor_comment(self.app.db,
+                                                                          result_id, text)))
+
+    # -------------------------------------------------------- teclado
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if self.inner is not None and symbol != key.TAB:
+            return self.inner.on_key(symbol, modifiers)
+        return super().on_key(symbol, modifiers)
+
+    def on_text(self, text: str) -> bool:
+        if self.inner is not None:
+            return self.inner.on_text(text)
+        return super().on_text(text)
 
 
 class DailyLogScreen(EditScreen):
@@ -271,6 +473,7 @@ def group_name(g: str) -> str:
 class TextEditScreen(SnapshotUnsaved, Screen):
     """Texto livre com várias linhas (notas, comentário do médico).
     Enter muda de linha; Esc guarda e volta."""
+    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
 
     AGENT = False
 

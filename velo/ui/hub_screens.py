@@ -2,6 +2,8 @@
 (artigos e exercícios)."""
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from pyglet.window import key
 
 from velo.core import gym, inventory
@@ -50,12 +52,33 @@ class InventoryScreen(Screen):
     TABBED = True
 
     def tab_labels(self) -> list[str]:
-        return [tr("Visão Geral", "Overview")] + [tr(*v) for v in inventory.GROUPS.values()]
+        return [tr("Visão Geral", "Overview"),
+                tr("Lista completa de artigos", "Full item list")] + \
+            [tr(*v) for v in inventory.GROUPS.values()]
 
     def group(self) -> str | None:
-        if self.tab % len(self.tab_labels()) == 0:
+        i = self.tab % len(self.tab_labels())
+        if i == 0:
             return None
-        return list(inventory.GROUPS)[(self.tab - 1) % len(inventory.GROUPS)]
+        if i == 1:
+            return "@all"
+        return list(inventory.GROUPS)[(i - 2) % len(inventory.GROUPS)]
+
+    def item_row(self, r: dict, with_kind: bool = True) -> Item:
+        a = self.app
+        bits = [inventory.kind_name(r["kind"])] if with_kind else []
+        if r["weight_kg"]:
+            bits.append(f"{r['weight_kg']:g} kg")
+        if r.get("purchase_date"):
+            d = str(r["purchase_date"])
+            bits.append(tr("comprado em {d}", "bought {d}", d=f"{d[8:10]}/{d[5:7]}/{d[:4]}"))
+        if r.get("purchase_price") is not None:
+            bits.append(f"{r['purchase_price']:,.2f} €".replace(",", " "))
+        if r["notes"]:
+            bits.append(r["notes"])
+        return Item(r["name"], value=f"× {r['qty']}", detail=" · ".join(bits),
+                    action=lambda iid=r["id"]: a.push(ItemEditor(a, iid)),
+                    data=("item", r["id"]))
 
     def enter(self) -> None:
         a = self.app
@@ -64,19 +87,24 @@ class InventoryScreen(Screen):
         if g is None:
             items = self.overview()
             first_kind = next(iter(inventory.KINDS))
+        elif g == "@all":
+            # todos os artigos, por nome, com o grupo e a compra
+            first_kind = next(iter(inventory.KINDS))
+            items = [self.item_row(r) for r in sorted(inventory.items(a.db),
+                                                      key=lambda r: r["name"].lower())]
+            total = sum((r.get("purchase_price") or 0) * 1 for r in inventory.items(a.db))
+            if items and total:
+                items.insert(0, Item(tr("Valor gasto", "Money spent"),
+                                     value=f"{total:,.2f} €".replace(",", " "),
+                                     detail=tr("a soma dos preços de compra",
+                                               "the sum of the purchase prices"),
+                                     enabled=False))
+            if not items:
+                items = [Item(tr("Ainda não há artigos", "No items yet"), enabled=False)]
         else:
             kinds = [k for k, v in inventory.KINDS.items() if v[2] == g]
             first_kind = kinds[0] if kinds else "other"
-            items = []
-            for r in inventory.items(a.db):
-                if r["kind"] not in kinds:
-                    continue
-                w = f" · {r['weight_kg']:g} kg" if r["weight_kg"] else ""
-                items.append(Item(r["name"], value=f"× {r['qty']}",
-                                  detail=inventory.kind_name(r["kind"]) + w
-                                  + (" · " + r["notes"] if r["notes"] else ""),
-                                  action=lambda iid=r["id"]: a.push(ItemEditor(a, iid)),
-                                  data=("item", r["id"])))
+            items = [self.item_row(r) for r in inventory.items(a.db) if r["kind"] in kinds]
             if not items:
                 items = [Item(tr("Ainda nada neste grupo", "Nothing in this group yet"),
                               enabled=False)]
@@ -131,7 +159,9 @@ class ItemEditor(EditPopup):
         r = inventory.item(app.db, iid) if iid else None
         self.v = {"name": (r or {}).get("name") or "", "kind": (r or {}).get("kind") or kind,
                   "qty": (r or {}).get("qty", 1), "weight_kg": (r or {}).get("weight_kg"),
-                  "notes": (r or {}).get("notes") or ""}
+                  "notes": (r or {}).get("notes") or "",
+                  "purchase_date": (r or {}).get("purchase_date"),
+                  "purchase_price": (r or {}).get("purchase_price")}
         self._armed = False
 
     def title(self) -> str:
@@ -154,17 +184,46 @@ class ItemEditor(EditPopup):
                      value="—" if v["weight_kg"] is None else f"{v['weight_kg']:g} kg",
                      data="num:weight_kg", detail=tr("de cada um (opcional)",
                                                      "each (optional)")),
+                Item(tr("Data de compra", "Purchase date"),
+                     value=self._date_text(), data="cyc:purchase_date",
+                     detail=tr("Enter abre o calendário · ←/→ um dia",
+                               "Enter opens the calendar · ←/→ one day")),
+                Item(tr("Preço de compra", "Purchase price"),
+                     value="—" if v["purchase_price"] is None else
+                     f"{v['purchase_price']:,.2f} €".replace(",", " "),
+                     data="num:purchase_price",
+                     detail=tr("escreve o valor · ←/→ ±1 € · Shift ±10 €",
+                               "type the amount · ←/→ ±1 € · Shift ±10 €")),
                 Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes")]
         if self.iid:
             rows.append(Item(tr("Apagar o artigo", "Delete the item"), action=self._delete,
                              detail=tr("Enter duas vezes", "Enter twice")))
         return rows
 
+    def _date_text(self) -> str:
+        d = self.v.get("purchase_date")
+        return f"{d[8:10]}/{d[5:7]}/{d[:4]}" if d else "—"
+
+    def date_get(self, field: str):
+        return self.v.get("purchase_date") or date.today().isoformat()
+
+    def date_set(self, field: str, iso: str) -> None:
+        self.v["purchase_date"] = iso
+        self.enter()
+
     def cycle(self, field: str, step: int) -> None:
+        if field == "purchase_date":
+            cur = date.fromisoformat(self.v.get("purchase_date") or date.today().isoformat())
+            self.v["purchase_date"] = (cur + timedelta(days=step)).isoformat()
+            return
         ks = list(inventory.KINDS)
         self.v["kind"] = ks[(ks.index(self.v["kind"]) + step) % len(ks)]
 
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
+        if field == "purchase_price":
+            cur = self.v["purchase_price"] or 0.0
+            self.v["purchase_price"] = max(0.0, round(cur + steps * (10 if big else 1), 2))
+            return
         if field == "qty":
             self.v["qty"] = max(0, self.v["qty"] + steps * (5 if big else 1))
         else:
@@ -172,6 +231,9 @@ class ItemEditor(EditPopup):
             self.v["weight_kg"] = max(0.0, round(cur + steps * (5 if big else 0.5), 2))
 
     def num_set(self, field: str, value) -> None:
+        if field == "purchase_price":
+            self.v["purchase_price"] = value
+            return
         if field == "qty":
             self.v["qty"] = int(value or 0)
         else:
@@ -192,7 +254,9 @@ class ItemEditor(EditPopup):
         v = self.v
         self.iid = inventory.save(self.app.db, self.iid, name=v["name"], kind=v["kind"],
                                   qty=v["qty"], weight_kg=v["weight_kg"],
-                                  notes=v["notes"] or None)
+                                  notes=v["notes"] or None,
+                                  purchase_date=v.get("purchase_date"),
+                                  purchase_price=v.get("purchase_price"))
         return True
 
     def _delete(self) -> None:

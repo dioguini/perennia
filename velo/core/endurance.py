@@ -453,7 +453,13 @@ class EnduranceEngine:
         self.checkpoint()
 
     def set_speed(self, kmh: float) -> None:
-        self.speed_kmh = max(0.0, min(30.0, round(kmh, 1)))
+        top = 30.0
+        if self.sport == "running":
+            try:            # a velocidade máxima da passadeira (Definições → Desportos)
+                top = float(self.db.get("treadmill_max_kmh", 20.0) or 20.0)
+            except Exception:
+                pass
+        self.speed_kmh = max(0.0, min(top, round(kmh, 1)))
 
     def add_length(self, n: int = 1) -> None:
         """Natação: mais uma piscina (ou menos, para corrigir)."""

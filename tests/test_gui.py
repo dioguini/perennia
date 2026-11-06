@@ -314,7 +314,11 @@ class TestSettingsScreen(GuiCase):
     def test_auto_pause_toggle(self):
         self.pick("Definições")
         self.select("Pausa automática")
-        self.press(key.ENTER)                         # Enter não muda valores
+        self.press(key.ENTER)                         # Enter abre a lista, não muda
+        from velo.ui.pickers import ChoicePopup
+        self.assertIsInstance(self.screen(), ChoicePopup)
+        self.assertEqual(self.screen().options, ["Ligado", "Desligado"])
+        self.press(key.ESCAPE)
         self.assertFalse(self.screen().dirty)
         self.press(key.RIGHT)
         self.save()
@@ -498,8 +502,7 @@ class TestSettingsScreen(GuiCase):
         return boxes.load(self.app.db, metrics.REGISTRY)
 
     def test_boxes_editor_adds_orders_and_limits(self):
-        self.pick("Definições")
-        self.pick("Caixas do ecrã")
+        self.app.push(app_mod.BoxesScreen(self.app))
         self.assertIsInstance(self.screen(), app_mod.BoxesScreen)
         labels = [i.label for i in self.screen().list.items]
         self.assertEqual(labels[:6], ["1 · Potência", "2 · Pedalada", "3 · Cardio",
@@ -523,19 +526,19 @@ class TestSettingsScreen(GuiCase):
 
     def test_metric_catalog_hides_metrics_from_the_editor(self):
         self.pick("Definições")
-        self.pick("Métricas disponíveis")
-        self.assertIsInstance(self.screen(), app_mod.MetricsCatalogScreen)
+        scr = self.screen()
+        scr.tab_named("Desportos")                    # Ciclismo · Métricas disponíveis
         self.pick("Torque médio")                     # desliga
-        self.press(key.ESCAPE)
-        self.pick("Caixas do ecrã")
+        self.assertEqual(scr.list.selected.value, "Desligado")
+        self.save()
+        self.app.push(app_mod.BoxesScreen(self.app))
         self.pick("1 · Potência")
         labels = [i.label.strip() for i in self.screen().list.items]
         self.assertNotIn("Torque médio", labels)
         self.assertIn("Torque", labels)
 
     def test_box_can_be_renamed_and_reset(self):
-        self.pick("Definições")
-        self.pick("Caixas do ecrã")
+        self.app.push(app_mod.BoxesScreen(self.app))
         self.pick("1 · Potência")
         self.select("Nome")
         for _ in range(len("Potência")):
@@ -1487,18 +1490,18 @@ class TestHomeScreen(GuiCase):
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
         titles = [tile.title_text for tile in home.tiles]
-        self.assertEqual(titles[:7], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
-                                      "Calendário", "Saúde"])
-        self.assertEqual(titles[7:], ["Rotas", "Segmentos", "Estatísticas gerais",
-                                      "Inventário de artigos", "Exercícios", "Backups"])
+        self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
+                                      "Saúde"])
+        self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Estatísticas gerais",
+                                      "Inventário de artigos", "Exercícios"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
-        self.assertGreater(home.tiles[0].bg.y, home.tiles[7].bg.y)
-        self.assertEqual(home.tiles[0].bg.y, home.tiles[6].bg.y)
-        # a segunda fila (seis cartões) fica ao centro
+        self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
+        self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
+        # a segunda fila (cinco cartões) fica ao centro
         left = home.tiles[0].bg.x
-        right = home.tiles[6].bg.x + home.tiles[6].bg.width
-        row2 = (home.tiles[7].bg.x + home.tiles[12].bg.x + home.tiles[12].bg.width) / 2
+        right = home.tiles[5].bg.x + home.tiles[5].bg.width
+        row2 = (home.tiles[6].bg.x + home.tiles[10].bg.x + home.tiles[10].bg.width) / 2
         self.assertAlmostEqual(row2, (left + right) / 2, delta=1)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
@@ -1507,24 +1510,31 @@ class TestHomeScreen(GuiCase):
             self.assertGreaterEqual(tl.title.font_size, 12)
         self.assertEqual(home.form_title.text, "Forma")
         self.assertIn("seguidos", home.streak_lines[0].text)
-        self.assertIn("Próximos treinos", home.up_title.text)
+        self.assertNotIn("Calendário", titles)        # o calendário está no ecrã
+        self.assertTrue(home.cal.title.text)
 
-    def test_home_lists_the_next_two_weeks(self):
+    def test_home_calendar_opens_a_day_to_add_things(self):
         from datetime import date, timedelta
         from velo.core import calendar_view as cv
         wid = self.app.db.workouts()[0]["id"]
-        cv.plan_add(self.app.db, date.today() + timedelta(days=2), "cycling", wid, "Plano A")
-        cv.plan_add(self.app.db, date.today() + timedelta(days=13), "cycling", wid, "Plano B")
-        cv.plan_add(self.app.db, date.today() + timedelta(days=15), "cycling", wid, "Longe")
+        when = date.today() + timedelta(days=2)
+        cv.plan_add(self.app.db, when, "cycling", wid, "Plano A")
         self.press(key.ESCAPE)
         home = self.screen()
-        titles = [e.title for e in home.upcoming]
-        self.assertEqual(titles, ["Plano A", "Plano B"])        # só duas semanas
-        self.assertTrue(any("Plano A" in r[2].text for r in home.up_rows))
-        self.press(key.DOWN, key.DOWN, key.ENTER)                # dos cartões para a lista
+        self.assertIn(when if when.month == home.cal.month else date.today(),
+                      [r[4] for r in home.cal._rects])
+        self.press(key.DOWN, key.DOWN)                           # dos cartões para o calendário
+        self.assertTrue(home.cal.focused)
+        self.press(key.RIGHT, key.RIGHT, key.ENTER)
         from velo.ui import calendar_screens as cs_
-        self.assertIsInstance(self.screen(), cs_.DayScreen)
-        self.assertEqual(self.screen().day, date.today() + timedelta(days=2))
+        day = self.screen()
+        self.assertIsInstance(day, cs_.DayScreen)
+        self.assertEqual(day.day, when)
+        labels = [i.label for i in day.list.items]
+        self.assertTrue(any("Plano A" in x for x in labels))
+        for want in ("+ Planear um treino neste dia", "Nota do dia",
+                     "Diário de saúde deste dia"):
+            self.assertIn(want, labels)
 
     def test_running_hub_and_back_arrow_returns(self):
         self.press(key.ESCAPE)
@@ -1540,7 +1550,7 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.press(key.DOWN)                        # para a fila de baixo
-        self.assertTrue(home.tiles[7].selected)
+        self.assertTrue(home.tiles[6].selected)
         self.press(key.RIGHT, key.RIGHT, key.ENTER)
         self.assertIsInstance(self.screen(), app_mod.StatsScreen)    # as gerais
         self.assertEqual(type(self.screen()).__name__, "GeneralStatsScreen")
