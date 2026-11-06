@@ -205,7 +205,9 @@ def ensure(db: Database) -> None:
     for table, cols in (("lab_reports", (("kind", "TEXT"),)),
                         ("lab_results", (("parameter_id", "INTEGER"), ("area", "TEXT"),
                                          ("panel", "TEXT"), ("subpanel", "TEXT"),
-                                         ("value_pct", "REAL"), ("qualifier", "TEXT")))):
+                                         ("value_pct", "REAL"), ("qualifier", "TEXT"),
+                                         # o comentário do médico a esta análise
+                                         ("doctor_comment", "TEXT")))):
         have = {r["name"] for r in db.conn.execute(f"PRAGMA table_info({table})")}
         for c, decl in cols:
             if c not in have:
@@ -387,6 +389,85 @@ def grouped_results(db: Database, report_id: int) -> list[tuple[str, str | None,
             out.append((area, panel, []))
         out[-1][2].append(r)
     return out
+
+
+CSV_DATE = ("date", "data", "done_on", "collection_date", "data_colheita", "dia")
+CSV_MARKER = ("marker", "parametro", "parâmetro", "parameter", "analise", "análise", "test",
+              "name", "nome")
+CSV_VALUE = ("value", "valor", "result", "resultado")
+
+
+def import_csv(db: Database, path: str | Path) -> dict:
+    """Análises clínicas num .csv: uma linha por resultado, com a data da
+    colheita, o nome da análise e o valor (e, se houver, a unidade, os
+    limites e o laboratório). Separador «,» ou «;»; datas AAAA-MM-DD ou
+    DD/MM/AAAA. As colheitas que já existem (mesma data e laboratório)
+    recebem os resultados novos."""
+    import csv
+    from datetime import datetime as _dt
+    ensure(db)
+    text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    sample = text[:2000]
+    delim = ";" if sample.count(";") > sample.count(",") else ","
+    rows = list(csv.DictReader(text.splitlines(), delimiter=delim))
+    if not rows:
+        raise ValueError("o ficheiro está vazio")
+
+    def col(row: dict, names: tuple) -> str | None:
+        low = {(k or "").strip().lower(): v for k, v in row.items()}
+        for n in names:
+            if n in low and str(low[n] or "").strip():
+                return str(low[n]).strip()
+        return None
+
+    reports: dict[tuple, int] = {}
+    n = 0
+    for row in rows:
+        day_raw, marker, value = col(row, CSV_DATE), col(row, CSV_MARKER), col(row, CSV_VALUE)
+        if not (day_raw and marker and value is not None):
+            continue
+        day = None
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
+            try:
+                day = _dt.strptime(day_raw[:10], fmt).date().isoformat()
+                break
+            except ValueError:
+                continue
+        if day is None:
+            continue
+        lab = col(row, ("lab", "laboratorio", "laboratório")) or ""
+        key_ = (day, lab)
+        if key_ not in reports:
+            from .health import save_lab_report
+            rid = find_report(db, day, lab, None)
+            reports[key_] = rid or save_lab_report(db, None, done_on=day, lab=lab)
+        unit = col(row, ("unit", "unidade"))
+        lo, hi = num(col(row, ("ref_low", "min", "minimo", "mínimo"))), \
+            num(col(row, ("ref_high", "max", "maximo", "máximo")))
+        pid = upsert_parameter(db, marker, unit=unit) if unit else None
+        if pid and (lo is not None or hi is not None):
+            set_parameter_reference(db, pid, lo, hi)
+        add_result(db, reports[key_], marker, value,
+                   area=col(row, ("area", "área", "grupo")))
+        n += 1
+    return {"reports": len(reports), "results": n, "parameters": len(parameters(db))}
+
+
+def set_doctor_comment(db: Database, result_id: int, text: str) -> None:
+    ensure(db)
+    db.conn.execute("UPDATE lab_results SET doctor_comment = ? WHERE id = ?",
+                    (text or None, result_id))
+    db.conn.commit()
+
+
+def previous_values(db: Database, marker: str, before: str, n: int = 3) -> list[dict]:
+    """Os `n` valores anteriores do mesmo marcador (os mais recentes primeiro)."""
+    ensure(db)
+    return [dict(r) for r in db.conn.execute(
+        "SELECT x.value, x.value_text, x.unit, x.qualifier, x.value_pct, r.done_on"
+        " FROM lab_results x"
+        " JOIN lab_reports r ON r.id = x.report_id WHERE x.marker = ? AND r.done_on < ?"
+        " ORDER BY r.done_on DESC LIMIT ?", (marker, before, n))]
 
 
 def value_text(r: dict) -> str:

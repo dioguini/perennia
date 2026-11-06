@@ -487,28 +487,26 @@ class TestLabsGui(tg.GuiCase):
         make_lab_xlsx(self.app.data_dir / "imports" / "analises.xlsx") \
             if (self.app.data_dir / "imports").mkdir(parents=True, exist_ok=True) is None \
             else None
-        self.press(key.ESCAPE)                       # volta ao ecrã inicial
-        self.pick("Saúde")
-        self.pick("Análises")
-        self.pick("Importar do Excel")
-        imp = self.screen()
-        self.assertIsInstance(imp, hs.ImportScreen)
+        self.pick("Definições")                       # Sincronização → Análises
+        scr = self.screen()
+        scr.tab_named("Sincronização")
+        scr.sync_tab = 2
+        scr.enter()
         self.pick("analises.xlsx")
-        self.assertEqual(imp.last_report["reports"], 2)
-        self.press(key.ESCAPE)
-        labs_scr = self.screen()
-        labs_scr.enter()
-        self.pick("2025-07-23")
+        self.assertEqual(scr.sync.last_report["reports"], 2)
+        self.app.reset_to_menu()
+        self.press(key.ESCAPE)                       # volta ao ecrã inicial
+        self.pick("Saúde")                           # o separador Análises: o report
         rep = self.screen()
+        self.pick("Colheita")                        # a lista das colheitas
+        self.pick("2025-07-23")
         labels = [i.label for i in rep.list.items]
         self.assertIn("Bioquímica · Ferro", labels)              # um título de secção
         head = next(i for i in rep.list.items if i.label == "Bioquímica · Ferro")
         self.assertTrue(head.header)
         self.assertIn("Ferritina ▲", labels)
         self.assertIn("Colesterol HDL ▼", labels)
-        self.press(key.ESCAPE)
-        self.screen().enter()
-        self.pick("Catálogo de parâmetros")
+        self.pick("Catálogo")
         cat = self.screen()
         self.assertIsInstance(cat, hs.ParameterCatalog)
         self.pick("Ferritina")

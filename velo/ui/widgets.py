@@ -167,6 +167,7 @@ class ListView:
     head_y: float | None = None
     head_x: float = 48
     head_w: float = 800
+    head_stack: bool = False      # as linhas `head` uma por baixo da outra
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
@@ -232,7 +233,60 @@ class ListView:
         self.visible_rows = n
         self._sync()
 
+    # ------------------------------------------------------------ pesquisa
+    #
+    # A pesquisa do canto superior direito filtra as linhas enquanto se
+    # escreve: ficam as que têm o texto no rótulo, no valor ou na descrição
+    # (sem ligar a maiúsculas nem a acentos), os títulos das secções onde
+    # sobra alguma e os botões.
+
+    query: str = ""
+    all_items: list = []
+
+    @staticmethod
+    def norm(text: str) -> str:
+        import unicodedata
+        s = unicodedata.normalize("NFKD", str(text or "")).lower()
+        return "".join(c for c in s if not unicodedata.combining(c))
+
+    def matches(self, it: Item, words: list[str]) -> bool:
+        hay = self.norm(" ".join((it.label or "", it.value or "", it.detail or "")))
+        return all(w in hay for w in words)
+
+    def _filtered(self, items: list[Item]) -> list[Item]:
+        words = self.norm(self.query).split()
+        if not words:
+            return list(items)
+        keep = [it.button or (not it.header and self.matches(it, words)) for it in items]
+        # um título fica se alguma linha da sua secção ficou
+        for i, it in enumerate(items):
+            if it.header:
+                j = i + 1
+                while j < len(items) and not items[j].header:
+                    if keep[j] and not items[j].button:
+                        keep[i] = True
+                        break
+                    j += 1
+        return [it for it, k in zip(items, keep) if k]
+
+    def set_query(self, query: str) -> None:
+        cur = self.selected
+        self.query = query
+        self.items = self._filtered(self.all_items)
+        self.index = self.items.index(cur) if cur in self.items else 0
+        self.scroll = 0
+        if self.items and self.items[self.index].header:
+            self.index = self._next_selectable(self.index, 1)
+        self._sync()
+
+    @property
+    def hidden_count(self) -> int:
+        return sum(1 for it in self.all_items if not it.button and not it.header) - \
+            sum(1 for it in self.items if not it.button and not it.header)
+
     def set_items(self, items: list[Item], keep_index: bool = False) -> None:
+        self.all_items = list(items)
+        items = self._filtered(items)
         self.items = items
         if not keep_index or self.index >= len(items):
             self.index = 0
@@ -295,7 +349,11 @@ class ListView:
             c, r = divmod(k, per)
             slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * self.row_h,
                           col_w, c))
-        if heads:
+        if heads and self.head_stack:
+            for j, idx in enumerate(heads):
+                slots.append((idx, self.head_x, self.head_y - j * self.row_h, self.head_w,
+                              "h"))
+        elif heads:
             hw = (self.head_w - self.COL_GAP * (len(heads) - 1)) / len(heads)
             for j, idx in enumerate(heads):
                 slots.append((idx, self.head_x + j * (hw + self.COL_GAP), self.head_y, hw,
@@ -370,8 +428,11 @@ class ListView:
         self._sync_buttons()
 
     def _sync_buttons(self) -> None:
-        bottom = [i for i in self.button_indices() if not self.items[i].top]
-        top = [i for i in self.button_indices() if self.items[i].top]
+        # todos os botões em baixo, à direita; os que eram «do topo» (Adicionar,
+        # Novo…) ficam à esquerda dos outros
+        bottom = [i for i in self.button_indices() if self.items[i].top] + \
+            [i for i in self.button_indices() if not self.items[i].top]
+        top: list[int] = []
         while len(self._buttons) < len(bottom) + len(top):
             self._add_button()
         self._button_rects = []
@@ -415,14 +476,14 @@ class ListView:
     @property
     def buttons_left(self) -> float | None:
         """Onde começam os botões de ação (para o rodapé não lhes passar por cima)."""
-        low = [r for r in self._button_rects if not self.items[r[0]].top]
+        low = [r for r in self._button_rects if r[4] >= BUTTON_H]
         if not low:
             return None
-        return low[0][1]
+        return min(r[1] for r in low)
 
     @property
     def has_top_buttons(self) -> bool:
-        return any(it.top for it in self.items)
+        return False                  # os botões ficam todos em baixo, à direita
 
     @property
     def selected(self) -> Item | None:
@@ -478,6 +539,56 @@ class ListView:
                 self.activate()
                 return True
         return False
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class SearchBox:
+    """A pesquisa do canto superior direito: filtra a lista da tab enquanto se
+    escreve. Ctrl+F (ou /, ou um clique) para escrever; Esc limpa; Enter ou ↓
+    voltam à lista com o filtro."""
+
+    W, H = 300, 30
+
+    def __init__(self):
+        self.batch = pyglet.graphics.Batch()
+        self.outline = pyglet.shapes.Rectangle(0, 0, self.W + 2, self.H + 2, color=BORDER,
+                                               batch=self.batch)
+        self.bg = pyglet.shapes.Rectangle(0, 0, self.W, self.H, color=PANEL, batch=self.batch)
+        self.label = make_label("", font_size=12, color=DIM, anchor_y="center",
+                                batch=self.batch)
+        self.count = make_label("", font_size=10, color=DIM, anchor_x="right",
+                                anchor_y="center", batch=self.batch)
+        self.focused = False
+        self.text = ""
+        self.x = self.y = 0.0
+
+    def place(self, right: float, top: float, width: float | None = None) -> None:
+        w = width or self.W
+        self.x, self.y = right - w, top - self.H
+        self.bg.x, self.bg.y, self.bg.width = self.x, self.y, w
+        self.outline.x, self.outline.y, self.outline.width = self.x - 1, self.y - 1, w + 2
+        self.label.x, self.label.y = self.x + 10, self.y + self.H / 2
+        self.count.x, self.count.y = self.x + w - 8, self.y + self.H / 2
+        self._w = w
+
+    def refresh(self, hidden: int = 0) -> None:
+        from velo.core.i18n import tr
+        if self.text:
+            shown = self.text + ("▏" if self.focused else "")
+            self.label.color = TEXT
+        else:
+            shown = (tr("Escreve para filtrar…", "Type to filter…") if self.focused
+                     else tr("Pesquisar · Ctrl+F", "Search · Ctrl+F"))
+            self.label.color = DIM if not self.focused else TEXT
+        self.label.text = fit_text(shown, getattr(self, "_w", self.W) - 60, 12)
+        self.count.text = (f"−{hidden}" if hidden else "") if self.text else ""
+        self.outline.color = ACCENT[:3] if self.focused else BORDER
+
+    def hit(self, mx: float, my: float) -> bool:
+        return self.x <= mx <= self.x + getattr(self, "_w", self.W) and \
+            self.y <= my <= self.y + self.H
 
     def draw(self) -> None:
         self.batch.draw()
@@ -1327,8 +1438,8 @@ class TopBar:
         self.more = make_label("", font_size=10, color=HEADER_DIM, anchor_y="center",
                                batch=self.batch)
         self.buttons: dict[str, tuple] = {}
-        for key_, icon in (("devices", "devices"), ("settings", "gear"),
-                           ("quit", "power_button")):
+        for key_, icon in (("devices", "devices"), ("backups", "recover"),
+                           ("settings", "gear"), ("quit", "power_button")):
             r = pyglet.shapes.Rectangle(0, 0, 10, self.H - 4,
                                         color=_theme.mix(HEADER, (255, 255, 255), 0.13),
                                         batch=self.batch)
@@ -1337,7 +1448,7 @@ class TopBar:
             ic = icons.sprite(icon, 0, 0, 16, batch=self.batch, opacity=235,
                               tint=HEADER_TEXT)
             self.buttons[key_] = (r, lab, ic)
-        self.enabled = {"devices": True, "settings": True, "quit": True}
+        self.enabled = {"devices": True, "backups": True, "settings": True, "quit": True}
         self.devices: list[tuple[str, str]] = []
         self._chip_rects: list[tuple[float, float, float]] = []
         # data e hora, ao lado do botão Dispositivos
@@ -1365,8 +1476,10 @@ class TopBar:
         self.clock.text = text
         return True
 
-    def set_texts(self, devices: str, settings: str, quit_: str) -> None:
-        for k, txt in (("devices", devices), ("settings", settings), ("quit", quit_)):
+    def set_texts(self, devices: str, settings: str, quit_: str, backups: str = "Backups"
+                  ) -> None:
+        for k, txt in (("devices", devices), ("settings", settings), ("quit", quit_),
+                       ("backups", backups)):
             self.buttons[k][1].text = txt
         self._clock_key = None
         self.update_clock()
@@ -1376,7 +1489,7 @@ class TopBar:
         w, h = self.window.width, self.window.height
         self.bg.x, self.bg.y, self.bg.width = 0, h - self.H, w
         x = w - 12
-        for k in ("quit", "settings", "devices"):
+        for k in ("quit", "settings", "backups", "devices"):
             r, lab, ic = self.buttons[k]
             bw = max(60, len(lab.text) * 6.6 + 34)
             x -= bw

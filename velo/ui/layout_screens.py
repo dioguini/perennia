@@ -69,6 +69,7 @@ class LayoutEditor(Screen):
     alterações ficam em rascunho até **Guardar** (em baixo, à direita);
     **Cancelar** volta ao que estava gravado. No remo, que tem várias páginas
     de campos, PgUp/PgDn (ou um clique) mudam de página."""
+    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
 
     AGENT = False
     TABBED = True
@@ -101,7 +102,8 @@ class LayoutEditor(Screen):
             self.saved[sport] = repr(loaded)
             self.drafts[sport] = [list(g) for g in loaded]
         self.groups = self.drafts[sport]
-        self.cat = lay.catalog(sport)
+        from velo.core import workout_meta as wm
+        self.cat = wm.enabled_catalog(self.app.db, sport)   # sem as desligadas
         self.sel = (0, 0)
         self.page_idx = 0
         pages = list(self.sh.group_names) if self.sh.kind == "grid" and self.sh.groups > 1 \

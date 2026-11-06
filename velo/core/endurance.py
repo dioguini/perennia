@@ -453,7 +453,13 @@ class EnduranceEngine:
         self.checkpoint()
 
     def set_speed(self, kmh: float) -> None:
-        self.speed_kmh = max(0.0, min(30.0, round(kmh, 1)))
+        top = 30.0
+        if self.sport == "running":
+            try:            # a velocidade máxima da passadeira (Definições → Desportos)
+                top = float(self.db.get("treadmill_max_kmh", 20.0) or 20.0)
+            except Exception:
+                pass
+        self.speed_kmh = max(0.0, min(top, round(kmh, 1)))
 
     def add_length(self, n: int = 1) -> None:
         """Natação: mais uma piscina (ou menos, para corrigir)."""
@@ -686,10 +692,25 @@ class EnduranceEngine:
         hrs = [h for h in self._hrs if h]
         load, source = None, None
         tp = self.avg_pace_s
-        thr = self.ctx.run_pace_s if self.sport == "running" else self.ctx.swim_css_s
-        if tp and self.distance_m > 200:
-            if_ = thr / tp
-            load, source = self.t / 3600.0 * if_ * if_ * 100.0, "pace"
+        from . import tss
+        if self.sport == "running" and self.distance_m > 200:
+            # rTSS como o TrainingPeaks: o NGS (velocidade normalizada) face ao limiar
+            try:
+                self.flush()
+                speeds = [x[0] or 0.0 for x in self.db.conn.execute(
+                    "SELECT speed_mps FROM endurance_samples WHERE session_id = ?"
+                    " ORDER BY t_s", (self.session_id,))]
+            except Exception:
+                speeds = []
+            if len(speeds) >= 30:
+                load = tss.rtss(speeds, self.t, 1000.0 / self.ctx.run_pace_s)
+                source = "rtss" if load is not None else None
+            elif tp:
+                if_ = self.ctx.run_pace_s / tp
+                load, source = self.t / 3600.0 * if_ * if_ * 100.0, "pace"
+        elif self.sport == "swimming" and self.distance_m > 50:
+            load = tss.stss(self.distance_m, self.t, self.ctx.swim_css_s)
+            source = "stss" if load is not None else None
         if load is None:
             load = st.hr_load(self._hrs, self.lthr)
             source = "hr" if load is not None else None

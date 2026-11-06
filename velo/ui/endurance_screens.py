@@ -136,7 +136,15 @@ def record_items(app, sport: str) -> list[Item]:
                               n=_pretty(s["name"]) or sp.name(sport)),
                     action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
     unit = " " + pace_unit(sport)
-    return [
+    extra = []
+    if sport == "running":
+        from velo.ui.evolution_screens import EvolutionScreen
+        extra = [Item(tr("Métricas de evolução da corrida", "Running progress metrics"),
+                      value="›", detail=tr("Eficiência, desacoplamento, durabilidade, previsões "
+                                           "e zonas de ritmo", "Efficiency, decoupling, "
+                                           "durability, predictions and pace zones"),
+                      action=lambda: a.push(EvolutionScreen(a, tab=1)))]
+    return extra + [
         Item(tr("Sessões", "Sessions"), value=str(len(ss)), enabled=False),
         Item(tr("Distância total", "Total distance"), value=_m(dist), enabled=False),
         Item(tr("Horas", "Hours"), value=f"{hours:.1f}", enabled=False),

@@ -129,6 +129,34 @@ def levels(db) -> dict:
             "w_max": float(cfg.get("w_max", 400))}
 
 
+# Os aparelhos sem controlo (Definições → Desportos → Sessões Não ERG): o
+# construtor de treinos não deixa passar destes limites.
+DEVICE_DEFAULTS = {"rower_levels": 10, "treadmill_max_kmh": 20.0,
+                   "treadmill_max_incline": 15.0}
+
+
+def device_limits(db) -> dict:
+    """{"trainer_levels", "rower_levels", "treadmill_max_kmh", "treadmill_max_incline"}."""
+    out = {k: db.get(k, v) for k, v in DEVICE_DEFAULTS.items()}
+    out["trainer_levels"] = levels(db)["n"]
+    out["rower_levels"] = int(out["rower_levels"] or 10)
+    out["treadmill_max_kmh"] = float(out["treadmill_max_kmh"] or 20.0)
+    out["treadmill_max_incline"] = float(out["treadmill_max_incline"] or 15.0)
+    return out
+
+
+def metrics_key(sport: str) -> str:
+    """A chave das métricas desligadas de um desporto (o ciclismo usa a antiga)."""
+    return "metrics_disabled" if sport == "cycling" else f"metrics_disabled_{sport}"
+
+
+def enabled_catalog(db, sport: str) -> list[tuple[str, str]]:
+    """As métricas que o desporto pode mostrar, sem as desligadas nas Definições."""
+    from . import layouts as lay
+    off = set(db.get(metrics_key(sport), []) or [])
+    return [(k, n) for k, n in lay.catalog(sport) if k not in off]
+
+
 def level_of(pct: float, ftp: int, cfg: dict) -> int:
     watts = pct / 100.0 * ftp
     n = max(2, cfg["n"])

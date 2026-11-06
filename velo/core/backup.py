@@ -83,7 +83,7 @@ class Component:
 
 
 ATALHOS = ("keymap",)
-ECRA_PREFIXES = ("screen_layout_", "layout_", "hud_")
+ECRA_PREFIXES = ("screen_layout_", "layout_", "hud_", "metrics_disabled_")
 ECRA_KEYS = ("row_fields", "metrics_disabled")
 LIGACOES_PREFIXES = ("strava_", "garmindb_", "agent_")
 LIGACOES_KEYS = ("sync_garmindb",)
@@ -114,14 +114,17 @@ COMPONENTS: tuple[Component, ...] = (
               "nome, peso, FTP e limiares", "name, weight, FTP and thresholds",
               tables=("athlete",)),
     Component("definicoes", "Definições", "Settings",
-              "unidades, tema, zonas, sessões, preferências de ligação…",
-              "units, theme, zones, sessions, connection preferences…",
+              "unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, forma e "
+              "fadiga (CTL/ATL iniciais), preferências de ligação…",
+              "units, theme, zones, General, non-ERG device limits, form and fatigue "
+              "(starting CTL/ATL), connection preferences…",
               settings=_is_definicao),
     Component("atalhos", "Atalhos de teclado", "Keyboard shortcuts",
               "as teclas que mudaste", "the keys you changed", settings=_is_atalho),
     Component("ecra", "Ecrã da sessão", "Session screen",
-              "disposição dos painéis e métricas de cada desporto",
-              "panel layout and metrics of each sport", settings=_is_ecra),
+              "disposição do ecrã e métricas de sessão disponíveis em cada desporto",
+              "screen layout and available session metrics of each sport",
+              settings=_is_ecra),
     Component("aparelhos", "Aparelhos", "Devices",
               "dispositivos emparelhados e calibrações", "paired devices and calibrations",
               tables=("devices", "trainer_calibrations")),
@@ -145,13 +148,16 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("exercises", "exercise_equipment", "exercise_modalities",
                       "strength_workouts", "strength_workout_items", "strength_structures")),
     Component("inventario", "Inventário de artigos", "Equipment inventory",
-              "bicicletas, sapatilhas, peças e o seu uso", "bikes, shoes, parts and their use",
+              "bicicletas, sapatilhas, peças, o seu uso e a data e o preço de compra",
+              "bikes, shoes, parts, their use and purchase date and price",
               tables=("equipment_items",)),
     Component("sessoes", "Histórico de sessões", "Session history",
               "todas as sessões (ciclismo, remo, corrida, natação, ginásio): amostras, "
-              "voltas, tempos em subidas e segmentos, jogos, sincronizadas — e os .fit",
+              "voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, "
+              "TrainingPeaks, com a TSS) — e os .fit",
               "every session (cycling, rowing, running, swimming, gym): samples, laps, "
-              "climb and segment times, games, synced — and the .fit files",
+              "climb and segment times, games, imported (Garmin, TrainingPeaks, with TSS) — "
+              "and the .fit files",
               tables=("rides", "ride_samples", "laps", "climb_efforts", "route_efforts",
                       "chase_efforts", "ride_comparisons", "workout_step_results",
                       "game_results", "row_sessions", "row_samples", "row_laps",
@@ -171,8 +177,9 @@ COMPONENTS: tuple[Component, ...] = (
               "testes, resultados e testes de FTP", "tests, results and FTP tests",
               tables=("fitness_tests", "test_results", "ftp_tests")),
     Component("saude", "Saúde", "Health",
-              "valores diários, métricas e análises clínicas",
-              "daily values, metrics and lab reports",
+              "valores diários (HRV4Training incluído), métricas e análises clínicas com os "
+              "comentários do médico", "daily values (HRV4Training included), metrics and "
+              "lab reports with the doctor's comments",
               tables=("metric_defs", "daily_values", "lab_parameters", "lab_reports",
                       "lab_results")),
     Component("calendario", "Calendário", "Calendar",

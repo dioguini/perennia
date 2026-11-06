@@ -218,27 +218,31 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Treze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
-(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), o
-**Calendário** e a **Saúde**; na segunda, ao centro, **Rotas**,
-**Segmentos**, **Estatísticas gerais**, **Inventário de artigos**,
-**Exercícios** e **Backups**. Um título que não caiba numa linha parte-se em
+Onze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e a
+**Saúde**; na segunda, ao centro, **Rotas**, **Segmentos**, **Estatísticas
+gerais**, **Inventário de artigos** e **Exercícios**. O Calendário deixou
+de ser um cartão: **está no próprio ecrã inicial** (ver abaixo), e os
+**Backups** passaram para a barra do topo. Um título que não caiba numa linha parte-se em
 duas (a letra nunca fica abaixo de 12 px). O título fica sempre por baixo do ícone, com a
 letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
 
-Por baixo dos cartões: a sequência de treino e a forma (à esquerda), os
-**próximos treinos das duas semanas seguintes** (ao centro, o que está
-planeado no Calendário, dia a dia) e o mapa das últimas 16 semanas (à
-direita). ↓ a partir da segunda fila de cartões entra na lista dos próximos
-treinos; Enter (ou um clique) abre esse dia do calendário.
+Por baixo dos cartões: a sequência de treino e a forma (à esquerda), **o
+calendário do mês** (ao centro, com os treinos feitos e planeados) e o mapa
+das últimas 16 semanas (à direita). ↓ a partir da segunda fila de cartões
+entra no calendário: setas mudam o dia, PgUp/PgDn o mês, T volta a hoje,
+↑ na primeira semana regressa aos cartões. **Enter (ou um clique) num dia
+abre-o**, e aí podes adicionar: **um treino planeado**, **a nota do dia** e
+**o diário de saúde desse dia**.
 
 **A barra do topo** está sempre visível, em todos os ecrãs:
 
 - À esquerda, os teus aparelhos com o estado: verde ligado, vermelho
   perdido, cinzento desligado.
-- À direita, a **data e a hora** («sáb 31/10/2026 · 09:05») e três botões:
-  **Dispositivos** (F4), **Definições** (F8) e **Desligar** (Ctrl+Q).
+- À direita, a **data e a hora** («sáb 31/10/2026 · 09:05») e quatro botões:
+  **Dispositivos** (F4), **Backups**, **Definições** (F8) e **Desligar**
+  (Ctrl+Q). Backups fica a cinzento durante uma sessão.
 - **Dispositivos** abre uma janela por cima do ecrã onde estás, também a
   meio de uma sessão. Aí ligas ou desligas cada aparelho e a sessão
   continua por baixo. Quando um aparelho se desliga aparece o aviso
@@ -248,13 +252,26 @@ treinos; Enter (ou um clique) abre esse dia do calendário.
 - **Desligar** pergunta sempre "Sair da Perennia?". A resposta já
   escolhida é "Não", para um Enter distraído não fechar a aplicação.
 
-**As Definições estão em separadores**: Atleta, Sessões, Ecrã e idioma,
-Ligações, **Sincronização** e **Atalhos de teclado**. Tab e Shift+Tab mudam
-de separador; também podes clicar. Em Atleta estão os limiares de todos os
-desportos: a FTP do ciclismo, a LTHR, a **FTP do remo**, o **ritmo de limiar
-da corrida** (min/km) e a **CSS da natação** (min/100 m). As zonas saem daí.
-Em Sessões, **Métricas disponíveis** abre as métricas em cartões espalhados
-pelo ecrã todo (setas mudam, Enter ou um clique liga/desliga).
+**As Definições estão em separadores**: Atleta, **Geral**, **Desportos**,
+Ecrã e idioma, Ligações Externas, **Sincronização** e **Atalhos de
+teclado**. Tab e Shift+Tab mudam de separador; também podes clicar.
+
+- **Atleta**: os limiares de todos os desportos — a FTP do ciclismo, a
+  LTHR, a **FTP do remo**, o **ritmo de limiar da corrida** (min/km) e a
+  **CSS da natação** (min/100 m) — cada um com a descrição do que é e para
+  que serve. As zonas saem daí. Também aqui: o **fitness (CTL) e a fadiga
+  (ATL) iniciais** (para começar com os números que trazes do
+  TrainingPeaks) e se **as atividades importadas contam** para a forma.
+- **Geral**: sensação de declive, n.º de passos seguintes, pausa
+  automática, ligação preferida e ligar ao abrir. O feedback no fim de
+  cada sessão é **sempre pedido** (já não se desliga).
+- **Desportos**: um separador por desporto (PgUp/PgDn muda), cada um com
+  três secções (Ctrl+←/→ muda): **Métricas de sessão disponíveis** (liga
+  e desliga as que o ecrã da sessão pode mostrar), **Disposição do ecrã de
+  sessão** e **Sessões Não ERG** — os limites do teu aparelho quando é
+  manual: **níveis do rolo** (ciclismo), **n.º de resistências** (remo),
+  **velocidade e inclinação máximas** (passadeira). O construtor de treinos
+  respeita estes limites (não deixa pedir mais do que o aparelho dá).
 
 **Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
 qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
@@ -267,9 +284,22 @@ tenha alguma coisa para guardar.
   continuam numa coluna ao lado, até ocupar a largura do ecrã. Só uma lista
   enorme (o inventário de exercícios da Longevidade, por exemplo) passa a
   ter páginas — o número da página aparece por baixo («1/3 ↑↓»).
-- **Os botões de ação** (Guardar, Apagar, Exportar, Só importar…) ficam **em
-  baixo, à direita**; o principal é o da ponta, realçado. **← Voltar** fica
-  em baixo, à esquerda. ↑↓ chegam aos botões como a qualquer linha.
+- **Os botões de ação** (Guardar, Apagar, Exportar, + Novo…) ficam **todos
+  em baixo, à direita** — em todos os ecrãs; o principal é o da ponta,
+  realçado. **← Voltar** fica em baixo, à esquerda. ↑↓ chegam aos botões
+  como a qualquer linha.
+- **Pesquisa em todos os separadores**, no canto superior direito: clica na
+  caixa ou carrega **Ctrl+F** (ou **/**) e escreve — a lista filtra-se
+  enquanto escreves (sem acentos nem maiúsculas a atrapalhar). Esc limpa o
+  texto; outro Esc sai da pesquisa.
+- **Escolhas com lista e pesquisa.** Enter numa opção de escolha (tema,
+  ligação, desporto…) abre uma **lista com pesquisa**: escreve para filtrar,
+  ↑↓ e Enter escolhe. As setas ←/→ ficam para os números (e ainda passam à
+  opção seguinte, para quem prefere).
+- **Seletor de datas em todos os campos de data** (inventário, análises,
+  sincronização, testes…): Enter abre o mês em grelha — ←/→ dia, ↑/↓
+  semana, PgUp/PgDn mês, H hoje; também podes escrever a data (AAAA-MM-DD ou
+  DD/MM/AAAA) ou clicar num dia.
 - **Nos construtores de treinos** (de qualquer desporto), voltar atrás com
   alterações por guardar abre a pergunta **Sair sem gravar · Cancelar ·
   Guardar**: sair sem gravar volta ao menu, Cancelar (ou Esc) volta à edição,
@@ -340,11 +370,10 @@ sessão?". Enquanto a pergunta está no ecrã, a sessão fica parada. **Sim**
 (ou Enter) grava e vai para o resumo. **Não** (ou Esc, ou N) volta à
 sessão em pausa, e a sessão continua mal voltes a pedalar.
 
-**As caixas.** Em **Definições → Caixas do ecrã** escolhes o que vai em
-cada caixa (1 a 7 métricas), por que ordem e com que nome. Enter numa
-métrica põe-na ou tira-a, ←/→ muda a ordem. Em **Definições → Métricas
-disponíveis** desligas as métricas que nunca usas, e elas deixam de
-aparecer no editor das caixas.
+**As métricas no ecrã.** Em **Definições → Desportos → Disposição do ecrã
+de sessão** escolhes o que aparece e onde. Em **Definições → Desportos →
+Métricas de sessão disponíveis** desligas as que nunca usas, e elas deixam
+de aparecer no editor.
 
 **Métricas.** Além das que já havia: **potência/peso** (W/kg, média de 3 s)
 e a média, **torque** e **torque médio**, **intervalo da zona** (de potência
@@ -467,12 +496,11 @@ prescrito».
 
 Tudo fica guardado para o futuro agente treinador. O feedback pode ser
 dado ou corrigido mais tarde, na primeira linha do resumo ou do detalhe da
-sessão, no Histórico. Desliga-se em **Definições → Sessões → Feedback no
-fim de cada sessão**.
+sessão, no Histórico. É sempre pedido.
 
 ### Ecrã da sessão, por desporto (arrastar as métricas)
 
-Em **Definições → Sessões → Ecrã da sessão, por desporto**, escolhe o
+Em **Definições → Desportos → Disposição do ecrã de sessão**, escolhe o
 desporto. Aparece uma miniatura do ecrã da sessão e, por baixo, todas as
 métricas que esse desporto conhece. As que já estão no ecrã aparecem
 realçadas. O tempo total fica sempre ao centro, em cima.
@@ -504,7 +532,7 @@ Fica com **Guardar** (em baixo, à direita); **Cancelar** volta ao gravado.
 
 ### Disposição do ecrã da sessão (arrastar painéis)
 
-Em **Definições → Sessões → Disposição do ecrã da sessão** (ou no botão
+Em **Definições → Desportos → Disposição do ecrã de sessão** (ou no botão
 **Disposição do ecrã**, em cima à direita, no editor das métricas) decides
 **onde fica cada painel** — um separador por desporto (ciclismo, remo,
 corrida, natação). Em cima está o ecrã da sessão em ponto pequeno, numa
@@ -532,30 +560,64 @@ avisos ficam sempre ao centro.
 
 ### Calendário
 
-**Calendário**, no ecrã inicial, mostra o mês no estilo do intervals.icu:
+O calendário **está no ecrã inicial**, por baixo dos cartões (já não há um
+menu à parte). Mostra o mês, de segunda a domingo, com as sessões feitas e
+os treinos planeados de cada dia.
 
-- uma linha por semana, de segunda a domingo;
-- em cada dia, as sessões feitas (de todos os desportos, com a cor do
-  desporto, a duração e o nome) e a carga do dia;
-- um ponto verde, amarelo ou vermelho, quando a sessão tem feedback;
-- os treinos planeados, marcados com ◷;
-- à direita, o **resumo de cada semana**: tempo, distância, número de
-  sessões, carga, plano por fazer e a forma no fim da semana (fitness e
-  fadiga).
+Teclas: ↓ a partir dos cartões entra no calendário; ←/→ dia, ↑/↓ semana,
+**PgUp/PgDn** mês, **T** hoje, **Enter** abre o dia; ↑ na primeira semana
+volta aos cartões. Com o rato, um clique num dia abre-o.
 
-Teclas: ←/→ dia, ↑/↓ semana, **PgUp/PgDn** (ou [ e ]) mês, **T** hoje,
-**Enter** abre o dia. Com o rato, um clique escolhe o dia e outro abre-o; em
-cima estão ‹ mês anterior · Hoje · mês seguinte ›.
-
-**O dia aberto** mostra o que fizeste, com o feedback, e o que estava
-planeado. Daí:
+**Ao abrir um dia** vês o que fizeste, com o feedback, e o que estava
+planeado. Daí podes adicionar:
 
 - **+ Planear um treino neste dia**: escolhe o desporto e o treino;
-- Enter num treino planeado abre o resumo, para começares;
-- **Del** tira-o do plano.
+- **Nota do dia**: um texto livre (como te sentiste, o tempo, a viagem…);
+- **Diário de saúde deste dia**: os valores da Saúde (sono, HRV, peso…)
+  desse dia.
 
-Um treino planeado fica **✓ feito** quando nesse dia há uma sessão desse
-treino.
+Enter num treino planeado abre o resumo, para começares; **Del** tira-o do
+plano. Um treino planeado fica **✓ feito** quando nesse dia há uma sessão
+desse treino.
+
+### Métricas de sessão e métricas de evolução
+
+A Perennia separa dois tipos de métricas:
+
+- **Métricas de sessão** — as que vês **durante** um treino (potência, FC,
+  ritmo, cadência…). Escolhem-se em **Definições → Desportos → Métricas de
+  sessão disponíveis**.
+- **Métricas de evolução** — as que mostram **como estás a mudar** ao
+  longo das semanas. Estão em **Estatísticas gerais → Métricas de
+  evolução** (e em Corrida → Estatísticas → Métricas de evolução da
+  corrida), em três separadores:
+
+**Forma e fadiga** — o fitness (CTL), a fadiga (ATL), a forma (TSB) e o
+ramp de 7 dias de hoje, todos os desportos juntos, e o gráfico.
+
+**Corrida** (precisa de corridas com FC):
+
+- **Fator de eficiência (EF)**: velocidade normalizada (m/min) ÷ FC média.
+  Mais alto é melhor: corres mais depressa com o mesmo coração.
+- **Desacoplamento ritmo:FC**: quanto a EF da 2.ª metade cai face à 1.ª,
+  na última corrida longa. Abaixo de 5 % = base aeróbia sólida.
+- **Durabilidade**: quanto a EF cai no último quarto dos treinos de 75 min
+  ou mais.
+- **Avisos de progressão da carga**: uma corrida mais de 10 % mais longa do
+  que a mais longa dos 30 dias anteriores; o volume semanal a subir mais de
+  10 % face à semana anterior.
+- **Previsões de prova** (5 km, 10 km, meia, maratona) pela fórmula de
+  **Riegel** a partir da melhor corrida (≥ 3 km) dos últimos 90 dias, e a
+  maratona também pela fórmula de **Tanda**, que conta com o volume semanal
+  das últimas 8 semanas (Riegel costuma ser otimista na maratona).
+- **Zonas de ritmo** por três métodos: **80/20** (Fitzgerald), **Friel**
+  (a partir do teu ritmo de limiar) e **Daniels** (a partir do VDOT da
+  melhor corrida recente).
+
+**Prontidão** — a HRV (média de 7 dias face ao normal de 60 dias, ± 0,5
+desvio, como o HRV4Training), a FC em repouso (5 bpm acima da linha de base
+é um sinal) e o sono (1 h abaixo do costume é um sinal): sem sinais,
+**Pronto**; um, **Atenção**; dois ou mais, **Descansa**.
 
 ### Carga e prontidão
 
@@ -605,7 +667,8 @@ na corrida e na natação** (o ginásio tem o seu): o separador Construtor de
 treinos lista os treinos da mesma maneira (duração, definição e tipo,
 descrição) e tem **+ Novo treino** em baixo, à direita.
 
-- **Em cima**, o nome e o objetivo do treino; por baixo, a paleta e o
+- **Em cima**, o **Nome do treino** e, na linha de baixo, o **Objetivo do
+  treino**; por baixo, a paleta e o
   gráfico; **por baixo do gráfico**, o bloco escolhido, com a descrição de
   cada opção à frente dela.
 - **No meio de cada bloco**, em letra grande: a zona, o valor na vista
@@ -616,8 +679,13 @@ descrição) e tem **+ Novo treino** em baixo, à direita.
 - **O bloco escolhido**, por baixo do gráfico, tem o título **«Bloco X de
   N»** e por baixo o **Tipo** (aquecimento, trabalho, descanso, retorno à
   calma). A lista fica sempre no mesmo sítio, numa coluna, seja qual for o
-  bloco. **Apagar o bloco** (ou Del) pergunta numa janela; **Guardar**
-  mostra «Treino guardado».
+  bloco. Para apagar o bloco carrega em **Del** (está no rodapé; já não há
+  a linha «Apagar bloco»), que pergunta numa janela; **Guardar** mostra
+  «Treino guardado».
+- **Os limites do teu aparelho** (Definições → Desportos → Sessões Não ERG)
+  valem no construtor: o nível do rolo não passa do número de níveis, a
+  resistência do remo do número de resistências, e a velocidade e a
+  inclinação da passadeira dos máximos que puseste.
 - **ERG ou Manual.** «+ Novo treino» pergunta primeiro o
   tipo, no ciclismo, no remo e na corrida (a natação é sempre manual):
   - **ERG** — o aparelho segue o treino sozinho (o rolo põe os watts, a
@@ -625,8 +693,8 @@ descrição) e tem **+ Novo treino** em baixo, à direita.
     aceite comandos. No ciclismo é por **zonas de potência**.
   - **Manual** — a sessão mostra o que o treino pede e és tu que o pões no
     aparelho, ou o segues pela FC/RPE. No ciclismo: **FC**, **RPE** ou
-    **Níveis do rolo** (primeiro defines em **Definições → Sessões** quantos
-    níveis tem o teu rolo e os watts no nível 1 e no máximo). Na corrida: o
+    **Níveis do rolo** (primeiro defines em **Definições → Desportos →
+    Ciclismo → Sessões Não ERG** quantos níveis tem o teu rolo). Na corrida: o
     ritmo, e por bloco a **velocidade** e a **inclinação** da passadeira. No
     remo: potência, ritmo, FC ou RPE, com a **resistência** e a **voga**.
   As listas de treinos mostram a definição e o tipo («Potência · ERG»).
@@ -882,7 +950,9 @@ ginásio → Por exercício**.
 **Inventário de artigos** (no ecrã inicial ou em Ginásio) é o teu
 equipamento, arrumado em separadores por tipo: máquinas, pesos livres,
 estações, peso do corpo, eletrónica e outros. Cada artigo tem
-quantidade, peso e uma nota.
+quantidade, peso, uma nota, a **data de compra** (com o seletor de datas) e
+o **preço de compra**. O separador **Lista completa de artigos** mostra
+todos juntos, com o **valor gasto** (a soma dos preços).
 
 **Exercícios** tem um separador por modalidade. Cada exercício diz de que
 equipamento precisa, e um exercício pode pertencer a várias modalidades.
@@ -944,19 +1014,34 @@ treino, não um percentil de uma população medida.
 ### Fitness, fadiga e forma
 
 São três números que as plataformas de treino usam (no TrainingPeaks chamam-se
-CTL, ATL e TSB):
+CTL, ATL e TSB). **Calculam-se exatamente como no TrainingPeaks e no WKO
+(modelo de Coggan):**
 
-- **Fitness:** a carga média dos últimos 42 dias. Sobe devagar com o treino
-  consistente.
-- **Fadiga:** a carga média dos últimos 7 dias. Sobe e desce depressa.
-- **Forma:** fitness − fadiga. Negativa quando estás a carregar, positiva
-  quando estás descansado.
+- **Fitness (CTL):** média exponencial da carga diária com constante de 42
+  dias: CTL hoje = CTL ontem + (carga de hoje − CTL ontem) × (1 − e^(−1/42)).
+  Sobe devagar com o treino consistente.
+- **Fadiga (ATL):** o mesmo, com constante de 7 dias. Sobe e desce depressa.
+- **Forma (TSB):** o fitness **de ontem** menos a fadiga **de ontem** — a
+  forma com que entras no dia, antes do treino de hoje (como o
+  TrainingPeaks).
+
+Um treino de 100 TSS a partir do zero dá CTL 2,4 e ATL 13,3, e no dia
+seguinte TSB −11 — os mesmos números do TrainingPeaks. Se trazes um
+histórico de lá, põe o **CTL e o ATL iniciais** em Definições → Atleta. As
+**atividades importadas** (GarminDB, TrainingPeaks) contam com a TSS do
+TrainingPeaks quando a têm, ou pela FC; uma atividade do mesmo dia e do
+mesmo desporto que uma sessão da Perennia, com duração parecida (± 25 %), é
+a mesma e não conta duas vezes.
 
 A frase por baixo diz em que zona estás: acima de +25 "muito fresco: a perder
 forma"; +5 a +25 "fresco: bom para competir ou testar"; −10 a +5 "zona
 neutra"; −30 a −10 "a construir forma"; abaixo de −30 "carga muito alta".
 
-A **carga** do ciclismo é a TSS. A da força calcula-se pela frequência
+A **carga** do ciclismo é a TSS (potência normalizada). A da **corrida** é
+a **rTSS** (velocidade normalizada, com o declive, face ao teu ritmo de
+limiar) e a da **natação** a **sTSS** (velocidade face à CSS, ao cubo),
+como no TrainingPeaks. Na primeira vez que abres esta versão, as cargas das
+corridas e natações já gravadas são recalculadas assim. A da força calcula-se pela frequência
 cardíaca na mesma escala (uma hora no teu limiar = 100). Sem FC suficiente,
 usa o RPE (RPE 10 durante uma hora = 100). Nas estatísticas do ciclismo o
 gráfico conta só o ciclismo; nas da força, só a força; nas **Estatísticas
@@ -1183,6 +1268,14 @@ O cartão **Saúde** tem:
   escolha ou hora), liga e desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
+- **A Saúde está em separadores**: **Análises**, **Testes de longevidade**,
+  **Diários**, **Tendências** e **Métricas**.
+- **Análises (o relatório):** em cima, **Colheita** (Enter abre a lista das
+  datas, com pesquisa) e o **Comentário geral do médico**; por baixo, todos
+  os resultados de uma vez, por área, cada um com o **valor atual, a
+  tendência e os 3 valores anteriores**, e o **comentário do médico** dessa
+  análise (Enter numa linha escreve-o). Botões: + Nova análise, Catálogo e
+  Editar esta colheita.
 - **Análises clínicas:** uma por data, com laboratório, notas e a caixa do
   **comentário do médico**; os resultados aparecem agrupados por área e exame
   (Hematologia · Hemograma, Bioquímica · Ferro…), com ▲/▼ quando estão fora.
@@ -1214,8 +1307,23 @@ O cartão **Saúde** tem:
 ### Sincronização (GarminDB)
 
 Em **Definições → Sincronização** trazes os teus dados de uma fonte para a
-base da Perennia. Cada fonte tem o seu separador; por agora há um, o
-[GarminDB](https://github.com/tcgoetz/GarminDB), que descarrega os dados do
+base da Perennia. Cada fonte tem o seu separador:
+
+- **HRV4Training (.csv)** — o export da app (Definições → Exportar
+  medições). Entra no diário da Saúde.
+- **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
+  se quiseres, unidade, mínimo, máximo, laboratório), separador «,» ou «;»,
+  datas AAAA-MM-DD ou DD/MM/AAAA. Também serve o Excel das análises.
+- **TrainingPeaks (.csv de atividades)** — no TrainingPeaks web:
+  Calendário → Exportar → Workouts. As atividades entram no Histórico com a
+  **TSS do TrainingPeaks** e contam para a forma e a fadiga. Os treinos só
+  planeados (sem tempo feito) ignoram-se; importar outra vez não duplica.
+
+Nos três, a lista mostra os ficheiros que a Perennia encontra em
+Transferências e na pasta `imports/` (ou arrasta o ficheiro para a janela);
+Enter importa.
+
+E o [GarminDB](https://github.com/tcgoetz/GarminDB), que descarrega os dados do
 Garmin Connect para bases locais (`~/HealthData/DBs`). A Perennia **lê essas
 bases** e, se o GarminDB estiver instalado, corre-o por ti. A tua
 palavra-passe do Garmin fica só na configuração do GarminDB
@@ -1231,8 +1339,8 @@ palavra-passe do Garmin fica só na configuração do GarminDB
      - *Todo o histórico* — sem `--latest`: desde as datas de início da
        configuração do GarminDB (`data.<dado>_start_date`; nas atividades,
        as últimas `download_all_activities`).
-     - *Um intervalo de datas* — **Desde** e **Até** (←/→ um dia, Shift um
-       mês). Com **Escrever as datas na configuração** ligado, as datas vão
+     - *Um intervalo de datas* — **Desde** e **Até** (Enter abre o
+       **seletor de datas**; ←/→ também muda um dia, Shift um mês). Com **Escrever as datas na configuração** ligado, as datas vão
        para `data.<dado>_start_date` e `data.<dado>_end_date` (formato
        MM/DD/AAAA) do GarminDB, com uma cópia `GarminConnectConfig.json.bak`
        antes; a Perennia importa só esse intervalo. As atividades, no
@@ -1271,10 +1379,12 @@ Importar outra vez não as duplica.
 
 A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 
-### Backups e reposição (menu do ecrã inicial)
+### Backups e reposição (botão na barra do topo)
 
 Tudo o que a Perennia guarda — **mesmo tudo** — sai num só ficheiro `.zip`,
-e volta a entrar com um clique. O menu tem dois separadores:
+e volta a entrar com um clique. Abre-se no botão **Backups** da barra do
+topo (ao lado de Dispositivos e Definições), em qualquer ecrã fora de uma
+sessão. Tem dois separadores:
 
 **Exportar** — marca **Tudo (exportação completa)** ou só as componentes que
 quiseres (Enter ou ←/→ marca e desmarca) e carrega em **Exportar** (ou
@@ -1285,20 +1395,20 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, sessões, preferências… |
+| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, CTL/ATL iniciais, preferências… |
 | Atalhos de teclado | as teclas que mudaste |
-| Ecrã da sessão | disposição dos painéis e métricas de cada desporto |
+| Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
 | Rotas | os .gpx: pontos, perfil, subidas |
 | Segmentos | os da Perennia e os do Strava |
 | Treinos | as listas de treinos de todos os desportos (com definição, objetivos, planos de voltas e as cópias das sessões) |
 | Ginásio e exercícios | exercícios, treinos de força e as suas estruturas |
-| Inventário de artigos | bicicletas, sapatilhas, peças |
-| Histórico de sessões | todas as sessões, com amostras, voltas, tempos em subidas e segmentos, jogos, sincronizadas — e os `.fit` |
+| Inventário de artigos | bicicletas, sapatilhas, peças, com data e preço de compra |
+| Histórico de sessões | todas as sessões, com amostras, voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, TrainingPeaks, com a TSS) — e os `.fit` |
 | Análises e feedback | o feedback e a análise de cada sessão, picos e curvas de potência |
 | Desafios | desafios e tentativas |
 | Testes de aptidão | testes, resultados, testes de FTP |
-| Saúde | valores diários, métricas, análises clínicas |
+| Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico |
 | Calendário | treinos planeados e notas do dia |
 | Ficheiros | treinos exportados, importações, a pasta `workouts` |
 | Ligações externas (credenciais) | Strava (chaves e sessão) e GarminDB (pastas) — **só se pedires** |
@@ -1358,6 +1468,21 @@ pasta de dados, como de costume. Os nomes das componentes são: perfil,
 definicoes, atalhos, ecra, aparelhos, rotas, segmentos, treinos, ginasio,
 inventario, sessoes, analises, desafios, testes, saude, calendario,
 ficheiros, ligacoes.
+
+**Importar pela linha de comandos** (as mesmas importações da
+Sincronização, sem abrir a janela):
+
+```bash
+python main.py --importar trainingpeaks ~/Transferências/workouts.csv
+```
+
+```bash
+python main.py --importar hrv4training ~/Transferências/MyMeasurements.csv
+```
+
+```bash
+python main.py --importar analises ~/Transferências/analises.csv
+```
 
 ### Rotas (menu do ecrã inicial)
 
@@ -1569,7 +1694,7 @@ gravar a sessão, como até aqui.
 Aparece no ecrã da sessão como **Balanço E/D**, em percentagem de cada perna,
 por exemplo `49 / 51`, com média de 3 segundos para não saltar a cada
 pedalada. Há também a métrica **Balanço E/D médio** (da sessão), que podes
-pôr numa caixa em Definições → Caixas do ecrã. O balanço fica:
+pôr no ecrã em Definições → Desportos → Disposição do ecrã de sessão. O balanço fica:
 
 - no resumo da sessão, e em cada subida (ao lado da potência, do pulso e da
   cadência);
@@ -1601,7 +1726,7 @@ aplicação mostra mais duas métricas, por perna:
   esse.
 
 Ficam no ecrã por omissão, com as médias da sessão disponíveis em
-Definições → Caixas do ecrã. Também ficam no resumo, em cada volta, na
+Definições → Desportos → Disposição do ecrã de sessão. Também ficam no resumo, em cada volta, na
 base de dados e no `.fit`, nos campos próprios da norma, que o Garmin
 Connect e o Golden Cheetah mostram. Só chegam por **ANT+**: o perfil de
 potência do Bluetooth não os transporta.
@@ -1886,6 +2011,21 @@ o `perennia.db`. O que a ronda 6 acrescentou:
 A ronda 7 (Backups e reposição) **não muda o esquema**: lê e escreve as
 tabelas que já existem.
 
+O que a ronda 8 acrescentou (tudo automático ao abrir):
+
+| Tabela / coluna / definição | Para quê |
+|---|---|
+| `equipment_items.purchase_date`, `equipment_items.purchase_price` | data e preço de compra de cada artigo |
+| `lab_results.doctor_comment` | o comentário do médico a cada análise |
+| `synced_activities.tss`, `.if_value`, `.avg_power_w`, `.np_w` | a TSS, o IF e a potência das atividades importadas (TrainingPeaks) |
+| definições `pmc_ctl0`, `pmc_atl0`, `pmc_synced` | CTL e ATL iniciais e se as atividades importadas contam para a forma |
+| definições `rower_levels`, `treadmill_max_kmh`, `treadmill_max_incline` | os limites Não ERG do remo e da passadeira (os níveis do rolo já existiam) |
+| definições `metrics_disabled_<desporto>` | as métricas de sessão desligadas de cada desporto |
+
+Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
+natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
+TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
+
 **Para mudar de computador:** faz um backup completo (menu Backups ou
 `python main.py --backup`), leva o .zip e, no computador novo, arrasta-o para
 a janela da Perennia e escolhe Substituir. Também continua a dar para copiar
@@ -1953,7 +2093,21 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (560 testes a passar).
+**Verificado com testes automáticos nesta versão** (704 testes a passar).
+
+*Novidades desta versão (24 testes novos, e os antigos atualizados):* o
+fitness, a fadiga e a forma com as constantes e a forma do dia anterior do
+TrainingPeaks (100 TSS a partir do zero dá CTL 2,353, ATL 13,312 e TSB
+−10,96 no dia seguinte) e com o CTL/ATL iniciais; rTSS (1 h ao limiar =
+100) e sTSS (a intensidade ao cubo); EF, desacoplamento e durabilidade;
+os avisos de progressão (corrida longa e volume semanal); Riegel, Tanda e o
+VDOT de Daniels (5 km em 20:00 ≈ 49,8) com as três tabelas de zonas; a
+prontidão (pronto, atenção, descansa); a importação do TrainingPeaks (sem
+duplicar, a contar para a carga) e das análises em .csv com o comentário do
+médico; a data e o preço de compra; os limites dos aparelhos; a pesquisa
+nas listas; o seletor de datas e a lista com pesquisa; o calendário no
+ecrã inicial; o ecrã das métricas de evolução; as definições novas nas
+componentes certas do backup; e o `--importar` da linha de comandos.
 
 *Novidades desta versão (13 testes):*
 

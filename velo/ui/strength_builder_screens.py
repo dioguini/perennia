@@ -56,6 +56,7 @@ class MenuPopup(ConfirmScreen):
 
 
 class StrengthBuilder(Screen):
+    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
     AGENT = True
     MAX_RECTS = 420
     MAX_LABELS = 520

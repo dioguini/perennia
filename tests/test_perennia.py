@@ -406,7 +406,9 @@ class TestLayouts(tg.GuiCase):
 
     def test_settings_open_the_editor(self):
         self.pick("Definições")
-        self.pick("Ecrã da sessão")
+        self.screen().tab_named("Desportos")
+        self.screen().set_section(1)
+        self.pick("Métricas no ecrã da sessão")
         ed = self.screen()
         self.assertIsInstance(ed, ls.LayoutEditor)
         self.assertEqual(ed.tab_labels(), ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"])
@@ -458,8 +460,7 @@ class TestCalendar(tg.GuiCase):
         self.assertTrue(cv.planned_for(db, today)[0].done)
 
     def test_calendar_screen_navigation_and_planning(self):
-        self.press(key.ESCAPE)
-        self.pick("Calendário")
+        self.app.push(cs.CalendarScreen(self.app))
         scr = self.screen()
         self.assertIsInstance(scr, cs.CalendarScreen)
         today = date.today()
@@ -485,8 +486,7 @@ class TestCalendar(tg.GuiCase):
         self.app._on_draw()
 
     def test_mouse_selects_then_opens_a_day(self):
-        self.press(key.ESCAPE)
-        self.pick("Calendário")
+        self.app.push(cs.CalendarScreen(self.app))
         scr = self.screen()
         d, cx, cy, cw, ch = next(g for g in scr.cell_geo
                                  if g[0] != scr.sel and g[0].month == scr.month)

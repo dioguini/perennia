@@ -414,7 +414,8 @@ class TestHealthGui(tg.GuiCase):
 
     def test_daily_log(self):
         self.go()
-        self.pick("Diário de hoje")
+        self.screen().tab_named("Diários")
+        self.pick("hoje")
         log = self.screen()
         self.assertIsInstance(log, hs.DailyLogScreen)
         db = self.app.db
@@ -452,8 +453,7 @@ class TestHealthGui(tg.GuiCase):
         self.assertEqual(log.day, today)
 
     def test_labs_flow_with_doctor_feedback(self):
-        self.go()
-        self.pick("Análises clínicas")
+        self.go()                                    # o separador Análises
         self.pick("Nova análise")
         ed = self.screen()
         self.assertIsInstance(ed, hs.LabReportEditor)
@@ -476,10 +476,25 @@ class TestHealthGui(tg.GuiCase):
         reps = health.lab_reports(self.app.db)
         self.assertEqual(reps[0]["done_on"], "2026-10-15")
         self.assertEqual(reps[0]["doctor_feedback"], "Repetir em 3 meses.")
+        # o report: a colheita, o comentário geral e cada resultado com o comentário
+        menu = self.screen()
+        self.assertIsInstance(menu, hs.HealthMenu)
+        menu.enter()
+        labels = [i.label for i in menu.list.items]
+        self.assertIn("Colheita", labels)
+        general = next(i for i in menu.list.items if i.label == "Comentário geral do médico")
+        self.assertIn("Repetir em 3 meses", general.detail)
+        self.pick("LDL")
+        self.app._on_text("Dieta e voltar a medir.")
+        self.press(key.ESCAPE)
+        menu.enter()
+        ldl = next(i for i in menu.list.items if "LDL" in i.label)
+        self.assertIn("Dieta e voltar a medir", ldl.detail)
+        self.assertIn("primeira vez", ldl.detail)
 
     def test_metrics_manager_and_trend(self):
         self.go()
-        self.pick("Métricas do diário")
+        self.screen().tab_named("Métricas")
         self.pick("Nova métrica")
         self.type("Comi fruta")
         self.pick("Guardar e sair")
@@ -487,12 +502,12 @@ class TestHealthGui(tg.GuiCase):
         self.select("Passos")
         self.press(key.A)                                       # desligar
         self.assertFalse(health.metric_by_key(self.app.db, "steps")["active"])
-        self.press(key.ESCAPE)
         db = self.app.db
         mid = health.metric_by_key(db, "sleep_hours")["id"]
         for k in range(10):
             health.set_value(db, date.today() - timedelta(days=k), mid, 7 + k % 3 * 0.5)
-        self.pick("Tendências")
+        self.screen().tab_named("Tendências")
+        self.pick(health.metric_by_key(db, "sleep_hours")["name"])
         trend = self.screen()
         self.assertTrue(trend.chart.points)
         self.assertIn("média", trend.summary.text)
@@ -501,10 +516,14 @@ class TestHealthGui(tg.GuiCase):
         imports = Path(self.tmp) / "imports"
         imports.mkdir(exist_ok=True)
         (imports / "My_Measurements.csv").write_text("date,rMSSD\n2026-10-28,70\n")
-        self.go()
-        self.pick("Importar dados")
+        self.pick("Definições")
+        scr = self.screen()
+        scr.tab_named("Sincronização")
+        scr.sync_tab = 1                                       # HRV4Training
+        scr.enter()
         self.pick("My_Measurements.csv")
-        self.assertEqual(self.screen().last_report["values"], 1)
+        self.assertEqual(scr.sync.last_report["values"], 1)
+        self.assertIn("1 valores", scr.list.items[0].value)
 
 
 # ===================================================== treino livre / conditioning

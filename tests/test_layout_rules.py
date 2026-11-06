@@ -285,13 +285,19 @@ class TestSettingsTabs(tg.GuiCase):
     def test_tabs_and_athlete_rowing_ftp(self):
         self.pick("Definições")
         scr = self.screen()
-        self.assertEqual(scr.tab_labels(), ["Atleta", "Sessões", "Ecrã e idioma",
+        self.assertEqual(scr.tab_labels(), ["Atleta", "Geral", "Desportos", "Ecrã e idioma",
                                             "Ligações Externas", "Sincronização",
                                             "Atalhos de teclado"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
-        scr.tab_named("Sessões")
-        self.assertFalse(any("Resistência extra" in i.label or "resistência" in i.label.lower()
-                             for i in scr.list.items))
+        ftp = next(i for i in scr.list.items if i.label.startswith("FTP"))
+        self.assertIn("limiar", ftp.detail)                   # cada métrica explicada
+        scr.tab_named("Geral")
+        labels = [i.label for i in scr.list.items]
+        self.assertFalse(any("Resistência extra" in x or "resistência" in x.lower()
+                             for x in labels))
+        for gone in ("Caixas do ecrã", "Feedback no fim de cada sessão",
+                     "Rolo sem ERG: watts no nível 1", "Rolo sem ERG: watts no nível máximo"):
+            self.assertNotIn(gone, labels)
 
     def test_shortcuts_are_listed_by_context(self):
         self.pick("Definições")
@@ -307,23 +313,19 @@ class TestSettingsTabs(tg.GuiCase):
         self.assertIn("Marcar volta (lap)", labels)
         self.assertTrue(any(i.header and i.label == "Sessão de ciclismo" for i in items))
 
-    def test_metrics_are_a_grid(self):
+    def test_sports_tab_has_a_tab_per_sport_and_three_sections(self):
         self.pick("Definições")
-        self.pick("Métricas")
         scr = self.screen()
-        self.assertIsInstance(scr, app_mod.MetricsCatalogScreen)
-        n = len(scr.list.items)
-        self.assertEqual(len(scr.grid.rects), n)
-        x, top, width, bottom = scr.grid.geometry
-        for cx, cy, tw, th in scr.grid.rects:
-            self.assertGreaterEqual(cy, bottom - 1)
-            self.assertLessEqual(cx + tw, x + width + 1)
-        self.assertGreater(scr.grid.cols, 1)
-        first = scr.list.items[0].label
-        self.press(key.ENTER)                                 # liga/desliga
-        self.assertNotEqual(scr.list.items[0].label, first)
-        self.press(key.DOWN)
-        self.assertEqual(scr.list.index, scr.grid.cols)
+        scr.tab_named("Desportos")
+        self.assertEqual(scr.section_labels(), ["Métricas de sessão disponíveis",
+                                                "Disposição do ecrã de sessão",
+                                                "Sessões Não ERG"])
+        self.assertEqual(scr.sport, "cycling")
+        self.press(key.PAGEDOWN)                              # o remo
+        self.assertEqual(scr.sport, "rowing")
+        self.app._on_key_press(key.RIGHT, key.MOD_CTRL)
+        self.app._on_key_press(key.RIGHT, key.MOD_CTRL)       # Sessões Não ERG
+        self.assertIn("Níveis de resistência do remo", [i.label for i in scr.list.items])
 
 
 # ================================================================ GarminDB

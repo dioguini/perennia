@@ -347,6 +347,11 @@ def ensure(db: Database) -> None:
       imported_at TEXT);
     CREATE INDEX IF NOT EXISTS ix_synced_sport ON synced_activities(sport, started_at);
     """)
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(synced_activities)")}
+    for c, decl in (("tss", "REAL"), ("if_value", "REAL"), ("avg_power_w", "REAL"),
+                    ("np_w", "REAL")):
+        if c not in cols:                 # a TSS do TrainingPeaks (e a calculada)
+            db.conn.execute(f"ALTER TABLE synced_activities ADD COLUMN {c} {decl}")
     db.conn.commit()
 
 

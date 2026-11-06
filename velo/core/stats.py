@@ -6,6 +6,7 @@ Tudo em SQL sobre a base local — nenhum serviço externo envolvido.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 
 from .db import Database
@@ -93,26 +94,17 @@ def training_load(db: Database, days: int = 90) -> list[tuple[str, float, float,
         "SELECT started_at, tss FROM rides WHERE status = 'completed'"
         " AND started_at >= ? ORDER BY started_at", (_days_ago(days + 42),)
     ).fetchall()
-    daily: dict[str, float] = {}
+    daily: dict = {}
     for r in rows:
         when = _parse(r["started_at"])
         if when is None:
             continue
-        key = when.date().isoformat()
+        key = when.date()
         daily[key] = daily.get(key, 0.0) + (r["tss"] or 0.0)
     if not daily:
         return []
-    start = datetime.fromisoformat(min(daily)).date()
-    end = datetime.now(timezone.utc).date()
-    ctl = atl = 0.0
-    out = []
-    day = start
-    while day <= end:
-        tss = daily.get(day.isoformat(), 0.0)
-        ctl += (tss - ctl) / 42.0
-        atl += (tss - atl) / 7.0
-        out.append((day.isoformat(), ctl, atl, ctl - atl))
-        day += timedelta(days=1)
+    out = [(f["date"].isoformat(), f["ctl"], f["atl"], f["tsb"])
+           for f in pmc(daily, datetime.now(timezone.utc).date(), db)]
     return out[-days:]
 
 
@@ -607,14 +599,101 @@ def form_state(tsb: float) -> str:
     return "overload"
 
 
-def daily_load(db: Database, sports: tuple[str, ...] = SPORTS) -> dict:
-    """{data local: carga} somando os desportos pedidos."""
+# Como o TrainingPeaks e o WKO (Coggan): médias exponenciais com as
+# constantes de tempo de 42 e de 7 dias — CTL(d) = CTL(d−1) + (TSS(d) −
+# CTL(d−1)) · (1 − e^(−1/42)) — e a forma (TSB) de um dia é o CTL menos o ATL
+# do dia ANTERIOR (a forma com que se entra no dia). O ponto de partida é o
+# CTL e o ATL iniciais das Definições (Atleta), no dia antes da 1.ª carga.
+CTL_DAYS, ATL_DAYS = 42.0, 7.0
+K_CTL = 1.0 - math.exp(-1.0 / CTL_DAYS)
+K_ATL = 1.0 - math.exp(-1.0 / ATL_DAYS)
+
+
+def pmc(daily: dict, today, db: Database | None = None, start=None) -> list[dict]:
+    """[{date, load, ctl, atl, tsb}] desde o 1.º dia com carga (ou `start`)
+    até `today`, com as fórmulas do TrainingPeaks/WKO."""
+    if not daily and start is None:
+        return []
+    ctl0 = atl0 = 0.0
+    if db is not None:
+        try:
+            ctl0 = float(db.get("pmc_ctl0", 0.0) or 0.0)
+            atl0 = float(db.get("pmc_atl0", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            pass
+    ctl, atl = ctl0, atl0
+    out = []
+    first = min(daily) if daily else today
+    day = first
+    if start is not None and start < first:
+        # antes da 1.ª carga, os valores iniciais ficam parados
+        d = start
+        while d < first:
+            out.append({"date": d, "load": 0.0, "ctl": ctl, "atl": atl, "tsb": ctl - atl})
+            d += timedelta(days=1)
+    while day <= today:
+        load = daily.get(day, 0.0)
+        tsb = ctl - atl                       # a forma: os valores de ontem
+        ctl += (load - ctl) * K_CTL
+        atl += (load - atl) * K_ATL
+        out.append({"date": day, "load": load, "ctl": ctl, "atl": atl, "tsb": tsb})
+        day += timedelta(days=1)
+    return out
+
+
+def synced_loads(db: Database, sports: tuple[str, ...], own: dict) -> dict:
+    """A carga das atividades importadas (Garmin, TrainingPeaks): a TSS do
+    TrainingPeaks quando há; senão a carga pela FC média. Uma atividade do
+    mesmo desporto e do mesmo dia que uma sessão da Perennia com a duração
+    parecida (± 25 %) é a mesma: não conta duas vezes."""
+    try:
+        rows = db.conn.execute("SELECT * FROM synced_activities").fetchall()
+    except Exception:
+        return {}
+    lthr = None
+    try:
+        lthr = db.athlete().lthr
+    except Exception:
+        pass
     out: dict = {}
+    for r in rows:
+        r = dict(r)
+        sport = r.get("sport") or "other"
+        if sport not in sports and not (sport == "other" and "other" in sports):
+            continue
+        day = _local_date(r.get("started_at")) if "T" in str(r.get("started_at") or "") \
+            else None
+        if day is None:
+            try:
+                day = datetime.fromisoformat(str(r.get("started_at"))[:10]).date()
+            except ValueError:
+                continue
+        secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
+        if any(abs(secs - s) <= 0.25 * max(secs, s) for s in own.get((day, sport), [])):
+            continue
+        load = r.get("tss")
+        if load is None and r.get("avg_hr") and lthr and secs:
+            load = secs / 3600.0 * (float(r["avg_hr"]) / lthr) ** 2 * 100.0
+        if load:
+            out[day] = out.get(day, 0.0) + float(load)
+    return out
+
+
+def daily_load(db: Database, sports: tuple[str, ...] = SPORTS) -> dict:
+    """{data local: carga} somando os desportos pedidos (e as atividades
+    importadas, se estiver ligado nas Definições)."""
+    out: dict = {}
+    own: dict = {}
+
+    def mark(day, sport, secs) -> None:
+        own.setdefault((day, sport), []).append(float(secs or 0))
     if "cycling" in sports:
-        for r in db.conn.execute("SELECT started_at, tss FROM rides WHERE status='completed'"):
+        for r in db.conn.execute("SELECT started_at, tss, moving_s, elapsed_s FROM rides"
+                                 " WHERE status='completed'"):
             day = _local_date(r["started_at"])
             if day is not None:
                 out[day] = out.get(day, 0.0) + (r["tss"] or 0.0)
+                mark(day, "cycling", r["moving_s"] or r["elapsed_s"])
     if "strength" in sports:
         for r in db.conn.execute(
                 "SELECT started_at, load FROM strength_sessions WHERE status='completed'"):
@@ -625,6 +704,14 @@ def daily_load(db: Database, sports: tuple[str, ...] = SPORTS) -> dict:
         if sp in sports:
             for day, r in sport_rows(db, sp):
                 out[day] = out.get(day, 0.0) + (r["load"] or 0.0)
+                mark(day, sp, r["moving_s"] or r["elapsed_s"])
+    try:
+        on = bool(db.get("pmc_synced", True))
+    except Exception:
+        on = True
+    if on:
+        for day, load in synced_loads(db, sports, own).items():
+            out[day] = out.get(day, 0.0) + load
     return out
 
 
@@ -637,15 +724,7 @@ def fitness(db: Database, days: int = 90, sports: tuple[str, ...] = SPORTS,
     if not daily:
         return []
     # começa no primeiro dia com carga, ou antes, para haver sempre `days` dias
-    day = min(min(daily), today - timedelta(days=days - 1))
-    ctl = atl = 0.0
-    out = []
-    while day <= today:
-        load = daily.get(day, 0.0)
-        ctl += (load - ctl) / 42.0
-        atl += (load - atl) / 7.0
-        out.append({"date": day, "load": load, "ctl": ctl, "atl": atl, "tsb": ctl - atl})
-        day += timedelta(days=1)
+    out = pmc(daily, today, db, start=today - timedelta(days=days - 1))
     return out[-days:]
 
 

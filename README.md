@@ -14,7 +14,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 560 testes
+python -m unittest discover -s tests -t .       # 704 testes
 ```
 
 **Para partilhar com quem não usa Python:** duplo clique em
@@ -42,7 +42,8 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Backups e reposição**: tudo, ou só algumas componentes, num `.zip`
   segmentado (uma pasta por componente, um `.jsonl` por tabela, os `.fit`);
   repor é arrastar o ficheiro para a janela (substituir ou juntar), com um
-  backup automático antes. Também por `--backup` / `--restore`.
+  backup automático antes. Abre-se no botão **Backups** da barra do topo.
+  Também por `--backup` / `--restore`, e as importações por `--importar`.
 - Mostra em tempo real distância, falta, declive, declives médios a 500 m /
   1 / 3 / 5 / 10 km, potência, balanço esquerda/direita, zonas, torque,
   cadência, cardio, carga, velocidades e médias — e **o perfil que vem a
@@ -59,7 +60,11 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Força:** planos com séries, repetições, carga, RPE e descanso; sessão com
   FC (banda ou relógio que a transmita, como o Garmin Swim 2 por ANT+);
   histórico, progressão por exercício (1RM estimada) e `.fit` com as séries.
-- **Fitness, fadiga e forma** (CTL/ATL/TSB) por desporto e juntos, **FTP
+- **Fitness, fadiga e forma** (CTL/ATL/TSB) **calculados como no
+  TrainingPeaks/WKO (Coggan)** — constantes de 42 e 7 dias, forma do dia
+  anterior, CTL/ATL iniciais, TSS no ciclismo, **rTSS** na corrida e
+  **sTSS** na natação, atividades importadas sem contar duas vezes — por
+  desporto e juntos, **FTP
   estimada** (20 min, 60 min ou potência crítica) e **tempo em zona por
   período**.
 - **Challenge:** desafio adaptativo à medida da tua FTP e curva de potência
@@ -79,7 +84,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   mudas a duração e a intensidade com o rato. Cada treino novo é **ERG**
   (o aparelho segue o treino sozinho) ou **Manual** (a sessão mostra o que
   pôr no aparelho). Ciclismo ERG: zonas de potência; manual: FC, RPE ou
-  **níveis do rolo** (definidos em Definições → Sessões). Corrida: ritmo,
+  **níveis do rolo** (definidos em Definições → Desportos → Sessões Não ERG). Corrida: ritmo,
   e no manual a velocidade e a inclinação da passadeira. Remo: potência,
   ritmo, resistência e voga. Cada bloco tem cadência alvo e alvo exato ou
   com margem (± %); a paleta mostra o nome e o intervalo de cada zona e
@@ -124,12 +129,21 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Análise pós-treino** da força (cumprimento, reps, volume, 1RM estimada,
   séries prescritas e feitas) e **estatísticas por exercício** (carga,
   1RM, volume, RPE, tempo).
-- **Inventário de artigos** (o teu equipamento) e **inventário de
+- **Métricas de evolução** (separadas das **métricas de sessão**, as do
+  ecrã do treino): forma e fadiga; na corrida, **fator de eficiência,
+  desacoplamento ritmo:FC e durabilidade**, **avisos de progressão da carga**
+  (corrida longa +10 %, volume semanal +10 %), **previsões de prova**
+  (Riegel e Tanda) e **zonas de ritmo** (80/20, Friel, Daniels); e a
+  **prontidão** pela HRV, FC em repouso e sono face à tua linha de base.
+- **Inventário de artigos** (o teu equipamento, com data e preço de compra
+  e a lista completa com o valor gasto) e **inventário de
   exercícios** por modalidade, ligado ao equipamento.
 - **Barra do topo** com os aparelhos e o estado de cada um, e uma janela de
   dispositivos que funciona a meio da sessão. Avisa quando um aparelho se
-  desliga. Também tem Definições (em separadores) e Desligar, que pede
-  confirmação.
+  desliga. Também tem Backups, Definições (em separadores: Atleta, Geral,
+  **Desportos** — métricas de sessão, disposição do ecrã e limites Não ERG
+  de cada desporto, que o construtor respeita —, Ecrã e idioma, Ligações
+  Externas, Sincronização, Atalhos) e Desligar, que pede confirmação.
 - **Contagem de 15 s** antes de qualquer sessão; nos treinos estruturados,
   uma volta por bloco (sem auto lap).
 - **Atalhos de teclado personalizáveis**, por contexto.
@@ -143,17 +157,24 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Editor do ecrã da sessão** de cada desporto: arrastam-se as métricas.
   E a **disposição** é tua: caixas, voltas, classificação, plano, gráfico
   ao vivo e tabelas arrastam-se e redimensionam-se numa grelha.
-- **Calendário mensal** com sessões, treinos planeados e o resumo de cada
-  semana, e **Carga e prontidão** (fitness, fadiga, forma, prontidão, ramp).
+- **Calendário no ecrã inicial** com sessões e treinos planeados; num dia
+  planeias um treino, escreves a nota do dia ou preenches o diário de
+  saúde. **Carga e prontidão** (fitness, fadiga, forma, prontidão, ramp).
 - **Volta automática** por tempo ou distância, opcional antes de cada
   treino, e **Terminar sem guardar**.
 - **Testes de aptidão** de ciclismo, remo, corrida, natação e longevidade,
   editáveis. Os do rolo e da máquina de remo abrem a janela da sessão em
   **Configurar sessão** (Enter); o resultado vem da própria sessão.
-- **Saúde:** diário com métricas tuas e notas, análises clínicas agrupadas
-  por área com o comentário do médico e importação do teu Excel (catálogo de
-  parâmetros e intervalos de referência), HRV4Training e Garmin.
-- **Sincronização** (Definições): traz os dados do **GarminDB** para a base
+- **Saúde** em separadores (Análises, Testes de longevidade, Diários,
+  Tendências, Métricas): diário com métricas tuas e notas; as **análises
+  clínicas como um relatório** — a colheita escolhida numa lista, o
+  comentário geral do médico em cima, todos os resultados com o valor atual
+  e os 3 anteriores e o comentário do médico de cada análise — e a
+  importação do teu Excel (catálogo de parâmetros e intervalos de
+  referência), HRV4Training e Garmin.
+- **Sincronização** (Definições), com separadores **HRV4Training (.csv)**,
+  **Análises (.csv)** e **TrainingPeaks (.csv de atividades**, com a TSS),
+  e o **GarminDB**, que traz os dados para a base
   da Perennia — tudo, só o mais recente ou um intervalo de datas, e que
   dados (atividades, monitorização, FC em repouso, HRV, sono, peso).
 - **Strava:** os segmentos que cruzam as tuas rotas e os teus PR, com a
@@ -175,12 +196,15 @@ teclado — setas, Enter, Esc — porque quem está em cima da bicicleta não
 chega ao rato; a lista de todas as teclas está em **Definições → Atalhos de
 teclado**, e **Ctrl+S** guarda em qualquer ecrã. Não há barras de
 deslocamento (as listas continuam em colunas), os botões de ação ficam em
-baixo à direita, adicionar e filtrar ficam em cima à direita, e a data e a
+baixo à direita, a pesquisa fica em cima à direita, e a data e a
 hora estão na faixa do topo. Acrescentar ou editar (artigos, exercícios,
 desafios, testes, passos) abre uma janela com **Cancelar · Guardar · Guardar
 e sair**; o Guardar só acende quando há alterações, e sair com alterações
 pergunta *Sair sem guardar · Cancelar · Sair e guardar*. **Enter nunca muda
-valores**: as escolhas mudam-se com ←/→. Os títulos das listas ficam numa
+valores sozinho**: numa escolha abre uma **lista com pesquisa**, e numa
+data o **seletor de datas** (←/→ continuam a mudar números). Todos os
+separadores têm **pesquisa** no canto superior direito (Ctrl+F), que filtra
+enquanto escreves; todos os botões de ação ficam em baixo à direita. Os títulos das listas ficam numa
 faixa sombreada e as setas saltam-nos; a descrição de cada opção fica à
 frente dela (nas listas grandes, como a dos exercícios, fica por baixo). Na
 janela da sessão, a rota escolhe-se numa lista das tuas rotas `.gpx`. Os
@@ -240,7 +264,12 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   workouts.py        .zwo/.mrc/.erg e controlo ERG
   ftp.py             protocolos de teste de FTP
   fit.py             codificador .fit escrito do zero
-  stats.py           agregações do histórico
+  stats.py           agregações do histórico; CTL/ATL/TSB como o TrainingPeaks
+  tss.py             rTSS (corrida) e sTSS (natação), velocidade normalizada
+  evolution.py       métricas de evolução: EF, desacoplamento, durabilidade,
+                     avisos de carga, previsões, zonas de ritmo, prontidão
+  tp_import.py       .csv de atividades do TrainingPeaks
+  file_import.py     as importações de ficheiros (ecrã e --importar)
   curves.py          curvas suaves para os gráficos (cúbica monótona, escala log)
   i18n.py units.py   traduções e unidades
 velo/io/             rádio e sensores
@@ -259,7 +288,9 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      Challenge, estatísticas gerais, recuperação) ·
                      health_screens.py (saúde, testes, agente) ·
                      rowing_screens.py (remo) · connect_screens.py (Strava) ·
-                     sync_screens.py (Sincronização) · keymap.py (atalhos
+                     sync_screens.py (Sincronização) · evolution_screens.py
+                     (métricas de evolução) · pickers.py (lista com pesquisa
+                     e seletor de datas) · keymap.py (atalhos
                      personalizáveis) · arrangement_screens.py (disposição) ·
                      session_panels.py (painéis das sessões) ·
                      challenge_screens.py (separador Treinar, Challenge da

@@ -97,8 +97,44 @@ class EditScreen(Screen):
             return True
         if cyc is not None and symbol in (key.ENTER, key.RETURN, key.SPACE) and \
                 (self.list.selected is None or self.list.selected.action is None):
+            # Enter numa escolha: o calendário (datas) ou a lista com pesquisa
+            if cyc in self.DATE_FIELDS:
+                self.open_date(cyc)
+            else:
+                from velo.ui.pickers import open_choices
+                open_choices(self, self.list.selected,
+                             lambda s=1, f=cyc: self.cycle(f, s))
             return True
         return super().on_key(symbol, modifiers)
+
+    # ------------------------------------------------------------- datas
+    #
+    # As linhas de data (`cyc:date`, `cyc:day`…) abrem o calendário com Enter;
+    # ←/→ continuam a mudar um dia. Um editor pode ter `date_get`/`date_set`
+    # próprios; por omissão lê-se o valor da linha e anda-se dia a dia.
+
+    DATE_FIELDS = ("date", "day", "done_on", "deadline", "purchase_date", "start", "end")
+
+    def date_get(self, field: str) -> str | None:
+        from velo.ui.pickers import _value_of
+        return _value_of(self, "cyc:" + field)
+
+    def date_set(self, field: str, iso: str) -> None:
+        from velo.ui.pickers import parse_date
+        cur = parse_date(self.date_get(field) or "")
+        want = parse_date(iso)
+        if cur is None or want is None:
+            return
+        n = (want - cur).days
+        for _ in range(min(abs(n), 20000)):
+            self.cycle(field, 1 if n > 0 else -1)
+        self.refresh()
+
+    def open_date(self, field: str) -> None:
+        from velo.ui.pickers import pick_date
+        item = self.list.selected
+        pick_date(self.app, item.label if item else tr("Data", "Date"), self.date_get(field),
+                  lambda iso, f=field: self.date_set(f, iso))
 
     def on_text(self, text: str) -> bool:
         num = self._field("num:")
@@ -1515,9 +1551,15 @@ class GeneralStatsScreen(StatsScreen):
         rows.append(Item(t("stats.row.range"),
                          value=t("stats.range", n=self.count,
                                  unit=t(f"stats.unit.{self.grouping}")), data="range"))
+        rows.append(Item(tr("Métricas de evolução", "Progress metrics"),
+                         value="›", detail=tr("Forma, fadiga e fitness (como o TrainingPeaks), "
+                                              "corrida, previsões e prontidão",
+                                              "Form, fatigue and fitness (like TrainingPeaks), "
+                                              "running, predictions and readiness"),
+                         action=lambda: a.push(_evolution().EvolutionScreen(a))))
         rows.append(Item(tr("Carga e prontidão", "Load and readiness"),
-                         value="›", detail=tr("Fitness, fadiga, forma, prontidão e ramp",
-                                              "Fitness, fatigue, form, readiness and ramp"),
+                         value="›", detail=tr("O gráfico de fitness, fadiga, forma e ramp",
+                                              "The fitness, fatigue, form and ramp chart"),
                          action=lambda: a.push(_load_screens().LoadReadinessScreen(a))))
         self.list.set_items(rows, keep_index=True)
         self.list.y = self.content_top(self.app.window.height)
@@ -2698,6 +2740,11 @@ def _hr_color(zone: int):
 def _load_screens():
     from velo.ui import load_screens
     return load_screens
+
+
+def _evolution():
+    from velo.ui import evolution_screens
+    return evolution_screens
 
 
 def _analysis_screen(app, sid: str):

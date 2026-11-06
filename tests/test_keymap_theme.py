@@ -92,7 +92,8 @@ class TestSyncTabs(tg.GuiCase):
         self.pick("Definições")
         scr = self.screen()
         scr.tab_named("Sincronização")
-        self.assertEqual(scr.sync.source_labels(), ["GarminDB"])
+        self.assertEqual(scr.sync.source_labels(), ["GarminDB", "HRV4Training", "Análises",
+                                                    "TrainingPeaks"])
         self.assertEqual(scr.sync_tabs.current, "GarminDB")
         self.assertNotIn("Fonte", [i.label for i in scr.list.items])
         self.app._on_draw()
