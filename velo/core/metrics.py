@@ -124,7 +124,7 @@ def _power3(s):
     return s.power_3s
 
 
-@metric("avg_power", "W", "metric.power")
+@metric("avg_power", "W")
 def _avg_power(s):
     return s.avg_power
 

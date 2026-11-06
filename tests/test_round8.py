@@ -61,7 +61,7 @@ class DbCase(unittest.TestCase):
         self.db.conn.execute(
             "INSERT INTO endurance_sessions(id, sport, name, status, started_at, moving_s,"
             " distance_m, avg_hr) VALUES (?,?,?,?,?,?,?,?)",
-            (sid, "running", "Corrida", "completed", f"{day.isoformat()}T09:00:00", secs,
+            (sid, "running", "Corrida", "completed", f"{day.isoformat()}T09:00:00Z", secs,
              km * 1000, 150))
         if samples:
             rows = [(sid, t, v * t, v, int(150 + hr_drift * t / secs)) for t in range(secs)]
@@ -161,6 +161,9 @@ class TestEvolution(DbCase):
         e_lo, e_hi = z["Daniels"][0][1], z["Daniels"][0][2]
         self.assertGreater(e_lo, e_hi)                       # o mais lento primeiro
         self.assertIn("/km", ev.zone_text(e_lo, e_hi))
+        easy = z["80/20"][0]
+        self.assertTrue(ev.zone_text(easy[1], easy[2]).startswith("mais lento"))
+        self.assertTrue(ev.zone_text(*z["Friel"][-1][1:]).startswith("mais rápido"))
 
     def test_readiness(self):
         health.ensure(self.db)
@@ -236,6 +239,29 @@ class TestLimits(DbCase):
         self.assertEqual(lim["treadmill_max_kmh"], 20.0)
         self.db.set("treadmill_max_kmh", 16.0)
         self.assertEqual(wm.device_limits(self.db)["treadmill_max_kmh"], 16.0)
+
+
+class TestBackupAndCli(DbCase):
+    def test_new_settings_go_to_the_right_component(self):
+        from velo.core import backup
+        self.assertTrue(backup.BY_KEY["ecra"].settings("metrics_disabled_running"))
+        for k in ("pmc_ctl0", "pmc_atl0", "pmc_synced", "rower_levels", "treadmill_max_kmh"):
+            self.assertTrue(backup.BY_KEY["definicoes"].settings(k), k)
+        backup.prepare(self.db)
+        self.assertEqual(backup.unknown_tables(self.db), [])
+
+    def test_import_cli(self):
+        import main
+        p = self.tmp / "tp.csv"
+        p.write_text("Title,WorkoutType,WorkoutDay,TimeTotalInHours,TSS\nX,Run,2026-06-20,1,70\n",
+                     encoding="utf-8")
+
+        class A:
+            data_dir = str(self.tmp / "d")
+            importar = ("trainingpeaks", str(p))
+        self.assertEqual(main.import_cli(A), 0)
+        A.importar = ("xpto", str(p))
+        self.assertEqual(main.import_cli(A), 2)
 
 
 # =================================================================== UI

@@ -137,25 +137,9 @@ class SyncPanel:
         return rows
 
     def import_file(self, kind: str, path) -> None:
-        db = self.app.db
+        from velo.core import file_import
         try:
-            if kind == "hrv4training":
-                from velo.core import health
-                rep = health.import_file(db, path, kind="hrv4training")
-                text = tr("{v} valores em {d} dias", "{v} values over {d} days",
-                          v=rep.get("values", 0), d=rep.get("days", 0))
-            elif kind == "labs":
-                from velo.core import labs
-                rep = labs.import_xlsx(db, path) if str(path).lower().endswith(
-                    (".xlsx", ".xlsm")) else labs.import_csv(db, path)
-                text = tr("{r} colheitas · {n} resultados", "{r} collections · {n} results",
-                          r=rep["reports"], n=rep["results"])
-            else:
-                from velo.core import tp_import
-                rep = tp_import.import_csv(db, path)
-                text = tr("{n} atividades · {s} só planeadas (ignoradas)",
-                          "{n} activities · {s} only planned (skipped)",
-                          n=rep["activities"], s=rep["skipped"])
+            rep, text = file_import.import_file(self.app.db, kind, path)
         except Exception as e:
             self.app.message(f"{t('common.error')}: {e}")
             return

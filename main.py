@@ -82,12 +82,17 @@ def main() -> int:
                         help="na reposição: substituir (cópia exata) ou juntar (acrescenta)")
     parser.add_argument("--credenciais", action="store_true",
                         help="no backup, incluir as credenciais (Strava)")
+    parser.add_argument("--importar", nargs=2, default=None, metavar=("TIPO", "FICHEIRO"),
+                        help="importa um ficheiro e sai: hrv4training (.csv), analises "
+                             "(.csv/.xlsx) ou trainingpeaks (.csv de atividades)")
     args = parser.parse_args()
 
     if args.self_test:
         return self_test()
     if args.backup is not None or args.restore:
         return backup_cli(args)
+    if args.importar:
+        return import_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -115,6 +120,31 @@ def main() -> int:
     except Exception:
         report_crash(Path(args.data_dir) if args.data_dir else _default_data_dir())
         return 1
+    return 0
+
+
+def import_cli(args) -> int:
+    """Importações pela linha de comandos, sem abrir a janela."""
+    from velo.core import file_import
+    from velo.core.db import Database
+    from velo.datadir import data_dir_for, database_path
+    kind, path = args.importar
+    if kind not in file_import.KINDS:
+        print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
+              "trainingpeaks", file=sys.stderr)
+        return 2
+    if not Path(path).is_file():
+        print(f"Erro: não encontro {path}", file=sys.stderr)
+        return 2
+    db = Database(database_path(data_dir_for(args.data_dir)))
+    try:
+        _rep, text = file_import.import_file(db, kind, path)
+    except Exception as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+    print(text)
     return 0
 
 

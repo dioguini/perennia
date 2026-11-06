@@ -576,11 +576,11 @@ class SearchBox:
     def refresh(self, hidden: int = 0) -> None:
         from velo.core.i18n import tr
         if self.text:
-            shown = "⌕ " + self.text + ("▏" if self.focused else "")
+            shown = self.text + ("▏" if self.focused else "")
             self.label.color = TEXT
         else:
-            shown = "⌕ " + (tr("Escreve para filtrar…", "Type to filter…") if self.focused
-                            else tr("Pesquisar · Ctrl+F", "Search · Ctrl+F"))
+            shown = (tr("Escreve para filtrar…", "Type to filter…") if self.focused
+                     else tr("Pesquisar · Ctrl+F", "Search · Ctrl+F"))
             self.label.color = DIM if not self.focused else TEXT
         self.label.text = fit_text(shown, getattr(self, "_w", self.W) - 60, 12)
         self.count.text = (f"−{hidden}" if hidden else "") if self.text else ""

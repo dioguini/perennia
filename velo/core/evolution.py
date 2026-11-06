@@ -251,10 +251,10 @@ def pace_zones(threshold_s_km: float, vdot: float | None = None) -> dict:
 
 def zone_text(lo: float | None, hi: float | None) -> str:
     """«5:40–6:10 /km» (lo é o mais lento)."""
-    if lo is None:
-        return tr("mais rápido que {p} /km", "faster than {p} /km", p=hms(hi))
-    if hi is None:
-        return tr("mais lento que {p} /km", "slower than {p} /km", p=hms(lo))
+    if lo is None:                       # sem limite do lado lento
+        return tr("mais lento que {p} /km", "slower than {p} /km", p=hms(hi))
+    if hi is None:                       # sem limite do lado rápido
+        return tr("mais rápido que {p} /km", "faster than {p} /km", p=hms(lo))
     return f"{hms(hi)}–{hms(lo)} /km"
 
 
@@ -287,7 +287,7 @@ def readiness(db, today: date | None = None) -> dict:
         state = tr("dentro do normal", "within normal") if lo <= base7 <= hi else (
             tr("abaixo do normal", "below normal") if base7 < lo else
             tr("acima do normal", "above normal"))
-        if base7 < lo or ln[today] < mean - sd:
+        if base7 < lo or ln[today] < mean - 2 * sd:     # a tendência, ou um dia muito baixo
             flags += 1
         lines.append(tr("HRV hoje {v} ms · média de 7 dias {b} ms · {s}",
                         "HRV today {v} ms · 7-day average {b} ms · {s}",
