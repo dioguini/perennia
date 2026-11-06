@@ -229,8 +229,8 @@ letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
 
 Por baixo dos cartões: a sequência de treino e a forma (à esquerda), **o
-calendário do mês** (ao centro, com os treinos feitos e planeados) e o mapa
-das últimas 16 semanas (à direita). ↓ a partir da segunda fila de cartões
+calendário do mês**, grande, em todo o resto da largura (com os treinos
+feitos e planeados). ↓ a partir da segunda fila de cartões
 entra no calendário: setas mudam o dia, PgUp/PgDn o mês, T volta a hoje,
 ↑ na primeira semana regressa aos cartões. **Enter (ou um clique) num dia
 abre-o**, e aí podes adicionar: **um treino planeado**, **a nota do dia** e
@@ -325,9 +325,7 @@ os temas.
 
 Por baixo fica a **sequência**: dias seguidos e semanas seguidas a treinar
 (conta até hoje, ou até ontem se hoje ainda não pedalaste), os melhores de
-sempre, as sessões desta semana, e um mapa das últimas 16 semanas, com um
-quadrado por dia, mais verde quanto mais tempo treinaste. Conta o ciclismo e
-a força.
+sempre e as sessões desta semana. Conta o ciclismo e a força.
 
 Ao lado fica a **forma**: fitness, fadiga e forma de hoje, com uma frase a
 dizer em que fase estás (ver *Fitness, fadiga e forma*, abaixo).

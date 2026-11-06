@@ -608,7 +608,7 @@ class MiniCalendar:
         weeks = self.data.get("weeks") or cv.weeks_of(self.year, self.month)
         cw = w / 7
         gy = top - 26
-        ch = max(16.0, min(44.0, (h - 46) / max(1, len(weeks))))
+        ch = max(16.0, min(80.0, (h - 46) / max(1, len(weeks))))
         days = tr("S T Q Q S S D", "M T W T F S S").split()
         for i, lab in enumerate(self.heads):
             lab.text = days[i]
