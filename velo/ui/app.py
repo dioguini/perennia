@@ -36,7 +36,7 @@ from velo.io import ant, autoconnect, ble
 from velo.io.hub import SensorHub
 from velo.io.sim import SimulatedTrainer
 from velo.ui.widgets import (ACCENT, BAD, BG, BackButton, BoardPanel, Chart, Chrome, DIM,
-                             GOOD, Heatmap, Item, ListView, PANEL, Popup, StackedBars,
+                             GOOD, Item, ListView, PANEL, Popup, StackedBars,
                              StartCountdown, TabBar, TEXT, Tile, TopBar)
 
 PRESET_ORDER = ("low", "medium", "high")
@@ -654,8 +654,8 @@ def _has_table(db, name: str) -> bool:
 
 class HomeScreen(Screen):
     """Ecrã inicial: os desportos e o resto em cartões todos do mesmo tamanho,
-    e por baixo a sequência de treino, a forma, o calendário do mês (era um
-    menu à parte) e o mapa das últimas 16 semanas."""
+    e por baixo a sequência de treino e a forma (à esquerda) e o calendário
+    do mês, grande, no resto da largura."""
 
     ROOT = True
     # Os desportos e a saúde na primeira fila; rotas, segmentos, estatísticas
@@ -686,15 +686,12 @@ class HomeScreen(Screen):
                                      anchor_y="top", batch=self.batch)
         self.form_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                       batch=self.batch) for _ in range(2)]
-        self.heat_title = make_label("", font_size=11, color=DIM, anchor_y="top",
-                                     batch=self.batch)
         # o calendário do mês (antes era um menu à parte)
         self.cal = _calendar().MiniCalendar(self.batch)
         self.upcoming: list = []
         from velo.gfx import icons
         self.flame = icons.sprite("flame", 0, 0, 24, batch=self.batch, opacity=240)
         self.pulse = icons.sprite("pulse", 0, 0, 24, batch=self.batch, opacity=240)
-        self.heat = Heatmap(16, batch=self.batch)
         self._layout()
 
     def _actions(self):
@@ -748,20 +745,14 @@ class HomeScreen(Screen):
         for i, lab in enumerate(self.form_lines):
             lab.x, lab.y = lx + 32, fy - 26 - i * 20
             lab.font_size = 12 if w >= 1200 else 11
-        left_w = span * 0.30
+        left_w = span * 0.28
         for lab in self.streak_lines + self.form_lines:
             lab.text = lab.text            # (o texto é cortado em `enter`)
         self._left_w = left_w - 36
-        # centro: o calendário do mês
-        ux = 48 + span * 0.31
-        uw = span * 0.40
+        # o resto da largura: o calendário do mês
+        ux = 48 + span * 0.29
+        uw = w - 48 - ux
         self.cal.layout(ux, sy, uw, sy - bottom)
-        # direita: as últimas 16 semanas
-        hx = 48 + span * 0.73
-        hw = w - 48 - hx
-        cell = max(8.0, min(14.0, (hw - 15 * 3) / 16, (sy - 24 - bottom) / 7 - 3))
-        self.heat_title.x, self.heat_title.y = hx, sy
-        self.heat.layout(hx, sy - 22 - 7 * (cell + 3), cell)
         for i, tile in enumerate(self.tiles):
             tile.set_selected(i == self.selected and not self.cal.focused)
 
@@ -792,8 +783,6 @@ class HomeScreen(Screen):
                        tsb=f"{now['tsb']:+.0f}"), t(f"form.{now['state']}")]
         for lab, text in zip(self.form_lines, lines):
             lab.text = _fit_text(text, self._left_w, lab.font_size)
-        self.heat_title.text = t("home.heatmap")
-        self.heat.set(stats.heatmap(a.db, 16))
         self.cal.load(a.db)
         self.upcoming = self.upcoming_entries()
 
