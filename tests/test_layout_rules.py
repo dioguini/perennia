@@ -317,7 +317,8 @@ class TestSettingsTabs(tg.GuiCase):
         self.pick("Definições")
         scr = self.screen()
         scr.tab_named("Desportos")
-        self.assertEqual(scr.section_labels(), ["Métricas disponíveis", "Ecrã da sessão",
+        self.assertEqual(scr.section_labels(), ["Métricas de sessão disponíveis",
+                                                "Disposição do ecrã de sessão",
                                                 "Sessões Não ERG"])
         self.assertEqual(scr.sport, "cycling")
         self.press(key.PAGEDOWN)                              # o remo

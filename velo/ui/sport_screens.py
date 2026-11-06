@@ -1551,9 +1551,15 @@ class GeneralStatsScreen(StatsScreen):
         rows.append(Item(t("stats.row.range"),
                          value=t("stats.range", n=self.count,
                                  unit=t(f"stats.unit.{self.grouping}")), data="range"))
+        rows.append(Item(tr("Métricas de evolução", "Progress metrics"),
+                         value="›", detail=tr("Forma, fadiga e fitness (como o TrainingPeaks), "
+                                              "corrida, previsões e prontidão",
+                                              "Form, fatigue and fitness (like TrainingPeaks), "
+                                              "running, predictions and readiness"),
+                         action=lambda: a.push(_evolution().EvolutionScreen(a))))
         rows.append(Item(tr("Carga e prontidão", "Load and readiness"),
-                         value="›", detail=tr("Fitness, fadiga, forma, prontidão e ramp",
-                                              "Fitness, fatigue, form, readiness and ramp"),
+                         value="›", detail=tr("O gráfico de fitness, fadiga, forma e ramp",
+                                              "The fitness, fatigue, form and ramp chart"),
                          action=lambda: a.push(_load_screens().LoadReadinessScreen(a))))
         self.list.set_items(rows, keep_index=True)
         self.list.y = self.content_top(self.app.window.height)
@@ -2734,6 +2740,11 @@ def _hr_color(zone: int):
 def _load_screens():
     from velo.ui import load_screens
     return load_screens
+
+
+def _evolution():
+    from velo.ui import evolution_screens
+    return evolution_screens
 
 
 def _analysis_screen(app, sid: str):

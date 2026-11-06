@@ -516,10 +516,14 @@ class TestHealthGui(tg.GuiCase):
         imports = Path(self.tmp) / "imports"
         imports.mkdir(exist_ok=True)
         (imports / "My_Measurements.csv").write_text("date,rMSSD\n2026-10-28,70\n")
-        self.go()
-        self.pick("Importar dados")
+        self.pick("Definições")
+        scr = self.screen()
+        scr.tab_named("Sincronização")
+        scr.sync_tab = 1                                       # HRV4Training
+        scr.enter()
         self.pick("My_Measurements.csv")
-        self.assertEqual(self.screen().last_report["values"], 1)
+        self.assertEqual(scr.sync.last_report["values"], 1)
+        self.assertIn("1 valores", scr.list.items[0].value)
 
 
 # ===================================================== treino livre / conditioning

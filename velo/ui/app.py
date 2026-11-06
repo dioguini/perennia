@@ -2117,8 +2117,8 @@ class SettingsScreen(Screen):
     SPORTS = ("cycling", "rowing", "running", "swimming", "gym")
 
     def section_labels(self) -> list[str]:
-        return [tr("Métricas disponíveis", "Available metrics"),
-                tr("Ecrã da sessão", "Session screen"),
+        return [tr("Métricas de sessão disponíveis", "Available session metrics"),
+                tr("Disposição do ecrã de sessão", "Session screen layout"),
                 tr("Sessões Não ERG", "Non-ERG sessions")]
 
     @property
@@ -3866,6 +3866,14 @@ class App:
             session_workouts.purge(self.db)        # cópias de treinos sem sessão
             from velo.core import segments as seg_mod
             seg_mod.purge(self.db)                 # tempos de sessões descartadas
+            if not self.db.get("migr_tp_loads", False):
+                # a carga da corrida e da natação passou a ser a do TrainingPeaks
+                from velo.core import tss as tss_mod
+                tss_mod.recompute_endurance(self.db)
+                self.db.set("migr_tp_loads", True)
+            if not self.db.get("migr_feedback_always", False):
+                self.db.set("ask_feedback", True)  # o feedback deixou de ser opcional
+                self.db.set("migr_feedback_always", True)
         except Exception:
             pass
         try:

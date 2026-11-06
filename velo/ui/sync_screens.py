@@ -59,7 +59,10 @@ class SyncPanel:
     GarminDB. Juntar uma fonte é acrescentá-la aqui e escrever as linhas dela
     (`items_<chave>`)."""
 
-    SOURCES = (("garmindb", "GarminDB"),)
+    SOURCES = (("garmindb", "GarminDB"), ("hrv4training", "HRV4Training"),
+               ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"))
+    FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
+                    "~/Desktop")
 
     def __init__(self, screen: Screen, runner=None, store=None):
         self.screen = screen
@@ -99,6 +102,97 @@ class SyncPanel:
 
     def items(self, source: str = "garmindb") -> list[Item]:
         return getattr(self, f"items_{source}")()
+
+    # ------------------------------------------------- importar ficheiros
+
+    def files(self, patterns: tuple) -> list:
+        import os
+        from pathlib import Path
+        imports = self.app.data_dir / "imports"
+        imports.mkdir(parents=True, exist_ok=True)
+        out = []
+        for f in self.FILE_FOLDERS:
+            base = imports if f == "imports" else Path(os.path.expanduser(f))
+            if base.is_dir():
+                for pat in patterns:
+                    out += sorted(base.glob(pat))[:40]
+        return list(dict.fromkeys(out))
+
+    def _file_items(self, kind: str, patterns: tuple, how: tuple, check=None) -> list[Item]:
+        rows = [Item(tr("Ficheiros encontrados", "Files found"), header=True)]
+        found = [p for p in self.files(patterns) if check is None or check(p)]
+        for p in found:
+            rows.append(Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
+                             action=lambda q=p: self.import_file(kind, q)))
+        if not found:
+            rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
+                             detail=tr("põe o ficheiro em {p}, Transferências ou Documentos",
+                                       "put the file in {p}, Downloads or Documents",
+                                       p=self.app.data_dir / "imports")))
+        rows += [Item(tr("Como exportar", "How to export"), header=True),
+                 Item(tr(*how), enabled=False)]
+        if self.last_report and self.last_report.get("_kind") == kind:
+            rows.insert(0, Item(tr("Última importação", "Last import"),
+                                value=self.last_report.get("_text", ""), enabled=False))
+        return rows
+
+    def import_file(self, kind: str, path) -> None:
+        db = self.app.db
+        try:
+            if kind == "hrv4training":
+                from velo.core import health
+                rep = health.import_file(db, path, kind="hrv4training")
+                text = tr("{v} valores em {d} dias", "{v} values over {d} days",
+                          v=rep.get("values", 0), d=rep.get("days", 0))
+            elif kind == "labs":
+                from velo.core import labs
+                rep = labs.import_xlsx(db, path) if str(path).lower().endswith(
+                    (".xlsx", ".xlsm")) else labs.import_csv(db, path)
+                text = tr("{r} colheitas · {n} resultados", "{r} collections · {n} results",
+                          r=rep["reports"], n=rep["results"])
+            else:
+                from velo.core import tp_import
+                rep = tp_import.import_csv(db, path)
+                text = tr("{n} atividades · {s} só planeadas (ignoradas)",
+                          "{n} activities · {s} only planned (skipped)",
+                          n=rep["activities"], s=rep["skipped"])
+        except Exception as e:
+            self.app.message(f"{t('common.error')}: {e}")
+            return
+        rep["_kind"], rep["_text"] = kind, text
+        self.last_report = rep
+        self.app.message(text)
+        self.screen.enter()
+
+    def items_hrv4training(self) -> list[Item]:
+        return self._file_items(
+            "hrv4training", ("*.csv",),
+            ("Na app HRV4Training: Definições → Exportar medições (CSV) → descarrega o "
+             "ficheiro para Transferências. A Perennia junta a HRV, a FC em repouso e o resto "
+             "ao diário da Saúde.",
+             "In the HRV4Training app: Settings → Export measurements (CSV) → download it to "
+             "Downloads. Perennia adds HRV, resting HR and the rest to the Health log."))
+
+    def items_labs(self) -> list[Item]:
+        return self._file_items(
+            "labs", ("*.csv", "*.xlsx", "*.xlsm"),
+            ("Um .csv com uma linha por resultado: data, análise, valor (e, se quiseres, "
+             "unidade, mínimo, máximo, laboratório). Também serve o Excel «readings» / "
+             "«ref_parameter».",
+             "A .csv with one row per result: date, test, value (and optionally unit, min, "
+             "max, lab). The «readings» / «ref_parameter» Excel also works."),
+            check=lambda p: not _is_tp(p))
+
+    def items_trainingpeaks(self) -> list[Item]:
+        return self._file_items(
+            "trainingpeaks", ("*.csv",),
+            ("No TrainingPeaks (web): Calendário → Exportar → «Workouts» (CSV) do período que "
+             "quiseres. As atividades entram no histórico com a TSS do TrainingPeaks (e contam "
+             "para a forma e a fadiga).",
+             "In TrainingPeaks (web): Calendar → Export → «Workouts» (CSV) for the period you "
+             "want. Activities join the history with TrainingPeaks' TSS (and count for form "
+             "and fatigue)."),
+            check=_is_tp)
 
     def items_garmindb(self) -> list[Item]:
         db = self.app.db
@@ -328,6 +422,11 @@ class SyncPanel:
             self._done(ok, msg, rep)
 
 
+def _is_tp(path) -> bool:
+    from velo.core import tp_import
+    return tp_import.looks_like_tp(path)
+
+
 def history_items(app, sport: str) -> list[Item]:
     """As atividades sincronizadas (GarminDB) deste desporto, para o fim do
     separador Histórico. Só de leitura: são o que o Garmin registou."""
@@ -337,8 +436,8 @@ def history_items(app, sport: str) -> list[Item]:
         return []
     if not acts:
         return []
-    rows = [Item(tr("— Sincronizadas do Garmin ({n}) —", "— Synced from Garmin ({n}) —",
-                    n=len(acts)), enabled=False)]
+    rows = [Item(tr("— Importadas (Garmin, TrainingPeaks) ({n}) —",
+                    "— Imported (Garmin, TrainingPeaks) ({n}) —", n=len(acts)), enabled=False)]
     from velo.core.units import hms
     for r in acts:
         bits = []
@@ -349,9 +448,12 @@ def history_items(app, sport: str) -> list[Item]:
             bits.append(f"{r['avg_hr']:.0f} bpm")
         if r.get("ascent_m"):
             bits.append(f"↑ {r['ascent_m']:.0f} m")
-        if r.get("training_load"):
+        if r.get("tss"):
+            bits.append(f"TSS {r['tss']:.0f}")
+        elif r.get("training_load"):
             bits.append(tr("carga {l}", "load {l}", l=f"{r['training_load']:.0f}"))
-        bits.append("Garmin" + (f" · {r['source_sport']}" if r.get("source_sport") else ""))
+        src = "TrainingPeaks" if r.get("source") == "trainingpeaks" else "Garmin"
+        bits.append(src + (f" · {r['source_sport']}" if r.get("source_sport") else ""))
         rows.append(Item(f"{str(r['started_at'])[:16].replace('T', ' ')}  "
                          f"{r.get('name') or tr('Atividade', 'Activity')}",
                          value=hms(r.get("moving_s") or r.get("elapsed_s") or 0),

@@ -243,7 +243,8 @@ class TestBackupMenu(tg.GuiCase):
     def test_export_some_components_then_restore_them(self):
         from velo.ui import backup_screens as bs
         self.press(key.ESCAPE)
-        self.pick("Backups")
+        b = self.app.topbar.buttons["backups"][0]           # na faixa do topo
+        self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         scr = self.screen()
         self.assertIsInstance(scr, bs.BackupScreen)
         self.assertEqual(scr.tab_labels(), ["Exportar", "Repor"])
