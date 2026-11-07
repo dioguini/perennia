@@ -134,11 +134,14 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    e a máquina de remo; `Procurar ANT+` usa a antena USB.
    Se ainda não quiseres hardware, escolhe **SEM HARDWARE - Trainer** (ou
    **SEM HARDWARE - Remo**) e podes experimentar a aplicação toda.
-3. **Ciclismo** → separador Treinar → **Sessão de treino** → pergunta
-   **Livre** ou **Carregar treino**.
-   - **Carregar treino** abre a Lista de treinos; a ficha do treino tem, em
-     baixo à direita, **Configurar sessão de treino** (Enter).
-   - **Livre** abre logo a janela da sessão.
+3. **Ciclismo** → separador Treinar → **Sessão de treino**: abre uma
+   janela (grande) com os modos da sessão — **Livre**, **Carregar
+   treino**, **Do computador**, **Challenge** e **Testes**. Tudo pode ser
+   uma sessão de treino; muda só o modo, e escolhe-se na mesma janela (Esc
+   volta ao passo anterior).
+   - **Carregar treino** mostra a lista de treinos ali mesmo; a ficha do
+     treino tem, em baixo à direita, **Configurar sessão de treino** (Enter).
+   - **Livre** passa logo à preparação da sessão.
 4. Na **janela da sessão** escolhes tudo de uma vez: **Aparelhos** (Enter
    abre o emparelhamento), **Rota (.gpx)** (Enter abre a lista das tuas
    rotas numa janela) ou **Carregar um .gpx novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
@@ -218,7 +221,7 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Onze cartões, **todos do mesmo tamanho**: na primeira fila os cinco desportos
+Onze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
 (**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e a
 **Saúde**; na segunda, ao centro, **Rotas**, **Segmentos**, **Estatísticas
 gerais**, **Inventário de artigos** e **Exercícios**. O Calendário deixou
@@ -228,18 +231,22 @@ duas (a letra nunca fica abaixo de 12 px). O título fica sempre por baixo do í
 letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
 
-Por baixo dos cartões: a sequência de treino e a forma (à esquerda), **o
-calendário do mês**, grande, em todo o resto da largura (com os treinos
-feitos e planeados). ↓ a partir da segunda fila de cartões
+Por baixo dos cartões: à esquerda, a sequência de treino, a forma e as
+**próximas atividades** planeadas (só para teres noção do que aí vem; um
+clique abre o dia); ao centro da página, **o calendário do mês**, grande
+(com os treinos feitos e planeados). ↓ a partir da segunda fila de cartões
 entra no calendário: setas mudam o dia, PgUp/PgDn o mês, T volta a hoje,
 ↑ na primeira semana regressa aos cartões. **Enter (ou um clique) num dia
 abre-o**, e aí podes adicionar: **um treino planeado**, **a nota do dia** e
 **o diário de saúde desse dia**.
 
-**A barra do topo** está sempre visível, em todos os ecrãs:
+**A barra do topo** (um pouco mais alta) está sempre visível, em todos os
+ecrãs:
 
 - À esquerda, os teus aparelhos com o estado: verde ligado, vermelho
   perdido, cinzento desligado.
+- A **pesquisa** (Ctrl+F) fica sempre aqui, ao lado da data e da hora, com
+  uma lupa: filtra a lista do separador onde estás enquanto escreves.
 - À direita, a **data e a hora** («sáb 31/10/2026 · 09:05») e quatro botões:
   **Dispositivos** (F4), **Backups**, **Definições** (F8) e **Desligar**
   (Ctrl+Q). Backups fica a cinzento durante uma sessão.
@@ -251,6 +258,10 @@ abre-o**, e aí podes adicionar: **um treino planeado**, **a nota do dia** e
   a sessão primeiro.
 - **Desligar** pergunta sempre "Sair da Perennia?". A resposta já
   escolhida é "Não", para um Enter distraído não fechar a aplicação.
+- **As mensagens** («Guardado», um erro, onde ficou um ficheiro…) aparecem
+  sempre no mesmo sítio — ao centro, na linha do título — a **bold**, em
+  letra amarela sobre um fundo escuro, para se verem em qualquer tema.
+  Duram uns segundos; as compridas passam a duas ou três linhas.
 
 **As Definições estão em separadores**: Atleta, **Geral**, **Desportos**,
 Ecrã e idioma, Ligações Externas, **Sincronização** e **Atalhos de
@@ -264,13 +275,24 @@ teclado**. Tab e Shift+Tab mudam de separador; também podes clicar.
 - **Geral**: sensação de declive, n.º de passos seguintes, pausa
   automática, ligação preferida e ligar ao abrir. O feedback no fim de
   cada sessão é **sempre pedido** (já não se desliga).
-- **Desportos**: um separador por desporto (PgUp/PgDn muda), cada um com
-  três secções (Ctrl+←/→ muda): **Métricas de sessão disponíveis** (liga
-  e desliga as que o ecrã da sessão pode mostrar), **Disposição do ecrã de
-  sessão** e **Sessões Não ERG** — os limites do teu aparelho quando é
-  manual: **níveis do rolo** (ciclismo), **n.º de resistências** (remo),
-  **velocidade e inclinação máximas** (passadeira). O construtor de treinos
-  respeita estes limites (não deixa pedir mais do que o aparelho dá).
+- **Desportos**: um separador por **Ciclismo, Remo, Corrida e Ginásio**
+  (PgUp/PgDn muda; a natação não tem opções aqui — só precisa do construtor
+  de treinos e das estatísticas), cada um com secções (Ctrl+←/→ muda):
+  **Métricas de sessão disponíveis** (liga e desliga as que o ecrã da
+  sessão pode mostrar), **Disposição do ecrã de sessão** e, no ciclismo, no
+  remo e na corrida, **Sessões Não ERG** — os limites do teu aparelho
+  quando é manual: **níveis do rolo**, **n.º de resistências** (remo),
+  **velocidade e inclinação máximas** (passadeira). O construtor de
+  treinos respeita estes limites. O ginásio não tem Sessões Não ERG.
+- **Disposição do ecrã de sessão → Número de métricas no ecrã**: de 1 até
+  ao total de métricas que o desporto tem (as ligadas) — ←/→ muda de um em
+  um. O ecrã da sessão **desenha-as sozinho**: a grelha ajusta-se (8 →
+  4 × 2, 12 → 4 × 3…); no remo, mais de 12 passam a mais páginas (V muda);
+  no ginásio, as filas de 4. No ciclismo é o total das 6 caixas. O número e
+  as métricas também se mudam em **Escolher as métricas do ecrã** (o
+  editor mostra «12 de 16 métricas» e tem os botões **− Métrica** e
+  **+ Métrica**, ou as teclas **[** e **]**). Esse editor e a **Disposição
+  dos painéis** só têm o separador do desporto de onde vieste.
 
 **Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
 qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
@@ -287,8 +309,8 @@ tenha alguma coisa para guardar.
   em baixo, à direita** — em todos os ecrãs; o principal é o da ponta,
   realçado. **← Voltar** fica em baixo, à esquerda. ↑↓ chegam aos botões
   como a qualquer linha.
-- **Pesquisa em todos os separadores**, no canto superior direito: clica na
-  caixa ou carrega **Ctrl+F** (ou **/**) e escreve — a lista filtra-se
+- **Pesquisa em todos os separadores**, na barra do topo (sempre no mesmo
+  sítio, com uma lupa): clica na caixa ou carrega **Ctrl+F** (ou **/**) e escreve — a lista filtra-se
   enquanto escreves (sem acentos nem maiúsculas a atrapalhar). Esc limpa o
   texto; outro Esc sai da pesquisa.
 - **Escolhas com lista e pesquisa.** Enter numa opção de escolha (tema,
@@ -636,14 +658,19 @@ Em cima ficam os números de hoje. ←/→ muda o período: 30, 60, 90, 180 ou
 Ciclismo, Remo, Corrida, Natação e Ginásio têm o mesmo menu, com cinco
 separadores em cima: **Treinar**, **Construtor de treinos**, **Lista de
 treinos**, **Histórico** e **Estatísticas**. O separador **Treinar** começa
-sempre pela mesma ordem: **Sessão de treino** · **Challenge** · **Desafios**
-(e depois **Testes**):
+sempre pela mesma ordem: **Sessão de treino** · **Desafios**
+(a natação: **Desafios** · **Testes**):
 
-- **Sessão de treino**: no ciclismo, no remo e na corrida pergunta
-  **Livre** ou **Carregar treino** e abre a janela da sessão (aparelhos,
-  rota `.gpx` — não no remo —, opções e auto lap); na corrida com rota, a
-  sessão diz a inclinação da estrada a pôr na passadeira. No ginásio, a
-  modalidade. A natação não tem sessão livre (os treinos começam na ficha).
+- **Sessão de treino**: no ciclismo, no remo e na corrida abre **uma
+  janela só**, grande, com os modos — **Livre**, **Carregar treino**,
+  **Do computador**, **Challenge** e **Testes** — e depois a preparação
+  (aparelhos, rota `.gpx` — não no remo —, opções e auto lap); na corrida
+  com rota, a sessão diz a inclinação da estrada a pôr na passadeira. No
+  ginásio, a mesma janela mostra as modalidades, o Challenge e os Testes.
+  A natação não tem sessão de treino.
+- **Challenge** e **Testes** já não estão na lista do separador Treinar:
+  estão nesta janela (a natação, que não tem sessão, fica só com os
+  **Desafios** e os **Testes**, sem Challenge).
 - **Challenge**: ciclismo — fuga, desafio adaptativo e os jogos; remo — a
   Regata e os jogos; corrida — 5 km e 10 km contra o relógio, 1 hora o mais
   longe possível, escada de ritmo; natação — 400 m e 1500 m contra o relógio,
@@ -665,7 +692,9 @@ treinos lista os treinos da mesma maneira (duração, definição e tipo,
 descrição) e tem **+ Novo treino** em baixo, à direita.
 
 - **Em cima**, o **Nome do treino** e, na linha de baixo, o **Objetivo do
-  treino**; por baixo, a paleta e o
+  treino** (os dois começam no mesmo sítio, à esquerda). O objetivo — do
+  treino e de cada bloco — escreve-se **numa janela** (Enter na linha, ou
+  começa a escrever): Enter guarda, Esc cancela. Por baixo, a paleta e o
   gráfico; **por baixo do gráfico**, o bloco escolhido, com a descrição de
   cada opção à frente dela.
 - **No meio de cada bloco**, em letra grande: a zona, o valor na vista
@@ -944,7 +973,7 @@ ginásio → Por exercício**.
 
 ### Inventário de artigos e de exercícios
 
-**Inventário de artigos** (no ecrã inicial ou em Ginásio) é o teu
+**Inventário de artigos** (no ecrã inicial) é o teu
 equipamento, arrumado em separadores por tipo: máquinas, pesos livres,
 estações, peso do corpo, eletrónica e outros. Cada artigo tem
 quantidade, peso, uma nota, a **data de compra** (com o seletor de datas) e
@@ -1225,8 +1254,9 @@ ficaram feitos agora; os de equipa precisam de outras pessoas.
 
 ### Testes de aptidão
 
-Cada modalidade tem os seus **Testes** (no separador Treinar de cada
-desporto — no ginásio, os de longevidade — e na Saúde). Ao abrir um teste
+Cada modalidade tem os seus **Testes** (na janela **Sessão de treino** →
+**Testes**, ou — na natação — no separador Treinar; no ginásio, os de
+longevidade; e na Saúde). Ao abrir um teste
 vês os **blocos** dele num gráfico, como no construtor de treinos (o
 aquecimento, o esforço — «livre», no máximo — e o retorno à calma), com o
 alvo de cada bloco; um teste sem duração (repetições, medidas) mostra as
@@ -1245,7 +1275,14 @@ atualiza a FTP do remo). Os outros têm **cronómetro**: contagem decrescente
 nos que têm duração (flexões em 1 min), cronómetro nos que medem tempo
 (suspensão, prancha, equilíbrio), e depois escreves o resultado e as notas.
 Também podes só **registar um resultado** de um teste feito fora da
-aplicação. Cada teste mostra o último, o melhor e a tendência. **+ Novo
+aplicação — na **natação** é só isto (a prova faz-se na piscina; não há
+«Fazer o teste»). Cada teste mostra o último, o melhor e a tendência.
+
+**A página de um teste** tem em cima os blocos e, por baixo, as ações e a
+**lista dos resultados** (data, valor e notas). **Enter num resultado abre
+uma janela** onde o corriges (valor, data com o seletor, notas) ou o
+**apagas** (com confirmação); **Registar um resultado** também abre essa
+janela. **+ Novo
 teste** cria os teus (nome, unidade, se é melhor mais alto ou mais baixo,
 duração e instruções); os que vêm com a aplicação também se editam ou
 desativam.
@@ -1310,6 +1347,16 @@ base da Perennia. Cada fonte tem o seu separador:
 - **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
   se quiseres, unidade, mínimo, máximo, laboratório), separador «,» ou «;»,
   datas AAAA-MM-DD ou DD/MM/AAAA. Também serve o Excel das análises.
+- **Upload manual** — **uma atividade** de cada vez, vinda do teu
+  computador: um **.fit** (relógios Garmin, Wahoo, Zwift…) ou um **.tcx**.
+  Escolhe-o na lista (a Perennia procura em `imports/`, Transferências e
+  Documentos) ou **arrasta-o para a janela**. A Perennia lê-o e mostra, numa
+  janela, o **nome**, o **desporto** (que podes mudar com ←/→), a data, o
+  tempo total e em movimento, a distância, a subida, a FC, a potência, as
+  calorias e o n.º de voltas; **Fazer upload** guarda a atividade no
+  Histórico desse desporto (e conta para a forma e a fadiga), **Cancelar**
+  descarta. Carregar o mesmo ficheiro outra vez não duplica. Um ficheiro
+  estragado ou incompleto dá uma mensagem de erro e não guarda nada.
 - **TrainingPeaks (.csv de atividades)** — no TrainingPeaks web:
   Calendário → Exportar → Workouts. As atividades entram no Histórico com a
   **TSS do TrainingPeaks** e contam para a forma e a fadiga. Os treinos só
@@ -1480,6 +1527,13 @@ python main.py --importar hrv4training ~/Transferências/MyMeasurements.csv
 python main.py --importar analises ~/Transferências/analises.csv
 ```
 
+```bash
+python main.py --importar atividade ~/Transferências/corrida.fit
+```
+
+(`atividade` lê um `.fit` ou `.tcx` e guarda-o no desporto respetivo, como o
+Upload manual.)
+
 ### Rotas (menu do ecrã inicial)
 
 O **único sítio onde se carregam ficheiros .gpx**. O ciclismo e a corrida já
@@ -1517,6 +1571,26 @@ com os segmentos agrupados por rota, o melhor tempo e quantas vezes os
 fizeste; à direita, o perfil da rota com o segmento escolhido. Enter abre o
 segmento: todos os tempos (o melhor primeiro, com o desporto e a sessão) e,
 nos da Perennia, Editar e Apagar.
+
+### Exportar um treino (todos os desportos)
+
+Na ficha de qualquer treino (a que se abre ao escolhê-lo na Lista de
+treinos) há, em baixo à direita, **Exportar**. Abre uma janela onde dás o
+**nome do ficheiro** e escolhes o **formato**; **OK** grava-o na pasta
+**Transferências** (Downloads) e a mensagem do topo diz onde ficou;
+**Cancelar** (ou Esc) volta à ficha do treino. Um ficheiro que já exista
+não é substituído: o novo leva «_2», «_3»…
+
+| Desporto | Formatos |
+|---|---|
+| Ciclismo | `.zwo` (Zwift, TrainerRoad, MyWhoosh), `.erg` (watts, com a tua FTP), `.mrc` (% da FTP), `.fit` (Garmin/Wahoo), `.json`, `.txt` |
+| Remo | `.fit` (treino estruturado), `.json`, `.txt` |
+| Corrida, natação, ginásio | `.json` (o treino da Perennia, com blocos e objetivos) e `.txt` (para ler ou imprimir) |
+
+A ficha do treino ocupa agora a largura toda: já não há a secção «Sobre
+este treino»; o que lá estava (objetivo, blocos e alvos) tem o espaço todo.
+Na **natação** a ficha não tem «Configurar sessão de treino» (só Editar
+objetivos, Abrir no construtor e Exportar).
 
 ### Treinos do computador (todos os desportos menos o Ginásio)
 
@@ -2022,6 +2096,20 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 9 não muda o esquema da base de dados** — não há tabelas nem
+colunas novas, **não tens de fazer nada** para que as alterações fiquem
+guardadas. O que muda no que já lá está:
+
+| Onde | O quê |
+|---|---|
+| `synced_activities` | as atividades do **Upload manual** entram aqui com `source = 'upload'` e o id `up:<impressão do ficheiro>` (por isso o mesmo ficheiro não se duplica). Podes apagá-las com SQL: `DELETE FROM synced_activities WHERE source = 'upload'` |
+| definições `layout_<desporto>` e `row_fields` | passam a ter o **tamanho que escolheres** (o número de métricas do ecrã), em vez de um tamanho fixo (8 na corrida, 24 no remo, 4 no ginásio); as listas que já tinhas continuam a valer |
+| definições `pmc_ctl0`, `pmc_atl0` | deixaram de existir nas Definições e de ser usadas (a forma parte de zero); se estiverem na base, são ignoradas |
+| definições de **Natação** (`layout_swimming`, `metrics_disabled_swimming`) | deixaram de ter ecrã; ficam na base, sem efeito |
+
+Os **backups** continuam a levar tudo (as listas de métricas vão na componente
+«Ecrã da sessão» e os uploads em «Histórico de sessões»).
+
 **Para mudar de computador:** faz um backup completo (menu Backups ou
 `python main.py --backup`), leva o .zip e, no computador novo, arrasta-o para
 a janela da Perennia e escolhe Substituir. Também continua a dar para copiar
@@ -2089,7 +2177,21 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (704 testes a passar).
+**Verificado com testes automáticos nesta versão** (731 testes a passar).
+
+*Novidades da ronda 9 (27 testes novos, e os antigos atualizados):* o número
+de métricas do ecrã da sessão (1 até ao máximo de cada desporto) e a sessão de
+corrida, de remo (com páginas repartidas por igual) e de ginásio a desenhá-las;
+a pesquisa na barra do topo e as mensagens; o leitor de `.fit` (escrito de
+raiz, testado com um `.fit` escrito pelo próprio codificador, e com ficheiros
+cortados e estranhos), o `.tcx` e o fluxo do Upload manual (desporto à
+escolha, sem duplicar, arrastar para a janela); o `--importar atividade`; os
+resultados dos testes em janelas (editar, apagar, registar) e a natação sem
+«Fazer o teste»; a exportação de treinos (os quatro formatos do ciclismo,
+`.fit` do remo, `.json` e `.txt`, sem escrever por cima); a ficha do treino
+sem «Sobre este treino» e a natação sem sessão; os objetivos numa janela e o
+nome e o objetivo alinhados; e a janela única da «Sessão de treino» (todos os
+modos, Esc a voltar atrás) em todos os desportos.
 
 *Novidades desta versão (24 testes novos, e os antigos atualizados):* o
 fitness, a fadiga e a forma com as constantes e a forma do dia anterior do

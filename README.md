@@ -14,7 +14,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 704 testes
+python -m unittest discover -s tests -t .       # 731 testes
 ```
 
 **Para partilhar com quem não usa Python:** duplo clique em
@@ -92,8 +92,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   valor (numa rampa, a média), a duração e a cadência. As listas de treinos
   mostram a definição e o tipo («Potência · ERG») e são iguais em todos os
   desportos, com **+ Novo treino** em baixo.
-- **Preparar a sessão numa só janela** (ciclismo, corrida, remo):
-  «Sessão de treino» pergunta *Livre* ou *Carregar treino*. Na janela:
+- **«Sessão de treino» numa só janela** (ciclismo, corrida, remo, e as
+  modalidades no ginásio): escolhes o modo — *Livre*, *Carregar treino*,
+  *Do computador*, *Challenge* ou *Testes* — na mesma janela (grande), e a
+  seguir a preparação. A natação não tem sessão de treino. Na preparação:
   aparelhos (emparelhar), rota `.gpx` (uma tua ou uma nova; obrigatória na
   sessão livre de ciclismo, opcional no resto), segmentos do Strava da rota,
   modo (sozinho ou comparação), ERG, auto lap. Se o Strava não responder
@@ -138,6 +140,15 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Inventário de artigos** (o teu equipamento, com data e preço de compra
   e a lista completa com o valor gasto) e **inventário de
   exercícios** por modalidade, ligado ao equipamento.
+- **Pesquisa na barra do topo** (sempre no mesmo sítio, Ctrl+F), **mensagens**
+  a bold ao centro do título, e o calendário maior no ecrã inicial, com as
+  próximas atividades à esquerda.
+- **Número de métricas do ecrã da sessão** à tua escolha (1 até ao máximo do
+  desporto): a sessão de corrida, remo e ginásio desenha-as sozinha.
+- **Upload manual** de uma atividade (.fit ou .tcx): vês o que o ficheiro tem
+  e guardas no desporto respetivo; os testes têm a lista de resultados e
+  janelas para registar, editar e apagar; qualquer treino se **exporta**
+  (nome e formato, para Transferências).
 - **Barra do topo** com os aparelhos e o estado de cada um, e uma janela de
   dispositivos que funciona a meio da sessão. Avisa quando um aparelho se
   desliga. Também tem Backups, Definições (em separadores: Atleta, Geral,
@@ -270,6 +281,9 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
                      avisos de carga, previsões, zonas de ritmo, prontidão
   tp_import.py       .csv de atividades do TrainingPeaks
   file_import.py     as importações de ficheiros (ecrã e --importar)
+  fit_decode.py      leitor de .fit (o contrário de fit.py)
+  activity_upload.py upload manual de uma atividade (.fit, .tcx)
+  workout_download.py exportar um treino de qualquer desporto
   curves.py          curvas suaves para os gráficos (cúbica monótona, escala log)
   i18n.py units.py   traduções e unidades
 velo/io/             rádio e sensores
@@ -290,7 +304,8 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      rowing_screens.py (remo) · connect_screens.py (Strava) ·
                      sync_screens.py (Sincronização) · evolution_screens.py
                      (métricas de evolução) · pickers.py (lista com pesquisa
-                     e seletor de datas) · keymap.py (atalhos
+                     e seletor de datas) · upload_screens.py (upload e
+                     exportar) · goal_popup.py (objetivos) · keymap.py (atalhos
                      personalizáveis) · arrangement_screens.py (disposição) ·
                      session_panels.py (painéis das sessões) ·
                      challenge_screens.py (separador Treinar, Challenge da
