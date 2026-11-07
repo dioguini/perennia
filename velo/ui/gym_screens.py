@@ -43,22 +43,14 @@ class GymHub(SportHub):
                   h=hr_txt)
 
     def items_train(self) -> list[Item]:
-        from velo.ui.challenge_screens import GymSessionPicker, train_items
+        from velo.ui.challenge_screens import train_items
+        from velo.ui.session_setup import ask_start
         a = self.app
-        items = train_items(a, "gym", Item(
+        # os Exercícios e o Inventário de artigos estão no menu principal
+        return train_items(a, "gym", Item(
             tr("Sessão de treino", "Training session"),
             detail=", ".join(m.name for m in gym.modalities()),
-            action=lambda: a.push(GymSessionPicker(a))))
-        from velo.ui.hub_screens import ExerciseInventory, InventoryScreen
-        items += [Item(tr("Exercícios", "Exercises"),
-                       detail=tr("O inventário de exercícios de cada modalidade",
-                                 "Each modality's exercise list"),
-                       action=lambda: a.push(ExerciseInventory(a))),
-                  Item(tr("Inventário de artigos", "Equipment"),
-                       detail=tr("O teu material: o treino surpresa só usa o que tens",
-                                 "Your equipment: the surprise workout only uses what you have"),
-                       action=lambda: a.push(InventoryScreen(a)))]
-        return items
+            action=lambda: ask_start(a, "gym", self)))
 
     def items_builder(self) -> list[Item]:
         a = self.app

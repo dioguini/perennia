@@ -196,6 +196,21 @@ def add_result(db: Database, test_id: int, value: float, *, done_on: str | None 
     return int(cur.lastrowid)
 
 
+def result(db: Database, result_id: int) -> dict | None:
+    ensure(db)
+    r = db.conn.execute("SELECT * FROM test_results WHERE id = ?", (result_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def update_result(db: Database, result_id: int, value: float, *, done_on: str,
+                  notes: str | None) -> None:
+    """Corrige um resultado (o valor, a data e as notas)."""
+    ensure(db)
+    db.conn.execute("UPDATE test_results SET value = ?, done_on = ?, notes = ? WHERE id = ?",
+                    (float(value), done_on, notes, result_id))
+    db.conn.commit()
+
+
 def delete_result(db: Database, result_id: int) -> None:
     db.conn.execute("DELETE FROM test_results WHERE id = ?", (result_id,))
     db.conn.commit()

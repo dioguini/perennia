@@ -158,8 +158,8 @@ class TestGames(unittest.TestCase):
 
 class TestGameInRide(tg.GuiCase):
     def test_adaptive_challenge_ride(self):
-        self.pick("Challenge")
-        self.assertIsInstance(self.screen(), ss.ChallengeMenu)
+        self.pick_mode("Challenge")
+        self.assertEqual(self.screen().level, "challenge")      # na mesma janela
         self.pick("Desafio adaptativo")
         setup = self.screen()
         self.assertIsInstance(setup, ss.GameSetup)
@@ -190,7 +190,7 @@ class TestGameInRide(tg.GuiCase):
         self.assertNotEqual(self.app.db.get("adaptive_level"), None)
 
     def test_elimination_with_bots_on_the_board(self):
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         self.pick("Eliminação")
         self.pick("Começar")
         ride = self.screen()
@@ -297,17 +297,18 @@ class TestTestsGui(tg.GuiCase):
     def test_rowing_tests_from_coming_soon(self):
         self.press(key.ESCAPE)
         self.pick("Remo")
-        self.pick("Testes")
-        self.assertIsInstance(self.screen(), hs.TestsMenu)
+        self.pick_mode("Testes")
+        self.assertEqual(self.screen().level, "tests")
         self.assertTrue(any("2000 m" in i.label for i in self.screen().list.items))
         self.pick("Adicionar teste")
         ed = self.screen()
         self.type("Remo 10 min")
         self.pick("Guardar e sair")
+        self.pick_mode("Testes")                       # a janela volta a abrir com o teste novo
         self.assertTrue(any("Remo 10 min" in i.label for i in self.screen().list.items))
 
     def test_cycling_5min_test_records_vo2max(self):
-        self.pick("Testes")
+        self.pick_mode("Testes")
         self.pick("5 minutos")
         self.pick("Configurar sessão")
         self.pick("Começar")

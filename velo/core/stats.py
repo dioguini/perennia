@@ -602,8 +602,8 @@ def form_state(tsb: float) -> str:
 # Como o TrainingPeaks e o WKO (Coggan): médias exponenciais com as
 # constantes de tempo de 42 e de 7 dias — CTL(d) = CTL(d−1) + (TSS(d) −
 # CTL(d−1)) · (1 − e^(−1/42)) — e a forma (TSB) de um dia é o CTL menos o ATL
-# do dia ANTERIOR (a forma com que se entra no dia). O ponto de partida é o
-# CTL e o ATL iniciais das Definições (Atleta), no dia antes da 1.ª carga.
+# do dia ANTERIOR (a forma com que se entra no dia). Parte-se de zero, no dia
+# antes da 1.ª carga.
 CTL_DAYS, ATL_DAYS = 42.0, 7.0
 K_CTL = 1.0 - math.exp(-1.0 / CTL_DAYS)
 K_ATL = 1.0 - math.exp(-1.0 / ATL_DAYS)
@@ -614,14 +614,7 @@ def pmc(daily: dict, today, db: Database | None = None, start=None) -> list[dict
     até `today`, com as fórmulas do TrainingPeaks/WKO."""
     if not daily and start is None:
         return []
-    ctl0 = atl0 = 0.0
-    if db is not None:
-        try:
-            ctl0 = float(db.get("pmc_ctl0", 0.0) or 0.0)
-            atl0 = float(db.get("pmc_atl0", 0.0) or 0.0)
-        except (TypeError, ValueError):
-            pass
-    ctl, atl = ctl0, atl0
+    ctl = atl = 0.0
     out = []
     first = min(daily) if daily else today
     day = first

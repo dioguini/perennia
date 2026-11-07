@@ -76,7 +76,7 @@ class EvolutionScreen(Screen):
                  Item(tr("Igual ao TrainingPeaks e ao WKO (Coggan)",
                          "Same as TrainingPeaks and WKO (Coggan)"),
                       detail=tr("TSS/rTSS/sTSS por sessão; constantes de 42 e 7 dias; atividades "
-                                "importadas sem duplicar; CTL/ATL iniciais em Definições → Atleta",
+                                "importadas sem duplicar",
                                 "TSS/rTSS/sTSS per session; 42 and 7-day constants; imported "
                                 "activities without duplicates; starting CTL/ATL in Settings → "
                                 "Athlete"), enabled=False)]

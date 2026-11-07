@@ -152,6 +152,7 @@ class BlockBuilder(EditScreen):
     AGENT = True
     PAL_H = 40
     HEAD_ROW_H = 30           # a segunda linha do cabeçalho (o objetivo do treino)
+    HEAD_VALUE_X = 230        # onde começam o nome e o objetivo (os dois no mesmo sítio)
 
     def __init__(self, app, sport: str, wid: str | None, control: str | None = None):
         self.sport = sport
@@ -389,6 +390,7 @@ class BlockBuilder(EditScreen):
         head_y = h - 98 - 34 - 20
         self.list.head_y, self.list.head_x, self.list.head_w = head_y, 48, w - 96
         self.list.head_stack = True
+        self.list.head_value_x = self.HEAD_VALUE_X     # nome e objetivo alinhados à esquerda
         pal_top = head_y - 24 - self.HEAD_ROW_H
         n = len(self.pal)
         pw = (w - 96 - (n - 1) * 6) / n
@@ -640,9 +642,10 @@ class BlockBuilder(EditScreen):
                 Item(tr("Tipo", "Kind"), value=kinds.get(blk.kind, blk.kind), data="cyc:kind",
                      detail=tr("←/→ aquecimento, trabalho, descanso, retorno à calma",
                                "←/→ warm-up, work, rest, cool-down")),
-                Item(tr("Objetivo do bloco", "Block goal"), value=(blk.goal or "") + "▏",
-                     data="text:goal", detail=tr("o que se treina aqui (aparece na sessão)",
-                                                 "what this block trains (shown in session)")),
+                Item(tr("Objetivo do bloco", "Block goal"), value=blk.goal or "—",
+                     data="text:goal", action=lambda: self._edit_goal("goal"),
+                     detail=tr("Enter edita numa janela · aparece na sessão",
+                               "Enter edits in a window · shown in the session")),
                 Item(tr("Mensagem", "Cue"), value=(blk.cue or "") + "▏", data="text:cue",
                      detail=tr("aparece na sessão no início do bloco",
                                "shown in the session when the block starts")),
@@ -722,10 +725,10 @@ class BlockBuilder(EditScreen):
         rows += [Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name", head=True),
                  Item(tr("Objetivo do treino", "Workout goal"),
-                      value=(self.wgoal[:46] + "…" if len(self.wgoal) > 47 else self.wgoal) + "▏",
-                      data="text:wgoal", head=True,
-                      detail="" if self.wgoal else tr("numa frase: o que este treino trabalha",
-                                                      "in one sentence: what this workout trains")),
+                      value=(self.wgoal[:70] + "…" if len(self.wgoal) > 71 else self.wgoal)
+                      or tr("Enter escreve o objetivo (numa janela)",
+                            "Enter writes the goal (in a window)"),
+                      data="text:wgoal", head=True, action=lambda: self._edit_goal("wgoal")),
                  Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
                       button=True, primary=True)]
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
@@ -883,13 +886,33 @@ class BlockBuilder(EditScreen):
         self.dirty = True
         self.redraw()
 
+    def _edit_goal(self, field: str, extra: str = "") -> None:
+        """Os objetivos (do treino e do bloco) escrevem-se numa janela."""
+        if field == "wgoal":
+            title, text, limit = tr("Objetivo do treino", "Workout goal"), self.wgoal, 300
+            sub = self.name
+        elif self.block is not None:
+            title, text, limit = tr("Objetivo do bloco", "Block goal"), self.block.goal or "", 160
+            sub = tr("Bloco {i} de {n}", "Block {i} of {n}", i=self.sel + 1, n=len(self.blocks))
+        else:
+            return
+
+        def save(value: str) -> None:
+            if field == "wgoal":
+                self.wgoal = value
+            elif self.block is not None:
+                self.block.goal = value
+            self.dirty = True
+            self.enter()
+        from velo.ui.goal_popup import GoalPopup
+        self.app.push(GoalPopup(self.app, title, sub, (text + extra)[:limit], limit, save))
+
     def text_input(self, field: str, text: str) -> None:
+        if field in ("wgoal", "goal"):
+            self._edit_goal(field, text)         # escrever abre a janela do objetivo
+            return
         if field == "name":
             self.name += text
-        elif field == "wgoal":
-            self.wgoal = (self.wgoal + text)[:300]
-        elif field == "goal" and self.block is not None:
-            self.block.goal = (self.block.goal + text)[:160]
         elif self.block is not None:
             self.block.cue += text
         self.dirty = True
@@ -898,10 +921,8 @@ class BlockBuilder(EditScreen):
     def text_backspace(self, field: str) -> None:
         if field == "name":
             self.name = self.name[:-1]
-        elif field == "wgoal":
-            self.wgoal = self.wgoal[:-1]
-        elif field == "goal" and self.block is not None:
-            self.block.goal = self.block.goal[:-1]
+        elif field in ("wgoal", "goal"):
+            return                                # o objetivo edita-se na janela (Enter)
         elif self.block is not None:
             self.block.cue = self.block.cue[:-1]
         self.dirty = True

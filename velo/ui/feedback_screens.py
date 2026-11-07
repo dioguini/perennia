@@ -23,7 +23,7 @@ from velo.gfx.compat import label as make_label
 from velo.gfx.compat import line as make_line
 from velo.ui.app import Screen, SnapshotUnsaved
 from velo.ui.brief import sport_kind, wrap
-from velo.ui.widgets import Item
+from velo.ui.widgets import Item, TopBar
 
 ROWS = ("rpe", "pain", "feel", "goal", "comment", "save", "close")
 
@@ -63,7 +63,7 @@ class FeedbackScreen(SnapshotUnsaved, Screen):
 
     def _area_top(self, h: int) -> float:
         """Onde começam os cartões (por baixo da faixa do título)."""
-        return h - 26 - 76 - 14
+        return h - TopBar.H - 76 - 14
 
     def __init__(self, app, kind: str, sid: str):
         self.kind, self.sid = kind, sid
@@ -155,12 +155,9 @@ class FeedbackScreen(SnapshotUnsaved, Screen):
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
         self.chrome.title.font_size = 18
-        self.band.x, self.band.y, self.band.width, self.band.height = 0, h - 26 - 76, w, 76
+        self.band.x, self.band.y, self.band.width, self.band.height = 0, h - TopBar.H - 76, w, 76
         self.band.opacity = 0 if self.EMBEDDED else 255
         self.chrome.title.y, self.chrome.subtitle.y = h - 38, h - 72
-        m = self.chrome.message               # o aviso «guardado» fica na faixa do topo
-        m.anchor_x, m.x, m.y = "right", w - 48, h - 44
-        m.color = _theme.rgba(_theme.P.header_text)
         top, bottom = self._area_top(h), 62
         lw = int((w - 96 - 20) * 0.56)
         self.left = (48, top, lw)

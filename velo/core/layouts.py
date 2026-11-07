@@ -7,11 +7,17 @@ Um «layout» é uma lista de grupos, cada um com lugares para métricas:
 * corrida e natação — 8 quadrados (4 × 2);
 * ginásio — 4 quadrados no painel da sessão.
 
+O **número de métricas** é escolhido no editor (e nas Definições): vai de 1
+ao máximo de métricas que o desporto conhece (as que não estão desligadas).
+Nas grelhas, é o tamanho da lista guardada; o ecrã da sessão distribui-as
+sozinho pelo espaço (`grid_for`). No ciclismo é o total das caixas.
+
 O editor (velo.ui.layout_screens) mexe nisto arrastando; as sessões leem
 daqui. Cada desporto guarda no seu próprio valor das definições.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from .i18n import tr
@@ -113,15 +119,55 @@ class Shape:
     group_names: list[str] = field(default_factory=list)
 
 
-def shape(sport: str) -> Shape:
+ROW_PAGE = 12          # no remo, no máximo 12 quadrados por página (V muda de página)
+
+_GRIDS = {1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (2, 2), 5: (3, 2), 6: (3, 2), 7: (4, 2),
+          8: (4, 2), 9: (3, 3), 10: (4, 3), 11: (4, 3), 12: (4, 3)}
+
+
+def grid_for(n: int, sport: str = "") -> tuple[int, int]:
+    """(colunas, filas) para desenhar `n` quadrados num ecrã largo."""
+    n = max(1, int(n))
+    if sport == "gym":                       # o painel do ginásio é estreito: até 4 por fila
+        return min(n, 4), -(-n // 4)
+    if n in _GRIDS:
+        return _GRIDS[n]
+    cols = min(6, math.ceil(math.sqrt(n * 1.6)))
+    return cols, -(-n // cols)
+
+
+def page_sizes(sport: str, n: int) -> list[int]:
+    """Quantos quadrados em cada página: só o remo tem páginas (até 12), e
+    repartem-se por igual (14 → 7 + 7)."""
+    n = max(1, int(n))
+    if sport != "rowing":
+        return [n]
+    pages = -(-n // ROW_PAGE)
+    base, extra = divmod(n, pages)
+    return [base + (1 if i < extra else 0) for i in range(pages)]
+
+
+def default_count(sport: str) -> int:
+    if sport == "rowing":
+        return len(ROW_DEFAULT)
+    return {"running": len(DEFAULT_RUN), "swimming": len(DEFAULT_SWIM)}.get(
+        sport, len(DEFAULT_GYM))
+
+
+def shape(sport: str, n: int | None = None) -> Shape:
+    """A forma do ecrã com `n` métricas (por omissão, as de origem)."""
     if sport == "cycling":
         from .boxes import MAX_PER_BOX, N_BOXES
         return Shape("boxes", N_BOXES, cols=N_BOXES, rows=MAX_PER_BOX, per_group=MAX_PER_BOX)
+    n = max(1, int(n if n is not None else default_count(sport)))
     if sport == "rowing":
-        return Shape("grid", 2, 4, 3, 12, [tr("Página 1", "Page 1"), tr("Página 2", "Page 2")])
-    if sport in ("running", "swimming"):
-        return Shape("grid", 1, 4, 2, 8, [tr("Ecrã", "Screen")])
-    return Shape("grid", 1, 4, 1, 4, [tr("Painel", "Panel")])
+        sizes = page_sizes(sport, n)
+        cols, rows = grid_for(max(sizes), sport)
+        return Shape("grid", len(sizes), cols, rows, max(sizes),
+                     [tr("Página {n}", "Page {n}", n=i + 1) for i in range(len(sizes))])
+    cols, rows = grid_for(n, sport)
+    return Shape("grid", 1, cols, rows, n,
+                 [tr("Painel", "Panel") if sport == "gym" else tr("Ecrã", "Screen")])
 
 
 def catalog(sport: str) -> list[tuple[str, str]]:
@@ -147,34 +193,54 @@ def _pad(keys: list, n: int) -> list:
     return keys + [None] * (n - len(keys))
 
 
-def load(db, sport: str) -> list[list[str | None]]:
-    """Os grupos com as métricas (None = lugar vazio)."""
-    sh = shape(sport)
+def split(flat: list, sport: str) -> list[list[str | None]]:
+    """A lista corrida repartida pelas páginas do desporto."""
+    out, at = [], 0
+    for size in page_sizes(sport, len(flat) or 1):
+        out.append(list(flat[at:at + size]))
+        at += size
+    return out
+
+
+class _Raw:
+    """Um valor guardado a fingir-se de base de dados (para ler o rascunho)."""
+
+    def __init__(self, key: str, value):
+        self.key, self.value = key, value
+
+    def get(self, key: str, default=None):
+        return self.value if key == self.key else default
+
+
+def decode(sport: str, raw) -> list[list[str | None]]:
+    """Os grupos com as métricas a partir do valor guardado (None = lugar
+    vazio). Nas grelhas, o número de lugares é o de métricas escolhido."""
     valid = {k for k, _ in catalog(sport)}
     if sport == "cycling":
         from . import boxes, metrics
-        return [list(b["metrics"]) for b in boxes.load(db, metrics.REGISTRY)]
+        return [list(b["metrics"]) for b in
+                boxes.load(_Raw("hud_boxes", raw), metrics.REGISTRY)]
     if sport == "rowing":
-        raw = db.get("row_fields") or list(ROW_DEFAULT)
-        raw = [x if x in valid else None for x in raw]
-        flat = _pad(raw, sh.groups * sh.per_group)
-        return [flat[g * sh.per_group:(g + 1) * sh.per_group] for g in range(sh.groups)]
-    key = f"layout_{sport}"
+        raw = list(raw) if isinstance(raw, list) and raw else list(ROW_DEFAULT)
+        return split([x if x in valid else None for x in raw], sport)
     default = {"running": DEFAULT_RUN, "swimming": DEFAULT_SWIM}.get(sport, DEFAULT_GYM)
-    raw = db.get(key)
-    if not isinstance(raw, list):
+    if not isinstance(raw, list) or not raw:
         raw = list(default)
-    raw = [x if x in valid else None for x in raw]
-    return [_pad(raw, sh.per_group)]
+    return [[x if x in valid else None for x in raw]]
 
 
-def save(db, sport: str, groups: list[list[str | None]]) -> None:
+def load(db, sport: str) -> list[list[str | None]]:
+    return decode(sport, db.get(settings_key(sport)))
+
+
+def encode(sport: str, groups: list[list[str | None]], old_raw=None):
+    """O valor a guardar nas definições para estes grupos."""
     if sport == "cycling":
         from . import boxes, metrics
-        old = boxes.load(db, metrics.REGISTRY)
-        boxes.save(db, [{"name": old[i]["name"] if i < len(old) else "",
-                         "metrics": [m for m in g if m]} for i, g in enumerate(groups)])
-        return
+        old = boxes.load(_Raw("hud_boxes", old_raw), metrics.REGISTRY)
+        return [{"name": old[i]["name"] if i < len(old) else "",
+                 "metrics": [m for m in g if m][:boxes.MAX_PER_BOX]}
+                for i, g in enumerate(groups)][:boxes.N_BOXES]
     if sport == "rowing":
         flat = [m for g in groups for m in g]
         # o remo guarda uma lista corrida; um lugar vazio fica com a métrica por omissão
@@ -182,24 +248,24 @@ def save(db, sport: str, groups: list[list[str | None]]) -> None:
         spare = [f for f in ROW_DEFAULT if f not in used]
         for m in flat:
             out.append(m if m else (spare.pop(0) if spare else ROW_DEFAULT[0]))
-        db.set("row_fields", out)
-        return
-    db.set(f"layout_{sport}", [m for m in groups[0]])
+        return out
+    return [m for m in groups[0]]
+
+
+def save(db, sport: str, groups: list[list[str | None]]) -> None:
+    db.set(settings_key(sport), encode(sport, groups, db.get(settings_key(sport))))
 
 
 def defaults(sport: str) -> list[list[str | None]]:
     """O ecrã de origem do desporto (o que «repor» põe), sem gravar nada."""
-    sh = shape(sport)
     valid = {k for k, _ in catalog(sport)}
     if sport == "cycling":
         from . import boxes
         return [list(m) for m in boxes.DEFAULT_BOXES]
     if sport == "rowing":
-        raw = [x if x in valid else None for x in ROW_DEFAULT]
-        flat = _pad(raw, sh.groups * sh.per_group)
-        return [flat[g * sh.per_group:(g + 1) * sh.per_group] for g in range(sh.groups)]
+        return split([x if x in valid else None for x in ROW_DEFAULT], sport)
     default = {"running": DEFAULT_RUN, "swimming": DEFAULT_SWIM}.get(sport, DEFAULT_GYM)
-    return [_pad([x if x in valid else None for x in default], sh.per_group)]
+    return [[x if x in valid else None for x in default]]
 
 
 def reset(db, sport: str) -> None:
@@ -214,3 +280,60 @@ def reset(db, sport: str) -> None:
 def keys(db, sport: str) -> list[str | None]:
     """Tudo numa lista (as sessões de grelha leem assim)."""
     return [m for g in load(db, sport) for m in g]
+
+
+# ----------------------------------------------------- número de métricas
+
+
+def count(groups: list[list]) -> int:
+    """Quantas métricas (lugares, nas grelhas) tem o ecrã."""
+    return sum(len(g) for g in groups)
+
+
+def settings_key(sport: str) -> str:
+    """Onde as Definições guardam o ecrã do desporto."""
+    return {"cycling": "hud_boxes", "rowing": "row_fields"}.get(sport, f"layout_{sport}")
+
+
+def max_count(sport: str, available: list[str]) -> int:
+    """O máximo: as métricas que o desporto conhece (as ligadas); no ciclismo,
+    também o que cabe nas caixas."""
+    n = len(available)
+    if sport == "cycling":
+        from .boxes import MAX_PER_BOX, N_BOXES
+        return min(n, MAX_PER_BOX * N_BOXES)
+    return n
+
+
+def resized(groups: list[list], sport: str, n: int, available: list[str]
+            ) -> list[list]:
+    """O ecrã com `n` métricas: tira as últimas ou acrescenta as que ainda não
+    estão no ecrã (pela ordem do catálogo). Nunca passa do máximo."""
+    n = max(1, min(int(n), max_count(sport, available)))
+    groups = [list(g) for g in groups]
+    used = {m for g in groups for m in g if m}
+    spare = [k for k in available if k not in used]
+    if sport == "cycling":
+        from .boxes import MAX_PER_BOX
+        total = sum(len(g) for g in groups)
+        while total > n:                   # tira da caixa com mais métricas (a última)
+            big = max(range(len(groups)), key=lambda i: (len(groups[i]), i))
+            if len(groups[big]) <= 1:
+                break
+            groups[big].pop()
+            total -= 1
+        while total < n and spare:         # põe na caixa com menos (a primeira)
+            few = [i for i in range(len(groups)) if len(groups[i]) < MAX_PER_BOX]
+            if not few:
+                break
+            groups[min(few, key=lambda i: (len(groups[i]), i))].append(spare.pop(0))
+            total += 1
+        return groups
+    flat = [m for g in groups for m in g]
+    if n <= len(flat):
+        flat = flat[:n]
+    else:
+        while len(flat) < n and spare:
+            flat.append(spare.pop(0))
+        flat += [None] * (n - len(flat))
+    return split(flat, sport)

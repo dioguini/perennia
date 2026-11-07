@@ -60,7 +60,8 @@ class SyncPanel:
     (`items_<chave>`)."""
 
     SOURCES = (("garmindb", "GarminDB"), ("hrv4training", "HRV4Training"),
-               ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"))
+               ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"),
+               ("upload", "Upload manual"))
     FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
                     "~/Desktop")
 
@@ -177,6 +178,50 @@ class SyncPanel:
              "want. Activities join the history with TrainingPeaks' TSS (and count for form "
              "and fatigue)."),
             check=_is_tp)
+
+    def items_upload(self) -> list[Item]:
+        """Uma atividade de cada vez: escolhe o ficheiro (.fit ou .tcx) e vê o que
+        tem antes de a guardar no desporto respetivo."""
+        rows = [Item(tr("Ficheiros encontrados", "Files found"), header=True)]
+        found = self.files(("*.fit", "*.FIT", "*.tcx", "*.TCX"))
+        for p in found:
+            rows.append(Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
+                             action=lambda q=p: self.open_upload(q)))
+        if not found:
+            rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
+                             detail=tr("põe o ficheiro em {p}, Transferências ou Documentos, ou "
+                                       "arrasta-o para a janela",
+                                       "put the file in {p}, Downloads or Documents, or drag it "
+                                       "onto the window", p=self.app.data_dir / "imports")))
+        rows += [Item(tr("Como funciona", "How it works"), header=True),
+                 Item(tr("Escolhe um ficheiro .fit (ou .tcx) do teu computador — ou arrasta-o "
+                         "para a janela. A Perennia lê-o e mostra o nome, o desporto, o tempo, a "
+                         "distância, a FC e a potência; carregas em «Fazer upload» e a atividade "
+                         "fica guardada no Histórico desse desporto (e conta para a forma e a "
+                         "fadiga).", "Pick a .fit (or .tcx) file from your computer — or drag it "
+                         "onto the window. Perennia reads it and shows the name, sport, time, "
+                         "distance, HR and power; press “Upload” and the activity is saved to "
+                         "that sport's History (and counts for form and fatigue)."),
+                      enabled=False)]
+        if self.last_report and self.last_report.get("_kind") == "upload":
+            rows.insert(0, Item(tr("Último upload", "Last upload"),
+                                value=self.last_report.get("_text", ""), enabled=False))
+        return rows
+
+    def open_upload(self, path) -> None:
+        from velo.ui import upload_screens as up
+
+        def done() -> None:
+            self.last_report = {"_kind": "upload", "_text": str(path.name if hasattr(path, "name")
+                                                                else path)}
+            self.screen.enter()
+        try:
+            from velo.core import activity_upload as au
+            info = au.parse(path)
+        except Exception as e:
+            self.app.message(f"{getattr(path, 'name', path)}: {e}")
+            return
+        self.app.push(up.UploadPreview(self.app, info, then=done))
 
     def items_garmindb(self) -> list[Item]:
         db = self.app.db
@@ -420,8 +465,9 @@ def history_items(app, sport: str) -> list[Item]:
         return []
     if not acts:
         return []
-    rows = [Item(tr("— Importadas (Garmin, TrainingPeaks) ({n}) —",
-                    "— Imported (Garmin, TrainingPeaks) ({n}) —", n=len(acts)), enabled=False)]
+    rows = [Item(tr("— Importadas (Garmin, TrainingPeaks, upload manual) ({n}) —",
+                    "— Imported (Garmin, TrainingPeaks, manual upload) ({n}) —", n=len(acts)),
+                 enabled=False)]
     from velo.core.units import hms
     for r in acts:
         bits = []
@@ -436,7 +482,8 @@ def history_items(app, sport: str) -> list[Item]:
             bits.append(f"TSS {r['tss']:.0f}")
         elif r.get("training_load"):
             bits.append(tr("carga {l}", "load {l}", l=f"{r['training_load']:.0f}"))
-        src = "TrainingPeaks" if r.get("source") == "trainingpeaks" else "Garmin"
+        src = {"trainingpeaks": "TrainingPeaks", "upload": tr("upload manual", "manual upload")
+               }.get(r.get("source"), "Garmin")
         bits.append(src + (f" · {r['source_sport']}" if r.get("source_sport") else ""))
         rows.append(Item(f"{str(r['started_at'])[:16].replace('T', ' ')}  "
                          f"{r.get('name') or tr('Atividade', 'Activity')}",

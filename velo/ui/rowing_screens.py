@@ -35,14 +35,13 @@ def _m(v: float | None) -> str:
 from velo.core.layouts import ROW_DEFAULT as DEFAULT_FIELDS  # noqa: E402
 from velo.core.layouts import ROW_FIELDS as FIELDS  # noqa: E402
 
-N_FIELDS = 12          # quadrados por página (3 filas × 4)
-PAGES = 2              # V muda de página
+N_FIELDS = 12          # no máximo, quadrados por página (V muda de página)
 
 
 def field_names(db) -> list[str]:
-    total = N_FIELDS * PAGES
-    v = [x for x in (db.get("row_fields") or []) if x in FIELDS][:total]
-    return v + DEFAULT_FIELDS[len(v):total]
+    """As métricas do ecrã, pela ordem: o número é o escolhido nas Definições."""
+    v = [x for x in (db.get("row_fields") or []) if x in FIELDS]
+    return v or list(DEFAULT_FIELDS)
 
 
 def field_value(e: rw.RowEngine, name: str) -> str:
@@ -315,9 +314,12 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         self.toast = ""
         self._toast_until = 0.0
         self.names = field_names(a.db)
+        from velo.core import layouts as _lay
+        self.sizes = _lay.page_sizes("rowing", len(self.names))     # quadrados por página
+        self.pages = len(self.sizes)
         b = self.batch = pyglet.graphics.Batch()
         self.cells = []
-        for _ in range(N_FIELDS):
+        for _ in range(max(self.sizes)):
             bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
             cap = make_label("", font_size=12, color=DIM, anchor_y="top", batch=b)
             val = make_label("", font_size=34, bold=True, color=TEXT, anchor_y="top", batch=b)
@@ -344,8 +346,9 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         return 300
 
     def _layout(self) -> None:
-        cols, gap = 4, 10
-        rows = -(-len(self.cells) // cols)
+        from velo.core import layouts as _lay
+        cols, rows = _lay.grid_for(len(self.cells), "rowing")
+        gap = 10
         m = self.arr_rect("metrics")
         if m is not None:
             mx, my, mw, mh = m
@@ -485,8 +488,14 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         self.clock.set(e.t, tr("volta {t}", "lap {t}", t=hms(lap)) + (
             f" · {tr('passo', 'step')} {e.workout.remaining_text()}"
             if e.workout is not None and e.workout.step is not None else ""))
+        start = sum(self.sizes[:self.page])
         for i, (bg, cap, val) in enumerate(self.cells):
-            name = self.names[self.page * N_FIELDS + i]
+            if i >= self.sizes[self.page]:             # a última página pode ter menos
+                bg.opacity = 0
+                cap.text = val.text = ""
+                continue
+            bg.opacity = 255
+            name = self.names[start + i]
             pt, en = FIELDS[name]
             cap.text = tr(pt, en).upper()
             val.text = field_value(e, name)
@@ -624,7 +633,7 @@ class RowingSessionScreen(ArrangedPanels, Screen):
                 self.laps_panel.pulse(time.monotonic())
             return True
         if symbol == key.V:
-            self.page = (self.page + 1) % PAGES
+            self.page = (self.page + 1) % self.pages
             return True
         if symbol == key.P:
             e.toggle_pause()
@@ -1163,35 +1172,6 @@ def RowSessionDetail(app, sid: str):                      # noqa: N802 — compa
 def RowStatsScreen(app):                     # noqa: N802 — compatibilidade
     from velo.ui.stats_screens import SportStatsScreen
     return SportStatsScreen(app, "rowing")
-
-
-class RowFieldsScreen(EditScreen):
-    TABBED = True
-
-    def tab_labels(self) -> list[str]:
-        return [tr("Página {n}", "Page {n}", n=i + 1) for i in range(PAGES)]
-
-    def enter(self) -> None:
-        names = field_names(self.app.db)
-        off = self.tab * N_FIELDS
-        items = [Item(tr("Campo {n}", "Field {n}", n=i + 1), value=tr(*FIELDS[n]),
-                      data=f"cyc:{off + i}") for i, n in enumerate(names[off:off + N_FIELDS])]
-        items.append(Item(tr("Repor os campos", "Reset the fields"), action=self._reset))
-        self.chrome.set(tr("Campos do ecrã de remo", "Rowing screen fields"),
-                        tr("←/→ muda o que cada quadrado mostra",
-                           "←/→ changes what each box shows"), self.footer())
-        self.list.set_items(items, keep_index=True)
-
-    def cycle(self, field: str, step: int) -> None:
-        names = field_names(self.app.db)
-        keys = list(FIELDS)
-        i = int(field)
-        names[i] = keys[(keys.index(names[i]) + step) % len(keys)]
-        self.app.db.set("row_fields", names)
-
-    def _reset(self) -> None:
-        self.app.db.set("row_fields", list(DEFAULT_FIELDS))
-        self.enter()
 
 
 # ============================================================= máquina

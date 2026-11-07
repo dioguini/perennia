@@ -86,17 +86,16 @@ class LayoutEditor(Screen):
         self.page_tabs = TabBar([], small=True)
         self.drag: dict | None = None
         self._armed_reset = False
-        self.tab = SPORTS.index(sport) if sport in SPORTS else 0
+        self.tab = 0                  # um só separador: o do desporto de onde se veio
         if self.tabs is not None:
-            self.tabs.select(self.tab)
-        self._load_sport(SPORTS[self.tab])
+            self.tabs.select(0)
+        self._load_sport(sport)
 
     def tab_labels(self) -> list[str]:
-        return [sport_title(s) for s in SPORTS]
+        return [sport_title(self.sport)]
 
     def _load_sport(self, sport: str) -> None:
         self.sport = sport
-        self.sh = lay.shape(sport)
         if sport not in self.drafts:
             loaded = lay.load(self.app.db, sport)
             self.saved[sport] = repr(loaded)
@@ -106,14 +105,45 @@ class LayoutEditor(Screen):
         self.cat = wm.enabled_catalog(self.app.db, sport)   # sem as desligadas
         self.sel = (0, 0)
         self.page_idx = 0
+        self._reshape()
+
+    def _reshape(self) -> None:
+        """Refaz a pré-visualização para o número de métricas do rascunho."""
+        self.sh = lay.shape(self.sport, None if self.sport == "cycling"
+                            else lay.count(self.groups))
         pages = list(self.sh.group_names) if self.sh.kind == "grid" and self.sh.groups > 1 \
             else []
         self.page_tabs.set_labels(pages)
-        self.page_tabs.select(0)
+        self.page_idx = min(self.page_idx, max(0, len(pages) - 1))
+        self.page_tabs.select(self.page_idx)
+        g, i = self.sel
+        g = min(g, len(self.groups) - 1)
+        self.sel = (g, min(i, max(0, len(self.groups[g]) - 1)))
         self.list.y = -2000
         self._build()
         self._layout()
         self._refresh()
+
+    # ------------------------------------------------- número de métricas
+
+    def max_count(self) -> int:
+        return lay.max_count(self.sport, [k for k, _ in self.cat])
+
+    def set_count(self, n: int) -> None:
+        """Mais ou menos métricas no ecrã (até às que o desporto conhece); o
+        ecrã da sessão volta a desenhá-las sozinho."""
+        before = lay.count(self.groups)
+        n = max(1, min(int(n), self.max_count()))
+        if n == before:
+            if int(n) >= self.max_count():
+                self.app.message(tr("Já tens todas as métricas do desporto no ecrã",
+                                    "You already have all the sport's metrics on screen"))
+            return
+        self.drafts[self.sport] = lay.resized(self.groups, self.sport, n,
+                                              [k for k, _ in self.cat])
+        self.groups = self.drafts[self.sport]
+        self._reshape()
+        self._changed()
 
     @property
     def page(self) -> int:
@@ -220,7 +250,7 @@ class LayoutEditor(Screen):
         self._refresh()
 
     def on_tab(self) -> None:
-        self._load_sport(SPORTS[self.tab % len(SPORTS)])
+        pass                       # só há o separador do desporto
 
     def set_page(self, i: int) -> None:
         n = len(self.page_tabs.labels_text)
@@ -235,19 +265,26 @@ class LayoutEditor(Screen):
 
     def enter(self) -> None:
         sub = tr("Por guardar: Guardar (Ctrl+S) ou Cancelar", "Unsaved: Save (Ctrl+S) or Cancel") \
-            if self.dirty else tr("Arrasta as métricas da paleta para o ecrã · Tab outro desporto",
-                                  "Drag metrics from the palette onto the screen · Tab another sport")
+            if self.dirty else tr("Arrasta as métricas da paleta para o ecrã · + / − Métrica "
+                                  "muda quantas aparecem (até {m})", "Drag metrics from the "
+                                  "palette onto the screen · + / − Metric changes how many show "
+                                  "(up to {m})", m=self.max_count())
         self.chrome.set(tr("Ecrã da sessão", "Session screen"), sub,
-                        tr("Setas lugar · Enter escolher · ,/. trocar · Del esvaziar · R repor · "
-                           "PgUp/PgDn página", "Arrows slot · Enter choose · ,/. swap · "
-                           "Del clear · R reset · PgUp/PgDn page"))
+                        tr("Setas lugar · Enter escolher · ,/. trocar · Del esvaziar · [ ] nº de "
+                           "métricas · R repor · PgUp/PgDn página", "Arrows slot · Enter choose · "
+                           ",/. swap · Del clear · [ ] metric count · R reset · PgUp/PgDn page"))
         items = []
         from velo.core import screen_layout as sl
         if self.sport in sl.SPORTS:
             # onde fica cada painel (caixas, voltas, gráficos, tabelas)
             items.append(Item(tr("Disposição do ecrã", "Screen layout"), top=True,
                               action=self._open_arrangement))
+        n, mx = lay.count(self.groups), self.max_count()
         items += [
+            Item(tr("− Métrica", "− Metric"), button=True, action=lambda: self.set_count(
+                lay.count(self.groups) - 1), enabled=n > 1),
+            Item(tr("+ Métrica", "+ Metric"), button=True, action=lambda: self.set_count(
+                lay.count(self.groups) + 1), enabled=n < mx),
             Item(tr("Cancelar", "Cancel"), action=self.cancel, button=True, enabled=self.dirty),
             Item(tr("Guardar", "Save"), action=self.save, button=True, primary=True,
                  enabled=self.dirty)]
@@ -265,7 +302,9 @@ class LayoutEditor(Screen):
         self.frame_out.x, self.frame_out.y = x - 1, y - 1
         self.frame_out.width, self.frame_out.height = w + 2, h + 2
         self.frame.x, self.frame.y, self.frame.width, self.frame.height = x, y, w, h
-        self.prev_title.text = tr("Pré-visualização do ecrã da sessão", "Session screen preview")
+        self.prev_title.text = tr("Pré-visualização do ecrã da sessão · {n} de {m} métricas",
+                                  "Session screen preview · {n} of {m} metrics",
+                                  n=lay.count(self.groups), m=self.max_count())
         self.prev_title.x, self.prev_title.y = x + 12, y + h - 8
         self.prev_note.text = tr("o tempo total fica sempre ao centro, em cima",
                                  "total time always stays top centre")
@@ -296,10 +335,17 @@ class LayoutEditor(Screen):
         gx, gy_top = x + 14, y + h - 66
         tw = (w - 28 - gap * (cols - 1)) / cols
         th = min(58, (gy_top - (y + 10) - gap * (rows - 1)) / rows)
-        for i, s in enumerate(self.slots[:cols * rows]):
+        for i, s in enumerate(self.slots):
+            if i >= len(self.groups[g]) or i >= cols * rows:      # a última página pode ter menos
+                for part in ("out", "bg"):
+                    s[part].opacity = 0
+                s["cap"].text = s["val"].text = ""
+                continue
+            for part in ("out", "bg"):
+                s[part].opacity = 255
             r, c = divmod(i, cols)
             sx, sy = gx + c * (tw + gap), gy_top - (r + 1) * th - r * gap
-            key_ = self.groups[g][i] if i < len(self.groups[g]) else None
+            key_ = self.groups[g][i]
             sel = self.sel == (g, i)
             s["out"].x, s["out"].y, s["out"].width, s["out"].height = sx - 1, sy - 1, tw + 2, th + 2
             s["bg"].x, s["bg"].y, s["bg"].width, s["bg"].height = sx, sy, tw, th
@@ -596,6 +642,10 @@ class LayoutEditor(Screen):
         if symbol == key.ESCAPE:
             self.app.pop()              # com alterações por guardar, pergunta primeiro
             return True
+        if symbol in (getattr(key, "BRACKETLEFT", -3), getattr(key, "BRACKETRIGHT", -4)):
+            self.set_count(lay.count(self.groups)
+                           + (1 if symbol == getattr(key, "BRACKETRIGHT", -4) else -1))
+            return True
         if symbol in (getattr(key, "PAGEUP", -1), getattr(key, "PAGEDOWN", -2)):
             self.set_page(self.page_idx + (1 if symbol == getattr(key, "PAGEDOWN", -2) else -1))
             return True
@@ -650,7 +700,7 @@ class LayoutEditor(Screen):
                 i += 1
             i = min(i, len(self.groups[g]), self.sh.per_group - 1)
         else:
-            cols, total = self.sh.cols, self.sh.cols * self.sh.rows
+            cols, total = self.sh.cols, max(1, len(self.groups[self.page]))
             step = {key.LEFT: -1, key.RIGHT: 1, key.UP: -cols, key.DOWN: cols}[symbol]
             i = (i + step) % total
             g = self.page

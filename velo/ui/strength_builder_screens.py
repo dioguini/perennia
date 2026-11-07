@@ -37,7 +37,7 @@ from velo.gfx import theme as _theme
 from velo.gfx.compat import label as make_label
 from velo.ui.app import ConfirmScreen, Screen
 from velo.ui.brief import wrap
-from velo.ui.widgets import Item
+from velo.ui.widgets import Item, TopBar
 
 ROW = {"bhead": 30, "exhead": 28, "notes": 20, "phead": 22, "set": 24, "addset": 24,
        "bfoot": 24, "gap": 12, "addblock": 40}
@@ -144,7 +144,7 @@ class StrengthBuilder(Screen):
 
     def _areas(self):
         w, h = self.app.window.width, self.app.window.height
-        top = h - 26
+        top = h - TopBar.H
         band_h = 84
         left_w = max(230, min(320, int(w * 0.26)))
         main_x = 48 + left_w + 20

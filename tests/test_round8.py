@@ -85,13 +85,6 @@ class TestPmc(DbCase):
         self.assertAlmostEqual(nxt["tsb"], first["ctl"] - first["atl"], places=3)
         self.assertAlmostEqual(first["tsb"], 0.0, places=6)
 
-    def test_starting_values_from_settings(self):
-        self.db.set("pmc_ctl0", 50.0)
-        self.db.set("pmc_atl0", 60.0)
-        out = stats.pmc({TODAY: 0.0}, TODAY, self.db)
-        self.assertAlmostEqual(out[0]["tsb"], -10.0, places=3)
-        self.assertLess(out[0]["ctl"], 50.0)
-
     def test_rtss_one_hour_at_threshold_is_100(self):
         self.assertAlmostEqual(tss.rtss([4.0] * 3600, 3600, 4.0), 100.0, places=3)
         self.assertLess(tss.rtss([3.0] * 3600, 3600, 4.0), 100.0)
@@ -245,7 +238,7 @@ class TestBackupAndCli(DbCase):
     def test_new_settings_go_to_the_right_component(self):
         from velo.core import backup
         self.assertTrue(backup.BY_KEY["ecra"].settings("metrics_disabled_running"))
-        for k in ("pmc_ctl0", "pmc_atl0", "pmc_synced", "rower_levels", "treadmill_max_kmh"):
+        for k in ("pmc_synced", "rower_levels", "treadmill_max_kmh"):
             self.assertTrue(backup.BY_KEY["definicoes"].settings(k), k)
         backup.prepare(self.db)
         self.assertEqual(backup.unknown_tables(self.db), [])

@@ -173,6 +173,7 @@ class EndurancePreview(BriefScreen):
 
     def __init__(self, app, sport: str, wid: str):
         self.SPORT, self.sport = sport, sport
+        self.CAN_START = sport != "swimming"       # a natação não tem sessão de treino
         super().__init__(app, wid)
 
     def make_brief(self):
@@ -234,7 +235,8 @@ class EnduranceSession(ArrangedPanels, Screen):
         b = self.batch = pyglet.graphics.Batch()
         self.clock = SessionClock(app.window, batch=b)
         self.cells = []
-        for _ in range(8):
+        from velo.core import layouts as _lay
+        for _ in range(max(1, len(_lay.keys(app.db, self.engine.sport)))):    # nº de métricas
             bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
             cap = make_label("", font_size=10, color=DIM, anchor_y="top", batch=b)
             val = make_label("", font_size=26, bold=True, color=TEXT, anchor_y="top", batch=b)
@@ -252,8 +254,9 @@ class EnduranceSession(ArrangedPanels, Screen):
         self._layout()
 
     def _layout(self) -> None:
-        cols, gap = 4, 10
-        rows = -(-len(self.cells) // cols)
+        from velo.core import layouts as _lay
+        cols, rows = _lay.grid_for(len(self.cells), self.engine.sport)
+        gap = 10
         m = self.arr_rect("metrics")
         if m is not None:
             mx, my, mw, mh = m

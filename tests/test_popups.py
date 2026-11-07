@@ -72,7 +72,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
         self.pick("Flexões em 1 minuto")
         self.pick("Registar um resultado")
         run = self.screen()
-        self.assertIsInstance(run, hs.TestRunScreen)
+        self.assertIsInstance(run, hs.ResultPopup)        # o registo é uma janela
         self.select("Resultado")
         self.app._on_text("30")
         self.press(key.ESCAPE)

@@ -46,12 +46,21 @@ class FakeStrava:
 class TestStartChoice(tg.GuiCase):
     def test_session_asks_free_or_load_workout(self):
         self.pick("Sessão de treino")
-        labels = [i.label for i in self.screen().list.items]
-        self.assertEqual(labels, ["Cancelar", "Do computador", "Carregar treino", "Livre"])
-        self.pick("Carregar treino")
-        hub = self.screen()
-        self.assertIsInstance(hub, app_mod.MainMenu)
-        self.assertEqual(hub.tab_labels()[hub.tab], "Lista de treinos")
+        pop = self.screen()
+        self.assertIsInstance(pop, ss.SessionModePopup)
+        labels = [i.label for i in pop.list.items]
+        self.assertEqual(labels, ["Livre", "Carregar treino", "Do computador", "Challenge",
+                                  "Testes", "Cancelar"])
+        self.assertGreaterEqual(pop.popup.w, 900)               # a janela é maior
+        self.pick("Carregar treino")                            # a lista abre na mesma janela
+        self.assertIs(self.screen(), pop)
+        self.assertEqual(pop.level, "workouts")
+        self.assertGreater(len(pop.list.items), 3)
+        self.press(key.ESCAPE)                                  # Esc volta aos modos
+        self.assertIs(self.screen(), pop)
+        self.assertIsNone(pop.level)
+        self.pick("Livre")
+        self.assertIsInstance(self.screen(), ss.SessionSetup)
 
     def test_free_cycling_needs_a_route(self):
         self.app.db.delete_route(self.route_id)
@@ -170,7 +179,7 @@ class TestWorkoutBriefAndSetup(tg.GuiCase):
 
 class TestChallengeAndTestsPopups(tg.GuiCase):
     def test_game_popup_has_how_to_play_and_no_erg(self):
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         self.pick("Desafio adaptativo")
         setup = self.screen()
         self.assertIsInstance(setup, ss.GameSetup)
@@ -183,7 +192,7 @@ class TestChallengeAndTestsPopups(tg.GuiCase):
             self.assertIn(want, labels)
 
     def test_cycling_test_has_configure_button_and_no_log_result(self):
-        self.pick("Testes")
+        self.pick_mode("Testes")
         self.pick("5 minutos")
         det = self.screen()
         labels = [i.label for i in det.list.items]
@@ -196,7 +205,7 @@ class TestChallengeAndTestsPopups(tg.GuiCase):
         self.assertEqual(self.screen().kind, "ftp_test")
 
     def test_adding_a_test_is_a_bottom_right_button(self):
-        self.pick("Testes")
+        self.pick_mode("Testes")
         menu = self.screen()
         add = [i for i in menu.list.items if i.button and "Adicionar teste" in i.label]
         self.assertTrue(add)

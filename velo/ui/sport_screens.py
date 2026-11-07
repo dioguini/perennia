@@ -478,13 +478,14 @@ class StrengthSessionScreen(EditScreen):
                         for _ in range(5)]
         self.hr_marker = pyglet.shapes.Rectangle(0, 0, 3, 18, color=TEXT[:3], batch=b)
         self.session_label = make_label("", font_size=13, color=DIM, anchor_y="top", batch=b)
-        # os 4 quadrados escolhidos no editor do ecrã (Definições → Ecrã da sessão)
+        # os quadrados escolhidos no editor do ecrã (Definições → Desportos → Ginásio):
+        # o número é o das métricas escolhidas, em filas de 4
         from velo.core import layouts
-        self.tile_keys = layouts.keys(app.db, "gym")[:4]
+        self.tile_keys = layouts.keys(app.db, "gym")
         self.tiles = [(pyglet.shapes.Rectangle(0, 0, 10, 10, color=_theme.P.panel2, batch=b),
                        make_label("", font_size=9, color=DIM, anchor_y="top", batch=b),
                        make_label("", font_size=20, bold=True, color=TEXT, anchor_y="top",
-                                  batch=b)) for _ in range(4)]
+                                  batch=b)) for _ in range(max(1, len(self.tile_keys)))]
         self.sets_title = make_label("", font_size=13, bold=True, color=TEXT, anchor_y="top",
                                      batch=b)
         self.set_lines = [make_label("", font_size=13, color=TEXT, anchor_y="top", batch=b)
@@ -513,22 +514,27 @@ class StrengthSessionScreen(EditScreen):
         self.hr_label.x, self.hr_label.y = -2000, -2000
         self.hr_zone_label.anchor_x = "right"
         self.hr_zone_label.x, self.hr_zone_label.y = -2000, -2000
-        tw = (pw - 40 - 3 * 8) / 4
+        from velo.core import layouts
+        cols, rows = layouts.grid_for(len(self.tiles), "gym")
+        tw = (pw - 40 - (cols - 1) * 8) / cols
         for i, (bg, cap, val) in enumerate(self.tiles):
-            tx = px + i * (tw + 8)
-            bg.x, bg.y, bg.width, bg.height = tx, top - 142, tw, 54
-            cap.x, cap.y = tx + 8, top - 92
-            val.x, val.y = tx + 8, top - 106
+            r, c = divmod(i, cols)
+            tx, ty = px + c * (tw + 8), top - 142 - r * 62
+            bg.x, bg.y, bg.width, bg.height = tx, ty, tw, 54
+            cap.x, cap.y = tx + 8, ty + 50
+            val.x, val.y = tx + 8, ty + 36
+        dy = (rows - 1) * 62               # o resto desce quando há mais filas de métricas
         seg_w = (pw - 40) / 5
         for i, r in enumerate(self.hr_segs):
-            r.x, r.y, r.width, r.height = px + i * seg_w, top - 152, seg_w - 2, 10
-        self.hr_marker.y = top - 156
-        self.session_label.x, self.session_label.y = px, top - 172
-        self.sets_title.x, self.sets_title.y = px, top - 204
+            r.x, r.y, r.width, r.height = px + i * seg_w, top - 152 - dy, seg_w - 2, 10
+        self.hr_marker.y = top - 156 - dy
+        self.session_label.x, self.session_label.y = px, top - 172 - dy
+        self.sets_title.x, self.sets_title.y = px, top - 204 - dy
         for i, lab in enumerate(self.set_lines):
-            lab.x, lab.y = px, top - 228 - i * 22
+            y = top - 228 - dy - i * 22
+            lab.x, lab.y = (px, y) if y > 150 else (-3000, y)
         self.next_label.x = px
-        self.next_label.y = max(140, top - 228 - self.SET_LINES * 22 - 10)
+        self.next_label.y = max(140, top - 228 - dy - self.SET_LINES * 22 - 10)
         self.next_label.width = max(200, pw - 40)
         self.clock.layout()
 
@@ -836,7 +842,7 @@ class StrengthSessionScreen(EditScreen):
 
     def _update_tiles(self) -> None:
         from velo.core import layouts
-        for (bg, cap, val), k in zip(self.tiles, self.tile_keys + [None] * 4):
+        for (bg, cap, val), k in zip(self.tiles, self.tile_keys + [None] * len(self.tiles)):
             if k is None:
                 bg.opacity = 0
                 cap.text = val.text = ""

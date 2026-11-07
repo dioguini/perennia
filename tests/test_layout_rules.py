@@ -37,6 +37,7 @@ from velo.ui import builder_screens as bs  # noqa: E402
 from velo.ui import challenge_screens as chs  # noqa: E402
 from velo.ui import health_screens as hs  # noqa: E402
 from velo.ui import rowing_screens as rs  # noqa: E402
+from velo.ui import session_setup  # noqa: E402
 from velo.ui import widgets as wd  # noqa: E402
 
 
@@ -171,23 +172,25 @@ class TestTrainTabEverywhere(tg.GuiCase):
         for name in ("Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"):
             self.pick(name)
             labels = [i.label for i in self.screen().list.items]
-            want = ["Sessão de treino", "Challenge", "Desafios", "Testes"]
-            if name == "Natação":                              # sem «sessão de treino»
-                want = want[1:]
+            # Challenge e Testes vivem dentro da janela «Sessão de treino»
+            want = ["Sessão de treino", "Desafios"]
+            if name == "Natação":                  # sem «sessão de treino» nem Challenge
+                want = ["Desafios", "Testes"]
             self.assertEqual(labels[:len(want)], want, name)
             self.press(key.ESCAPE)
 
     def test_cycling_challenge_has_no_games_header(self):
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         labels = [i.label for i in self.screen().list.items]
         self.assertFalse(any("Jogos" in x for x in labels))
 
     def test_running_challenge_runs_a_time_trial(self):
         self.press(key.ESCAPE)
         self.pick("Corrida")
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         menu = self.screen()
-        self.assertIsInstance(menu, chs.EnduranceChallengeMenu)
+        self.assertIsInstance(menu, session_setup.SessionModePopup)
+        self.assertEqual(menu.level, "challenge")
         self.assertIn("5 km contra o relógio", [i.label for i in menu.list.items])
         # os treinos das provas não se misturam com a lista de treinos
         names = [w["name"] for w in en.workouts(self.app.db, "running")]
@@ -200,13 +203,13 @@ class TestTrainTabEverywhere(tg.GuiCase):
     def test_gym_challenge_and_session_picker(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         labels = [i.label for i in self.screen().list.items]
         self.assertIn("EMOM 20 min", labels)
         self.assertTrue(any(x.startswith("Surpresa · Força") for x in labels))
-        self.press(key.ESCAPE)
-        self.pick("Sessão de treino")
-        self.assertIsInstance(self.screen(), chs.GymSessionPicker)
+        self.press(key.ESCAPE)                     # volta aos modos (na mesma janela)
+        self.assertIsNone(self.screen().level)
+        self.assertIn("Força", [i.label for i in self.screen().list.items])   # as modalidades
 
 
 class TestChallengesWithDeadline(tg.GuiCase):
