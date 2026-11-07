@@ -74,6 +74,12 @@ class GuiCase(unittest.TestCase):
         from velo.ui import route_screens
         self.app.push(route_screens.RoutesScreen(self.app))
 
+    def pick_mode(self, mode: str) -> None:
+        """Abre a janela «Sessão de treino» do desporto e escolhe o modo
+        (Livre, Carregar treino, Do computador, Challenge ou Testes)."""
+        self.pick("Sessão de treino")
+        self.pick(mode)
+
     def press(self, *symbols: int) -> None:
         for s in symbols:
             self.app._on_key_press(s, 0)
@@ -168,10 +174,10 @@ class TestShell(GuiCase):
     def test_arrows_move_the_selection(self):
         view = self.screen().list
         self.assertEqual(view.index, 0)
-        self.press(key.DOWN, key.DOWN)
-        self.assertEqual(view.index, 2)
-        self.press(key.UP)
+        self.press(key.DOWN)
         self.assertEqual(view.index, 1)
+        self.press(key.UP)
+        self.assertEqual(view.index, 0)
 
     def test_selection_wraps_around(self):
         view = self.screen().list
@@ -195,11 +201,11 @@ class TestShell(GuiCase):
         view = self.screen().list
         row_y = view.y                      # primeira linha
         self.app._on_mouse_press(view.x + 10, row_y, 1, 0)
-        # «Sessão de treino»: Livre ou Carregar treino
-        self.assertIsInstance(self.screen(), app_mod.ConfirmScreen)
+        # «Sessão de treino»: a janela dos modos (Livre, Carregar treino, Challenge, Testes…)
+        self.assertIsInstance(self.screen(), session_setup.SessionModePopup)
 
     def test_every_screen_opens_updates_and_draws(self):
-        for entry in ("Sessão de treino", "Carregar do computador", "Testes", "Challenge", "Novo treino",
+        for entry in ("Sessão de treino", "Carregar do computador", "Novo treino",
                       "Desafios", "Estatísticas", "Dispositivos", "Definições"):
             with self.subTest(ecra=entry):
                 self.app.reset_to_menu()
@@ -1284,7 +1290,7 @@ class TestWorkoutAndFtpScreens(GuiCase):
         self.assertFalse(setup.erg)
 
     def test_ftp_protocols_are_listed_and_startable(self):
-        self.pick("Testes")
+        self.pick_mode("Testes")
         labels = [i.label for i in self.screen().list.items]
         self.assertNotIn("Teste de FTP", labels)         # os protocolos são testes
         for proto in ("FTP — 20 minutos", "FTP — rampa", "FTP — 2 × 8 minutos"):
@@ -1301,7 +1307,7 @@ class TestWorkoutAndFtpScreens(GuiCase):
         ride.draw()
 
     def test_ftp_result_is_offered_and_accepted(self):
-        self.pick("Testes")
+        self.pick_mode("Testes")
         self.pick("FTP — 20 minutos")
         self.pick("Configurar sessão")
         self.pick("Começar")
@@ -1405,7 +1411,7 @@ class TestChallengeScreen(GuiCase):
 
 class TestChaseScreens(GuiCase):
     def test_full_flow_from_menu_to_summary(self):
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         self.pick("Fuga")
         self.assertIsInstance(self.screen(), app_mod.ChaseScreen)
         self.assertIn("Fuga", self.board_texts())
@@ -1431,7 +1437,7 @@ class TestChaseScreens(GuiCase):
         self.assertIn("Fuga", texts)
 
     def test_chase_setup_offers_the_routes(self):
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         self.pick("Fuga")
         self.pick("Normal")
         setup = self.screen()
@@ -1446,10 +1452,8 @@ class TestBoardsEverywhere(GuiCase):
     def test_main_menu_board_changes_with_selection(self):
         self.select("Sessão de treino")
         self.assertIn("Recordes", self.board_texts())
-        self.select("Testes")
-        self.assertIn("Teste de FTP", self.board_texts())
-        self.select("Challenge")
-        self.assertIn("Fuga", self.board_texts())
+        self.select("Desafios")
+        self.assertNotIn("Recordes", self.board_texts())
 
     def test_route_library_and_detail_show_route_board(self):
         self.open_routes()
@@ -1722,8 +1726,8 @@ class TestStatsScreen(GuiCase):
         title_top = chart.title.y + 18
         self.assertGreater(lowest_row, title_top, "recordes por cima do gráfico")
         axis_labels = chart.y - 14
-        self.assertGreater(axis_labels - 12, chrome.message.y,
-                           "legendas do eixo por cima das mensagens")
+        self.assertGreater(axis_labels - 12, chrome.footer.y,
+                           "legendas do eixo por cima do rodapé")
         self.assertLess(view.y + 10, chrome.subtitle.y - 16, "recordes por cima do título")
         self.assertGreaterEqual(chart.height, 120)
 

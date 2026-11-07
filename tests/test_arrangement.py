@@ -69,11 +69,14 @@ class TestEditor(tg.GuiCase):
     def _open(self, sport="running"):
         self.pick("Definições")
         self.screen().tab_named("Desportos")
-        self.screen().set_section(1)                    # Ecrã da sessão
+        self.screen().set_sport({"cycling": 0, "rowing": 1, "running": 2}[sport])
+        self.screen().set_section(1)                    # Disposição do ecrã de sessão
         self.pick("Disposição dos painéis")
         ed = self.screen()
         self.assertIsInstance(ed, ars.ArrangementEditor)
-        ed.tab_named({"running": "Corrida", "rowing": "Remo", "cycling": "Ciclismo"}[sport])
+        self.assertEqual(ed.sport, sport)               # só o separador do desporto de onde se veio
+        self.assertEqual(ed.tab_labels(), [{"cycling": "Ciclismo", "rowing": "Remo",
+                                            "running": "Corrida"}[sport]])
         return ed
 
     def test_keys_move_resize_remove_and_add(self):
@@ -144,7 +147,7 @@ class TestEditor(tg.GuiCase):
         self.pick("Definições")
         self.screen().tab_named("Desportos")
         self.screen().set_section(1)
-        self.pick("Métricas no ecrã da sessão")
+        self.pick("Escolher as métricas do ecrã")
         self.pick("Disposição do ecrã")
         self.assertIsInstance(self.screen(), ars.ArrangementEditor)
         self.assertEqual(self.screen().sport, "cycling")

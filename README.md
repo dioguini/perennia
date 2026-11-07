@@ -62,7 +62,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   histórico, progressão por exercício (1RM estimada) e `.fit` com as séries.
 - **Fitness, fadiga e forma** (CTL/ATL/TSB) **calculados como no
   TrainingPeaks/WKO (Coggan)** — constantes de 42 e 7 dias, forma do dia
-  anterior, CTL/ATL iniciais, TSS no ciclismo, **rTSS** na corrida e
+  anterior, TSS no ciclismo, **rTSS** na corrida e
   **sTSS** na natação, atividades importadas sem contar duas vezes — por
   desporto e juntos, **FTP
   estimada** (20 min, 60 min ou potência crítica) e **tempo em zona por

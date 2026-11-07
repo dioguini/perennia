@@ -419,7 +419,7 @@ class TestRowingGui(tg.GuiCase):
     def test_regatta_from_challenge(self):
         self.app.set_rower(rio.SimulatedRower(watts=260))
         self.go_rowing()
-        self.pick("Challenge")
+        self.pick_mode("Challenge")
         self.pick("Regata")
         setup = self.screen()
         self.select("Distância")
@@ -439,7 +439,7 @@ class TestRowingGui(tg.GuiCase):
     def test_rowing_test_from_tests_menu(self):
         self.app.set_rower(rio.SimulatedRower())
         self.go_rowing()
-        self.pick("Testes")
+        self.pick_mode("Testes")
         self.pick("500 m")
         self.pick("Configurar sessão")
         self.pick("Começar")
@@ -450,7 +450,7 @@ class TestRowingGui(tg.GuiCase):
         # a FTP do remo está nas Definições (Atleta); a máquina, nos Dispositivos
         self.go_rowing()
         labels = [i.label for i in self.screen().list.items]
-        self.assertEqual(labels[:3], ["Sessão de treino", "Challenge", "Desafios"])
+        self.assertEqual(labels[:2], ["Sessão de treino", "Desafios"])
         self.assertFalse(any("Máquina de remo" in x or "FTP" in x for x in labels))
         self.assertNotIn("Campos do ecrã de remo", labels)     # estão nas Definições
         self.pick("Definições")

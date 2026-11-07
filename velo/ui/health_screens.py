@@ -1256,6 +1256,8 @@ class TestDetail(Screen):
     """Um teste: os blocos (como no construtor de treinos), fazer, registar,
     editar e os resultados."""
 
+    PANEL_H = 250                     # o cartão dos blocos; os resultados ficam por baixo
+
     def __init__(self, app, test_id: int):
         super().__init__(app)
         self.test_id = test_id
@@ -1266,13 +1268,16 @@ class TestDetail(Screen):
         self.brief = None
         self._layout_panel()
 
-    def _list_width(self, w: int) -> int:
-        return max(300, int(w * 0.36))
-
     def _layout_panel(self) -> None:
+        """O cartão dos blocos em cima, a toda a largura; a lista (ações e
+        resultados) por baixo dele."""
         w, h = self.app.window.width, self.app.window.height
-        x = 48 + self._list_width(w) + 28
-        self.panel.layout(x, self.content_top(h) + 18, w - 48 - x, 66)
+        top = self.content_top(h) + 18
+        has = getattr(self, "brief", None) is not None
+        self.panel.layout(48, top, w - 96, top - self.PANEL_H)
+        list_top = top - self.PANEL_H - 16 if has else self.content_top(h)
+        self.list.x, self.list.y, self.list.width = 48, list_top, w - 96
+        self.list.set_visible_rows(max(3, int((list_top - 96) // 38) + 1))
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -1309,6 +1314,7 @@ class TestDetail(Screen):
             self.brief = self.make_brief(x)
         except Exception:
             self.brief = None
+        self._layout_panel()
         if self.brief is not None:
             self.panel.set(self.brief)
         s = ft.summary(a.db, x)
@@ -1328,23 +1334,36 @@ class TestDetail(Screen):
                        Item(tr("Configurar sessão", "Set up the session"), button=True,
                             primary=True, action=self._configure)]
         else:
-            rows.append(Item(tr("▶ Fazer o teste", "▶ Run the test"),
-                             detail=tr("com cronómetro", "with a timer"),
-                             action=lambda: a.push(TestRunScreen(a, self.test_id))))
+            # na natação só se regista o resultado (a prova faz-se na piscina)
+            if x["sport"] != "swimming":
+                rows.append(Item(tr("▶ Fazer o teste", "▶ Run the test"),
+                                 detail=tr("com cronómetro", "with a timer"),
+                                 action=lambda: a.push(TestRunScreen(a, self.test_id))))
             rows += [Item(tr("Registar um resultado", "Log a result"),
-                          action=lambda: a.push(TestRunScreen(a, self.test_id, timer=False))),
+                          detail=tr("numa janela: valor, data e notas",
+                                    "in a window: value, date and notes"),
+                          action=lambda: a.push(ResultPopup(a, self.test_id, None,
+                                                            then=self.enter))),
                      Item(tr("Editar o teste", "Edit the test"),
                           action=lambda: a.push(TestEditor(a, self.test_id, x["sport"])))]
         if self.brief is None:
             rows.append(Item(tr("Instruções", "Instructions"),
                              detail=_excerpt(x["instructions"], 120), enabled=False))
-        for r in ft.results(a.db, self.test_id):
+        res = ft.results(a.db, self.test_id)
+        rows.append(Item(tr("Resultados ({n})", "Results ({n})", n=len(res)), header=True))
+        for r in res:
             rows.append(Item(r["done_on"], value=ft.fmt_value(r["value"], x["unit"]),
-                             detail=_excerpt(r["notes"], 90), data=("result", r["id"])))
+                             detail=_excerpt(r["notes"], 90),
+                             action=lambda rid=r["id"]: a.push(
+                                 ResultPopup(a, self.test_id, rid, then=self.enter)),
+                             data=("result", r["id"])))
+        if not res:
+            rows.append(Item(tr("Ainda sem resultados", "No results yet"), enabled=False))
         best = ft.fmt_value(s["best"], x["unit"]) if s["n"] else "—"
-        self.chrome.set(x["name"], tr("Melhor: {b} · {n} resultados · Del apaga um resultado",
-                                      "Best: {b} · {n} results · Del deletes a result",
-                                      b=best, n=s["n"]), self.footer())
+        self.chrome.set(x["name"], tr("Melhor: {b} · {n} resultados · Enter num resultado "
+                                      "edita-o ou apaga-o",
+                                      "Best: {b} · {n} results · Enter on a result edits or "
+                                      "deletes it", b=best, n=s["n"]), self.footer())
         self.list.set_items(rows + buttons, keep_index=True)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
@@ -1364,6 +1383,116 @@ class TestDetail(Screen):
                              yes=tr("Apagar", "Delete"))
             return True
         return super().on_key(symbol, modifiers)
+
+
+class ResultPopup(EditPopup):
+    """Registar ou corrigir um resultado de um teste, numa janela: valor, data
+    e notas. Ao corrigir há também **Apagar** (com confirmação)."""
+
+    DATE_FIELDS = ("done_on",)
+
+    def __init__(self, app, test_id: int, result_id: int | None, then=None):
+        super().__init__(app)
+        self.test = ft.test(app.db, test_id)
+        self.result_id = result_id
+        self.then = then
+        r = ft.result(app.db, result_id) if result_id else None
+        self.value = r["value"] if r else None
+        self.done_on = r["done_on"] if r else date.today().isoformat()
+        self.notes = (r or {}).get("notes") or ""
+
+    def title(self) -> str:
+        return tr("Resultado", "Result") if self.result_id else tr("Novo resultado",
+                                                                    "New result")
+
+    def subtitle(self) -> str:
+        return self.test["name"]
+
+    def state(self):
+        return (self.value, self.done_on, self.notes)
+
+    def rows(self) -> list[Item]:
+        return [Item(tr("Resultado", "Result"), value=ft.fmt_value(self.value, self.test["unit"]),
+                     data="num:value",
+                     detail=tr("escreve o número ({u}) · ←/→ ±1", "type the number ({u}) · "
+                               "←/→ ±1", u=self.test["unit"])),
+                Item(tr("Data", "Date"), value=self.done_on, data="cyc:done_on",
+                     detail=tr("Enter abre o calendário", "Enter opens the calendar")),
+                Item(tr("Notas", "Notes"), value=(self.notes or "") + "▏", data="text:notes")]
+
+    def buttons(self) -> list[Item]:
+        out = super().buttons()
+        if self.result_id:
+            out.insert(0, Item(tr("Apagar", "Delete"), button=True, action=self.delete))
+        return out
+
+    def num_adjust(self, field: str, steps: int, big: bool) -> None:
+        self.value = max(0.0, (self.value or 0) + steps * (10 if big else 1))
+
+    def num_set(self, field: str, value: float | None) -> None:
+        self.value = value
+
+    def cycle(self, field: str, step: int) -> None:
+        from datetime import timedelta
+        try:
+            self.done_on = (date.fromisoformat(self.done_on) + timedelta(days=step)).isoformat()
+        except ValueError:
+            self.done_on = date.today().isoformat()
+
+    def date_set(self, field: str, iso: str) -> None:
+        self.done_on = iso
+        self.refresh()
+
+    def text_input(self, field: str, text: str) -> None:
+        self.notes += text
+        self.enter()
+
+    def text_backspace(self, field: str) -> None:
+        self.notes = self.notes[:-1]
+        self.enter()
+
+    def saved_message(self) -> str:
+        return tr("Resultado guardado: {v}", "Result saved: {v}",
+                  v=ft.fmt_value(self.value, self.test["unit"]))
+
+    def commit(self) -> bool:
+        if self.value is None:
+            self.app.message(tr("Falta o resultado.", "The result is missing."))
+            return False
+        try:
+            date.fromisoformat(self.done_on)
+        except ValueError:
+            self.app.message(tr("Data inválida: usa AAAA-MM-DD.", "Invalid date: use YYYY-MM-DD."))
+            return False
+        if self.result_id:
+            ft.update_result(self.app.db, self.result_id, self.value, done_on=self.done_on,
+                             notes=self.notes or None)
+        else:
+            extra = None
+            if "Cooper" in self.test["name"]:
+                extra = {"vo2max": round(ft.vo2max_cooper(self.value), 1)}
+            self.result_id = ft.add_result(self.app.db, self.test["id"], self.value,
+                                           done_on=self.done_on, notes=self.notes or None,
+                                           extra=extra)
+        if self.then is not None:
+            self.then()
+        return True
+
+    def delete(self) -> None:
+        rid = self.result_id
+
+        def gone() -> None:
+            ft.delete_result(self.app.db, rid)
+            self._saved_state = self.state()
+            self.close()
+            self.app.message(tr("Resultado apagado", "Result deleted"))
+            if self.then is not None:
+                self.then()
+        self.app.confirm(tr("Apagar o resultado de {d}?", "Delete the result from {d}?",
+                            d=self.done_on),
+                         tr("Tens a certeza? Não dá para desfazer.",
+                            "Are you sure? This cannot be undone."), gone,
+                         yes=tr("Apagar", "Delete"))
 
 
 class TestRunScreen(SnapshotUnsaved, EditScreen):

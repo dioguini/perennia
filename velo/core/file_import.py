@@ -7,7 +7,8 @@ from pathlib import Path
 from .i18n import tr
 
 KINDS = {"hrv4training": "hrv4training", "analises": "labs", "labs": "labs",
-         "trainingpeaks": "trainingpeaks", "tp": "trainingpeaks"}
+         "trainingpeaks": "trainingpeaks", "tp": "trainingpeaks",
+         "atividade": "upload", "upload": "upload"}
 
 
 def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
@@ -24,6 +25,13 @@ def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
             (".xlsx", ".xlsm")) else labs.import_csv(db, path)
         text = tr("{r} colheitas · {n} resultados", "{r} collections · {n} results",
                   r=rep["reports"], n=rep["results"])
+    elif kind == "upload":
+        from . import activity_upload as au
+        info = au.parse(path)
+        au.save(db, info)
+        rep = {"activities": 1, "sport": info["sport"]}
+        text = tr("Atividade «{n}» guardada em {s}", "Activity «{n}» saved to {s}",
+                  n=info["name"], s=info["sport"])
     elif kind == "trainingpeaks":
         from . import tp_import
         rep = tp_import.import_csv(db, path)

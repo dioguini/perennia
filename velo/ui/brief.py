@@ -284,16 +284,13 @@ class BriefScreen(Screen):
 
     SPORT = "cycling"
     START_LABEL = ("Configurar sessão de treino", "Set up the training session")
+    CAN_START = True               # a natação não tem sessão de treino
 
     def __init__(self, app, wid: str):
         self.wid = wid
         super().__init__(app)
         self.panel = BriefPanel()
         self.brief_data: ob.Brief | None = None
-        self.about = make_label("", font_size=10, color=DIM, anchor_y="top",
-                                multiline=True, width=260, batch=self.panel.batch)
-        self.about_title = make_label("", font_size=10, bold=True, color=TEXT, anchor_y="top",
-                                      batch=self.panel.batch)
         self._layout_panel()
 
     def _list_width(self, w: int) -> int:
@@ -302,12 +299,7 @@ class BriefScreen(Screen):
     def _layout_panel(self) -> None:
         w, h = self.app.window.width, self.app.window.height
         # o cartão ocupa a largura toda; as ações ficam na barra de baixo
-        about_w = max(220, min(300, int(w * 0.24)))
-        self.panel.layout(48, self.content_top(h) + 18, w - 96 - about_w - 24, 66)
-        self.about_title.x, self.about_title.y = w - 48 - about_w, self.content_top(h) + 4
-        self.about.x, self.about.y = self.about_title.x, self.about_title.y - 18
-        self.about.width = about_w
-        self._about_w = about_w
+        self.panel.layout(48, self.content_top(h) + 18, w - 96, 66)
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -330,22 +322,31 @@ class BriefScreen(Screen):
             return
         self.brief_data = b
         self.panel.set(b)
-        desc = b.note.split(" · ", 1)[-1] if b.note else ""
-        self.about_title.text = tr("Sobre este treino", "About this workout") if desc else ""
-        self.about.text = wrap(desc, getattr(self, "_about_w", 260), 10, 16)
         items = [Item(tr("Editar objetivos", "Edit goals"), button=True,
                       action=lambda: a.push(_editor().GoalEditor(a, self.SPORT, self.wid, b)))]
         for extra in self.extra_actions():
             extra.button = True                     # tudo na barra de baixo, à direita
             items.append(extra)
-        items.append(Item(tr(*self.START_LABEL), action=self.start, button=True, primary=True))
+        items.append(Item(tr("Exportar", "Export"), button=True, action=self.export,
+                          primary=not self.CAN_START))
+        if self.CAN_START:
+            items.append(Item(tr(*self.START_LABEL), action=self.start, button=True,
+                              primary=True))
         self.chrome.set(sp.name(self.SPORT) if self.SPORT != "gym" else tr("Ginásio", "Gym"),
                         tr("Objetivo, blocos e alvos antes de começar · Enter configura a sessão",
                            "Goal, blocks and targets before you start · Enter sets up the "
-                           "session"), self.footer())
+                           "session") if self.CAN_START else
+                        tr("Objetivo, blocos e alvos do treino", "The workout's goal, blocks "
+                           "and targets"), self.footer())
         self.list.set_items(items, keep_index=True)
         self.list.index = len(items) - 1
         self.list._sync()
+
+    def export(self) -> None:
+        """Exportar: um popup pede o nome do ficheiro e o formato."""
+        from velo.ui.upload_screens import ExportPopup
+        b = self.brief_data
+        self.app.push(ExportPopup(self.app, self.SPORT, self.wid, b.title if b else ""))
 
     def agent_data(self) -> dict:
         return self.brief_data.as_dict() if self.brief_data else {}

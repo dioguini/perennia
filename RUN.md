@@ -259,9 +259,8 @@ teclado**. Tab e Shift+Tab mudam de separador; também podes clicar.
 - **Atleta**: os limiares de todos os desportos — a FTP do ciclismo, a
   LTHR, a **FTP do remo**, o **ritmo de limiar da corrida** (min/km) e a
   **CSS da natação** (min/100 m) — cada um com a descrição do que é e para
-  que serve. As zonas saem daí. Também aqui: o **fitness (CTL) e a fadiga
-  (ATL) iniciais** (para começar com os números que trazes do
-  TrainingPeaks) e se **as atividades importadas contam** para a forma.
+  que serve. As zonas saem daí. Também aqui: se **as atividades importadas
+  contam** para a forma.
 - **Geral**: sensação de declive, n.º de passos seguintes, pausa
   automática, ligação preferida e ligar ao abrir. O feedback no fim de
   cada sessão é **sempre pedido** (já não se desliga).
@@ -1024,8 +1023,7 @@ CTL, ATL e TSB). **Calculam-se exatamente como no TrainingPeaks e no WKO
   TrainingPeaks).
 
 Um treino de 100 TSS a partir do zero dá CTL 2,4 e ATL 13,3, e no dia
-seguinte TSB −11 — os mesmos números do TrainingPeaks. Se trazes um
-histórico de lá, põe o **CTL e o ATL iniciais** em Definições → Atleta. As
+seguinte TSB −11 — os mesmos números do TrainingPeaks. As
 **atividades importadas** (GarminDB, TrainingPeaks) contam com a TSS do
 TrainingPeaks quando a têm, ou pela FC; uma atividade do mesmo dia e do
 mesmo desporto que uma sessão da Perennia, com duração parecida (± 25 %), é
@@ -1393,7 +1391,7 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, CTL/ATL iniciais, preferências… |
+| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, preferências… |
 | Atalhos de teclado | as teclas que mudaste |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
@@ -2016,7 +2014,7 @@ O que a ronda 8 acrescentou (tudo automático ao abrir):
 | `equipment_items.purchase_date`, `equipment_items.purchase_price` | data e preço de compra de cada artigo |
 | `lab_results.doctor_comment` | o comentário do médico a cada análise |
 | `synced_activities.tss`, `.if_value`, `.avg_power_w`, `.np_w` | a TSS, o IF e a potência das atividades importadas (TrainingPeaks) |
-| definições `pmc_ctl0`, `pmc_atl0`, `pmc_synced` | CTL e ATL iniciais e se as atividades importadas contam para a forma |
+| definição `pmc_synced` | se as atividades importadas contam para a forma |
 | definições `rower_levels`, `treadmill_max_kmh`, `treadmill_max_incline` | os limites Não ERG do remo e da passadeira (os níveis do rolo já existiam) |
 | definições `metrics_disabled_<desporto>` | as métricas de sessão desligadas de cada desporto |
 
@@ -2096,7 +2094,7 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 *Novidades desta versão (24 testes novos, e os antigos atualizados):* o
 fitness, a fadiga e a forma com as constantes e a forma do dia anterior do
 TrainingPeaks (100 TSS a partir do zero dá CTL 2,353, ATL 13,312 e TSB
-−10,96 no dia seguinte) e com o CTL/ATL iniciais; rTSS (1 h ao limiar =
+−10,96 no dia seguinte); rTSS (1 h ao limiar =
 100) e sTSS (a intensidade ao cubo); EF, desacoplamento e durabilidade;
 os avisos de progressão (corrida longa e volume semanal); Riegel, Tanda e o
 VDOT de Daniels (5 km em 20:00 ≈ 49,8) com as três tabelas de zonas; a

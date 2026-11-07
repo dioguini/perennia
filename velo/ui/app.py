@@ -248,29 +248,39 @@ class Screen:
     def _place_search(self) -> None:
         if self.search_box is None:
             return
-        w, h = self.app.window.width, self.app.window.height
         if self.MODAL and getattr(self, "popup", None) is not None:
             p = self.popup
             self.search_box.place(p.x + p.w - 24, p.y + p.h - 16, min(300, p.w * 0.4))
         else:
-            self.search_box.place(w - 48, h - 40)
+            # a pesquisa das tabs fica sempre na barra do topo, no mesmo sítio
+            self.search_box.place(*self.app.topbar.search_slot())
         self.search_box.refresh(self.list.hidden_count)
+
+    def _search_prepare(self) -> bool:
+        """Cria e põe a pesquisa no sítio; True se este ecrã a mostra."""
+        if not (self.has_search or getattr(self, "SEARCH_ENTER_PICKS", False)):
+            return False
+        if self.search_box is None:
+            self.search_focus(False)
+        sig = (self.search_box.text, self.search_box.focused, self.list.hidden_count,
+               self.app.window.width, self.app.window.height)
+        if sig != getattr(self, "_search_sig", None):
+            self._search_sig = sig
+            self._place_search()
+        return True
+
+    def draw_search_top(self) -> None:
+        """A pesquisa das tabs, na barra do topo (o App chama-a depois de a
+        desenhar, para ficar por cima dela)."""
+        if not self.MODAL and self._search_prepare():
+            self.search_box.draw()
 
     def draw(self) -> None:
         self.chrome.set_footer_limit(self.list.buttons_left)
-        if self.has_search or getattr(self, "SEARCH_ENTER_PICKS", False):
-            if self.search_box is None:
-                self.search_focus(False)
-            sig = (self.search_box.text, self.search_box.focused, self.list.hidden_count,
-                   self.app.window.width, self.app.window.height)
-            if sig != getattr(self, "_search_sig", None):
-                self._search_sig = sig
-                self._place_search()
-            self.search_box.draw()
+        if self._search_prepare() and self.MODAL:
+            self.search_box.draw()          # a janela tem a sua pesquisa; a das tabs vai no topo
         if self.AGENT and not self.MODAL:
-            # com botões no topo, à direita, a dica do agente sai dali
-            # o canto superior direito é da pesquisa
-            self.chrome.agent_hint.text = "" if self.has_search else t("agent.hint")
+            self.chrome.agent_hint.text = t("agent.hint")
         self.chrome.draw()
         if self.hub_tabs is not None:
             self.hub_tabs.draw()
@@ -686,6 +696,12 @@ class HomeScreen(Screen):
                                      anchor_y="top", batch=self.batch)
         self.form_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
                                       batch=self.batch) for _ in range(2)]
+        # as próximas atividades planeadas (só para ter noção do que aí vem)
+        self.up_title = make_label("", font_size=15, bold=True, color=ACCENT, anchor_y="top",
+                                   batch=self.batch)
+        self.up_lines = [make_label("", font_size=12, color=TEXT, anchor_y="top",
+                                    batch=self.batch) for _ in range(self.UPCOMING_ROWS)]
+        self._up_rects: list = []
         # o calendário do mês (antes era um menu à parte)
         self.cal = _calendar().MiniCalendar(self.batch)
         self.upcoming: list = []
@@ -714,7 +730,7 @@ class HomeScreen(Screen):
         top = h - 120
         gap = 14
         tw = (w - 96 - (self.BIG - 1) * gap) / self.BIG
-        th = max(92.0, min(170.0, (top - 60 - 250 - gap) / 2))
+        th = max(84.0, min(112.0, (top - 60 - 300 - gap) / 2))
         return tw, th, top
 
     def _layout(self) -> None:
@@ -728,7 +744,6 @@ class HomeScreen(Screen):
             in_row = min(self.BIG, n - r * self.BIG)
             shift = (self.BIG - in_row) * (tw + gap) / 2
             tile.layout(48 + shift + c * (tw + gap), top - (r + 1) * th - r * gap, tw, th)
-        span = w - 96
         sy = top - 2 * th - gap - 30          # topo da faixa de baixo
         bottom = 56
         # esquerda: sequência e forma
@@ -745,14 +760,19 @@ class HomeScreen(Screen):
         for i, lab in enumerate(self.form_lines):
             lab.x, lab.y = lx + 32, fy - 26 - i * 20
             lab.font_size = 12 if w >= 1200 else 11
-        left_w = span * 0.28
-        for lab in self.streak_lines + self.form_lines:
-            lab.text = lab.text            # (o texto é cortado em `enter`)
-        self._left_w = left_w - 36
-        # o resto da largura: o calendário do mês
-        ux = 48 + span * 0.29
-        uw = w - 48 - ux
-        self.cal.layout(ux, sy, uw, sy - bottom)
+        # o calendário do mês: grande e ao centro da página; à esquerda dele
+        # ficam a sequência, a forma e as próximas atividades
+        cw = max(460.0, min(w * 0.58, w - 2 * 330.0))
+        ux = (w - cw) / 2
+        self._left_w = max(120.0, ux - 48 - 36 - 28)
+        self.cal.layout(ux, sy, cw, sy - bottom)
+        uy = fy - 26 - 2 * 20 - 16
+        self.up_title.x, self.up_title.y = lx, uy
+        self._up_top = uy - 26
+        self._up_rows = max(0, min(len(self.up_lines), int((self._up_top - bottom) // 22)))
+        for i, lab in enumerate(self.up_lines):
+            lab.x, lab.y = lx, self._up_top - i * 22
+        self._up_x1 = ux - 16
         for i, tile in enumerate(self.tiles):
             tile.set_selected(i == self.selected and not self.cal.focused)
 
@@ -785,6 +805,37 @@ class HomeScreen(Screen):
             lab.text = _fit_text(text, self._left_w, lab.font_size)
         self.cal.load(a.db)
         self.upcoming = self.upcoming_entries()
+        self._fill_upcoming()
+
+    def _fill_upcoming(self) -> None:
+        from velo.ui.widgets import fit_text
+        self.up_title.text = tr("Próximas atividades", "Upcoming activities")
+        width = getattr(self, "_up_x1", 300) - 48
+        rows = getattr(self, "_up_rows", len(self.up_lines))
+        self._up_rects = []
+        for i, lab in enumerate(self.up_lines):
+            if i >= rows:
+                lab.text = ""
+                continue
+            if i < len(self.upcoming):
+                e = self.upcoming[i]
+                mark = "✓ " if e.done else ""
+                text = f"{cv_weekday(e.day)} · {sport_name(e.sport)} · {e.title or '—'}"
+                lab.text = fit_text(mark + text, width, 12)
+                lab.color = DIM if e.done else TEXT
+                self._up_rects.append((48.0, lab.y - 18, width, 22.0, e.day))
+            elif i == 0:
+                lab.text = fit_text(tr("Nada planeado nas próximas duas semanas",
+                                       "Nothing planned for the next two weeks"), width, 12)
+                lab.color = DIM
+            else:
+                lab.text = ""
+        if len(self.upcoming) > rows and rows > 0:
+            self.up_lines[rows - 1].text = fit_text(
+                tr("+ {n} mais no calendário", "+ {n} more in the calendar",
+                   n=len(self.upcoming) - rows + 1), width, 12)
+            self.up_lines[rows - 1].color = DIM
+            self._up_rects = self._up_rects[:rows - 1]
 
     def upcoming_entries(self) -> list:
         """O que está planeado de hoje a 13 dias, pela ordem dos dias."""
@@ -874,6 +925,10 @@ class HomeScreen(Screen):
             self.cal.go(d)
             self.open_day(d)
             return True
+        for rx, ry, rw, rh, day in self._up_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self.open_day(day)
+                return True
         return False
 
     def on_resize(self, w: int, h: int) -> None:
@@ -1671,7 +1726,6 @@ class PopupMixin:
         c.title.x, c.title.y = p.x + 24, p.y + p.h - 18
         c.subtitle.x, c.subtitle.y = p.x + 24, p.y + p.h - 50
         c.footer.x, c.footer.y = p.x + 160, p.y + 22
-        c.message.x, c.message.y = p.x + 24, p.y + 70
         c.agent_hint.text = ""
         self.list.x = p.x + 28
         self.list.y = p.y + p.h - 92
@@ -2075,7 +2129,7 @@ class SettingsScreen(Screen):
     TABBED = True
     # que linhas vão em cada separador (pelo nome; ver `_rows`)
     GROUPS = (("name", "age", "weight", "ftp", "lthr", "row_ftp", "run_pace", "swim_pace",
-               "@pmc_head", "pmc_ctl0", "pmc_atl0", "pmc_synced"),
+               "@pmc_head", "pmc_synced"),
               ("difficulty", "lookahead", "auto_pause", "connection", "auto_connect"),
               ("@sports",),
               ("theme", "units", "language", "render", "display", "msaa"),
@@ -2103,12 +2157,18 @@ class SettingsScreen(Screen):
                                  self.content_top(h) + 6, w - 96)
         self.section_tabs = TabBar(self.section_labels(), 48, self.content_top(h) - 38, w - 96)
 
-    SPORTS = ("cycling", "rowing", "running", "swimming", "gym")
+    # A natação não tem opções aqui (só construtor de treinos e estatísticas)
+    SPORTS = ("cycling", "rowing", "running", "gym")
+    SECTION_NAMES = {"metrics": ("Métricas de sessão disponíveis", "Available session metrics"),
+                     "layout": ("Disposição do ecrã de sessão", "Session screen layout"),
+                     "limits": ("Sessões Não ERG", "Non-ERG sessions")}
+
+    def sections(self) -> list[str]:
+        """As secções do desporto: o ginásio não tem aparelhos Não ERG."""
+        return ["metrics", "layout"] + (["limits"] if self.sport != "gym" else [])
 
     def section_labels(self) -> list[str]:
-        return [tr("Métricas de sessão disponíveis", "Available session metrics"),
-                tr("Disposição do ecrã de sessão", "Session screen layout"),
-                tr("Sessões Não ERG", "Non-ERG sessions")]
+        return [tr(*self.SECTION_NAMES[s]) for s in self.sections()]
 
     @property
     def sport(self) -> str:
@@ -2296,18 +2356,6 @@ class SettingsScreen(Screen):
                             data="row_ftp"),
             "@pmc_head": Item(tr("Forma, fadiga e fitness (como o TrainingPeaks)",
                                  "Form, fatigue and fitness (like TrainingPeaks)"), header=True),
-            "pmc_ctl0": Item(tr("CTL inicial (fitness)", "Starting CTL (fitness)"),
-                             value=f"{float(self.get('pmc_ctl0', 0.0)):.0f}",
-                             detail=tr("o fitness antes da primeira atividade; põe o valor do "
-                                       "TrainingPeaks/WKO desse dia · ←/→ ±1 · Shift ±10",
-                                       "fitness before the first activity; use TrainingPeaks/"
-                                       "WKO's value for that day · ←/→ ±1 · Shift ±10"),
-                             data="pmc_ctl0"),
-            "pmc_atl0": Item(tr("ATL inicial (fadiga)", "Starting ATL (fatigue)"),
-                             value=f"{float(self.get('pmc_atl0', 0.0)):.0f}",
-                             detail=tr("a fadiga antes da primeira atividade · ←/→ ±1 · Shift ±10",
-                                       "fatigue before the first activity · ←/→ ±1 · Shift ±10"),
-                             data="pmc_atl0"),
             "pmc_synced": Item(tr("Contar as atividades importadas", "Count imported activities"),
                                value=on if self.get("pmc_synced", True) else off,
                                detail=tr("as do Garmin e do TrainingPeaks entram na carga, sem "
@@ -2473,12 +2521,12 @@ class SettingsScreen(Screen):
     def sports_items(self) -> list[Item]:
         a = self.app
         sport = self.sport
-        sec = self.section_tab % 3
+        sec = self.sections()[self.section_tab % len(self.sections())]
         from velo.core import layouts as lay
         from velo.core import workout_meta as wm
         on, off = t("common.on"), t("common.off")
         rows: list[Item] = []
-        if sec == 0:
+        if sec == "metrics":
             k = wm.metrics_key(sport)
             disabled = set(self.get(k, []) or [])
             cat = lay.catalog(sport)
@@ -2492,13 +2540,21 @@ class SettingsScreen(Screen):
                                            "in the screen editor"),
                                  action=lambda m=mid: self._toggle_metric(m),
                                  data=f"metric:{mid}"))
-        elif sec == 1:
-            shown = [lay.label(sport, x) for x in lay.keys(a.db, sport) if x]
-            rows += [Item(tr("Métricas no ecrã da sessão", "Metrics on the session screen"),
-                          value=str(len(shown)),
+        elif sec == "layout":
+            groups = self._layout_groups(sport)
+            shown = [lay.label(sport, x) for g in groups for x in g if x]
+            top = self._max_metrics(sport)
+            rows += [Item(tr("Número de métricas no ecrã", "Number of metrics on screen"),
+                          value=f"{lay.count(groups)} / {top}",
+                          detail=tr("←/→ ±1 · o ecrã da sessão desenha-as sozinho · no máximo as "
+                                    "{n} que o desporto tem", "←/→ ±1 · the session screen lays "
+                                    "them out by itself · at most the {n} the sport has", n=top),
+                          data=f"count:{sport}",
+                          action=lambda: self._open_layout_editor(sport)),
+                     Item(tr("Escolher as métricas do ecrã", "Choose the screen's metrics"),
                           detail=(", ".join(shown[:6]) + ("…" if len(shown) > 6 else ""))
                           or tr("Enter abre e arrasta as métricas", "Enter opens; drag metrics"),
-                          action=lambda: a.push(_layouts().LayoutEditor(a, sport))),
+                          action=lambda: self._open_layout_editor(sport)),
                      Item(tr("Disposição dos painéis", "Panel layout"),
                           detail=tr("Enter abre · arrasta caixas, voltas, gráficos e tabelas",
                                     "Enter opens · drag boxes, laps, charts and tables"),
@@ -2538,6 +2594,39 @@ class SettingsScreen(Screen):
                                            "swimming and gym don't use devices with levels"),
                                  enabled=False))
         return rows
+
+    def _layout_groups(self, sport: str) -> list:
+        """O ecrã do desporto (com o rascunho, se o houver)."""
+        from velo.core import layouts as lay
+        k = lay.settings_key(sport)
+        return lay.decode(sport, self.get(k, None))
+
+    def _max_metrics(self, sport: str) -> int:
+        from velo.core import layouts as lay
+        from velo.core import workout_meta as wm
+        off = set(self.get(wm.metrics_key(sport), []) or [])
+        return lay.max_count(sport, [k for k, _ in lay.catalog(sport) if k not in off])
+
+    def _adjust_count(self, sport: str, step: int) -> None:
+        from velo.core import layouts as lay
+        from velo.core import workout_meta as wm
+        off = set(self.get(wm.metrics_key(sport), []) or [])
+        avail = [k for k, _ in lay.catalog(sport) if k not in off]
+        groups = self._layout_groups(sport)
+        before = lay.count(groups)
+        new = lay.resized(groups, sport, before + (1 if step > 0 else -1), avail)
+        if lay.count(new) == before:
+            return
+        k = lay.settings_key(sport)
+        self.put(k, lay.encode(sport, new, self.get(k, None)))
+        self.enter()
+
+    def _open_layout_editor(self, sport: str) -> None:
+        """O editor grava ele próprio: as alterações às Definições vão primeiro."""
+        from velo.core import layouts as lay
+        if lay.settings_key(sport) in self.draft:
+            self.save()
+        self.app.push(_layouts().LayoutEditor(self.app, sport))
 
     def _limits(self) -> dict:
         from velo.core import workout_meta as wm
@@ -2673,11 +2762,12 @@ class SettingsScreen(Screen):
 
     def set_sport(self, i: int) -> None:
         self.sport_tab = i % len(self.SPORTS)
+        self.section_tab = min(self.section_tab, len(self.sections()) - 1)
         self.list.index = 0
         self.enter()
 
     def set_section(self, i: int) -> None:
-        self.section_tab = i % 3
+        self.section_tab = i % len(self.sections())
         self.list.index = 0
         self.enter()
 
@@ -2789,6 +2879,9 @@ class SettingsScreen(Screen):
             if d.startswith("lim:") and symbol in (key.LEFT, key.RIGHT):
                 self._adjust_limit(d[4:], 1 if symbol == key.RIGHT else -1)
                 return True
+            if d.startswith("count:") and symbol in (key.LEFT, key.RIGHT):
+                self._adjust_count(d[6:], 1 if symbol == key.RIGHT else -1)
+                return True
         if item is not None and symbol in (key.ENTER, key.RETURN) and item.action is None \
                 and isinstance(item.data, str) and self._enter_row(item):
             return True
@@ -2849,8 +2942,6 @@ class SettingsScreen(Screen):
             from velo.core import workout_meta as wm
             if self._orig.get("trainer_levels") is None and lv == wm.levels(a.db):
                 self.draft.pop("trainer_levels", None)      # voltou ao que estava
-        elif field in ("pmc_ctl0", "pmc_atl0"):
-            self.put(field, max(0.0, min(250.0, float(self.get(field, 0.0)) + step)))
         elif field == "pmc_synced":
             self.put("pmc_synced", not self.get("pmc_synced", True))
         elif field == "lookahead":
@@ -4066,11 +4157,17 @@ class App:
                        n=name or tr("Treino", "Workout")))
 
     def _on_file_drop(self, x: int, y: int, paths) -> None:
-        """Arrastar um ficheiro para a janela: um backup (.zip) abre a reposição."""
+        """Arrastar um ficheiro para a janela: um backup (.zip) abre a reposição;
+        uma atividade (.fit ou .tcx) abre o upload manual."""
         try:
+            from velo.ui import upload_screens
+            if upload_screens.open_dropped(self, list(paths or [])):
+                return
             if not _backups().open_dropped(self, list(paths or [])):
-                self.message(tr("Arrasta um backup da Perennia (.zip) para o repor",
-                                "Drag a Perennia backup (.zip) to restore it"))
+                self.message(tr("Arrasta um backup (.zip) para o repor, ou uma atividade "
+                                "(.fit, .tcx) para a carregar",
+                                "Drag a backup (.zip) to restore it, or an activity "
+                                "(.fit, .tcx) to upload it"))
         except Exception as e:
             self.message(f"{t('common.error')}: {e}")
 
@@ -4171,6 +4268,29 @@ class App:
     def message(self, text: str) -> None:
         self._message = text
         self._message_at = time.monotonic()
+
+    def _draw_message(self, base) -> None:
+        """A mensagem do momento e a pesquisa das tabs, por cima da barra do
+        topo. A mensagem fica ao centro, na linha do título (à direita dele)."""
+        screen = self.current
+        if screen is not None and not screen.MODAL and not screen.counting:
+            screen.draw_search_top()
+        bar = self.topbar.msg
+        if self._message and time.monotonic() - self._message_at < 6.0:
+            w = self.window.width
+            title = base.chrome.title if base is not None else None
+            left = 48.0
+            if title is not None and title.text:
+                from velo.ui.widgets import text_px
+                left = 48.0 + max(getattr(title, "content_width", 0) or 0,
+                                  text_px(title.text, title.font_size, True)
+                                  if title.font_size < 30 else 0) + 40
+            left = min(left, w * 0.55)
+            bar.show(self._message, left, w - 48.0 - (190.0 if screen is not None
+                                                      and screen.AGENT else 0.0))
+            bar.draw()
+        else:
+            bar.active = False
 
     # --------------------------------------------------------- faixa do topo
 
@@ -4412,11 +4532,8 @@ class App:
                 if scr.MODAL:
                     scr.draw()
             screen.draw()
-            if self._message and time.monotonic() - self._message_at < 6.0:
-                screen.chrome.message.text = self._message
-            else:
-                screen.chrome.message.text = ""
             self.topbar.draw()
+            self._draw_message(below or screen)
             return
         if not isinstance(screen, RideScreen):
             self.window.projection = pyglet.math.Mat4.orthogonal_projection(
@@ -4430,17 +4547,14 @@ class App:
                 self.window.view = pyglet.math.Mat4()
                 pyglet.gl.glDisable(pyglet.gl.GL_DEPTH_TEST)
             screen.start_cd.draw()
-        if self._message and time.monotonic() - self._message_at < 6.0:
-            if not isinstance(screen, RideScreen):
-                screen.chrome.message.text = self._message
-        elif not isinstance(screen, RideScreen):
-            screen.chrome.message.text = ""
         if isinstance(screen, RideScreen):
             self.window.projection = pyglet.math.Mat4.orthogonal_projection(
                 0, self.window.width, 0, self.window.height, -255, 255)
             self.window.view = pyglet.math.Mat4()
             pyglet.gl.glDisable(pyglet.gl.GL_DEPTH_TEST)
         self.topbar.draw()
+        if not isinstance(screen, RideScreen):
+            self._draw_message(screen)
         if self._fps is not None:
             self._fps.draw()
 
@@ -4524,6 +4638,11 @@ class App:
             return
         if which == "quit":
             self.ask_quit()
+            return
+        if which == "search":
+            screen = self.current
+            if screen is not None and not screen.counting and screen.has_search:
+                screen.search_focus(True)
             return
         if which == "bar":
             return

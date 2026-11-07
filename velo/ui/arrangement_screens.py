@@ -41,17 +41,16 @@ class ArrangementEditor(Screen):
         self.drag: dict | None = None
         self.sel: str | None = None
         self.pal_sel = 0
-        self.tab = sl.SPORTS.index(self.sport)
+        self.tab = 0                  # um só separador: o do desporto de onde se veio
         if self.tabs is not None:
-            self.tabs.select(self.tab)
+            self.tabs.select(0)
         self._load_sport(self.sport)
 
     def tab_labels(self) -> list[str]:
-        return [sp.name(s) for s in sl.SPORTS]
+        return [sp.name(self.sport)]
 
     def on_tab(self) -> None:
-        self._load_sport(sl.SPORTS[self.tab % len(sl.SPORTS)])
-        self.enter()
+        pass                          # só há o separador do desporto
 
     def _load_sport(self, sport: str) -> None:
         self.sport = sport
@@ -165,9 +164,8 @@ class ArrangementEditor(Screen):
 
     def enter(self) -> None:
         sub = tr("Por guardar: Guardar (Ctrl+S) ou Cancelar", "Unsaved: Save (Ctrl+S) or Cancel") \
-            if self.dirty else tr("Arrasta os painéis; o canto de baixo muda o tamanho · Tab "
-                                  "outro desporto", "Drag the panels; the bottom corner resizes "
-                                  "· Tab another sport")
+            if self.dirty else tr("Arrasta os painéis; o canto de baixo muda o tamanho",
+                                  "Drag the panels; the bottom corner resizes")
         self.chrome.set(tr("Disposição do ecrã da sessão", "Session screen layout"), sub,
                         tr(", . painel · setas mover · Shift+setas tamanho · Del tirar · "
                            "Enter pôr", ", . panel · arrows move · Shift+arrows size · "

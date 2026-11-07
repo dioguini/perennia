@@ -238,10 +238,16 @@ class TestBriefScreens(tg.GuiCase):
         b = self.screen()
         b.sel = 1
         b.enter()
-        self.select("Objetivo do bloco")
+        self.pick("Objetivo do bloco")                 # os objetivos escrevem-se numa janela
+        from velo.ui.goal_popup import GoalPopup
+        self.assertIsInstance(self.screen(), GoalPopup)
         self.type("Z2 sem picos")
-        self.select("Objetivo do treino")
+        self.press(key.ENTER)                          # Enter guarda
+        self.assertIs(self.screen(), b)
+        self.pick("Objetivo do treino")
+        self.assertIsInstance(self.screen(), GoalPopup)
         self.type("Base aeróbia")
+        self.press(key.ENTER)
         self.pick("Guardar")
         saved = ob.stored(self.app.db, "cycling", b.wid)
         self.assertEqual(saved["goal"], "Base aeróbia")
@@ -407,12 +413,12 @@ class TestLayouts(tg.GuiCase):
     def test_settings_open_the_editor(self):
         self.pick("Definições")
         self.screen().tab_named("Desportos")
+        self.screen().set_sport(1)                    # o remo
         self.screen().set_section(1)
-        self.pick("Métricas no ecrã da sessão")
+        self.pick("Escolher as métricas do ecrã")
         ed = self.screen()
         self.assertIsInstance(ed, ls.LayoutEditor)
-        self.assertEqual(ed.tab_labels(), ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio"])
-        ed.tab_named("Remo")                          # um separador por desporto
+        self.assertEqual(ed.tab_labels(), ["Remo"])   # só o separador do desporto de onde se veio
         self.assertEqual(ed.sport, "rowing")
         self.assertEqual(len(ed.page_tabs.labels_text), 2)   # o remo tem duas páginas
         self.press(key.ENTER)                         # escolher pela lista

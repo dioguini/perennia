@@ -22,7 +22,7 @@ from velo.gfx import theme as _theme
 from velo.gfx.compat import label as make_label
 from velo.ui.app import Screen
 from velo.ui.brief import wrap
-from velo.ui.widgets import Item
+from velo.ui.widgets import Item, TopBar
 
 MAX_EX = 12
 MAX_SETS = 10
@@ -90,9 +90,9 @@ class StrengthAnalysisScreen(Screen):
     def _layout(self) -> None:
         w, h = self.app.window.width, self.app.window.height
         self.chrome.title.font_size = 18
-        self.band.x, self.band.y, self.band.width, self.band.height = 0, h - 26 - 76, w, 76
+        self.band.x, self.band.y, self.band.width, self.band.height = 0, h - TopBar.H - 76, w, 76
         self.chrome.title.y, self.chrome.subtitle.y = h - 38, h - 72
-        self.top = h - 26 - 76 - 12
+        self.top = h - TopBar.H - 76 - 12
         self._fill()
 
     def on_resize(self, w: int, h: int) -> None:

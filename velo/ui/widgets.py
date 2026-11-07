@@ -168,6 +168,8 @@ class ListView:
     head_x: float = 48
     head_w: float = 800
     head_stack: bool = False      # as linhas `head` uma por baixo da outra
+    head_value_x: float | None = None   # nas linhas `head`: o valor começa aqui (à esquerda,
+    #                                   no mesmo sítio em todas), em vez de à direita
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
@@ -391,7 +393,12 @@ class ListView:
                 highlight._bar.opacity = highlight.opacity
             highlight._bar.x, highlight._bar.y = highlight.x, highlight.y
             value.text = item.value
-            value.x, value.y = x + col_w, row_y
+            if c == "h" and self.head_stack and self.head_value_x is not None:
+                value.anchor_x = "left"
+                value.x, value.y = x + self.head_value_x, row_y
+            else:
+                value.anchor_x = "right"
+                value.x, value.y = x + col_w, row_y
             # o rótulo e a nota não podem passar por baixo do valor à direita
             free = col_w - text_px(item.value, 13) - 18
             d = item.detail or ""
@@ -552,10 +559,13 @@ class SearchBox:
     W, H = 300, 30
 
     def __init__(self):
+        from velo.gfx import icons
         self.batch = pyglet.graphics.Batch()
         self.outline = pyglet.shapes.Rectangle(0, 0, self.W + 2, self.H + 2, color=BORDER,
                                                batch=self.batch)
         self.bg = pyglet.shapes.Rectangle(0, 0, self.W, self.H, color=PANEL, batch=self.batch)
+        self.icon = icons.sprite("search", 0, 0, 16, batch=self.batch, opacity=200,
+                                 tint=_theme.P.dim)
         self.label = make_label("", font_size=12, color=DIM, anchor_y="center",
                                 batch=self.batch)
         self.count = make_label("", font_size=10, color=DIM, anchor_x="right",
@@ -563,14 +573,20 @@ class SearchBox:
         self.focused = False
         self.text = ""
         self.x = self.y = 0.0
+        self.h = self.H
 
-    def place(self, right: float, top: float, width: float | None = None) -> None:
+    def place(self, right: float, top: float, width: float | None = None,
+              height: float | None = None) -> None:
         w = width or self.W
-        self.x, self.y = right - w, top - self.H
-        self.bg.x, self.bg.y, self.bg.width = self.x, self.y, w
-        self.outline.x, self.outline.y, self.outline.width = self.x - 1, self.y - 1, w + 2
-        self.label.x, self.label.y = self.x + 10, self.y + self.H / 2
-        self.count.x, self.count.y = self.x + w - 8, self.y + self.H / 2
+        self.h = height or self.H
+        self.x, self.y = right - w, top - self.h
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = self.x, self.y, w, self.h
+        self.outline.x, self.outline.y = self.x - 1, self.y - 1
+        self.outline.width, self.outline.height = w + 2, self.h + 2
+        if self.icon is not None:
+            self.icon.x, self.icon.y = self.x + 8, self.y + (self.h - 16) / 2
+        self.label.x, self.label.y = self.x + 32, self.y + self.h / 2
+        self.count.x, self.count.y = self.x + w - 8, self.y + self.h / 2
         self._w = w
 
     def refresh(self, hidden: int = 0) -> None:
@@ -582,13 +598,13 @@ class SearchBox:
             shown = (tr("Escreve para filtrar…", "Type to filter…") if self.focused
                      else tr("Pesquisar · Ctrl+F", "Search · Ctrl+F"))
             self.label.color = DIM if not self.focused else TEXT
-        self.label.text = fit_text(shown, getattr(self, "_w", self.W) - 60, 12)
+        self.label.text = fit_text(shown, getattr(self, "_w", self.W) - 84, 12)
         self.count.text = (f"−{hidden}" if hidden else "") if self.text else ""
         self.outline.color = ACCENT[:3] if self.focused else BORDER
 
     def hit(self, mx: float, my: float) -> bool:
         return self.x <= mx <= self.x + getattr(self, "_w", self.W) and \
-            self.y <= my <= self.y + self.H
+            self.y <= my <= self.y + self.h
 
     def draw(self) -> None:
         self.batch.draw()
@@ -606,8 +622,6 @@ class Chrome:
                                           anchor_y="top", batch=self.batch)
         self.footer = make_label("", font_size=11, color=DIM,
                                         batch=self.batch)
-        self.message = make_label("", font_size=13, color=ACCENT,
-                                         anchor_y="top", batch=self.batch)
         self.agent_hint = make_label("", font_size=10, color=DIM, anchor_x="right",
                                      batch=self.batch)
         self.footer_x = 48
@@ -619,7 +633,6 @@ class Chrome:
         w, h = self.window.width, self.window.height
         self.title.x, self.title.y = 48, h - 40
         self.subtitle.x, self.subtitle.y = 48, h - 78
-        self.message.x, self.message.y = 48, 76
         self.footer.x, self.footer.y = self.footer_x, 26
         # a dica do agente fica em cima, à direita: em baixo estão os botões
         self.agent_hint.x, self.agent_hint.y = w - 48, h - 52
@@ -1210,7 +1223,9 @@ class BackButton:
 
 
 class Tile:
-    """Cartão grande com ícone e título (ecrã inicial)."""
+    """Cartão com ícone e título (ecrã inicial)."""
+
+    ICON_MAX = 42           # o ícone é discreto: o título é o que se lê
 
     def __init__(self, title: str, icon_name: str, note: str = "", batch=None):
         from velo.gfx import icons
@@ -1261,7 +1276,7 @@ class Tile:
         # o ícone fica por cima do título, sem lhe tocar
         top_of_title = title_y + size * 0.8 + (size * 0.7 if two else 0)
         room = (y + h - 12) - (top_of_title + 10)
-        icon = max(20.0, min(72.0, room, w * 0.5))
+        icon = max(20.0, min(self.ICON_MAX, room, w * 0.5))
         if self.icon is not None:
             self.icon.scale = icon / 64
             self.icon.x = x + (w - icon) / 2
@@ -1413,46 +1428,113 @@ class TabBar:
 # =================================================================== topo
 
 
+def wrap_lines(text: str, max_px: float, size: float, bold: bool = False,
+               max_lines: int = 3) -> list[str]:
+    """Parte o texto em linhas que cabem em `max_px` (por palavras); a última
+    leva reticências se ainda sobrar texto."""
+    words, lines, cur = str(text).split(), [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if text_px(trial, size, bold) <= max_px or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = fit_text(lines[-1] + " …", max_px, size, bold)
+    return [fit_text(ln, max_px, size, bold) for ln in lines]
+
+
+class MessageBar:
+    """A mensagem do momento («Guardado», um erro, onde ficou um ficheiro…).
+    Aparece sempre na mesma zona, ao centro e na linha do título, a bold, com
+    um fundo escuro e a cor a destacar, para se ver em qualquer tema."""
+
+    SIZE, LINE_H, PAD = 14, 20, 12
+    TEXT = (255, 208, 70)
+
+    def __init__(self, window):
+        self.window = window
+        self.batch = pyglet.graphics.Batch()
+        self.edge = pyglet.shapes.Rectangle(0, 0, 10, 10, color=self.TEXT, batch=self.batch)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=(20, 28, 44), batch=self.batch)
+        self.lines = [make_label("", font_size=self.SIZE, bold=True, color=self.TEXT,
+                                 anchor_x="center", anchor_y="center", batch=self.batch)
+                      for _ in range(3)]
+        self.active = False
+
+    def show(self, text: str, left: float, right: float) -> None:
+        """Mostra `text` entre `left` e `right` (o espaço que o título deixa)."""
+        if not text:
+            self.active = False
+            return
+        h = self.window.height
+        room = max(160.0, right - left - 2 * self.PAD - 4)
+        lines = wrap_lines(text, room, self.SIZE, True, len(self.lines))
+        wid = max(text_px(ln, self.SIZE, True) for ln in lines) + 2 * self.PAD
+        bh = len(lines) * self.LINE_H + 12
+        cx = (left + right) / 2
+        top = h - TopBar.H - 8
+        dark = _theme.mix(_theme.P.header, (0, 0, 0), 0.3)
+        self.bg.color = dark
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = cx - wid / 2, top - bh, wid, bh
+        self.edge.x, self.edge.y = cx - wid / 2 - 2, top - bh - 2
+        self.edge.width, self.edge.height = wid + 4, bh + 4
+        for k, lab in enumerate(self.lines):
+            lab.text = lines[k] if k < len(lines) else ""
+            lab.x, lab.y = cx, top - 6 - self.LINE_H / 2 - k * self.LINE_H
+        self.active = True
+
+    def draw(self) -> None:
+        if self.active:
+            self.batch.draw()
+
+
 class TopBar:
     """Faixa do topo, sempre à vista: os aparelhos e o estado de cada um, e os
     botões Dispositivos, Definições e Ligar/Desligar (sair)."""
 
-    H = 26
+    H = 32
     CHIPS = 6
+    SEARCH_W = 270          # a pesquisa: sempre aqui, ao lado da data e hora
 
     def __init__(self, window):
         from velo.gfx import icons
         self.window = window
         self.batch = pyglet.graphics.Batch()
+        self.msg = MessageBar(window)
         self.bg = pyglet.shapes.Rectangle(0, 0, 10, self.H, color=HEADER, batch=self.batch)
-        self.brand = make_label("Perennia", font_size=11, bold=True, color=HEADER_TEXT,
+        self.brand = make_label("Perennia", font_size=12, bold=True, color=HEADER_TEXT,
                                 anchor_y="center", batch=self.batch)
         self.brand_dot = pyglet.shapes.Circle(0, 0, 4, color=_theme.mix(
             _theme.P.good, (255, 255, 255), 0.25), batch=self.batch)
         self.chips = []
         for _ in range(self.CHIPS):
             dot = pyglet.shapes.Rectangle(0, 0, 8, 8, color=GOOD[:3], batch=self.batch)
-            lab = make_label("", font_size=10, color=HEADER_TEXT, anchor_y="center",
+            lab = make_label("", font_size=11, color=HEADER_TEXT, anchor_y="center",
                              batch=self.batch)
             self.chips.append((dot, lab))
-        self.more = make_label("", font_size=10, color=HEADER_DIM, anchor_y="center",
+        self.more = make_label("", font_size=11, color=HEADER_DIM, anchor_y="center",
                                batch=self.batch)
         self.buttons: dict[str, tuple] = {}
         for key_, icon in (("devices", "devices"), ("backups", "recover"),
                            ("settings", "gear"), ("quit", "power_button")):
-            r = pyglet.shapes.Rectangle(0, 0, 10, self.H - 4,
+            r = pyglet.shapes.Rectangle(0, 0, 10, self.H - 6,
                                         color=_theme.mix(HEADER, (255, 255, 255), 0.13),
                                         batch=self.batch)
-            lab = make_label("", font_size=10, bold=True, color=HEADER_TEXT, anchor_y="center",
+            lab = make_label("", font_size=11, bold=True, color=HEADER_TEXT, anchor_y="center",
                              batch=self.batch)
-            ic = icons.sprite(icon, 0, 0, 16, batch=self.batch, opacity=235,
+            ic = icons.sprite(icon, 0, 0, 18, batch=self.batch, opacity=235,
                               tint=HEADER_TEXT)
             self.buttons[key_] = (r, lab, ic)
         self.enabled = {"devices": True, "backups": True, "settings": True, "quit": True}
         self.devices: list[tuple[str, str]] = []
         self._chip_rects: list[tuple[float, float, float]] = []
         # data e hora, ao lado do botão Dispositivos
-        self.clock = make_label("", font_size=10, bold=True, color=HEADER_TEXT,
+        self.clock = make_label("", font_size=11, bold=True, color=HEADER_TEXT,
                                 anchor_x="right", anchor_y="center", batch=self.batch)
         self._clock_key = None
         self.now = None                       # para os testes: uma hora fixa
@@ -1491,17 +1573,24 @@ class TopBar:
         x = w - 12
         for k in ("quit", "settings", "backups", "devices"):
             r, lab, ic = self.buttons[k]
-            bw = max(60, len(lab.text) * 6.6 + 34)
+            bw = max(64, text_px(lab.text, 11, True) + 42)
             x -= bw
-            r.x, r.y, r.width = x, h - self.H + 2, bw
+            r.x, r.y, r.width = x, h - self.H + 3, bw
             if ic is not None:
-                ic.x, ic.y = x + 6, h - self.H + 5
-            lab.x, lab.y = x + 26, h - self.H / 2
+                ic.x, ic.y = x + 7, h - self.H + 7
+            lab.x, lab.y = x + 29, h - self.H / 2
             x -= 6
         self.clock.x, self.clock.y = x - 8, h - self.H / 2
-        x -= 8 + len(self.clock.text) * 6.6 + 10
+        x -= 8 + text_px(self.clock.text, 11, True) + 14
+        self._search_right = x
+        x -= self.SEARCH_W + 12
         self._buttons_left = x
         self._place_chips()
+
+    def search_slot(self) -> tuple[float, float, float, float]:
+        """Onde fica a pesquisa: (direita, topo, largura, altura)."""
+        return (getattr(self, "_search_right", self.window.width - 400),
+                self.window.height - 4, self.SEARCH_W, self.H - 8)
 
     def set_devices(self, devices: list[tuple[str, str]]) -> None:
         """[(nome, estado)] com estado em ok | lost | off."""
@@ -1513,7 +1602,7 @@ class TopBar:
         h = self.window.height
         self.brand_dot.x, self.brand_dot.y = 16, h - self.H / 2
         self.brand.x, self.brand.y = 26, h - self.H / 2
-        x = 26 + len(self.brand.text) * 7.6 + 18
+        x = 26 + text_px(self.brand.text, 12, True) + 20
         limit = getattr(self, "_buttons_left", self.window.width) - 10
         self._chip_rects = []
         shown = 0
@@ -1524,7 +1613,7 @@ class TopBar:
                 continue
             name, state = dev
             text = name if len(name) <= 22 else name[:21] + "…"
-            wdt = 18 + len(text) * 6.2 + 14
+            wdt = 18 + text_px(text, 11) + 16
             if x + wdt > limit:
                 lab.text = ""
                 dot.opacity = 0
@@ -1562,6 +1651,9 @@ class TopBar:
         for k, (r, _lab, _ic) in self.buttons.items():
             if r.x <= mx <= r.x + r.width:
                 return k
+        sr = getattr(self, "_search_right", None)
+        if sr is not None and sr - self.SEARCH_W <= mx <= sr:
+            return "search"
         for x0, x1, _i in self._chip_rects:
             if x0 <= mx <= x1:
                 return "devices"

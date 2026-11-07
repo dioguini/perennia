@@ -37,37 +37,163 @@ from velo.ui.widgets import Item
 
 
 def ask_start(app, sport: str, hub=None) -> None:
-    """«Sessão de treino»: Livre ou Carregar treino."""
-    def free() -> None:
-        app.pop()
-        app.push(SessionSetup(app, sport, kind="free"))
+    """«Sessão de treino»: tudo numa só janela — o modo da sessão (Livre,
+    Carregar treino, Do computador, Challenge ou Testes) e, a seguir, a
+    preparação."""
+    app.push(SessionModePopup(app, sport, hub))
 
-    def load() -> None:
-        app.pop()
-        if hub is not None:
-            hub.tab_named(tr("Lista de treinos", "Workouts"))
-    sub = {"cycling": tr("Livre: escolhes os aparelhos e a rota (.gpx). Carregar treino: abre a "
-                         "lista de treinos.", "Free: pick the devices and the route (.gpx). "
-                         "Load workout: opens the workout list."),
-           "running": tr("Livre: passadeira, com ou sem rota (.gpx). Carregar treino: abre a "
-                         "lista de treinos.", "Free: treadmill, with or without a route (.gpx). "
-                         "Load workout: opens the workout list."),
-           "rowing": tr("Livre: remo sem plano, com voltas. Carregar treino: abre a lista de "
-                        "treinos.", "Free: row with no plan, with laps. Load workout: opens "
-                        "the workout list.")}.get(sport, "")
-    def from_pc() -> None:
-        app.pop()
-        from velo.ui.workout_import import WorkoutFilePopup
-        app.push(WorkoutFilePopup(app, sport, mode="session"))
-    sub += tr(" Do computador: um .zwo ou .fit (pergunta se fica na lista).",
-              " From the computer: a .zwo or .fit (asks whether to keep it in the list).")
-    dlg = ConfirmScreen(app, tr("Sessão de treino", "Training session") + f" · {sp.name(sport)}",
-                        sub, [(tr("Cancelar", "Cancel"), app.pop),
-                              (tr("Do computador", "From the computer"), from_pc),
-                              (tr("Carregar treino", "Load workout"), load),
-                              (tr("Livre", "Free"), free)],
-                        default=3, buttons=True, cancel=app.pop)
-    app.push(dlg)
+
+class SessionModePopup(PopupMixin, Screen):
+    """A janela da «Sessão de treino». Afinal tudo pode ser uma sessão de
+    treino; muda só o modo:
+
+    * **Livre** — escolhes os aparelhos e a rota (.gpx) e começas;
+    * **Carregar treino** — a lista de treinos do desporto;
+    * **Do computador** — um .zwo ou .fit;
+    * **Challenge** — fuga, jogos, provas…;
+    * **Testes** — os testes de aptidão (FTP, 2000 m, Cooper…).
+
+    O que se escolhe numa lista abre-se aqui mesmo (Esc volta ao passo
+    anterior); escolhida uma coisa, a janela passa para a preparação da sessão."""
+
+    W, H = 920, 660
+    SEARCH_ENTER_PICKS = False
+
+    def __init__(self, app, sport: str, hub=None):
+        super().__init__(app)
+        self.sport = sport
+        self.hub = hub
+        self.level: str | None = None          # None = os modos
+        self.back_button = None
+        self._init_popup()
+
+    # ------------------------------------------------------------- os modos
+
+    def _after(self, action):
+        """Fecha a janela e faz a ação (o que abre por cima volta ao menu do desporto)."""
+        def go() -> None:
+            self.app.pop()
+            action()
+        return go
+
+    def _sub(self, name: str) -> tuple[str, list[Item]]:
+        """O título e as linhas de uma lista (treinos, Challenge ou testes), lidas
+        dos menus que já existem."""
+        a = self.app
+        if name == "workouts":
+            rows = self.hub.items_for("library") if self.hub is not None else []
+            title = tr("Carregar treino", "Load a workout")
+        elif name == "challenge":
+            from velo.ui.challenge_screens import challenge_menu
+            scr = challenge_menu(a, self.sport)
+            scr.enter()
+            rows = list(scr.list.all_items or scr.list.items)
+            title = "Challenge"
+        else:
+            from velo.ui.app import _extra_health
+            scr = _extra_health().TestsMenu(a, "longevity" if self.sport == "gym"
+                                            else self.sport)
+            scr.enter()
+            rows = list(scr.list.all_items or scr.list.items)       # com «Adicionar teste»
+            title = tr("Testes", "Tests")
+        out = []
+        for r in rows:
+            if r.header or r.action is None and not r.enabled:
+                out.append(Item(r.label, value=r.value, detail=r.detail, enabled=False,
+                                header=r.header))
+                continue
+            out.append(Item(r.label, value=r.value, detail=r.detail, data=r.data,
+                            button=r.button, primary=r.primary, action=self._after(r.action)))
+        if not out:
+            out = [Item(tr("Nada por aqui ainda", "Nothing here yet"), enabled=False)]
+        return title, out
+
+    def mode_rows(self) -> list[Item]:
+        a, sport = self.app, self.sport
+
+        def free() -> None:
+            a.push(SessionSetup(a, sport, kind="free"))
+
+        def from_pc() -> None:
+            from velo.ui.workout_import import WorkoutFilePopup
+            a.push(WorkoutFilePopup(a, sport, mode="session"))
+        if sport == "gym":                 # no ginásio escolhe-se a modalidade
+            from velo.core import gym
+            from velo.core import laps_session as ls
+            from velo.ui import gym_screens as gs
+            rows = []
+            for m in gym.modalities():
+                n = len(gym.workouts(a.db, m.key)) if not m.laps else len(ls.plans(a.db, m.key))
+                rows.append(Item(m.name, value=tr("{n} treinos", "{n} workouts", n=n) if n
+                                 else "", detail=m.desc, data=("modality", m.key),
+                                 action=self._after(lambda k=m.key: a.push(
+                                     gs.ModalityScreen(a, k)))))
+            rows += [Item("Challenge", detail=_challenge_help(sport),
+                          action=lambda: self.open_level("challenge"), data="challenge"),
+                     Item(tr("Testes", "Tests"), detail=tr("os testes de longevidade",
+                                                          "the longevity tests"),
+                          action=lambda: self.open_level("tests"), data="tests")]
+            return rows
+        free_help = {"cycling": tr("escolhes os aparelhos e a rota (.gpx) e pedalas",
+                                   "pick the devices and the route (.gpx) and ride"),
+                     "running": tr("passadeira, com ou sem rota (.gpx)",
+                                   "treadmill, with or without a route (.gpx)"),
+                     "rowing": tr("remo sem plano, com voltas", "row with no plan, with laps")
+                     }.get(sport, "")
+        return [
+            Item(tr("Livre", "Free"), detail=free_help, action=self._after(free), data="free"),
+            Item(tr("Carregar treino", "Load workout"),
+                 detail=tr("a lista de treinos de {s}", "the {s} workout list", s=sp.name(sport)),
+                 action=lambda: self.open_level("workouts"), data="workouts"),
+            Item(tr("Do computador", "From the computer"),
+                 detail=tr("um .zwo ou .fit (pergunta se fica na lista)",
+                           "a .zwo or .fit (asks whether to keep it in the list)"),
+                 action=self._after(from_pc), data="pc"),
+            Item("Challenge", detail=_challenge_help(sport),
+                 action=lambda: self.open_level("challenge"), data="challenge"),
+            Item(tr("Testes", "Tests"),
+                 detail=tr("testes de aptidão: o resultado vem da própria sessão",
+                           "fitness tests: the result comes from the session itself"),
+                 action=lambda: self.open_level("tests"), data="tests")]
+
+    def open_level(self, name: str | None) -> None:
+        self.level = name
+        self.list.index = 0
+        self.enter()
+
+    def enter(self) -> None:
+        sport = sp.name(self.sport)
+        if self.level is None:
+            items = self.mode_rows()
+            self.chrome.set(tr("Sessão de treino", "Training session") + f" · {sport}",
+                            tr("Escolhe a modalidade ou o modo", "Pick the modality or the mode")
+                            if self.sport == "gym" else
+                            tr("Tudo pode ser uma sessão de treino: escolhe o modo",
+                               "Anything can be a training session: pick the mode"),
+                            tr("↑↓ escolher · Enter abre · Esc cancela",
+                               "↑↓ pick · Enter opens · Esc cancels"))
+            items.append(Item(tr("Cancelar", "Cancel"), button=True, action=self.app.pop))
+        else:
+            title, items = self._sub(self.level)
+            self.chrome.set(f"{title} · {sport}",
+                            tr("Escolhe e a janela passa à preparação · Esc volta",
+                               "Pick one and the window moves on to the set-up · Esc goes back"),
+                            tr("↑↓ escolher · Enter abre · Esc volta", "↑↓ pick · Enter opens · "
+                               "Esc goes back"))
+            items.append(Item(tr("Voltar", "Back"), button=True,
+                              action=lambda: self.open_level(None)))
+        self.list.set_items(items, keep_index=True)
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE and self.level is not None:
+            self.open_level(None)
+            return True
+        return super().on_key(symbol, modifiers)
+
+
+def _challenge_help(sport: str) -> str:
+    from velo.ui.challenge_screens import challenge_detail
+    return challenge_detail(sport)
 
 
 class GpxPickerPopup(PopupMixin, GpxPicker):
@@ -160,7 +286,7 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
     """Ver o módulo. `kind`: "free" (livre), "workout", "ftp_test", "chase",
     "game" (Challenge) ou "test" (remo)."""
 
-    W, H = 820, 600
+    W, H = 960, 700
     HTTP = None                 # cliente HTTP do Strava (os testes trocam-no)
     BOT_OPTIONS = (0, 1, 3, 5, 7)
     GHOSTS_SHOWN = 3

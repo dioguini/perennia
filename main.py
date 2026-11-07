@@ -84,7 +84,8 @@ def main() -> int:
                         help="no backup, incluir as credenciais (Strava)")
     parser.add_argument("--importar", nargs=2, default=None, metavar=("TIPO", "FICHEIRO"),
                         help="importa um ficheiro e sai: hrv4training (.csv), analises "
-                             "(.csv/.xlsx) ou trainingpeaks (.csv de atividades)")
+                             "(.csv/.xlsx), trainingpeaks (.csv de atividades) ou atividade "
+                             "(um .fit ou .tcx, guardado no desporto respetivo)")
     args = parser.parse_args()
 
     if args.self_test:
@@ -131,7 +132,7 @@ def import_cli(args) -> int:
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
-              "trainingpeaks", file=sys.stderr)
+              "trainingpeaks, atividade", file=sys.stderr)
         return 2
     if not Path(path).is_file():
         print(f"Erro: não encontro {path}", file=sys.stderr)

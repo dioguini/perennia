@@ -115,15 +115,16 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("athlete",)),
     Component("definicoes", "Definições", "Settings",
               "unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, forma e "
-              "fadiga (CTL/ATL iniciais), preferências de ligação…",
-              "units, theme, zones, General, non-ERG device limits, form and fatigue "
-              "(starting CTL/ATL), connection preferences…",
+              "fadiga, preferências de ligação…",
+              "units, theme, zones, General, non-ERG device limits, form and fatigue, "
+              "connection preferences…",
               settings=_is_definicao),
     Component("atalhos", "Atalhos de teclado", "Keyboard shortcuts",
               "as teclas que mudaste", "the keys you changed", settings=_is_atalho),
     Component("ecra", "Ecrã da sessão", "Session screen",
-              "disposição do ecrã e métricas de sessão disponíveis em cada desporto",
-              "screen layout and available session metrics of each sport",
+              "disposição do ecrã, número de métricas e métricas de sessão disponíveis em "
+              "cada desporto",
+              "screen layout, number of metrics and available session metrics of each sport",
               settings=_is_ecra),
     Component("aparelhos", "Aparelhos", "Devices",
               "dispositivos emparelhados e calibrações", "paired devices and calibrations",
@@ -154,9 +155,9 @@ COMPONENTS: tuple[Component, ...] = (
     Component("sessoes", "Histórico de sessões", "Session history",
               "todas as sessões (ciclismo, remo, corrida, natação, ginásio): amostras, "
               "voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, "
-              "TrainingPeaks, com a TSS) — e os .fit",
+              "TrainingPeaks, upload manual) — e os .fit",
               "every session (cycling, rowing, running, swimming, gym): samples, laps, "
-              "climb and segment times, games, imported (Garmin, TrainingPeaks, with TSS) — "
+              "climb and segment times, games, imported (Garmin, TrainingPeaks, manual upload) — "
               "and the .fit files",
               tables=("rides", "ride_samples", "laps", "climb_efforts", "route_efforts",
                       "chase_efforts", "ride_comparisons", "workout_step_results",
