@@ -312,7 +312,7 @@ class TestLoadFromComputer(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Remo")
         hub = self.screen()
-        hub.tab_named("Construtor de treinos")
+        hub.tab_named("Lista de treinos")
         first = next(i for i in hub.list.items if isinstance(i.data, tuple))
         hub.list.index = hub.list.items.index(first)
         hub.list._sync()

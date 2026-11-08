@@ -23,7 +23,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from . import inventory
+from . import inventory, muscles
 from . import strength as st
 from .db import Database, new_id, now_iso
 from .i18n import tr
@@ -259,6 +259,50 @@ register(Modality("sandbag", "Sandbag", "Sandbag", "box",
     ("Sandbag por cima do ombro", "full", "total_body", 0.0, "reps", ("sandbag",)),
 ])
 
+register(Modality("mobility", "Mobilidade", "Mobility", "wave",
+                  ("Amplitude de movimento: anca, coluna, ombros e tornozelos.",
+                   "Range of motion: hips, spine, shoulders and ankles."),
+                  Scheme(n=6, sets=2, reps=40, measure="time", time_s=40, rest_s=15, rpe=4.0)), [
+    ("Alongamento do flexor da anca", "hips", "warm_up", 0.0, "time", ()),
+    ("Gato-camelo", "mobility", "warm_up", 0.0, "time", ()),
+    ("Rotação torácica (open book)", "mobility", "warm_up", 0.0, "time", ()),
+    ("Agachamento profundo (mobilidade)", "legs", "squat", 0.0, "time", ()),
+    ("Círculos de ombro", "shoulders", "shoulder_stability", 0.0, "time", ("bands",)),
+    ("Mobilidade de tornozelo na parede", "legs", "calf_raise", 0.0, "time", ()),
+    ("Alongamento de isquiotibiais", "legs", "warm_up", 0.0, "time", ()),
+    ("90/90 de anca", "hips", "hip_stability", 0.0, "time", ()),
+    ("Cão a olhar para baixo", "full", "warm_up", 0.0, "time", ()),
+])
+
+register(Modality("tendons", "Tendões", "Tendons", "heart",
+                  ("Cargas lentas e pesadas para tendões e ligamentos: Aquiles, rótula, cotovelo.",
+                   "Slow heavy loading for tendons and ligaments: Achilles, patella, elbow."),
+                  Scheme(n=5, sets=4, reps=45, measure="time", time_s=45, rest_s=120, rpe=6.0)), [
+    ("Elevação de gémeos lenta (3-0-3)", "legs", "calf_raise", 0.0, "reps", ()),
+    ("Agachamento em declive (rótula)", "legs", "squat", 0.0, "reps", ("box",)),
+    ("Excêntrico de Aquiles num degrau", "legs", "calf_raise", 0.0, "reps", ("box",)),
+    ("Curl nórdico excêntrico", "legs", "leg_curl", 0.0, "reps", ()),
+    ("Extensão de punho excêntrica", "arms", "curl", 0.0, "reps", ("dumbbell",)),
+    ("Rotação externa do ombro (banda)", "shoulders", "shoulder_stability", 0.0, "reps",
+     ("bands",)),
+    ("Salto à corda suave", "legs", "plyo", 0.0, "time", ("jump_rope",)),
+])
+
+register(Modality("isometric", "Isométrico", "Isometric", "stopwatch",
+                  ("Manter a posição: força sem movimento, tendões e estabilidade.",
+                   "Holding a position: strength without movement, tendons and stability."),
+                  Scheme(n=5, sets=3, reps=30, measure="time", time_s=30, rest_s=60, rpe=7.0)), [
+    ("Prancha", "core", "plank", 0.0, "time", ()),
+    ("Prancha lateral", "core", "plank", 0.0, "time", ()),
+    ("Agachamento na parede (wall sit)", "legs", "squat", 0.0, "time", ()),
+    ("Ponte de glúteos isométrica", "hips", "hip_raise", 0.0, "time", ()),
+    ("Suspensão ativa na barra", "back", "pull_up", 0.0, "time", ("pullup_bar",)),
+    ("Hollow hold", "core", "core", 0.0, "time", ()),
+    ("Isométrico de bíceps (90°)", "arms", "curl", 0.0, "time", ("dumbbell",)),
+    ("Press isométrico na parede", "shoulders", "shoulder_press", 0.0, "time", ()),
+    ("Posição de lunge isométrico", "legs", "lunge", 0.0, "time", ()),
+])
+
 register(Modality("longevity", "Longevidade", "Longevity", "heart",
                   ("Junta tudo: força, equilíbrio, mobilidade e cardio de outros desportos.",
                    "Brings it all together: strength, balance, mobility and other sports' cardio."),
@@ -286,9 +330,82 @@ SEED_EXERCISES.append(("Natação (piscina)", "cardio", "full", "cardio", 0.0, "
 # ================================================================ tabelas
 
 
+# As disciplinas que juntas tu (cada uma é uma modalidade com o seu separador).
+_CUSTOM: set[str] = set()
+
+
+def load_custom(db: Database) -> None:
+    """Põe no registo as disciplinas desta base de dados (e tira as de outra)."""
+    db.conn.execute("CREATE TABLE IF NOT EXISTS gym_disciplines (key TEXT PRIMARY KEY, name_pt"
+                    " TEXT NOT NULL, name_en TEXT NOT NULL, icon TEXT NOT NULL DEFAULT"
+                    " 'dumbbell', description TEXT, sort INTEGER NOT NULL DEFAULT 0)")
+    for k in list(_CUSTOM):
+        MODALITIES.pop(k, None)
+    _CUSTOM.clear()
+    for r in db.conn.execute("SELECT * FROM gym_disciplines ORDER BY sort, name_pt"):
+        if r["key"] in MODALITIES:
+            continue
+        MODALITIES[r["key"]] = Modality(
+            r["key"], r["name_pt"], r["name_en"], r["icon"] or "dumbbell",
+            (r["description"] or "", r["description"] or ""), Scheme())
+        _CUSTOM.add(r["key"])
+
+
+def is_custom(key: str) -> bool:
+    return key in _CUSTOM
+
+
+def add_discipline(db: Database, name_pt: str, name_en: str | None = None,
+                   icon: str = "dumbbell") -> str:
+    """Uma disciplina nova: ganha logo o seu separador na lista de exercícios."""
+    import re
+    import unicodedata
+    ensure(db)
+    name_pt = " ".join((name_pt or "").split())
+    if not name_pt:
+        raise ValueError("nome vazio")
+    s = unicodedata.normalize("NFKD", name_pt)
+    key = re.sub(r"[^a-z0-9]+", "_", "".join(c for c in s if not unicodedata.combining(c))
+                 .lower()).strip("_") or "disciplina"
+    base, n = key, 2
+    while key in MODALITIES:
+        key = f"{base}_{n}"
+        n += 1
+    top = db.conn.execute("SELECT COALESCE(MAX(sort), 0) + 1 FROM gym_disciplines").fetchone()[0]
+    db.conn.execute("INSERT INTO gym_disciplines (key, name_pt, name_en, icon, sort)"
+                    " VALUES (?,?,?,?,?)", (key, name_pt, (name_en or name_pt).strip(), icon,
+                                            top))
+    db.conn.commit()
+    load_custom(db)
+    return key
+
+
+def delete_discipline(db: Database, key: str) -> None:
+    """Tira a disciplina: os exercícios só dela e os treinos passam para a Força."""
+    ensure(db)
+    if key not in _CUSTOM:
+        return
+    db.conn.execute("UPDATE strength_workouts SET modality = 'strength' WHERE modality = ?",
+                    (key,))
+    db.conn.execute("UPDATE strength_sessions SET modality = 'strength' WHERE modality = ?",
+                    (key,))
+    orphans = [r[0] for r in db.conn.execute(
+        "SELECT exercise_id FROM exercise_modalities GROUP BY exercise_id HAVING"
+        " SUM(modality != ?) = 0", (key,))]
+    for eid in orphans:
+        db.conn.execute("INSERT OR IGNORE INTO exercise_modalities VALUES (?, 'strength')",
+                        (eid,))
+    db.conn.execute("DELETE FROM exercise_modalities WHERE modality = ?", (key,))
+    db.conn.execute("DELETE FROM gym_disciplines WHERE key = ?", (key,))
+    db.conn.commit()
+    load_custom(db)
+
+
 def ensure(db: Database) -> None:
     st.seed(db)
     inventory.ensure(db)
+    load_custom(db)
+    muscles.ensure(db)
     db.conn.execute("CREATE TABLE IF NOT EXISTS exercise_modalities (exercise_id INTEGER NOT"
                     " NULL REFERENCES exercises(id) ON DELETE CASCADE, modality TEXT NOT NULL,"
                     " PRIMARY KEY (exercise_id, modality)) WITHOUT ROWID")
@@ -311,7 +428,7 @@ def ensure(db: Database) -> None:
 def seed(db: Database) -> None:
     """Põe cada exercício na(s) sua(s) modalidade(s), uma vez por versão do
     catálogo; exercícios novos do catálogo entram, os teus ficam como estão."""
-    version = len(SEED_EXERCISES) * 1000 + len(MODALITIES)
+    version = len(SEED_EXERCISES) * 1000 + len([k for k in MODALITIES if k not in _CUSTOM])
     if db.get("gym_seed_version") == version:
         return
     by_name = {r["name"]: r["id"] for r in db.conn.execute("SELECT id, name FROM exercises")}
@@ -387,7 +504,8 @@ def exercise(db: Database, eid: int) -> dict | None:
 
 def save_exercise(db: Database, eid: int | None, *, name: str, mods: Sequence[str],
                   group: str = "full", measure: str = "reps", bodyweight: float = 0.0,
-                  equipment: Sequence[str] = (), description: str | None = None) -> int:
+                  equipment: Sequence[str] = (), description: str | None = None,
+                  subgroup: int | None = None) -> int:
     ensure(db)
     name = (name or "").strip() or tr("Exercício", "Exercise")
     if eid is None:
@@ -398,7 +516,8 @@ def save_exercise(db: Database, eid: int | None, *, name: str, mods: Sequence[st
         db.conn.execute("UPDATE exercises SET name=?, category=?, bodyweight=?, measure=?"
                         " WHERE id = ?", (name, group, bodyweight, measure, eid))
         _ = fit_cat
-    db.conn.execute("UPDATE exercises SET description = ? WHERE id = ?", (description, eid))
+    db.conn.execute("UPDATE exercises SET description = ?, subgroup_id = ? WHERE id = ?",
+                    (description, subgroup, eid))
     db.conn.execute("DELETE FROM exercise_modalities WHERE exercise_id = ?", (eid,))
     db.conn.execute("DELETE FROM exercise_equipment WHERE exercise_id = ?", (eid,))
     for m in dict.fromkeys(mods or ["strength"]):

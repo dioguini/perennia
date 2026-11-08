@@ -1142,6 +1142,13 @@ class RowEngine:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         path, name = naming.unique_path(self.out_dir, base)
         fit_path = None
+        from . import tags as tags_mod
+        tag_info = tags_mod.resolve(
+            self.db, "rowing", self.session_id, getattr(self, "tags_chosen", None),
+            workout_id=self.workout_id,
+            summary={"ftp_w": self.ftp, "np_w": summ.get("np_w"),
+                     "avg_power_w": summ.get("avg_power_w"), "load": summ.get("load"),
+                     "moving_s": summ.get("moving_s"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit
             samples = [dict(r) for r in self.db.conn.execute(
@@ -1158,7 +1165,8 @@ class RowEngine:
             fs = dict(summ)
             for k in ("avg_power_w", "np_w"):
                 fs[k] = None if fs[k] is None else int(round(fs[k]))
-            fit.write_rowing(path, self.athlete, samples, laps, fs, self.start_unix, name=name)
+            fit.write_rowing(path, self.athlete, samples, laps, fs, self.start_unix, name=name,
+                             tags=tags_mod.fit_text(tag_info))
             fit_path = str(path)
         except Exception as e:
             self.events.append(("fit_error", {"message": str(e)}))
@@ -1184,7 +1192,7 @@ class RowEngine:
                 # o esforço de ~7 min fica bem acima do limiar)
                 self.db.set("row_ftp_w", int(round(self.avg_power_w * 0.85)))
         summ.update(session_id=self.session_id, name=name, fit_path=fit_path,
-                    game=getattr(self, "game_result", None))
+                    game=getattr(self, "game_result", None), tags=tag_info)
         return summ
 
     def abort(self) -> None:

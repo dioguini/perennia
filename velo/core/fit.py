@@ -347,7 +347,7 @@ def write_activity(path: str | Path, athlete: Athlete, samples: Sequence[Sample]
                    laps: Sequence[Lap], summary: RideSummary,
                    start_unix: float, include_coords: bool = True,
                    coord_at: Any = None, name: str = "",
-                   virtual: bool = True) -> Path:
+                   virtual: bool = True, tags: str = "") -> Path:
     """Escreve o .fit completo da sessão.
 
     `coord_at(dist_m) -> (lat, lon, ele)` fornece as coordenadas da rota; se
@@ -366,7 +366,8 @@ def write_activity(path: str | Path, athlete: Athlete, samples: Sequence[Sample]
     w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
             functional_threshold_power=athlete.ftp_w)
     sub_sport = SUB_SPORT_VIRTUAL if virtual else SUB_SPORT_INDOOR_CYCLING
-    w.write(SPORT, sport=SPORT_CYCLING, sub_sport=sub_sport, name=name or "Perennia")
+    w.write(SPORT, sport=SPORT_CYCLING, sub_sport=sub_sport,
+            name=tags or name or "Perennia")           # as etiquetas: ver velo.core.tags
     w.write(EVENT, timestamp=t0, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
 
     for s in samples:
@@ -831,7 +832,7 @@ ROW_LAP = (LAP[0], LAP[1] + [Field("total_cycles", 10, "uint32")])
 def write_rowing(path: str | Path, athlete: Athlete, samples: Sequence[dict],
                  laps: Sequence[dict], summary: dict, start_unix: float,
                  name: str = "", sport: int = SPORT_ROWING,
-                 sub_sport: int = SUB_SPORT_INDOOR_ROWING) -> Path:
+                 sub_sport: int = SUB_SPORT_INDOOR_ROWING, tags: str = "") -> Path:
     """Remo indoor (sport 15, sub_sport 14): registos a 1 Hz com distância,
     velocidade, potência, remadas por minuto e FC; uma volta FIT por volta."""
     path = Path(path)
@@ -846,7 +847,7 @@ def write_rowing(path: str | Path, athlete: Athlete, samples: Sequence[dict],
     w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
             functional_threshold_power=summary.get("ftp_w") or athlete.ftp_w)
     w.write(SPORT, sport=sport, sub_sport=sub_sport,
-            name=name or "Perennia")
+            name=tags or name or "Perennia")           # as etiquetas: ver velo.core.tags
     w.write(EVENT, timestamp=t0, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
     for s in samples:
         w.write(ROW_RECORD, timestamp=t0 + int(s["t_s"]), heart_rate=s.get("hr_bpm"),

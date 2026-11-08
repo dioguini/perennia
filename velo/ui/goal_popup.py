@@ -19,14 +19,18 @@ class GoalPopup(SnapshotUnsaved, PopupMixin, Screen):
     W, H = 820, 380
     SEARCH = False
 
-    def __init__(self, app, title: str, subtitle: str, text: str, limit: int, on_save):
+    def __init__(self, app, title: str, subtitle: str, text: str, limit: int, on_save,
+                 multiline: bool = False):
         super().__init__(app)
+        self.multiline = multiline
         self.title_text, self.sub_text = title, subtitle
         self.text = text or ""
         self.limit = limit
         self.on_text_saved = on_save
         self.back_button = None
         self._init_popup()
+        if multiline:                       # notas e comentários: uma janela maior
+            self.set_popup_size(900, 600)
         self.batch = pyglet.graphics.Batch()
         self.box = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=self.batch)
         self.edge = pyglet.shapes.Rectangle(0, 0, 10, 2, color=ACCENT[:3], batch=self.batch)
@@ -55,8 +59,11 @@ class GoalPopup(SnapshotUnsaved, PopupMixin, Screen):
 
     def enter(self) -> None:
         self.chrome.set(self.title_text, self.sub_text,
-                        tr("Escreve · Enter guarda · Esc cancela", "Type · Enter saves · "
-                           "Esc cancels"))
+                        tr("Escreve · Enter muda de linha · Del limpa · Esc cancela",
+                           "Type · Enter new line · Del clears · Esc cancels")
+                        if self.multiline else
+                        tr("Escreve · Enter guarda · Del limpa · Esc cancela", "Type · Enter "
+                           "saves · Del clears · Esc cancels"))
         self.list.set_items([
             Item(tr("Cancelar", "Cancel"), button=True, action=self.cancel),
             Item(tr("Guardar", "Save"), button=True, primary=True, action=self.save)])
@@ -67,7 +74,8 @@ class GoalPopup(SnapshotUnsaved, PopupMixin, Screen):
         self.counter.text = f"{len(self.text)} / {self.limit}"
 
     def on_text(self, text: str) -> bool:
-        clean = "".join(c for c in text if c.isprintable()).replace("\r", "")
+        clean = "".join(c for c in text if c.isprintable() or (self.multiline and c == "\n")
+                        ).replace("\r", "")
         if clean:
             self.text = (self.text + clean)[:self.limit]
             self._render()
@@ -78,8 +86,16 @@ class GoalPopup(SnapshotUnsaved, PopupMixin, Screen):
             self.text = self.text[:-1]
             self._render()
             return True
+        if symbol == key.DELETE:                  # Del limpa tudo (para escrever de novo)
+            self.text = ""
+            self._render()
+            return True
         if symbol in (key.ENTER, key.RETURN):
-            self.save()
+            if self.multiline:
+                self.text = (self.text + "\n")[:self.limit]
+                self._render()
+            else:
+                self.save()
             return True
         if symbol == key.ESCAPE:
             self.cancel()

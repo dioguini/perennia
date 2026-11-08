@@ -197,7 +197,7 @@ class TestStravaInRide(tg.GuiCase):
                 break
         self.assertTrue(seen_board)
         self.assertEqual(len(ride.engine.strava_results), 1)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         summ = self.screen()
         self.assertIsInstance(summ, app_mod.SummaryScreen)
         self.assertTrue(any("Sprint Lisboa" in i.label for i in summ.list.items))

@@ -384,7 +384,10 @@ class EnduranceEngine:
             tr("Natação livre", "Free swim")
         # passadeira num treino manual: a velocidade de cada bloco (do construtor)
         self.block_speeds: list[float | None] = []
+        self.block_inclines: list[float | None] = []
         self.speed_locked = False
+        self.treadmill = None             # a passadeira (real ou simulada), se estiver ligada
+        self.incline_pct = 0.0
         if workout_id:
             w = workout(db, workout_id)
             if w:
@@ -397,6 +400,8 @@ class EnduranceEngine:
                     if meta["control"] == "manual":
                         self.block_speeds = [(b or {}).get("speed_kmh")
                                              for b in meta.get("blocks") or []]
+                        self.block_inclines = [(b or {}).get("incline_pct")
+                                               for b in meta.get("blocks") or []]
         self.autolap = AutoLap(autolap)
         self.events: list[tuple[str, dict]] = []
         self.started = False
@@ -450,6 +455,8 @@ class EnduranceEngine:
             self.start()
             return
         self.paused = not self.paused
+        if self.treadmill is not None:          # parado, a passadeira abranda
+            self.treadmill.set_speed(0.0 if self.paused else self.speed_kmh)
         self.checkpoint()
 
     def set_speed(self, kmh: float) -> None:
@@ -460,6 +467,14 @@ class EnduranceEngine:
             except Exception:
                 pass
         self.speed_kmh = max(0.0, min(top, round(kmh, 1)))
+        if self.treadmill is not None:
+            self.treadmill.set_speed(self.speed_kmh if not self.paused else 0.0)
+
+    def set_incline(self, pct: float) -> None:
+        """A inclinação a pôr na passadeira (a de um bloco, ou a da rota)."""
+        self.incline_pct = max(0.0, float(pct))
+        if self.treadmill is not None:
+            self.treadmill.set_incline(self.incline_pct)
 
     def add_length(self, n: int = 1) -> None:
         """Natação: mais uma piscina (ou menos, para corrigir)."""
@@ -511,7 +526,13 @@ class EnduranceEngine:
             return
         self.t += dt
         dm = 0.0
-        if self.sport == "running" and self.speed_kmh > 0:
+        if self.sport == "running" and self.treadmill is not None:
+            # a distância conta pelo que a passadeira faz de verdade (arranca e
+            # trava aos poucos), e não pelo que se lhe pediu
+            self.treadmill.tick(dt)
+            dm = self.treadmill.speed_kmh / 3.6 * dt
+            self.distance_m += dm
+        elif self.sport == "running" and self.speed_kmh > 0:
             dm = self.speed_kmh / 3.6 * dt
             self.distance_m += dm
         if self.workout is not None:
@@ -538,6 +559,9 @@ class EnduranceEngine:
         self.speed_locked = bool(v)
         if v:
             self.set_speed(float(v))
+        inc = self.block_inclines[idx] if 0 <= idx < len(self.block_inclines) else None
+        if inc is not None:
+            self.set_incline(float(inc))
 
     def _sample(self) -> None:
         hr = self.hr_bpm
@@ -549,7 +573,8 @@ class EnduranceEngine:
             if self.lthr:
                 z = physics.zone_of(hr, self.hr_bounds, self.lthr)
                 self.hr_zone_s[min(z, len(self.hr_zone_s)) - 1] += 1.0
-        speed = self.speed_kmh / 3.6 if self.sport == "running" else None
+        real = self.treadmill.speed_kmh if self.treadmill is not None else self.speed_kmh
+        speed = real / 3.6 if self.sport == "running" else None
         self._pending.append((self.session_id, int(self.t), round(self.distance_m, 1), speed, hr))
         if len(self._pending) >= FLUSH_EVERY:
             self.flush()
@@ -736,6 +761,12 @@ class EnduranceEngine:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         path, name = naming.unique_path(self.out_dir, base)
         fit_path = None
+        from . import tags as tags_mod
+        tag_info = tags_mod.resolve(
+            self.db, self.sport, self.session_id, getattr(self, "tags_chosen", None),
+            workout_id=self.workout_id, has_route=bool(self.route_id),
+            summary={"load": summ.get("load"), "moving_s": summ.get("moving_s"),
+                     "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit
             from .sports import SPORTS as REG
@@ -748,11 +779,13 @@ class EnduranceEngine:
                          lp.trigger, lp.trigger if lp.trigger in ("time", "distance")
                          else "manual")} for lp in self.laps]
             sp = REG[self.sport]
+            has_route = bool(self.route_id)
+            sub = tags_mod.sub_sport(self.sport, has_route) or sp.fit_sub
             fit.write_rowing(path, self.athlete, samples, laps,
                              dict(summ, strokes=self.lengths or None, avg_spm=None, kcal=None,
                                   avg_power_w=None, max_power_w=None, np_w=None),
                              self.start_unix, name=name, sport=sp.fit_sport,
-                             sub_sport=sp.fit_sub)
+                             sub_sport=sub, tags=tags_mod.fit_text(tag_info))
             fit_path = str(path)
         except Exception as e:
             self.events.append(("fit_error", {"message": str(e)}))
@@ -766,7 +799,7 @@ class EnduranceEngine:
              fit_path, name, self.session_id))
         self.db.conn.commit()
         self.db.delete_checkpoint(self.session_id)
-        summ.update(session_id=self.session_id, name=name, fit_path=fit_path)
+        summ.update(session_id=self.session_id, name=name, fit_path=fit_path, tags=tag_info)
         return summ
 
     def abort(self, delete: bool = False) -> None:

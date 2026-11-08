@@ -35,6 +35,7 @@ from velo import __version__, paths
 from velo.io import ant, autoconnect, ble
 from velo.io.hub import SensorHub
 from velo.io.sim import SimulatedTrainer
+from velo.ui.session_radar import RadarSide
 from velo.ui.widgets import (ACCENT, BAD, BG, BackButton, BoardPanel, Chart, Chrome, DIM,
                              GOOD, Item, ListView, PANEL, Popup, StackedBars,
                              StartCountdown, TabBar, TEXT, Tile, TopBar)
@@ -467,12 +468,24 @@ class SportHub(Screen):
 
     TABBED = True
     SPORT = "cycling"
-    TAB_KEYS = ("train", "builder", "library", "history", "stats")
+    # O construtor de treinos já não é um separador: abre-se com «+ Novo treino»
+    # na Lista de treinos (e com «Editar» na ficha de cada treino).
+    TAB_KEYS = ("train", "library", "history", "stats")
 
     def tab_labels(self) -> list[str]:
-        return [tr("Treinar", "Train"), tr("Construtor de treinos", "Workout builder"),
-                tr("Lista de treinos", "Workouts"), tr("Histórico", "History"),
-                tr("Estatísticas", "Statistics")]
+        return [tr("Treinar", "Train"), tr("Lista de treinos", "Workouts"),
+                tr("Histórico", "History"), tr("Estatísticas", "Statistics")]
+
+    def new_workout_item(self) -> Item:
+        """«+ Novo treino»: abre o construtor (o do ginásio pergunta a modalidade)."""
+        a = self.app
+        if self.SPORT == "gym":
+            from velo.ui.gym_screens import ModalityPicker
+            action = lambda: a.push(ModalityPicker(a))
+        else:
+            action = lambda: _builder().new_workout(a, self.SPORT)
+        return Item(tr("+ Novo treino", "+ New workout"), button=True, primary=True,
+                    action=action, data="new_workout")
 
     def title(self) -> str:
         from velo.core import sports as sp
@@ -521,6 +534,8 @@ class SportHub(Screen):
                 self.tabs.select(0)
         key_ = self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
         items = self.items_for(key_)
+        if key_ == "library":
+            items = items + [self.new_workout_item()]
         if not items:
             items = [Item(tr("Nada por aqui ainda", "Nothing here yet"), enabled=False)]
         self.chrome.set(self.title(), self.subtitle(), self.footer())
@@ -528,7 +543,7 @@ class SportHub(Screen):
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
-        if symbol == key.DELETE and self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "builder" \
+        if symbol == key.DELETE and self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "library" \
                 and self.SPORT in ("cycling", "rowing", "running", "swimming") and \
                 item is not None and isinstance(item.data, tuple):
             _builder().delete_workout(self.app, self.SPORT, item.data[1], item.label,
@@ -537,9 +552,11 @@ class SportHub(Screen):
         return super().on_key(symbol, modifiers)
 
     def footer(self) -> str:
-        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "builder" and \
+        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "library" and \
                 self.SPORT in ("cycling", "rowing", "running", "swimming"):
-            return _builder().builder_footer(self.SPORT)
+            return tr("Tab separador · ↑↓ mover · Enter abre a ficha do treino · Del apagar · "
+                      "Esc voltar", "Tab next tab · ↑↓ move · Enter opens the workout page · "
+                      "Del delete · Esc back")
         return tr("Tab separador · ↑↓ mover · Enter escolher · Esc voltar",
                   "Tab next tab · ↑↓ move · Enter choose · Esc back")
 
@@ -583,9 +600,6 @@ class MainMenu(SportHub):
             detail=tr("Livre (com uma rota .gpx) ou carregar um treino",
                       "Free (with a .gpx route) or load a workout"),
             action=lambda: _setup().ask_start(a, "cycling", self), data="ride"))
-
-    def items_builder(self) -> list[Item]:
-        return _builder().builder_items(self.app, "cycling")
 
     def items_library(self) -> list[Item]:
         a = self.app
@@ -634,20 +648,6 @@ class MainMenu(SportHub):
                              enabled=False))
         return super().items_stats() + rows
 
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        item = self.list.selected
-        if self.TAB_KEYS[self.tab] == "builder" and item is not None and \
-                isinstance(item.data, tuple):
-            wid = item.data[1]
-            if symbol == key.E:
-                self.app.push(_extra().ExportScreen(self.app, wid))
-                return True
-            if symbol == key.P:
-                self.app.push(_extra().WorkoutEditor(self.app, wid))
-                return True
-        return super().on_key(symbol, modifiers)
-
-
 def RideDetailScreen(app: "App", ride_id: str):            # noqa: N802 — compatibilidade
     """Uma sessão de ciclismo do histórico: a análise em separadores."""
     from velo.ui.session_analysis import SessionAnalysis
@@ -677,7 +677,8 @@ class HomeScreen(Screen):
              ("home.gym", "kettlebell", ""), ("home.health", "heart", ""),
              ("home.routes", "road", ""), ("home.segments", "flag", ""),
              ("home.stats", "stats", ""),
-             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""))
+             ("home.inventory", "box", ""), ("home.exercises", "checklist", ""),
+             ("home.longevity", "recover", ""))
     BIG = 6               # cartões por fila
     UPCOMING_DAYS = 14
     UPCOMING_ROWS = 12
@@ -723,7 +724,8 @@ class HomeScreen(Screen):
                 lambda: a.push(_segments_ui().SegmentsScreen(a)),
                 lambda: a.push(hub.stats_screen(a, None)),
                 lambda: a.push(hub.InventoryScreen(a)),
-                lambda: a.push(hub.ExerciseInventory(a))]
+                lambda: a.push(hub.ExerciseInventory(a)),
+                lambda: a.push(_longevity_ui().LongevityMenu(a))]
 
     def tile_geometry(self, w: int, h: int) -> tuple[float, float, float]:
         """(largura, altura, topo) dos cartões — todos iguais."""
@@ -1397,7 +1399,7 @@ class RideScreen(Screen):
         if self.hud is not None and self.hud.confirm_visible:
             # diálogo aberto: S/Enter terminam, N/Esc voltam à sessão
             if symbol in (key.ENTER, key.RETURN, key.S, key.Y):
-                self._finish()
+                self._finish_with_tags()
             elif symbol in (key.ESCAPE, key.N):
                 self._cancel_finish()
             elif symbol == key.D:
@@ -1426,7 +1428,7 @@ class RideScreen(Screen):
         if self.hud is not None and self.hud.confirm_visible:
             choice = self.hud.confirm_hit(x, y)
             if choice == "yes":
-                self._finish()
+                self._finish_with_tags()
             elif choice == "no":
                 self._cancel_finish()
             elif choice == "discard":
@@ -1452,6 +1454,25 @@ class RideScreen(Screen):
             return
         self.engine.pause(confirming=True)
         self.hud.show_confirm()
+
+    def _finish_with_tags(self) -> None:
+        """«Sim, terminar»: antes de gravar, a janela das etiquetas do .fit."""
+        e = self.engine
+        if e is None or self.hud is None or getattr(e, "_t", 0) < 1:
+            self._finish()
+            return
+        s = e.summary()
+        self.hud.hide_confirm()
+        from velo.ui.tag_popup import open_session_tags
+        open_session_tags(
+            self, "cycling", workout_id=self.workout_id, has_route=bool(self.route_id),
+            summary={"ftp_w": e.athlete.ftp_w, "np_w": s.np_w, "avg_power_w": s.avg_power_w,
+                     "tss": s.tss, "elapsed_s": s.elapsed_s},
+            on_done=self._tags_done, on_back=self._cancel_finish)
+
+    def _tags_done(self, info: dict) -> None:
+        self.engine.tags_chosen = info
+        self._finish()
 
     def _cancel_finish(self) -> None:
         """«Não»: volta à sessão em pausa; pedalar retoma."""
@@ -1508,7 +1529,7 @@ class RideScreen(Screen):
         return True                         # na sessão as teclas não escrevem
 
 
-class SummaryScreen(Screen):
+class SummaryScreen(RadarSide, Screen):
     HAS_BOARD = True
 
     def side_board(self):
@@ -1660,6 +1681,7 @@ class SummaryScreen(Screen):
         fb_item = _feedback().summary_item(self.app, "ride", self.result.get("ride_id"))
         if fb_item is not None:
             items.insert(0, fb_item)
+        items[1:1] = self.radar_attach("cycling", self.result.get("ride_id"))   # o radar + longevidade
         self.list.set_items(items)
         _feedback().maybe_ask(self, "ride", self.result.get("ride_id"))
 
@@ -1915,6 +1937,12 @@ class DeviceScreen(ModalScreen):
                               detail=tr("para remar sem a máquina (testes, demonstração)",
                                         "to row without the machine (tests, demo)"),
                               action=self._add_sim_rower))
+        if getattr(a, "treadmill", None) is None:
+            items.append(Item(tr("SEM HARDWARE - PASSADEIRA", "NO HARDWARE - TREADMILL"),
+                              detail=tr("passadeira simulada: velocidade, inclinação e passos "
+                                        "(sem FC) · corrida", "simulated treadmill: speed, "
+                                        "incline and steps (no HR) · running"),
+                              action=self._add_sim_treadmill))
         # só com um rolo ligado (que aceite comandos) é que se pode calibrar
         can_cal = a.hub.can_control and getattr(a.hub.trainer, "supports_spindown", False)
         items.append(Item(t("dev.calibrate"), action=self._calibrate, enabled=bool(can_cal),
@@ -2085,6 +2113,15 @@ class DeviceScreen(ModalScreen):
     def _add_sim(self) -> None:
         self.app.hub.add_source(SimulatedTrainer(), role="simulated", is_trainer=True)
         self.note = t("dev.simulated")
+        self.enter()
+
+    def _add_sim_treadmill(self) -> None:
+        from velo.core import workout_meta as wm
+        from velo.io.sim import SimulatedTreadmill
+        lim = wm.device_limits(self.app.db)
+        self.app.set_treadmill(SimulatedTreadmill(lim["treadmill_max_kmh"],
+                                                  lim["treadmill_max_incline"]))
+        self.note = tr("SEM HARDWARE - PASSADEIRA ligada", "NO HARDWARE - TREADMILL connected")
         self.enter()
 
     def _add_sim_hr(self) -> None:
@@ -2587,7 +2624,16 @@ class SettingsScreen(Screen):
                          Item(tr("Inclinação máxima da passadeira", "Treadmill top incline"),
                               value=f"{lim['treadmill_max_incline']:.1f} %",
                               detail=tr("←/→ ±0,5 %", "←/→ ±0.5 %"),
-                              data="lim:treadmill_max_incline")]
+                              data="lim:treadmill_max_incline"),
+                         Item(tr("Passo da inclinação", "Incline step"),
+                              value=f"{lim['treadmill_incline_step']:g} %",
+                              detail=tr("de quanto em quanto a tua passadeira sobe: o "
+                                        "construtor e o GPX Conversor arredondam a isto · "
+                                        "←/→ 0,1 · 0,5 · 1",
+                                        "how much your treadmill's incline moves at a time: "
+                                        "the builder and the GPX converter round to it · "
+                                        "←/→ 0.1 · 0.5 · 1"),
+                              data="lim:treadmill_incline_step")]
             else:
                 rows.append(Item(tr("Sem aparelho a configurar", "No device to set up"),
                                  detail=tr("a natação e o ginásio não usam aparelhos com níveis",
@@ -2665,6 +2711,12 @@ class SettingsScreen(Screen):
         elif name == "treadmill_max_incline":
             self.put("treadmill_max_incline", max(0.0, min(40.0, lim["treadmill_max_incline"]
                                                            + 0.5 * unit)))
+        elif name == "treadmill_incline_step":
+            from velo.core import workout_meta as wm
+            order = list(wm.INCLINE_STEPS)
+            cur = order.index(lim["treadmill_incline_step"]) \
+                if lim["treadmill_incline_step"] in order else 1
+            self.put("treadmill_incline_step", order[(cur + unit) % len(order)])
         self.enter()
 
     # ------------------------------------------------------------ atalhos
@@ -3989,6 +4041,7 @@ class App:
 
         self.hub = SensorHub()
         self.rower = None                 # máquina de remo ligada (velo.io.rower)
+        self.treadmill = None             # passadeira ligada (real ou simulada)
         self.ant_stick = None
         self.ant_found: list = []
         self.auto_running = False
@@ -4265,6 +4318,16 @@ class App:
                 pass
         self.rower = rower
 
+    def set_treadmill(self, treadmill) -> None:
+        """Liga (ou desliga, com None) a passadeira."""
+        old = self.treadmill
+        if old is not None and old is not treadmill:
+            try:
+                old.disconnect()
+            except Exception:
+                pass
+        self.treadmill = treadmill
+
     def message(self, text: str) -> None:
         self._message = text
         self._message_at = time.monotonic()
@@ -4357,6 +4420,9 @@ class App:
                 out.append((name, "ok"))
         if self.rower is not None:
             out.append((self.rower.name, "ok" if getattr(self.rower, "connected", True)
+                        else "lost"))
+        if self.treadmill is not None:
+            out.append((self.treadmill.name, "ok" if getattr(self.treadmill, "connected", True)
                         else "lost"))
         return out
 
@@ -4904,6 +4970,11 @@ def _backups():
 def _segments_mod():
     from velo.core import segments
     return segments
+
+
+def _longevity_ui():
+    from velo.ui import longevity_screens
+    return longevity_screens
 
 
 def _extra_health():

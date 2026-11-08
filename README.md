@@ -14,7 +14,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 731 testes
+python -m unittest discover -s tests -t .       # 777 testes
 ```
 
 **Para partilhar com quem não usa Python:** duplo clique em
@@ -39,6 +39,21 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   com visão geral e melhores tempos; contam sozinhos nas sessões.
 - Treinos do computador (`.zwo`, `.fit`, `.mrc`, `.erg`) perguntam se ficam
   na lista; cada sessão guarda a sua cópia do treino.
+- **Terminar uma sessão** é igual no ciclismo, na corrida e no remo (Esc pausa, F10 pergunta,
+  Sim / Não / Terminar sem guardar) e abre a janela das **etiquetas** do `.fit`: tipo de treino
+  (sugerido pelo esforço nas sessões livres), tipo de sessão (`Perennia`, `Indoor Cycling`,
+  `Virtual …` só quando segue um .gpx) e etiquetas livres com sugestão das que já existem.
+- **Longevidade**: um índice (0–100) para 1 dia … 20 anos, com a tendência e um **radar**
+  de onde o corpo tem estado mais ou menos concentrado; cada sessão mostra o seu radar (o que
+  treinou) e o que acrescentou ao índice, e o construtor mostra o impacto do treino antes de o
+  fazeres. Os testes de longevidade vivem aqui.
+- **GPX Conversor**: de um percurso .gpx para um treino manual (níveis do rolo, inclinação e
+  velocidade da passadeira), com média móvel, troços e várias fórmulas.
+- **Exercícios** com grupos e subgrupos musculares, modalidades novas (Mobilidade, Tendões,
+  Isométrico) e disciplinas que crias tu (cada uma ganha o seu separador).
+- **CSV**: modelos, exportação e importação de artigos, exercícios, grupos musculares,
+  disciplinas e testes (Definições → Sincronização → CSV, ou `--csv-modelo`, `--csv-exportar`
+  e `--importar csv`).
 - **Backups e reposição**: tudo, ou só algumas componentes, num `.zip`
   segmentado (uma pasta por componente, um `.jsonl` por tabela, os `.fit`);
   repor é arrastar o ficheiro para a janela (substituir ou juntar), com um
@@ -281,6 +296,11 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
                      avisos de carga, previsões, zonas de ritmo, prontidão
   tp_import.py       .csv de atividades do TrainingPeaks
   file_import.py     as importações de ficheiros (ecrã e --importar)
+  tags.py            etiquetas das sessões e tipos de treino (sugestão pelo esforço, .fit)
+  longevity.py       índice de longevidade, eixos, radar, impacto de uma sessão
+  gpx_convert.py     GPX Conversor: percurso → níveis do rolo / inclinação da passadeira
+  muscles.py         grupos e subgrupos musculares
+  csv_sync.py        modelos, exportação e importação em CSV
   fit_decode.py      leitor de .fit (o contrário de fit.py)
   activity_upload.py upload manual de uma atividade (.fit, .tcx)
   workout_download.py exportar um treino de qualquer desporto
@@ -308,6 +328,9 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      exportar) · goal_popup.py (objetivos) · keymap.py (atalhos
                      personalizáveis) · arrangement_screens.py (disposição) ·
                      session_panels.py (painéis das sessões) ·
+                     session_flow.py (terminar sessões) · tag_popup.py (etiquetas) ·
+                     longevity_screens.py · session_radar.py · radar.py (radar) ·
+                     gpx_convert_screens.py · muscle_screens.py · csv_screens.py ·
                      challenge_screens.py (separador Treinar, Challenge da
                      corrida, natação e ginásio) · hub_screens.py (menus dos desportos,
                      inventários) · builder_screens.py (blocos) ·
@@ -327,7 +350,7 @@ packaging/           receita do PyInstaller e LEIA-ME para os colegas
 build_windows.bat    cria a versão para Windows, para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               649 testes: núcleo, protocolos, força, remo, saúde,
+tests/               777 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

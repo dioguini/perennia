@@ -370,8 +370,13 @@ class TestRowingGui(tg.GuiCase):
         self.press(key.PLUS)
         self.assertEqual(self.app.rower.level, 7)
         self.press(key.L)
-        self.press(key.ESCAPE)
-        self.pick("Sim")
+        self.press(key.ESCAPE)                                  # Esc pausa (como no ciclismo)
+        self.assertTrue(ses.engine.manual_pause)
+        self.assertIs(self.screen(), ses)
+        self.press(key.F10)                                     # F10 pergunta
+        self.assertTrue(ses.finish_dialog.visible)
+        self.press(key.ENTER)                                   # «Sim, terminar»
+        self.press(key.ENTER)                                   # «Guardar e terminar» (etiquetas)
         summ = self.screen()
         self.assertIsInstance(summ, rs.RowSummaryScreen)
         self.assertTrue(any("Volta 1" in i.label for i in summ.list.items))

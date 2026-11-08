@@ -81,7 +81,7 @@ class TestBlockList(tg.GuiCase):
         b.enter()
         lv = b.list
         heads = [lv.items[i].label for i in lv.head_indices()]
-        self.assertEqual(heads, ["Nome do treino", "Objetivo do treino"])
+        self.assertEqual(heads, ["Tipo de treino", "Nome do treino", "Objetivo do treino"])
         cells = {lv.items[i].label: (x, y) for i, x, y, _w in lv._cells}
         name_y = cells["Nome do treino"][1]
         self.assertGreater(name_y, b.cy1)                  # por cima do gráfico
@@ -171,7 +171,7 @@ class TestBuilderRound5(tg.GuiCase):
             b.enter()
             self.assertEqual(b.list.columns, 1, sport)
             self.assertEqual([b.list.items[i].label for i in b.list.head_indices()],
-                             ["Nome do treino", "Objetivo do treino"], sport)
+                             ["Tipo de treino", "Nome do treino", "Objetivo do treino"], sport)
             self.assertTrue(b.list.items[[i.header for i in b.list.items].index(True)]
                             .label.startswith("Bloco 2 de"), sport)
             self.app.pop(force=True)
@@ -189,14 +189,14 @@ class TestSameBuilderListEverywhere(tg.GuiCase):
             self.assertTrue(" · ERG" in first.detail or " · Manual" in first.detail, sport)
 
     def test_new_workout_button_is_at_the_bottom_in_the_hub(self):
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         hub = self.screen()
         lv = hub.list
         idx = next(i for i, it in enumerate(lv.items) if it.label == "+ Novo treino")
         self.app._on_draw()
         rect = next(r for r in lv._button_rects if r[0] == idx)
         self.assertLess(rect[3], 100)                      # a faixa de baixo
-        self.assertIn("P passos", hub.chrome.footer_full)
+        self.assertIn("Del apagar", hub.chrome.footer_full)
 
 
 class TestNoDuplicateImports(tg.GuiCase):

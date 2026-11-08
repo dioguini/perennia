@@ -14,6 +14,8 @@ from velo.core.units import hms
 from velo.gfx.compat import label as make_label
 from velo.ui.app import Screen, SportHub, StartOptions
 from velo.ui.brief import BriefScreen, endurance_brief
+from velo.ui.session_flow import FinishFlow
+from velo.ui.session_radar import RadarSide
 from velo.ui.session_panels import OFF, ArrangedPanels
 from velo.ui.widgets import ACCENT, DIM, GOOD, PANEL, TEXT, Item, LapPanel, SessionClock
 
@@ -86,10 +88,6 @@ class EnduranceHub(SportHub):
         from velo.ui.session_setup import ask_start
         ask_start(self.app, self.SPORT, self)
 
-    def items_builder(self) -> list[Item]:
-        from velo.ui import builder_screens as bs
-        return bs.builder_items(self.app, self.SPORT)
-
     def _dur(self, w: dict) -> str:
         return " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
                                       _m(w["total_m"]) if w["total_m"] else "") if x)
@@ -99,7 +97,8 @@ class EnduranceHub(SportHub):
         from velo.ui.workout_import import import_item
         return [import_item(a, self.SPORT, on_done=lambda _w: self.enter())] + [
             Item(w["name"], value=self._dur(w), detail=w["description"] or "",
-                 action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)))
+                 action=lambda wid=w["id"]: a.push(EndurancePreview(a, self.SPORT, wid)),
+                 data=("endurance_workout", w["id"]))
             for w in en.workouts(a.db, self.SPORT)]
 
     def items_history(self) -> list[Item]:
@@ -182,14 +181,9 @@ class EndurancePreview(BriefScreen):
     def start(self) -> None:
         start(self.app, self.sport, self.wid, replace=self.sport != "running")
 
-    def extra_actions(self) -> list[Item]:
-        a = self.app
-        from velo.ui.builder_screens import BlockBuilder
-        return [Item(tr("Abrir no construtor", "Open in the builder"),
-                     action=lambda: a.push(BlockBuilder(a, self.sport, self.wid)))]
 
 
-class EnduranceSession(ArrangedPanels, Screen):
+class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
     KEY_SCOPE = "endurance"
     AGENT = False
     IN_SESSION = True
@@ -224,11 +218,13 @@ class EnduranceSession(ArrangedPanels, Screen):
             autolap=autolap if resume is None else cfg.get("autolap"),
             pool_m=cfg.get("pool_m", pool_m), out_dir=app.data_dir / "endurance", resume=resume,
             route_id=route_id)
+        if self.engine.sport == "running" and getattr(app, "treadmill", None) is not None:
+            self.engine.treadmill = app.treadmill       # a passadeira simulada ou real
         if resume is None and self.engine.sport == "running":
             self.engine.set_speed(speed_kmh)
         self.session = self.engine
         self.start_countdown(resume)          # 15 s e começa sozinha
-        self.confirming = False
+        self.init_finish()                    # o diálogo de terminar, como no ciclismo
         self.typing: str | None = None
         self.toast = ""
         self._toast_until = 0.0
@@ -289,6 +285,7 @@ class EnduranceSession(ArrangedPanels, Screen):
         self.arr_layout_extras()
         self.list.y = -1000
         self.clock.layout()
+        self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -299,25 +296,17 @@ class EnduranceSession(ArrangedPanels, Screen):
         if e.sport == "running":
             if not e.manual_laps:
                 return tr("Espaço começa · +/− velocidade · T total do visor · P pausa · "
-                          "Esc terminar", "Space starts · +/− speed · T display total · "
-                          "P pause · Esc finish")
+                          "F10 terminar e guardar", "Space starts · +/− speed · T display "
+                          "total · P pause · F10 stop and save")
             return tr("Espaço começa · +/− velocidade · T total do visor · L volta · P pausa · "
-                      "Esc terminar", "Space starts · +/− speed · T display total · L lap · "
-                      "P pause · Esc finish")
-        return tr("Espaço começa · + piscina (− corrige) · L volta · P pausa · Esc terminar",
-                  "Space starts · + length (− corrects) · L lap · P pause · Esc finish")
+                      "F10 terminar e guardar", "Space starts · +/− speed · T display total · "
+                      "L lap · P pause · F10 stop and save")
+        return tr("Espaço começa · + piscina (− corrige) · L volta · P pausa · "
+                  "F10 terminar e guardar", "Space starts · + length (− corrects) · L lap · "
+                  "P pause · F10 stop and save")
 
     def enter(self) -> None:
         e = self.engine
-        if self.confirming:
-            self.list.y = self.app.window.height - 330
-            self.chrome.set(tr("Terminar a sessão?", "Finish the session?"),
-                            f"{_m(e.distance_m)} · {hms(e.t)}", "")
-            self.list.set_items([Item(t("str.confirm_no"), action=self._cancel),
-                                 Item(t("str.confirm_yes"), action=self._finish),
-                                 Item(tr("Terminar sem guardar", "Finish without saving"),
-                                      action=self._discard)])
-            return
         self.list.y = -1000
         self.list.set_items([])
         self.chrome.set(e.title, sp.name(e.sport), self.footer())
@@ -513,6 +502,8 @@ class EnduranceSession(ArrangedPanels, Screen):
             return ""
         d, total, grade = st
         incline = max(0.0, min(15.0, round(grade * 2) / 2))
+        if self.engine.treadmill is not None and self.engine.workout is None:
+            self.engine.set_incline(incline)             # a passadeira segue a rota
         line = tr("Rota «{n}» · {a} de {b} km · inclinação da estrada {g} % → põe {i} %",
                   "Route «{n}» · {a} of {b} km · road gradient {g} % → set {i} %",
                   n=self.route_name, a=f"{d / 1000:.2f}", b=f"{total / 1000:.1f}",
@@ -567,11 +558,8 @@ class EnduranceSession(ArrangedPanels, Screen):
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         e = self.engine
-        if self.confirming:
-            if symbol == key.ESCAPE:
-                self._cancel()
-                return True
-            return super().on_key(symbol, modifiers)
+        if self.confirming:                       # o diálogo de terminar tem as teclas todas
+            return self.finish_key(symbol)
         if self.typing is not None:
             if symbol in (key.ENTER, key.RETURN):
                 try:
@@ -615,20 +603,35 @@ class EnduranceSession(ArrangedPanels, Screen):
         if symbol == key.P:
             e.toggle_pause()
             return True
-        if symbol in (key.ESCAPE, key.F10):
-            self.confirming = True
-            self.enter()
-            return True
+        if symbol in (key.ESCAPE, key.F10):        # Esc pausa · F10 pergunta (como no ciclismo)
+            return self.finish_key(symbol)
         return True
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        handled = self.finish_mouse(x, y)
+        return handled if handled is not None else super().on_mouse(x, y)
+
+    def _tag_context(self):
+        e = self.engine
+        if not e.started or e.t < 1:
+            return None
+        s = e.summary()
+        return (e.sport, e.workout_id, bool(e.route_id),
+                {"load": s.get("load"), "moving_s": s.get("moving_s"),
+                 "elapsed_s": s.get("elapsed_s")})
+
+    def _flow_paused(self) -> bool:
+        return bool(self.engine.paused)
+
+    def _flow_set_paused(self, paused: bool) -> None:
+        e = self.engine
+        if e.started and bool(e.paused) != paused:
+            e.toggle_pause()
 
     def on_text(self, text: str) -> bool:
         if self.typing is not None:
             self.typing += "".join(c for c in text if c in "0123456789.,")
         return True
-
-    def _cancel(self) -> None:
-        self.confirming = False
-        self.enter()
 
     def _finish(self) -> None:
         e = self.engine
@@ -664,17 +667,15 @@ class EnduranceSession(ArrangedPanels, Screen):
 
     def draw(self) -> None:
         self.chrome.draw()
-        if self.confirming:
-            self.list.draw()
-            return
         self.batch.draw()
         self.laps_panel.draw()
         self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
+        self.draw_finish()
 
 
-class EnduranceSummary(Screen):
+class EnduranceSummary(RadarSide, Screen):
     def __init__(self, app, result: dict):
         super().__init__(app)
         self.result = result
@@ -702,14 +703,17 @@ class EnduranceSummary(Screen):
             items.append(Item(f"  {tr('Volta', 'Lap')} {lp.no}", value=hms(lp.seconds),
                               detail=f"{_m(lp.distance_m)}" + (f" · {hms(p)} {unit}" if p
                                                                else ""), enabled=False))
-        if r.get("fit_path"):
-            items.append(Item(".fit", value=r.get("name") or "", detail=r["fit_path"],
-                              enabled=False))
-        self.chrome.set(r.get("title") or sp.name(r["sport"]), r.get("name") or "",
-                        self.footer())
+        # o título e o rodapé são os do resumo do ciclismo
+        fit = r.get("fit_path")
+        sub = t("summary.saved_fit", path=fit) if fit else \
+            f"{t('common.error')}: o .fit não foi escrito"
+        if r.get("name"):
+            sub = f"{r['name']} · {sub}"
+        self.chrome.set(t("summary.title"), sub, self.footer())
         fb_item = _feedback().summary_item(self.app, "endurance", self.result.get("session_id"))
         if fb_item is not None:
             items.insert(0, fb_item)
+        items[1:1] = self.radar_attach(r["sport"], self.result.get("session_id"))
         self.list.set_items(items, keep_index=True)
         _feedback().maybe_ask(self, "endurance", self.result.get("session_id"))
 

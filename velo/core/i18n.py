@@ -1131,6 +1131,7 @@ def tr(pt: str, en: str, **kwargs) -> str:
 _STRINGS[PT].update({
     "agent.hint": "F1 resumo · F2 contexto",
     "home.health": "Saúde",
+    "home.longevity": "Longevidade",
     "menu.challenge": "Challenge",
     "menu.challenge_detail": "fuga, desafio adaptativo e jogos",
     "menu.tests": "Testes",
@@ -1215,6 +1216,7 @@ _STRINGS[PT].update({
 _STRINGS[EN].update({
     "agent.hint": "F1 summary · F2 context",
     "home.health": "Health",
+    "home.longevity": "Longevity",
     "menu.challenge": "Challenge",
     "menu.challenge_detail": "breakaway, adaptive challenge and games",
     "menu.tests": "Tests",

@@ -52,24 +52,6 @@ class GymHub(SportHub):
             detail=", ".join(m.name for m in gym.modalities()),
             action=lambda: ask_start(a, "gym", self)))
 
-    def items_builder(self) -> list[Item]:
-        a = self.app
-        items = [Item(tr("+ Novo treino", "+ New workout"),
-                      detail=tr("Escolhe a modalidade", "Pick the modality"),
-                      action=lambda: a.push(ModalityPicker(a)))]
-        for w in gym.workouts(a.db):
-            m = gym.modality(w.get("modality"))
-            items.append(Item(w["name"], value=m.name,
-                              detail=tr("{n} exercícios · {s} séries", "{n} exercises · {s} sets",
-                                        n=w["n_items"], s=w["n_sets"]),
-                              action=lambda wid=w["id"], mk=m.key: a.push(
-                                  _builder(a, mk, wid))))
-        for p in ls.plans(a.db, "conditioning"):
-            items.append(Item(p["name"], value="Conditioning",
-                              detail=tr("{n} voltas", "{n} laps", n=len(p["items"])),
-                              action=lambda pid=p["id"]: a.push(LapPlanEditor(a, pid))))
-        return items
-
     def items_library(self) -> list[Item]:
         a = self.app
         items = []

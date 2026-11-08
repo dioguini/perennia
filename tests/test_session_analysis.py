@@ -44,7 +44,7 @@ class Base(tg.GuiCase):
         for _ in range(int(seconds / 0.5)):
             self.app.hub.tick(0.5)
             ride.update(0.5)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         return ride.engine.ride_id
 
 
@@ -164,8 +164,9 @@ class TestOtherSports(tg.GuiCase):
         for _ in range(60):
             self.app._tick(0.5)
         sid = ses.engine.session_id
-        self.press(key.ESCAPE)
-        self.pick("Sim, terminar")
+        self.press(key.F10)
+        self.press(key.ENTER)                      # «Sim, terminar»
+        self.press(key.ENTER)                      # «Guardar e terminar» (etiquetas)
         an = sa.open_session(self.app, "running", sid)
         self.app.push(an)
         kind = next(i for i in an.list.items if i.label == "Tipo de sessão")

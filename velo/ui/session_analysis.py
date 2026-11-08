@@ -23,6 +23,7 @@ from velo.core import session_review as rv
 from velo.core.i18n import t, tr
 from velo.core.units import hms, km
 from velo.ui.app import Screen
+from velo.ui.session_radar import RadarSide
 from velo.ui.widgets import PANEL, Chart, Item, TabBar, Table
 
 KINDS = {"cycling": "ride", "rowing": "row", "running": "endurance", "swimming": "endurance",
@@ -54,6 +55,14 @@ def general_items(app, kind: str, sid: str, sess) -> list[Item]:
     db = a.db
     rows = [Item(tr("Tipo de sessão", "Session kind"), value=rv.session_type(db, sess),
                  enabled=False)]
+    try:                                     # as etiquetas do .fit (ver velo.core.tags)
+        from velo.core import tags as tg
+        info = tg.load(db, {"ride": "cycling", "row": "rowing"}.get(kind, sess.sport), sid)
+        text = " · ".join(tg.labels(info))
+    except Exception:
+        text = ""
+    if text:
+        rows.append(Item(tr("Etiquetas", "Tags"), value=text, enabled=False))
     wstate = workout_state(db, kind, sid, sess)
     if wstate:
         rows.append(Item(tr("Treino", "Workout"), value=wstate, enabled=False))
@@ -184,8 +193,9 @@ class _EmbeddedRide:
 # ================================================================= o ecrã
 
 
-class SessionAnalysis(Screen):
+class SessionAnalysis(RadarSide, Screen):
     TABBED = True
+    RADAR_BIG = True
     VIEWS = ("general", "feedback", "analysis", "infographics")
 
     def __init__(self, app, kind: str, sid: str, tab: int = 0):
@@ -256,8 +266,14 @@ class SessionAnalysis(Screen):
         self.list.y = self.content_top(h)
         view = self.view
         items: list[Item] = []
+        if (view == "general") != self.radar_visible:
+            self.radar_visible = view == "general"
+            if self._radar is not None:
+                self._relayout_list()
         if view == "general":
             items = general_items(a, self.kind, self.sid, s)
+            sport = {"ride": "cycling", "row": "rowing"}.get(self.kind, s.sport)
+            items[1:1] = self.radar_attach(sport, self.sid)
         elif view == "feedback":
             self.list.y = -3000
             foot = tr("Tab separador · ↑↓ linha · ←/→ valor · Ctrl+S guardar · Esc voltar",

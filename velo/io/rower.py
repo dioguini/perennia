@@ -214,7 +214,9 @@ def is_rower(name: str, service_uuids: list[str]) -> str | None:
 
 
 class SimulatedRower:
-    """Remador virtual: rema a ~24 spm e responde à resistência."""
+    """Remador virtual: rema a ~24 spm e responde à resistência. Dá o que uma
+    máquina de remo dá (remadas, voga, ritmo, distância, resistência) e **não
+    dá FC** (vem da banda cardíaca); `with_hr=True` só serve para os testes."""
 
     name = "SEM HARDWARE - Remo"
     device_id = "sim:rower"
@@ -222,7 +224,7 @@ class SimulatedRower:
     connected = True
 
     def __init__(self, watts: float = 160.0, spm: float = 24.0, seed: int | None = 3,
-                 with_hr: bool = True):
+                 with_hr: bool = False):
         self.base_w = watts
         self.base_spm = spm
         self.with_hr = with_hr
