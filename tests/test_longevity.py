@@ -181,7 +181,7 @@ class TestGameInRide(tg.GuiCase):
         self.assertTrue(ride.hud._chase_title.text)
         self.assertEqual(ride.hud.board_panel.title.text, "Desafio adaptativo")
         self.app._on_draw()
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         summ = self.screen()
         self.assertIsInstance(summ, app_mod.SummaryScreen)
         self.assertTrue(any("Desafio adaptativo" in i.label for i in summ.list.items))
@@ -264,7 +264,7 @@ class TestFitnessTests(unittest.TestCase):
 class TestTestsGui(tg.GuiCase):
     def test_longevity_test_with_timer(self):
         self.press(key.ESCAPE)
-        self.pick("Saúde")
+        self.pick("Longevidade")
         self.pick("Testes de longevidade")
         self.pick("Flexões em 1 minuto")
         self.assertIsInstance(self.screen(), hs.TestDetail)
@@ -283,7 +283,7 @@ class TestTestsGui(tg.GuiCase):
 
     def test_stopwatch_gives_the_time(self):
         self.press(key.ESCAPE)
-        self.pick("Saúde")
+        self.pick("Longevidade")
         self.pick("Testes de longevidade")
         self.pick("Suspensão na barra")
         self.pick("Fazer o teste")
@@ -316,7 +316,7 @@ class TestTestsGui(tg.GuiCase):
         for _ in range(int(1500 / 1.0)):
             self.app.hub.tick(1.0)
             ride.update(1.0)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         summ = self.screen()
         self.assertTrue(any("VO2máx" in (i.value or "") for i in summ.list.items))
         t_ = ft.by_protocol(self.app.db, "5min")
@@ -434,7 +434,7 @@ class TestHealthGui(tg.GuiCase):
         self.app._on_text("em jejum")
         self.press(key.ENTER)
         self.app._on_text("balança nova")
-        self.press(key.ESCAPE)
+        self.pick("Guardar")                                  # a nota é uma janela: Guardar
         self.assertIs(self.screen(), log)
         self.select("O que almocei")
         self.type("sopa e frango")
@@ -472,7 +472,7 @@ class TestHealthGui(tg.GuiCase):
         self.assertTrue(any("LDL ▲" in i.label for i in ed.list.items))
         self.pick("Comentário do médico")
         self.app._on_text("Repetir em 3 meses.")
-        self.press(key.ESCAPE)
+        self.pick("Guardar")                                  # a janela do comentário
         self.pick("Guardar")
         reps = health.lab_reports(self.app.db)
         self.assertEqual(reps[0]["done_on"], "2026-10-15")
@@ -487,7 +487,7 @@ class TestHealthGui(tg.GuiCase):
         self.assertIn("Repetir em 3 meses", general.detail)
         self.pick("LDL")
         self.app._on_text("Dieta e voltar a medir.")
-        self.press(key.ESCAPE)
+        self.pick("Guardar")
         menu.enter()
         ldl = next(i for i in menu.list.items if "LDL" in i.label)
         self.assertIn("Dieta e voltar a medir", ldl.detail)

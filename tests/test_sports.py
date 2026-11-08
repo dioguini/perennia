@@ -342,7 +342,7 @@ class TestBlockBuilderCore(Base):
 
 class TestBlockBuilderGui(tg.GuiCase):
     def open_builder(self, control="ERG"):
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         self.assertIn("ERG", [i.label for i in self.screen().list.items])
         self.pick(control)
@@ -438,7 +438,7 @@ class TestBlockBuilderGui(tg.GuiCase):
     def test_running_manual_treadmill_speed_and_incline(self):
         self.press(key.ESCAPE)
         self.pick("Corrida")
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         self.pick("Manual")
         b = self.screen()
@@ -460,7 +460,7 @@ class TestBlockBuilderGui(tg.GuiCase):
     def test_rowing_manual_has_rate_and_resistance(self):
         self.press(key.ESCAPE)
         self.pick("Remo")
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         self.pick("Manual")
         b = self.screen()
@@ -499,8 +499,9 @@ class TestBlockBuilderGui(tg.GuiCase):
     def test_rowing_and_swimming_builders(self):
         self.press(key.ESCAPE)
         self.pick("Remo")
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("8 × 500 m")
+        self.pick("Editar")                         # a ficha do treino → o construtor
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
         self.assertEqual(b.tab_labels(), ["Zonas de potência", "Ritmo"])      # ERG
@@ -510,7 +511,7 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.assertTrue(any(i.label == "Resistência" for i in b.list.items))
         self.press(key.ESCAPE, key.ESCAPE, key.ESCAPE)
         self.pick("Natação")
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         w = self.screen()
         self.assertEqual(w.blocks[0].dur_type, "distance")
@@ -552,8 +553,9 @@ class TestSportsGui(tg.GuiCase):
         self.app._on_text("0,5")
         self.press(key.ENTER)
         self.assertEqual(scr.engine.distance_m, 500)
-        self.press(key.ESCAPE)
-        self.pick("Sim, terminar")
+        self.press(key.F10)
+        self.press(key.ENTER)                      # «Sim, terminar»
+        self.press(key.ENTER)                      # «Guardar e terminar» (etiquetas)
         summ = self.screen()
         self.assertIsInstance(summ, es.EnduranceSummary)
         self.assertTrue(Path(summ.result["fit_path"]).exists())

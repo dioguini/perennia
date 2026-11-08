@@ -429,16 +429,10 @@ class StrengthPreview(GymBrief):
         except ValueError as e:
             a.message(f"{t('common.error')}: {e}")
 
-    def extra_actions(self) -> list[Item]:
-        a = self.app
-
-        def builder():
-            from velo.ui.strength_builder_screens import StrengthBuilder
-            a.push(StrengthBuilder(a, "strength", self.wid))
-        return [Item(tr("Editar no construtor por blocos", "Edit in the block builder"),
-                     action=builder),
-                Item(tr("Editor simples (lista)", "Simple editor (list)"),
-                     action=lambda: a.push(StrengthWorkoutEditor(a, self.wid)))]
+    def edit(self) -> None:
+        """«Editar»: abre o treino no construtor por blocos do ginásio."""
+        from velo.ui.strength_builder_screens import StrengthBuilder
+        self.app.push(StrengthBuilder(self.app, "strength", self.wid))
 
     @property
     def workout_id(self):                  # compatibilidade

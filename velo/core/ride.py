@@ -1313,11 +1313,20 @@ class RideEngine:
             def coord_at(m: float):                       # noqa: E306
                 p = self.route.point_at(m % self.route.total_m)
                 return p.lat, p.lon, p.ele_m
+        from . import tags as tags_mod
+        has_route = bool(self.route_id)
+        tag_info = tags_mod.resolve(
+            self.db, "cycling", self.ride_id, getattr(self, "tags_chosen", None),
+            workout_id=self.workout_id, has_route=has_route,
+            summary={"ftp_w": self.athlete.ftp_w, "np_w": summary.np_w,
+                     "avg_power_w": summary.avg_power_w, "tss": summary.tss,
+                     "elapsed_s": summary.elapsed_s})
         try:
             fit.write_activity(fit_path, self.athlete, samples, self.laps, summary,
                                start_unix=self.start_unix,
                                include_coords=self.include_coords, coord_at=coord_at,
-                               name=self.name, virtual=True)
+                               name=self.name, virtual=tags_mod.is_virtual("cycling", has_route),
+                               tags=tags_mod.fit_text(tag_info))
             fit_written: str | None = str(fit_path)
         except Exception as e:
             self._emit("fit_error", message=str(e))
@@ -1332,7 +1341,7 @@ class RideEngine:
 
         return {
             "ride_id": self.ride_id, "name": self.name, "summary": summary,
-            "fit_path": fit_written,
+            "fit_path": fit_written, "tags": tag_info,
             "laps": self.laps, "climbs": self.climb_results,
             "strava": self.strava_results,
             "power_series": self._power_series, "chase": self.chase_result,

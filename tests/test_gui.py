@@ -29,6 +29,7 @@ from velo.core.i18n import PT, set_language  # noqa: E402
 from velo.gfx.world import PRESETS, World  # noqa: E402
 from velo.io.sim import SimulatedTrainer  # noqa: E402
 from velo.ui import app as app_mod  # noqa: E402
+from velo.ui import tag_popup as tagpop  # noqa: E402
 from velo.ui import session_setup  # noqa: E402
 
 GPX = Path(__file__).parent / "teste.gpx"
@@ -52,7 +53,7 @@ class GuiCase(unittest.TestCase):
         self.points = gpx.resample(raw)
         self.route_id = self.app.db.insert_route(
             "Serra de Teste", self.points, climbs_mod.detect(self.points))
-        self.app.hub.add_source(SimulatedTrainer(base_power=210),
+        self.app.hub.add_source(SimulatedTrainer(base_power=210, with_hr=True),
                                 role="trainer", is_trainer=True)
         self.app.stack[0].enter()
         self.pick("Ciclismo")                # do ecrã inicial para o menu do ciclismo
@@ -163,7 +164,7 @@ class TestShell(GuiCase):
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
         labels = self.labels()
         for expected in ("Sessão de treino", "Lista de treinos", "Desafios", "Estatísticas",
-                         "Construtor de treinos", "Histórico",
+                         "Histórico",
                          "Dispositivos", "Definições", "Desligar"):
             self.assertIn(expected, labels, f"falta «{expected}» no menu")
 
@@ -851,7 +852,7 @@ class TestRideFlow(GuiCase):
         for _ in range(400):
             self.app.hub.tick(0.25)
             ride.update(0.25)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         summary = self.screen()
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         self.app._on_draw()
@@ -870,7 +871,7 @@ class TestRideFlow(GuiCase):
         for _ in range(80):
             self.app.hub.tick(0.25)
             ride.update(0.25)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
@@ -946,7 +947,7 @@ class TestRideFlow(GuiCase):
         ride.preparing = False
         self._run(ride, 10)
         self.app._on_draw()
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         pyglet_stub.calls.clear()
         self.app._on_draw()
         clears = [c for c in pyglet_stub.calls if c[0] == "gl.glClearColor"]
@@ -1143,6 +1144,8 @@ class TestRideFlow(GuiCase):
         self.assertTrue(hud.confirm_visible)                 # pergunta primeiro
         yes = hud._confirm_yes
         self.app._on_mouse_press(int(yes.x + 5), int(yes.y + 5), 1, 0)
+        self.assertIsInstance(self.screen(), tagpop.SessionTagsPopup)    # as etiquetas do .fit
+        self.pick("Guardar e terminar")
         summary = self.screen()
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         self.assertTrue(Path(summary.result["fit_path"]).exists())
@@ -1197,7 +1200,7 @@ class TestRideFlow(GuiCase):
         ride.world.build_all()
         ride.preparing = False
         self._run(ride, 90)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         summary = self.screen()
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         self.assertEqual(summary.result["summary"].elapsed_s, 90)
@@ -1229,7 +1232,7 @@ class TestRideFlow(GuiCase):
             self.app.hub.tick(0.25)
             ride.update(0.25)
             guard += 1
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
         self.open_routes()
@@ -1315,7 +1318,7 @@ class TestWorkoutAndFtpScreens(GuiCase):
         for _ in range(60):
             self.app.hub.tick(1.0)
             ride.update(1.0)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         summary = self.screen()
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         summary.ftp_estimate = (300.0, 285)   # como se o teste tivesse corrido
@@ -1428,7 +1431,7 @@ class TestChaseScreens(GuiCase):
             ride.update(0.25)
         self.assertIn("Vantagem", ride.hud._chase_title.text)
         self.assertEqual(ride.hud.board_panel.title.text, "Fuga")
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         summary = self.screen()
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         self.assertTrue(any("Fuga terminada" in x for x in self.labels()))
@@ -1482,7 +1485,7 @@ class TestBoardsEverywhere(GuiCase):
             if ride.engine.state.loops:
                 break
         self.assertEqual(ride.engine.state.loops, 1)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         panel = self.screen().board_panel
         self.app._on_draw()
         self.assertEqual(panel.board.rows[0].me, True)
@@ -1497,16 +1500,14 @@ class TestHomeScreen(GuiCase):
         self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
                                       "Saúde"])
         self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Estatísticas gerais",
-                                      "Inventário de artigos", "Exercícios"])
+                                      "Inventário de artigos", "Exercícios", "Longevidade"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
         self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
         self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
-        # a segunda fila (cinco cartões) fica ao centro
-        left = home.tiles[0].bg.x
-        right = home.tiles[5].bg.x + home.tiles[5].bg.width
-        row2 = (home.tiles[6].bg.x + home.tiles[10].bg.x + home.tiles[10].bg.width) / 2
-        self.assertAlmostEqual(row2, (left + right) / 2, delta=1)
+        # a segunda fila (também seis cartões) alinha com a primeira
+        self.assertEqual(home.tiles[6].bg.x, home.tiles[0].bg.x)
+        self.assertEqual(home.tiles[11].bg.x, home.tiles[5].bg.x)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
         for tl in home.tiles:                        # o título não fica por baixo do ícone
@@ -1544,8 +1545,8 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         self.pick("Corrida")
         hub = self.screen()
-        self.assertEqual(hub.tab_labels(), ["Treinar", "Construtor de treinos",
-                                            "Lista de treinos", "Histórico", "Estatísticas"])
+        self.assertEqual(hub.tab_labels(), ["Treinar", "Lista de treinos", "Histórico",
+                                            "Estatísticas"])
         b = hub.back_button.bg
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         self.assertIsInstance(self.screen(), app_mod.HomeScreen)
@@ -1648,7 +1649,7 @@ class TestStatsExplorer(GuiCase):
         for _ in range(int(seconds / 0.5)):
             self.app.hub.tick(0.5)
             ride.update(0.5)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
     def test_power_curve_shows_values_and_the_date_of_a_point(self):
@@ -1761,7 +1762,7 @@ class TestStatsScreen(GuiCase):
         for _ in range(600):
             self.app.hub.tick(0.5)
             ride.update(0.5)
-        self.press(key.F10, key.ENTER)          # terminar → «Sim»
+        self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
 
         self.pick("Estatísticas")

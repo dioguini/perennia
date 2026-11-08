@@ -61,7 +61,7 @@ class SyncPanel:
 
     SOURCES = (("garmindb", "GarminDB"), ("hrv4training", "HRV4Training"),
                ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"),
-               ("upload", "Upload manual"))
+               ("upload", "Upload manual"), ("csv", "CSV"))
     FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
                     "~/Desktop")
 
@@ -178,6 +178,58 @@ class SyncPanel:
              "want. Activities join the history with TrainingPeaks' TSS (and count for form "
              "and fatigue)."),
             check=_is_tp)
+
+    def items_csv(self) -> list[Item]:
+        """Artigos, exercícios, grupos musculares… por .csv: modelo, exportação e importação."""
+        from velo.core import csv_sync as cs
+        rows = [Item(tr("Conjuntos de dados", "Data sets"), header=True)]
+        for d in cs.DATASETS.values():
+            n = len(d.export(self.app.db))
+            rows.append(Item(d.label, value=tr("{n} linhas", "{n} rows", n=n), detail=d.help,
+                             action=lambda k=d.key: self.open_csv(k)))
+        rows.append(Item(tr("Ficheiros .csv encontrados", "CSV files found"), header=True))
+        found = self.files(("*.csv",))
+        known = 0
+        for p in found:
+            try:
+                text = p.read_text(encoding="utf-8-sig", errors="replace")
+                key = cs.detect(text)
+            except Exception:
+                key = None
+            if key is None:
+                continue
+            known += 1
+            rows.append(Item(p.name, value=cs.DATASETS[key].label, detail=str(p.parent),
+                             action=lambda q=p: self.import_csv_file(q)))
+        if not known:
+            rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
+                             detail=tr("descarrega um modelo, preenche-o e põe-no em {p}, "
+                                       "Transferências ou Documentos",
+                                       "download a template, fill it in and put it in {p}, "
+                                       "Downloads or Documents", p=self.app.data_dir / "imports")))
+        if self.last_report and self.last_report.get("_kind") == "csv":
+            rows.insert(0, Item(tr("Último CSV", "Last CSV"),
+                                value=self.last_report.get("_text", ""), enabled=False))
+        return rows
+
+    def open_csv(self, key: str) -> None:
+        from velo.ui.csv_screens import CsvDatasetPopup
+        self.app.push(CsvDatasetPopup(self.app, key, then=self._csv_done))
+
+    def _csv_done(self, text: str) -> None:
+        self.last_report = {"_kind": "csv", "_text": text}
+        self.screen.enter()
+
+    def import_csv_file(self, path) -> None:
+        from velo.core import csv_sync as cs
+        try:
+            key, rep = cs.import_file(self.app.db, path)
+        except Exception as e:
+            self.app.message(f"{t('common.error')}: {e}")
+            return
+        text = f"{cs.DATASETS[key].label}: {rep.text()}"
+        self.app.message(text)
+        self._csv_done(text)
 
     def items_upload(self) -> list[Item]:
         """Uma atividade de cada vez: escolhe o ficheiro (.fit ou .tcx) e vê o que

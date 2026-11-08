@@ -172,10 +172,24 @@ class BlockBuilder(EditScreen):
         self.limits = wm.device_limits(app.db)
         self._clamp_blocks()
         from velo.core import objectives as ob
+        from velo.core import tags as tags_mod
+        self.wtype = tags_mod.workout_type(app.db, sport, wid)     # None: pelo esforço
         saved = ob.stored(app.db, sport, wid)
         self.wgoal = saved.get("goal") or ob.library_goal(self.name)
         for b, g in zip(self.blocks, saved.get("blocks") or []):
             b.goal = (g or {}).get("goal", "") if isinstance(g, dict) else ""
+        # os objetivos são os do próprio treino: o que a ficha mostra é o que está
+        # aqui; o que ainda não foi escrito vem sugerido pela estrutura (editável)
+        try:
+            ctx0 = it.Context.from_db(app.db, sport)
+            suggested = ob.build(app.db, sport, wid, self.name, self.blocks, ctx0)
+            for b, rb in zip(self.blocks, suggested.raw_blocks):
+                if not b.goal:
+                    b.goal = rb.goal
+            if not self.wgoal:
+                self.wgoal = suggested.goal
+        except Exception:
+            pass
         self.mode = mode if mode in self.modes else self.modes[0]
         self.ctx = it.Context.from_db(app.db, sport)
         self.sel = 0 if self.blocks else -1
@@ -219,11 +233,27 @@ class BlockBuilder(EditScreen):
 
     # ----------------------------------------------------------- separadores
 
+    def has_gpx_tab(self) -> bool:
+        """O GPX Conversor: nos treinos manuais de ciclismo e de corrida."""
+        return getattr(self, "control", "erg") == "manual" and \
+            getattr(self, "sport", "") in ("cycling", "running")
+
     def tab_labels(self) -> list[str]:
         modes = getattr(self, "modes", None) or ["power"]
-        return [wm.mode_label(m) if m == "level" else it.mode_name(m) for m in modes]
+        labels = [wm.mode_label(m) if m == "level" else it.mode_name(m) for m in modes]
+        if self.has_gpx_tab():
+            labels.append(tr("GPX Conversor", "GPX Converter"))
+        return labels
 
     def on_tab(self) -> None:
+        if self.has_gpx_tab() and self.tab >= len(self.modes):
+            # a tab do conversor abre a janela; a vista fica a que estava
+            self.tab = self.modes.index(self.mode)
+            if self.tabs is not None:
+                self.tabs.select(self.tab)
+            from velo.ui.gpx_convert_screens import GpxConverter
+            self.app.push(GpxConverter(self.app, self))
+            return
         # mudar de vista não mexe no treino: não conta como alteração
         self.mode = self.modes[self.tab % len(self.modes)]
         for (name, pct, r, lab), note in zip(self.pal, self.pal_notes):
@@ -387,11 +417,11 @@ class BlockBuilder(EditScreen):
         w, h = self.app.window.width, self.app.window.height
         # em cima, por baixo dos separadores: o nome e o objetivo do treino
         # o nome e o objetivo do treino: uma linha por baixo da outra
-        head_y = h - 98 - 34 - 20
+        head_y = h - 98 - 34 - 12
         self.list.head_y, self.list.head_x, self.list.head_w = head_y, 48, w - 96
         self.list.head_stack = True
         self.list.head_value_x = self.HEAD_VALUE_X     # nome e objetivo alinhados à esquerda
-        pal_top = head_y - 24 - self.HEAD_ROW_H
+        pal_top = head_y - 14 - self.HEAD_ROW_H * 2         # tipo, nome e objetivo
         n = len(self.pal)
         pw = (w - 96 - (n - 1) * 6) / n
         for i, ((_n, _p, r, lab), note) in enumerate(zip(self.pal, self.pal_notes)):
@@ -722,7 +752,9 @@ class BlockBuilder(EditScreen):
                      Item(tr("Repetir os 2 últimos blocos", "Repeat the last 2 blocks"),
                           value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat)]
         # o nome e o objetivo do treino ficam em cima (head), um por baixo do outro
-        rows += [Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
+        rows += [Item(tr("Tipo de treino", "Workout type"), value=self._wtype_text(),
+                      data="cyc:wtype", head=True),
+                 Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name", head=True),
                  Item(tr("Objetivo do treino", "Workout goal"),
                       value=(self.wgoal[:70] + "…" if len(self.wgoal) > 71 else self.wgoal)
@@ -737,11 +769,13 @@ class BlockBuilder(EditScreen):
         self.chrome.set(tr("Construtor de treinos", "Workout builder") + f" · {sport_name}"
                         + f" · {wm.control_name(self.control)}",
                         f"{wm.control_name(self.control)} · "
-                        + self.summary.text.replace("\n", "  ·  "),
+                        + self.summary.text.replace("\n", "  ·  ") + self._longevity_text(),
                         tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
-                           "D duplicar · Del apagar · Tab vista",
+                           "D duplicar · Del apagar · Tab vista · o tipo de treino também "
+                           "etiqueta o .fit",
                            "Drag palette blocks · ←/→ block · ↑↓ row · +/− duration · "
-                           "D duplicate · Del delete · Tab view"))
+                           "D duplicate · Del delete · Tab view · the workout type also "
+                           "tags the .fit"))
         self.list.set_items(rows, keep_index=True)
         if hasattr(self, "pal"):          # a lista mudou de tamanho: o gráfico acompanha
             self._layout()
@@ -756,6 +790,25 @@ class BlockBuilder(EditScreen):
         self.redraw()
         self.enter()
 
+    def _longevity_text(self) -> str:
+        """O que este treino acrescentaria ao índice de longevidade (se o fizesses hoje):
+        refaz-se só quando os blocos mudam."""
+        sig = tuple((b.kind, b.dur_type, round(b.dur), b.lo, b.hi) for b in self.blocks)
+        if getattr(self, "_lg_sig", None) != sig:
+            self._lg_sig = sig
+            try:
+                from velo.core import longevity as lg
+                if getattr(self, "_lg_doses", None) is None:
+                    self._lg_doses = lg.all_doses(self.app.db)
+                imp = lg.impact_of(self.app.db, lg.blocks_mins(self.blocks, self.sport),
+                                   sport=self.sport, doses=self._lg_doses)
+                text = lg.impact_text(imp)
+                self._lg_text = ("  ·  " + tr("Longevidade", "Longevity") + " " + text) \
+                    if text else ""
+            except Exception:
+                self._lg_text = ""
+        return self._lg_text
+
     # ----------------------------------------------------------- campos
 
     def cycle(self, field: str, step: int) -> None:
@@ -764,6 +817,13 @@ class BlockBuilder(EditScreen):
             self.repeat_n = max(2, min(20, self.repeat_n + (1 if step > 0 else -1)))
             return
         if b is None:
+            return
+        if field == "wtype":
+            from velo.core import tags as tags_mod
+            order = [None, *tags_mod.TYPE_KEYS]
+            self.wtype = order[(order.index(self.wtype) + step) % len(order)]
+            self.dirty = True
+            self.enter()
             return
         if field == "kind":
             ks = ["warmup", "active", "rest", "cooldown"]
@@ -779,6 +839,18 @@ class BlockBuilder(EditScreen):
             b.lo = 75.0
         self.dirty = True
         self.redraw()
+
+    def _wtype_text(self) -> str:
+        """O tipo escolhido, ou — se ninguém escolheu — o que os blocos sugerem."""
+        from velo.core import tags as tags_mod
+        if self.wtype:
+            return tags_mod.type_label(self.wtype)
+        try:
+            sug = tags_mod.type_label(tags_mod.suggest_for_blocks(self.blocks, self.sport))
+        except Exception:
+            sug = ""
+        return tr("Automático · {s}", "Automatic · {s}", s=sug) if sug else \
+            tr("Automático", "Automatic")
 
     def _text(self, pct: float) -> str:
         if self.mode == "level":
@@ -822,9 +894,10 @@ class BlockBuilder(EditScreen):
             b.hi = None
             self._to_time(b)
         elif field == "incline":
+            step = self.limits["treadmill_incline_step"]
             b.extra["incline_pct"] = max(0.0, min(self.limits["treadmill_max_incline"],
                                                   round((b.extra.get("incline_pct") or 0)
-                                                              + steps * 0.5, 1)))
+                                                        + steps * step, 2)))
         elif field == "rate":
             r = (b.extra.get("rate") or 22) + steps
             b.extra["rate"] = None if r < 14 else min(40, r)
@@ -879,8 +952,9 @@ class BlockBuilder(EditScreen):
             b.hi = None
             self._to_time(b)
         elif field == "incline":
+            step = self.limits["treadmill_incline_step"]
             b.extra["incline_pct"] = max(0.0, min(self.limits["treadmill_max_incline"],
-                                                  float(value)))
+                                                  round(round(float(value) / step) * step, 2)))
         elif field == "rate":
             b.extra["rate"] = int(value) if value >= 14 else None
         self.dirty = True
@@ -1041,6 +1115,8 @@ class BlockBuilder(EditScreen):
         from velo.core import objectives as ob
         ob.save(self.app.db, self.sport, self.wid, self.wgoal.strip(),
                 [{"name": "", "goal": b.goal} for b in self.blocks])
+        from velo.core import tags as tags_mod
+        tags_mod.set_workout_type(self.app.db, self.sport, self.wid, self.wtype)
         self.dirty = False
         self.enter()
         self.app.workout_saved(self.name.strip(), self)

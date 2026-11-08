@@ -18,6 +18,7 @@ from velo.core.i18n import t, tr
 from velo.core.units import hms, parse_number
 from velo.gfx.compat import label as make_label
 from velo.ui.app import FtpRouteChoice, Screen, SnapshotUnsaved
+from velo.ui.goal_popup import GoalPopup
 from velo.ui.sport_screens import EditPopup, EditScreen
 from velo.ui.widgets import ACCENT, BAD, Chart, DIM, GOOD, PANEL, TEXT, Item
 
@@ -102,11 +103,11 @@ class _ChromeProxy:
 
 
 class HealthMenu(Screen):
-    """A Saúde por separadores: Análises (o report de cada colheita) · Testes
-    de longevidade · Diários · Tendências · Métricas."""
+    """A Saúde por separadores: Análises (o report de cada colheita) · Diários ·
+    Tendências · Métricas. Os testes de longevidade passaram para o menu Longevidade."""
 
     TABBED = True
-    TAB_KEYS = ("labs", "longevity", "diary", "trends", "metrics")
+    TAB_KEYS = ("labs", "diary", "trends", "metrics")
 
     @staticmethod
     def TITLE() -> str:
@@ -121,9 +122,8 @@ class HealthMenu(Screen):
             self.tabs.select(tab)
 
     def tab_labels(self) -> list[str]:
-        return [tr("Análises", "Lab results"), tr("Testes de longevidade", "Longevity tests"),
-                tr("Diários", "Daily logs"), tr("Tendências", "Trends"),
-                tr("Métricas", "Metrics")]
+        return [tr("Análises", "Lab results"), tr("Diários", "Daily logs"),
+                tr("Tendências", "Trends"), tr("Métricas", "Metrics")]
 
     def on_tab(self) -> None:
         self.inner = None
@@ -146,8 +146,6 @@ class HealthMenu(Screen):
         if k == "labs":
             self.inner = None
             self._labs()
-        elif k == "longevity":
-            self._embed(TestsMenu, "longevity").enter()
         elif k == "diary":
             self.inner = None
             self._diary()
@@ -470,79 +468,13 @@ def group_name(g: str) -> str:
             "other": tr("Outras", "Other")}.get(g, g)
 
 
-class TextEditScreen(SnapshotUnsaved, Screen):
-    """Texto livre com várias linhas (notas, comentário do médico).
-    Enter muda de linha; Esc guarda e volta."""
-    SEARCH = False            # escreve-se texto aqui: sem a pesquisa
-
-    AGENT = False
+class TextEditScreen(GoalPopup):
+    """Texto livre com várias linhas (notas, comentário do médico, instruções),
+    **numa janela**: Enter muda de linha, Ctrl+S ou Guardar grava, Esc cancela
+    (com alterações pergunta primeiro)."""
 
     def __init__(self, app, title: str, subtitle: str, text: str, on_save):
-        super().__init__(app)
-        self.title, self.sub = title, subtitle
-        self.text = text or ""
-        self._on_text_saved = on_save
-        w, h = app.window.width, app.window.height
-        self.batch = pyglet.graphics.Batch()
-        self.box = pyglet.shapes.Rectangle(40, 100, w - 80, h - 230, color=PANEL,
-                                           batch=self.batch)
-        self.label = make_label("", font_size=14, color=TEXT, multiline=True,
-                                width=w - 120, anchor_y="top", batch=self.batch)
-        self.label.x, self.label.y = 60, h - 150
-        self.mark_saved()             # voltar com alterações pergunta
-
-    def snapshot_state(self):
-        return self.text
-
-    def on_save(self) -> bool:
-        self.save()
-        return True
-
-    def enter(self) -> None:
-        self.chrome.set(self.title, self.sub,
-                        tr("Escreve · Enter nova linha · Esc guardar e voltar",
-                           "Type · Enter new line · Esc save and go back"))
-        self.list.set_items([])
-        self._render()
-
-    def _render(self) -> None:
-        self.label.text = self.text + "▏"
-
-    def on_text(self, text: str) -> bool:
-        clean = "".join(c for c in text if c.isprintable() or c == "\n").replace("\r", "")
-        if clean:
-            self.text += clean
-            self._render()
-        return True
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        if symbol in (key.ENTER, key.RETURN):
-            self.text += "\n"
-            self._render()
-            return True
-        if symbol == key.BACKSPACE:
-            self.text = self.text[:-1]
-            self._render()
-            return True
-        if symbol == key.ESCAPE:
-            self.save()
-            return True
-        return True
-
-    def save(self) -> None:
-        self._on_text_saved(self.text.strip())
-        self.mark_saved()
-        self.app.pop()
-
-    def on_mouse(self, x: int, y: int) -> bool:
-        if self.back_button is not None and self.back_button.hit(x, y):
-            self.save()
-            return True
-        return False
-
-    def draw(self) -> None:
-        super().draw()
-        self.batch.draw()
+        super().__init__(app, title, subtitle, text, 4000, on_save, multiline=True)
 
 
 class MetricsManager(Screen):

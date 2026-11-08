@@ -731,20 +731,6 @@ class TestCyclingBuilderGui(tg.GuiCase):
         back = parse_zwo(next(exp.folder().glob("*.zwo")))
         self.assertEqual(len(back.steps), len(ed.steps))
 
-    def test_edit_existing_workout_by_steps(self):
-        self.pick("Construtor de treinos")
-        first = self.screen().list.items[1]
-        self.select(first.label)
-        self.press(key.P)                                          # P: editor por passos
-        ed = self.screen()
-        self.assertIsInstance(ed, ss.WorkoutEditor)
-        n = len(ed.steps)
-        self.select("2.")
-        self.press(key.DELETE)
-        self.press(key.ENTER)                          # confirma na janela
-        self.pick("Guardar")
-        self.assertEqual(len(self.app.db.workout_steps(ed.workout_id)), n - 1)
-
 
 class TestStatsNewViews(tg.GuiCase):
     def test_fitness_zones_and_eftp(self):
@@ -800,6 +786,7 @@ class TestRecoveryGui(tg.GuiCase):
             self.assertGreater(ride2.engine.state.t_s, t_before)
             app2._on_key_press(key.F10, 0)
             app2._on_key_press(key.ENTER, 0)
+            app2._on_key_press(key.ENTER, 0)           # «Guardar e terminar» (etiquetas)
             self.assertIsInstance(app2.current, app_mod.SummaryScreen)
         finally:
             app2.shutdown()

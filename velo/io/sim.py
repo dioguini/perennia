@@ -15,7 +15,12 @@ from velo.core.ride import Reading
 
 class SimulatedTrainer:
     """Ciclista virtual. Em modo ERG segue o alvo; em simulação, aguenta
-    uma potência de base e sobe um pouco quando a estrada inclina."""
+    uma potência de base e sobe um pouco quando a estrada inclina.
+
+    Como um rolo a sério, só dá o que um rolo dá: potência, cadência (e o
+    equilíbrio e a suavidade dos pedais). **Não dá frequência cardíaca** — essa
+    vem da banda cardíaca (`SimulatedHeartStrap`); `with_hr=True` só serve
+    para os testes que querem tudo num aparelho."""
 
     name = "SEM HARDWARE - Trainer"
     device_id = "sim:trainer"
@@ -25,7 +30,7 @@ class SimulatedTrainer:
     supports_spindown = True
 
     def __init__(self, base_power: int = 180, seed: int | None = 7,
-                 with_hr: bool = True, with_balance: bool = True):
+                 with_hr: bool = False, with_balance: bool = True):
         self.base_power = base_power
         self.with_hr = with_hr
         self.with_balance = with_balance
@@ -180,6 +185,53 @@ class SimulatedHeartStrap:
 
     def reading(self) -> Reading:
         return Reading(hr_bpm=int(round(self._hr + self._rng.uniform(-0.6, 0.6))))
+
+
+class SimulatedTreadmill:
+    """Passadeira simulada («SEM HARDWARE - PASSADEIRA»): recebe a velocidade e a
+    inclinação (como uma passadeira FTMS), chega lá aos poucos e devolve o que
+    uma passadeira dá — velocidade, inclinação e cadência dos passos. **Não dá
+    FC** (vem da banda cardíaca)."""
+
+    name = "SEM HARDWARE - PASSADEIRA"
+    device_id = "sim:treadmill"
+    profiles = ("ftms-treadmill",)
+    connected = True
+    ACCEL_KMH_S = 0.8                 # km/h por segundo
+    INCLINE_PCT_S = 0.5               # % por segundo
+
+    def __init__(self, max_kmh: float = 20.0, max_incline: float = 15.0,
+                 seed: int | None = 5):
+        self.max_kmh = float(max_kmh)
+        self.max_incline = float(max_incline)
+        self._rng = random.Random(seed)
+        self._target_kmh = 0.0
+        self._target_incline = 0.0
+        self.speed_kmh = 0.0
+        self.incline_pct = 0.0
+        self.commands: list[tuple[str, float]] = []
+
+    def set_speed(self, kmh: float) -> None:
+        self._target_kmh = max(0.0, min(self.max_kmh, float(kmh)))
+        self.commands.append(("speed", self._target_kmh))
+
+    def set_incline(self, pct: float) -> None:
+        self._target_incline = max(0.0, min(self.max_incline, float(pct)))
+        self.commands.append(("incline", self._target_incline))
+
+    def tick(self, dt: float) -> None:
+        step = self.ACCEL_KMH_S * dt
+        self.speed_kmh += max(-step, min(step, self._target_kmh - self.speed_kmh))
+        istep = self.INCLINE_PCT_S * dt
+        self.incline_pct += max(-istep, min(istep, self._target_incline - self.incline_pct))
+
+    def reading(self) -> Reading:
+        cad = 0
+        if self.speed_kmh > 3.0:
+            cad = int(round(140 + 3.2 * (self.speed_kmh - 8.0) + self._rng.uniform(-1.5, 1.5)))
+        return Reading(speed_mps=self.speed_kmh / 3.6, cadence_rpm=cad)
+
+    def disconnect(self) -> None: ...
 
 
 class ScriptedSource:

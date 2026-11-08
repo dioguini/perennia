@@ -85,7 +85,16 @@ def main() -> int:
     parser.add_argument("--importar", nargs=2, default=None, metavar=("TIPO", "FICHEIRO"),
                         help="importa um ficheiro e sai: hrv4training (.csv), analises "
                              "(.csv/.xlsx), trainingpeaks (.csv de atividades) ou atividade "
-                             "(um .fit ou .tcx, guardado no desporto respetivo)")
+                             "(um .fit ou .tcx, guardado no desporto respetivo) ou csv (artigos, "
+                             "exercícios, grupos musculares… — descobre o conjunto pelo "
+                             "cabeçalho)")
+    parser.add_argument("--csv-modelo", default=None, metavar="CONJUNTO",
+                        help="grava o modelo .csv de um conjunto (artigos, exercicios, grupos, "
+                             "disciplinas, testes, material) e sai")
+    parser.add_argument("--csv-exportar", default=None, metavar="CONJUNTO",
+                        help="exporta um conjunto para .csv e sai")
+    parser.add_argument("--destino", default=None,
+                        help="pasta onde gravar os .csv (por omissão, Transferências)")
     args = parser.parse_args()
 
     if args.self_test:
@@ -94,6 +103,8 @@ def main() -> int:
         return backup_cli(args)
     if args.importar:
         return import_cli(args)
+    if args.csv_modelo or args.csv_exportar:
+        return csv_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -124,6 +135,26 @@ def main() -> int:
     return 0
 
 
+def csv_cli(args) -> int:
+    """O modelo ou a exportação de um conjunto em .csv, sem abrir a janela."""
+    from velo.core import csv_sync
+    from velo.core.db import Database
+    from velo.core.workout_download import downloads_dir
+    from velo.datadir import data_dir_for, database_path
+    key = args.csv_modelo or args.csv_exportar
+    if key not in csv_sync.DATASETS:
+        print("Conjunto desconhecido: " + key + "\nExistem: " + ", ".join(csv_sync.DATASETS),
+              file=sys.stderr)
+        return 2
+    db = Database(database_path(data_dir_for(args.data_dir)))
+    try:
+        print(csv_sync.write(db, key, args.destino or downloads_dir(),
+                             what="template" if args.csv_modelo else "export"))
+    finally:
+        db.close()
+    return 0
+
+
 def import_cli(args) -> int:
     """Importações pela linha de comandos, sem abrir a janela."""
     from velo.core import file_import
@@ -132,7 +163,7 @@ def import_cli(args) -> int:
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
-              "trainingpeaks, atividade", file=sys.stderr)
+              "trainingpeaks, atividade, csv", file=sys.stderr)
         return 2
     if not Path(path).is_file():
         print(f"Erro: não encontro {path}", file=sys.stderr)

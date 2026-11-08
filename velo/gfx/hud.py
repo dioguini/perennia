@@ -98,6 +98,85 @@ def _hit(r, x, y) -> bool:
     return r.x <= x <= r.x + r.width and r.y <= y <= r.y + r.height
 
 
+class FinishDialog:
+    """O diálogo «Terminar a sessão?» (Sim / Não / Terminar sem guardar). É o do
+    ciclismo e também o da corrida e do remo: mesmo aspeto, mesmas teclas
+    (Enter, S ou Y terminam · Esc ou N voltam · D termina sem guardar)."""
+
+    def __init__(self):
+        self.batch = pyglet.graphics.Batch()           # por cima de tudo
+        self.visible = False
+        tb = self.batch
+        self.shade = _rect(tb, _theme.P.shade, 0)
+        self.box = _rect(tb, _theme.P.panel, 0)
+        self.title = make_label("", font_size=22, bold=True, color=TEXT,
+                                anchor_x="center", anchor_y="center", batch=tb)
+        self.sub = make_label("", font_size=13, color=DIM, anchor_x="center",
+                              anchor_y="center", batch=tb)
+        self.yes = _rect(tb, _theme.P.danger, 0)
+        self.no = _rect(tb, _theme.P.panel2, 0)
+        self.discard = _rect(tb, _theme.P.danger_soft, 0)
+        self.discard_label = make_label("", font_size=12, bold=True, color=BAD,
+                                        anchor_x="center", anchor_y="center", batch=tb)
+        self.yes_label = make_label("", font_size=14, bold=True, color=ON_DARK,
+                                    anchor_x="center", anchor_y="center", batch=tb)
+        self.no_label = make_label("", font_size=14, bold=True, color=TEXT,
+                                   anchor_x="center", anchor_y="center", batch=tb)
+
+    def layout(self, w: int, h: int) -> None:
+        self.shade.x, self.shade.y = 0, 0
+        self.shade.width, self.shade.height = w, h
+        bw, bh = 560, 240
+        bx, by = (w - bw) // 2, (h - bh) // 2
+        self.box.x, self.box.y = bx, by
+        self.box.width, self.box.height = bw, bh
+        self.title.x, self.title.y = w // 2, by + bh - 42
+        self.sub.x, self.sub.y = w // 2, by + bh - 80
+        for r, x0 in ((self.yes, bx + 30), (self.no, bx + bw // 2 + 10)):
+            r.x, r.y, r.width, r.height = x0, by + 76, bw // 2 - 40, 50
+        self.yes_label.x = bx + 30 + (bw // 2 - 40) // 2
+        self.no_label.x = bx + bw // 2 + 10 + (bw // 2 - 40) // 2
+        self.yes_label.y = self.no_label.y = by + 101
+        d = self.discard
+        d.x, d.y, d.width, d.height = bx + 30, by + 20, bw - 60, 40
+        self.discard_label.x, self.discard_label.y = w // 2, by + 40
+
+    def show(self, title: str | None = None, sub: str | None = None) -> None:
+        self.visible = True
+        self.shade.opacity = _theme.P.shade_alpha
+        self.box.opacity = 245
+        self.yes.opacity = self.no.opacity = 255
+        self.discard.opacity = 255
+        self.discard_label.text = tr("Terminar sem guardar (D)", "Finish without saving (D)")
+        self.title.text = title or t("confirm.title")
+        self.sub.text = sub or t("confirm.sub")
+        self.yes_label.text = t("confirm.yes")
+        self.no_label.text = t("confirm.no")
+
+    def hide(self) -> None:
+        self.visible = False
+        for r in (self.shade, self.box, self.yes, self.no, self.discard):
+            r.opacity = 0
+        for lab in (self.title, self.sub, self.yes_label, self.no_label,
+                    self.discard_label):
+            lab.text = ""
+
+    def hit(self, x: float, y: float) -> str | None:
+        if not self.visible:
+            return None
+        if _hit(self.yes, x, y):
+            return "yes"
+        if _hit(self.no, x, y):
+            return "no"
+        if _hit(self.discard, x, y):
+            return "discard"
+        return None
+
+    def draw(self) -> None:
+        if self.visible:
+            self.batch.draw()
+
+
 @dataclass
 class Toast:
     text: str
@@ -148,7 +227,7 @@ class Hud:
         self.lookahead = int(db.get("workout_lookahead", 2))
 
         self.batch = pyglet.graphics.Batch()
-        self.top_batch = pyglet.graphics.Batch()      # o diálogo de confirmação, por cima
+        self.finish_dialog = FinishDialog()           # o diálogo de confirmação, por cima
         self.toasts: list[Toast] = []
         self.sign: Sign | None = None
         self.climb: dict | None = None
@@ -156,7 +235,6 @@ class Hud:
         self.workout_info: dict | None = None
         self.paused = False
         self.status = "waiting"
-        self.confirm_visible = False
         self.has_workout = False
         self.brief = None                 # velo.core.objectives.Brief do treino, se houver
         self.lap_flash_at: float | None = None
@@ -319,24 +397,13 @@ class Hud:
         self._paused_label = make_label("", font_size=22, bold=True, color=ACCENT,
                                         anchor_x="center", anchor_y="center", batch=b)
 
-        # ---- diálogo «tem a certeza?»
-        tb = self.top_batch
-        self._confirm_shade = _rect(tb, _theme.P.shade, 0)
-        self._confirm_box = _rect(tb, _theme.P.panel, 0)
-        self._confirm_title = make_label("", font_size=22, bold=True, color=TEXT,
-                                         anchor_x="center", anchor_y="center", batch=tb)
-        self._confirm_sub = make_label("", font_size=13, color=DIM, anchor_x="center",
-                                       anchor_y="center", batch=tb)
-        self._confirm_yes = _rect(tb, _theme.P.danger, 0)
-        self._confirm_no = _rect(tb, _theme.P.panel2, 0)
-        self._confirm_discard = _rect(tb, _theme.P.danger_soft, 0)
-        self._confirm_discard_label = make_label("", font_size=12, bold=True, color=BAD,
-                                                 anchor_x="center", anchor_y="center",
-                                                 batch=tb)
-        self._confirm_yes_label = make_label("", font_size=14, bold=True, color=ON_DARK,
-                                             anchor_x="center", anchor_y="center", batch=tb)
-        self._confirm_no_label = make_label("", font_size=14, bold=True, color=TEXT,
-                                            anchor_x="center", anchor_y="center", batch=tb)
+        # ---- diálogo «tem a certeza?» (partilhado com a corrida e o remo)
+        d = self.finish_dialog
+        self._confirm_shade, self._confirm_box = d.shade, d.box
+        self._confirm_title, self._confirm_sub = d.title, d.sub
+        self._confirm_yes, self._confirm_no, self._confirm_discard = d.yes, d.no, d.discard
+        self._confirm_discard_label = d.discard_label
+        self._confirm_yes_label, self._confirm_no_label = d.yes_label, d.no_label
 
         # ---- classificação ao vivo
         from velo.ui.widgets import BoardPanel     # import tardio: widgets usa compat
@@ -531,22 +598,7 @@ class Hud:
             self._layout_arranged(w, h, top)
 
         # ---------------- diálogo
-        self._confirm_shade.x, self._confirm_shade.y = 0, 0
-        self._confirm_shade.width, self._confirm_shade.height = w, h
-        bw, bh = 560, 240
-        bx, by = (w - bw) // 2, (h - bh) // 2
-        self._confirm_box.x, self._confirm_box.y = bx, by
-        self._confirm_box.width, self._confirm_box.height = bw, bh
-        self._confirm_title.x, self._confirm_title.y = w // 2, by + bh - 42
-        self._confirm_sub.x, self._confirm_sub.y = w // 2, by + bh - 80
-        for r, x0 in ((self._confirm_yes, bx + 30), (self._confirm_no, bx + bw // 2 + 10)):
-            r.x, r.y, r.width, r.height = x0, by + 76, bw // 2 - 40, 50
-        self._confirm_yes_label.x = bx + 30 + (bw // 2 - 40) // 2
-        self._confirm_no_label.x = bx + bw // 2 + 10 + (bw // 2 - 40) // 2
-        self._confirm_yes_label.y = self._confirm_no_label.y = by + 101
-        d = self._confirm_discard
-        d.x, d.y, d.width, d.height = bx + 30, by + 20, bw - 60, 40
-        self._confirm_discard_label.x, self._confirm_discard_label.y = w // 2, by + 40
+        self.finish_dialog.layout(w, h)
 
     def _layout_arranged(self, w: int, h: int, top: float) -> None:
         """Cada painel no retângulo que lhe deste (velo.core.screen_layout).
@@ -868,22 +920,13 @@ class Hud:
             self.has_workout = workout
             self.layout(self._w, self._h)
 
-        self._clock.text = hms(state.t_s)
-        lap_t = getattr(engine, "lap_elapsed_s", None)
-        self._clock_cap.text = (tr("TEMPO TOTAL · volta {t}", "TOTAL TIME · lap {t}",
-                                   t=hms(lap_t)) if lap_t is not None
-                                else tr("TEMPO TOTAL", "TOTAL TIME"))
-        dist_v, dist_u = km(state.dist_m, self.units)
-        if state.route is not None:
-            pos_v, _ = km(state.pos_m, self.units)
-            total_v, _ = km(state.route.total_m, self.units)
-            self._dist.text = f"{pos_v:.2f} / {total_v:.2f} {dist_u}"
-            self._loops_label.text = (
-                f"{t('metric.loops')}: {state.loops} · {dist_v:.1f} {dist_u}"
-                if state.loops else "")
-        else:
-            self._dist.text = f"{dist_v:.2f} {dist_u}"
-            self._loops_label.text = ""
+        # o tempo da sessão e a distância já não vêm no topo do ecrã (são métricas
+        # das caixas); só as voltas da rota, quando as há
+        self._clock.text = ""
+        self._clock_cap.text = ""
+        self._dist.text = ""
+        loops = getattr(state, "loops", 0) if state.route is not None else 0
+        self._loops_label.text = f"{t('metric.loops')}: {loops}" if loops else ""
 
         erg = workout and getattr(engine.workout, "erg_enabled", False)
         pct = getattr(state, "intensity", 1.0) if erg else getattr(state, "difficulty", 1.0)
@@ -1466,37 +1509,18 @@ class Hud:
 
     # ============================================================ diálogo
 
+    @property
+    def confirm_visible(self) -> bool:
+        return self.finish_dialog.visible
+
     def show_confirm(self) -> None:
-        self.confirm_visible = True
-        self._confirm_shade.opacity = _theme.P.shade_alpha
-        self._confirm_box.opacity = 245
-        self._confirm_yes.opacity = self._confirm_no.opacity = 255
-        self._confirm_discard.opacity = 255
-        self._confirm_discard_label.text = tr("Terminar sem guardar (D)", "Finish without saving (D)")
-        self._confirm_title.text = t("confirm.title")
-        self._confirm_sub.text = t("confirm.sub")
-        self._confirm_yes_label.text = t("confirm.yes")
-        self._confirm_no_label.text = t("confirm.no")
+        self.finish_dialog.show()
 
     def hide_confirm(self) -> None:
-        self.confirm_visible = False
-        for r in (self._confirm_shade, self._confirm_box, self._confirm_yes,
-                  self._confirm_no, self._confirm_discard):
-            r.opacity = 0
-        for lab in (self._confirm_title, self._confirm_sub, self._confirm_yes_label,
-                    self._confirm_no_label, self._confirm_discard_label):
-            lab.text = ""
+        self.finish_dialog.hide()
 
     def confirm_hit(self, x: float, y: float) -> str | None:
-        if not self.confirm_visible:
-            return None
-        if _hit(self._confirm_yes, x, y):
-            return "yes"
-        if _hit(self._confirm_no, x, y):
-            return "no"
-        if _hit(self._confirm_discard, x, y):
-            return "discard"
-        return None
+        return self.finish_dialog.hit(x, y)
 
     # ============================================================== botões
 
@@ -1523,6 +1547,5 @@ class Hud:
         self.window.view = Mat4()
         self.batch.draw()
         self.board_panel.draw()
-        if self.confirm_visible:
-            self.top_batch.draw()
+        self.finish_dialog.draw()
         glEnable(GL_DEPTH_TEST)

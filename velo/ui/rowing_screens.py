@@ -16,6 +16,8 @@ from velo.io import rower as rower_io
 from velo.io.rower import pace_text
 from velo.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from velo.ui.challenge_screens import train_items
+from velo.ui.session_flow import FinishFlow
+from velo.ui.session_radar import RadarSide
 from velo.ui.session_panels import OFF, ArrangedPanels
 from velo.ui.sport_screens import EditScreen, LiveEditPopup
 from velo.ui.brief import BriefScreen as _BriefBase
@@ -171,10 +173,6 @@ class RowingMenu(SportHub):
         from velo.ui.session_setup import ask_start
         ask_start(self.app, "rowing", self)
 
-    def items_builder(self) -> list[Item]:
-        from velo.ui import builder_screens as bs
-        return bs.builder_items(self.app, "rowing")
-
     def items_library(self) -> list[Item]:
         a = self.app
         from velo.ui.workout_import import import_item
@@ -183,7 +181,8 @@ class RowingMenu(SportHub):
             dur = " + ".join(x for x in (hms(w["total_s"]) if w["total_s"] else "",
                                          _m(w["total_m"]) if w["total_m"] else "") if x)
             out.append(Item(w["name"], value=dur, detail=w["description"] or "",
-                            action=lambda wid=w["id"]: a.push(RowWorkoutPreview(a, wid))))
+                            action=lambda wid=w["id"]: a.push(RowWorkoutPreview(a, wid)),
+                            data=("row_workout", w["id"])))
         return out
 
     def items_history(self) -> list[Item]:
@@ -289,7 +288,7 @@ def start_session(app, replace: bool = False, **kw) -> None:
 # ================================================================== sessão
 
 
-class RowingSessionScreen(ArrangedPanels, Screen):
+class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
     KEY_SCOPE = "rowing"
     AGENT = False
     HAS_BOARD = True
@@ -310,7 +309,7 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         self.start_countdown(resume)          # 15 s; depois conta a partir da 1.ª remada
         self.page = 0
         self.session = self.engine           # o fecho da aplicação trata dela
-        self.confirming = False
+        self.init_finish()                    # o diálogo de terminar, como no ciclismo
         self.toast = ""
         self._toast_until = 0.0
         self.names = field_names(a.db)
@@ -402,6 +401,7 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         else:
             self.laps_panel.layout(OFF, OFF + 400, 200, OFF)
         self.arr_layout_extras()
+        self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -440,10 +440,11 @@ class RowingSessionScreen(ArrangedPanels, Screen):
     def footer(self) -> str:
         eng = getattr(self, "engine", None)
         if eng is not None and not eng.manual_laps:
-            return tr("+/− resistência · V outra página · P pausa · Esc terminar",
-                      "+/− resistance · V other page · P pause · Esc finish")
-        return tr("+/− resistência · L volta · V outra página · P pausa · Esc terminar",
-                  "+/− resistance · L lap · V other page · P pause · Esc finish")
+            return tr("+/− resistência · V outra página · P pausa · F10 terminar e guardar",
+                      "+/− resistance · V other page · P pause · F10 stop and save")
+        return tr("+/− resistência · L volta · V outra página · P pausa · "
+                  "F10 terminar e guardar", "+/− resistance · L lap · V other page · "
+                  "P pause · F10 stop and save")
 
     # ------------------------------------------------------------- quadro
 
@@ -463,15 +464,6 @@ class RowingSessionScreen(ArrangedPanels, Screen):
 
     def enter(self) -> None:
         e = self.engine
-        if self.confirming:
-            self.list.y = self.app.window.height - 330
-            self.chrome.set(tr("Terminar a sessão?", "Finish the session?"),
-                            f"{_m(e.distance_m)} · {hms(e.t)}", self.footer())
-            self.list.set_items([Item(t("str.confirm_no"), action=self._cancel),
-                                 Item(t("str.confirm_yes"), action=self._finish),
-                                 Item(tr("Terminar sem guardar", "Finish without saving"),
-                                      action=self._discard)])
-            return
         self.list.y = -1000
         self.list.set_items([])
         self.chrome.set(e.title, f"FTP {e.ftp} W · {getattr(e.rower, 'name', '')}",
@@ -612,11 +604,8 @@ class RowingSessionScreen(ArrangedPanels, Screen):
     # ------------------------------------------------------------- teclas
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.confirming:
-            if symbol == key.ESCAPE:
-                self._cancel()
-                return True
-            return super().on_key(symbol, modifiers)
+        if self.confirming:                       # o diálogo de terminar tem as teclas todas
+            return self.finish_key(symbol)
         e = self.engine
         if symbol in (key.PLUS, key.EQUAL, key.NUM_ADD, getattr(key, "PAGEUP", -1)):
             e.adjust_resistance(+1)
@@ -638,22 +627,31 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         if symbol == key.P:
             e.toggle_pause()
             return True
-        if symbol in (key.ESCAPE, key.F10):
-            self.confirming = True
-            self.enter()
-            return True
+        if symbol in (key.ESCAPE, key.F10):        # Esc pausa · F10 pergunta (como no ciclismo)
+            return self.finish_key(symbol)
         return True
 
     def on_mouse(self, x: int, y: int) -> bool:
-        if self.back_button is not None and self.back_button.hit(x, y):
-            self.confirming = True
-            self.enter()
-            return True
-        return self.list.on_mouse_press(x, y)
+        handled = self.finish_mouse(x, y)
+        return handled if handled is not None else self.list.on_mouse_press(x, y)
 
-    def _cancel(self) -> None:
-        self.confirming = False
-        self.enter()
+    def _tag_context(self):
+        e = self.engine
+        if not e.started:
+            return None
+        s = e.summary()
+        return ("rowing", e.workout_id, False,
+                {"ftp_w": s.get("ftp_w"), "np_w": s.get("np_w"),
+                 "avg_power_w": s.get("avg_power_w"), "load": s.get("load"),
+                 "moving_s": s.get("moving_s"), "elapsed_s": s.get("elapsed_s")})
+
+    def _flow_paused(self) -> bool:
+        return bool(self.engine.manual_pause)
+
+    def _flow_set_paused(self, paused: bool) -> None:
+        e = self.engine
+        if e.started and bool(e.manual_pause) != paused:
+            e.toggle_pause()
 
     def _discard(self) -> None:
         self.engine.discard()
@@ -681,9 +679,6 @@ class RowingSessionScreen(ArrangedPanels, Screen):
 
     def draw(self) -> None:
         self.chrome.draw()
-        if self.confirming:
-            self.list.draw()
-            return
         self.batch.draw()
         if self.board_panel is not None and self.engine.game is not None:
             self.board_panel.draw()
@@ -691,6 +686,7 @@ class RowingSessionScreen(ArrangedPanels, Screen):
         self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
+        self.draw_finish()
 
 
 def _zone_ink(z: int):
@@ -709,7 +705,7 @@ def _kind(k: str) -> str:
 # ================================================================== resumo
 
 
-class RowSummaryScreen(Screen):
+class RowSummaryScreen(RadarSide, Screen):
     def __init__(self, app, result: dict):
         super().__init__(app)
         self.result = result
@@ -754,13 +750,17 @@ class RowSummaryScreen(Screen):
                 f"{_m(lp.distance_m)} · {pace_text(lp.avg_pace_s)} /500 m"
                 + (f" · {lp.avg_power_w:.0f} W" if lp.avg_power_w else "")
                 + (f" · {lp.avg_spm:.0f} spm" if lp.avg_spm else ""))
-        if r.get("fit_path"):
-            add(".fit", r.get("name") or "", str(r["fit_path"]))
-        items.append(Item(tr("Voltar ao remo", "Back to rowing"), action=self.app.pop))
-        self.chrome.set(r.get("title") or t("home.rowing"), r.get("name") or "", self.footer())
+        # o título e o rodapé são os do resumo do ciclismo
+        fit = r.get("fit_path")
+        sub = t("summary.saved_fit", path=fit) if fit else \
+            f"{t('common.error')}: o .fit não foi escrito"
+        if r.get("name"):
+            sub = f"{r['name']} · {sub}"
+        self.chrome.set(t("summary.title"), sub, self.footer())
         fb_item = _feedback().summary_item(self.app, "row", self.result.get("session_id"))
         if fb_item is not None:
             items.insert(0, fb_item)
+        items[1:1] = self.radar_attach("rowing", self.result.get("session_id"))
         self.list.set_items(items, keep_index=True)
         _feedback().maybe_ask(self, "row", self.result.get("session_id"))
 
@@ -814,12 +814,6 @@ class RowWorkoutPreview(_BriefBase):
     def start(self) -> None:
         start_session(self.app, replace=True, workout_id=self.wid)
 
-    def extra_actions(self) -> list[Item]:
-        a = self.app
-        from velo.ui.builder_screens import BlockBuilder
-        return [Item(tr("Editar", "Edit"), action=lambda: a.push(RowWorkoutEditor(a, self.wid))),
-                Item(tr("Abrir no construtor", "Open in the builder"),
-                     action=lambda: a.push(BlockBuilder(a, "rowing", self.wid)))]
 
 
 class RowWorkoutEditor(EditScreen):

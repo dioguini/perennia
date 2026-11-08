@@ -142,12 +142,13 @@ COMPONENTS: tuple[Component, ...] = (
               "sessions' copies)",
               tables=("workouts", "workout_steps", "row_workouts", "row_workout_steps",
                       "endurance_workouts", "endurance_steps", "workout_meta",
-                      "workout_goals", "lap_plans")),
+                      "workout_goals", "lap_plans", "workout_types")),
     Component("ginasio", "Ginásio e exercícios", "Gym and exercises",
               "exercícios, treinos de força e as suas estruturas",
               "exercises, strength workouts and their structures",
               tables=("exercises", "exercise_equipment", "exercise_modalities",
-                      "strength_workouts", "strength_workout_items", "strength_structures")),
+                      "strength_workouts", "strength_workout_items", "strength_structures",
+                      "muscle_groups", "muscle_subgroups", "gym_disciplines")),
     Component("inventario", "Inventário de artigos", "Equipment inventory",
               "bicicletas, sapatilhas, peças, o seu uso e a data e o preço de compra",
               "bikes, shoes, parts, their use and purchase date and price",
@@ -165,7 +166,7 @@ COMPONENTS: tuple[Component, ...] = (
                       "endurance_sessions", "endurance_samples", "endurance_laps",
                       "strength_sessions", "strength_sets", "strength_laps", "strength_hr",
                       "session_workouts", "segment_efforts", "strava_efforts",
-                      "synced_activities"),
+                      "synced_activities", "session_tags", "tag_catalog"),
               folders=("rides", "rowing", "endurance", "strength")),
     Component("analises", "Análises e feedback", "Analyses and feedback",
               "o feedback de cada sessão e a sua análise, picos e curvas de potência",
@@ -216,7 +217,7 @@ def folder_of(c: Component) -> str:
 ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "games",
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
-                  "strength_builder", "workout_meta")
+                  "muscles", "strength_builder", "tags", "workout_meta")
 
 
 def prepare(db) -> None:

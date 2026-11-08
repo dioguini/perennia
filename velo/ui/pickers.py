@@ -122,6 +122,56 @@ class ChoicePopup(PopupMixin, Screen):
         return super().search_key(symbol, modifiers)
 
 
+class MultiChoicePopup(PopupMixin, Screen):
+    """Várias opções numa lista com pesquisa: Enter marca/desmarca, OK aplica (Esc cancela).
+    Para as modalidades e o material de um exercício."""
+
+    W, H = 640, 580
+    SEARCH_ENTER_PICKS = True
+
+    def __init__(self, app, title: str, options: list[tuple[str, str]], selected: list[str],
+                 on_done, min_one: bool = False):
+        super().__init__(app)
+        self.title_text = title
+        self.options = list(options)
+        self.selected = list(selected)
+        self.on_done = on_done
+        self.min_one = min_one
+        self.back_button = None
+        self._init_popup()
+        self.search_focus(True)
+
+    def enter(self) -> None:
+        items = [Item(("✓ " if k in self.selected else "    ") + label, data=k,
+                      action=lambda k=k: self._toggle(k))
+                 for k, label in self.options]
+        items.append(Item(tr("Cancelar", "Cancel"), button=True, action=self.app.pop))
+        items.append(Item("OK", button=True, primary=True, action=self._ok))
+        self.chrome.set(self.title_text,
+                        tr("Escreve para filtrar · Enter marca ou desmarca · OK aplica",
+                           "Type to filter · Enter ticks or unticks · OK applies"), "")
+        self.list.set_items(items, keep_index=True)
+
+    def _toggle(self, k: str) -> None:
+        if k in self.selected:
+            if self.min_one and len(self.selected) == 1:
+                return
+            self.selected.remove(k)
+        else:
+            self.selected.append(k)
+        self.enter()
+
+    def _ok(self) -> None:
+        self.app.pop()
+        self.on_done(list(self.selected))
+
+    def search_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol == key.ESCAPE and not self.search_box.text:
+            self.app.pop()
+            return True
+        return super().search_key(symbol, modifiers)
+
+
 # ================================================================== datas
 
 

@@ -221,10 +221,10 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Onze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
+Doze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
 (**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e a
-**Saúde**; na segunda, ao centro, **Rotas**, **Segmentos**, **Estatísticas
-gerais**, **Inventário de artigos** e **Exercícios**. O Calendário deixou
+**Saúde**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
+gerais**, **Inventário de artigos**, **Exercícios** e **Longevidade**. O Calendário deixou
 de ser um cartão: **está no próprio ecrã inicial** (ver abaixo), e os
 **Backups** passaram para a barra do topo. Um título que não caiba numa linha parte-se em
 duas (a letra nunca fica abaixo de 12 px). O título fica sempre por baixo do ícone, com a
@@ -655,9 +655,11 @@ Em cima ficam os números de hoje. ←/→ muda o período: 30, 60, 90, 180 ou
 
 ### Os menus de cada desporto
 
-Ciclismo, Remo, Corrida, Natação e Ginásio têm o mesmo menu, com cinco
-separadores em cima: **Treinar**, **Construtor de treinos**, **Lista de
-treinos**, **Histórico** e **Estatísticas**. O separador **Treinar** começa
+Ciclismo, Remo, Corrida, Natação e Ginásio têm o mesmo menu, com quatro
+separadores em cima: **Treinar**, **Lista de treinos**, **Histórico** e
+**Estatísticas**. (O separador «Construtor de treinos» deixou de existir: o
+construtor abre-se com **+ Novo treino**, em baixo na lista, e com **Editar**
+na ficha de um treino.) O separador **Treinar** começa
 sempre pela mesma ordem: **Sessão de treino** · **Desafios**
 (a natação: **Desafios** · **Testes**):
 
@@ -687,12 +689,21 @@ inicial.
 
 O construtor desenha o treino como um gráfico: cada bloco é uma barra, a
 largura é a duração e a altura é o esforço. É **igual no ciclismo, no remo,
-na corrida e na natação** (o ginásio tem o seu): o separador Construtor de
-treinos lista os treinos da mesma maneira (duração, definição e tipo,
-descrição) e tem **+ Novo treino** em baixo, à direita.
+na corrida e na natação** (o ginásio tem o seu): a **Lista de treinos** mostra
+os treinos da mesma maneira (duração, definição e tipo, descrição) e tem
+**+ Novo treino** em baixo, à direita (Del apaga o escolhido). Enter num treino abre a
+**ficha**, com letra maior e três ações: **Editar** (abre o construtor),
+**Exportar** e **Configurar sessão de treino**. Os objetivos que a ficha mostra
+**são os do próprio treino** — mudam-se no construtor, ao editar o treino (já não há
+«Editar objetivos» nem objetivos «misturados»).
 
-- **Em cima**, o **Nome do treino** e, na linha de baixo, o **Objetivo do
-  treino** (os dois começam no mesmo sítio, à esquerda). O objetivo — do
+- **Em cima**, o **Tipo de treino** (uma lista: recuperação, resistência
+  aeróbia, tempo, limiar, VO2máx, anaeróbio, trabalho, aquecimento de prova,
+  prova, teste, técnica, força, mobilidade — ←/→ ou Enter; «Automático» sugere-o
+  pelo esforço dos blocos), por baixo o **Nome do treino** e o **Objetivo do
+  treino** (os três começam no mesmo sítio, à esquerda). O tipo também **etiqueta
+  o .fit** (ver «Etiquetas e tipo de sessão»). No subtítulo, o que o treino
+  **acrescentaria ao índice de longevidade** (muda ao mexer nos blocos). O objetivo — do
   treino e de cada bloco — escreve-se **numa janela** (Enter na linha, ou
   começa a escrever): Enter guarda, Esc cancela. Por baixo, a paleta e o
   gráfico; **por baixo do gráfico**, o bloco escolhido, com a descrição de
@@ -1287,6 +1298,140 @@ teste** cria os teus (nome, unidade, se é melhor mais alto ou mais baixo,
 duração e instruções); os que vêm com a aplicação também se editam ou
 desativam.
 
+### Terminar uma sessão (ciclismo, corrida e remo)
+
+O **ciclismo é a base** e a corrida e o remo fazem agora **exatamente o mesmo**:
+
+- **P** pausa e retoma. **Esc não termina**: pausa e diz «P retomar · F10 terminar
+  e guardar». **F10** (ou o botão de voltar) abre o diálogo **«Terminar a
+  sessão?»** — o mesmo do ciclismo, com **Sim, terminar** · **Não, continuar** ·
+  **Terminar sem guardar (D)**. Enquanto o diálogo está aberto a sessão fica parada.
+- No diálogo: **Enter, S ou Y** terminam · **Esc ou N** voltam (e retomam, se foi o
+  diálogo que parou a sessão) · **D** termina sem guardar (nada de .fit nem estatísticas).
+- **Sim, terminar** abre a **janela das etiquetas** (ver abaixo); **Enter, Enter** termina
+  com as etiquetas sugeridas. A página de **resumo** é igual nos três desportos
+  (título «Sessão concluída», onde ficou o .fit, o feedback, o **radar do que treinou** e o
+  efeito no índice de longevidade).
+- A sessão de ciclismo já não mostra a **distância** (em cima, à esquerda) nem o **tempo
+  de sessão** (em cima, ao centro) no cabeçalho — estão nas métricas, se as quiseres.
+
+**Simuladores** (Dispositivos): cada um dá **só os dados do seu aparelho**.
+**SEM HARDWARE - Trainer** dá potência, cadência e velocidade, **sem FC**;
+**SEM HARDWARE - Remo**, a remada; **SEM HARDWARE - PASSADEIRA** (novo), a velocidade
+e a distância da corrida (a inclinação que o treino ou a rota pedem fica registada na
+passadeira); a FC vem **só** da **SEM HARDWARE - Banda cardíaca**.
+
+### Etiquetas e tipo de sessão
+
+Cada sessão (e o seu `.fit`) leva três géneros de etiquetas:
+
+- **Tipo de sessão** — automático: `Perennia` + onde foi (`Indoor Cycling`, `Indoor Rowing`,
+  `Indoor Running`, `Pool Swimming`). Uma sessão **que segue um .gpx** também leva
+  `Virtual Cycling` / `Virtual Running` e o `.fit` vai com o subtipo **virtual** (como o
+  Zwift e o MyWhoosh). **Correr na passadeira não é virtual**, a não ser que sigas um
+  .gpx; uma sessão sem rota é «indoor» à secura.
+- **Tipo de treino** — o esforço: recuperação, resistência aeróbia, tempo, limiar,
+  VO2máx, anaeróbio / sprint, trabalho, aquecimento de prova, prova, teste, técnica,
+  força, mobilidade. Um treino traz o seu (escolhido no construtor); **numa sessão livre
+  sugere-se pelo esforço** (IF ≈ potência normalizada / FTP, ou √(carga / 100 h) quando
+  não há potência: < 0,55 recuperação · < 0,76 resistência · < 0,88 tempo · < 1,0
+  limiar · < 1,15 VO2máx · mais, anaeróbio; muito variável e forte = trabalho / VO2máx).
+  Os tipos servem também a análises e à IA, mais tarde.
+- **Etiquetas livres** — as que escreveres.
+
+Ao terminar, a **janela «Etiquetas da sessão»** mostra o tipo de treino (Enter muda, com
+pesquisa), o tipo de sessão, as tuas etiquetas e a linha **No .fit** com tudo como vai ficar.
+**+ Adicionar etiqueta** abre uma janela onde, **ao escreveres, aparecem as etiquetas que já
+existem** (sem contar maiúsculas nem acentos — «pre» acha «Pré-prova»); escolhe uma ou
+**Criar «…»**. **Guardar e terminar** grava; **Voltar à sessão** (ou Esc) volta atrás.
+No `.fit` as etiquetas vão no **nome do perfil desportivo** (mensagem `sport`, campo
+`name`: `Limiar · Perennia · Indoor Cycling · Pré-prova`), onde o Garmin Connect, o Strava e
+o TrainingPeaks as mostram. Ficam também na base (`session_tags`) e na análise da sessão
+(linha **Etiquetas**).
+
+### Longevidade (menu do ecrã inicial)
+
+O cartão **Longevidade** tem o **índice de longevidade** e os **Testes de longevidade** (que
+saíram da Saúde). O índice (0–100) existe para **1 dia, 1 semana, 1 mês, 3, 6 e 9 meses, 1,
+2, 3, 5, 10, 15 e 20 anos**; cada linha diz se o período curto está acima ou abaixo do
+seguinte (↑ ↓ =: a tendência) e, à direita, o **radar** mostra **onde o corpo tem estado mais
+ou menos concentrado** no período escolhido.
+
+A fórmula (`velo/core/longevity.py`): nove **eixos** — aeróbio, limiar, VO2máx, anaeróbio,
+força, potência, mobilidade, estabilidade (isométricos, tendões) e recuperação. Cada sessão
+dá **minutos a cada eixo**: ciclismo pelo tempo em cada zona de potência, corrida, remo e
+natação pelo tempo em cada zona de FC (Z1 recuperação · Z2–Z3 aeróbio · Z4 limiar · Z5 VO2máx
+· Z6–Z7 anaeróbio), ginásio pelas séries de cada exercício e as suas modalidades. Para cada
+eixo e período de `D` dias:
+
+    R = minutos do eixo / (D / 7)                  (minutos por semana)
+    S = 100 · (1 − e^(−R / T))                      (satura: o último minuto vale menos)
+    S' = 0,75 · S + 0,25 · teste                    (se fizeste um teste desse eixo no período)
+    índice = Σ peso · S' / Σ peso
+
+`T` é a dose semanal que dá 63 % da nota (aeróbio 240 min, limiar 30, VO2máx 15, anaeróbio 6,
+força 90, potência 20, mobilidade 60, estabilidade 40, recuperação 300) e os **pesos** são
+maiores no VO2máx, na força e no aeróbio (1,5). **Tudo conta**: cada **treino**, os
+**hábitos** (30 min de recuperação por dia com 7 h ou mais de sono e 15 por dia com HRV
+registada) e os **resultados dos testes** (o último face ao teu melhor; com um só resultado
+vale 60). Até haver `D` dias de histórico divide-se pelos dias que há (no mínimo 7).
+
+- **Em cada sessão**: o resumo e a página da sessão (separador Geral) mostram o **radar do
+  que treinou** (Z2 → 100 % aeróbio; VO2máx + Z2 → aeróbio e VO2máx; corrida + força →
+  aeróbio e força) e a linha **Longevidade** com o que a sessão acrescentou ao índice
+  (1 semana · 1 mês · 3 meses) e os eixos onde mais mexeu.
+- **No construtor**: o subtítulo mostra, ao mexeres nos blocos, o que o treino
+  acrescentaria ao índice se o fizesses hoje.
+
+### GPX Conversor (construtor de treinos manuais: ciclismo e corrida)
+
+Nos treinos **Manual** de ciclismo e de corrida, o construtor ganha o separador **GPX
+Conversor**, que abre uma janela: escolhes um **percurso** (uma rota que já tens, ou
+carregas um .gpx novo), a **fórmula** e a precisão, e os **blocos** do treino são gerados
+a partir do perfil (nível do rolo, ou inclinação e velocidade da passadeira). O que fazem:
+
+1. **Média móvel da altitude** (20 · 50 · 100 · 200 m): alisa o «tremor» do GPS (com 50 m a
+   altitude é a média dos 50 m à volta de cada ponto) para não haver subidas falsas.
+2. **Troço mínimo** (100 · 200 · 500 · 1000 m): o percurso parte-se em troços e cada um fica
+   com a sua inclinação média. **Troços mais curtos seguem o terreno com mais fidelidade e
+   mandam-te mexer no aparelho mais vezes** (mais oscilações manuais); troços seguidos com
+   a mesma regulação juntam-se num só.
+3. **Fórmula** — passadeira: **Inclinação direta** (inclinação = a do troço; descidas a 0 %) ·
+   **Com calibração de 1 %** (menos 1 %, a compensação habitual da falta de ar) ·
+   **Esforço constante** (a inclinação e uma velocidade que mantém o esforço, pelo custo
+   energético de Minetti: abranda a subir). Rolo: **Linear** (nível = % da FTP plana + ganho
+   por 1 % de inclinação) · **Física** (a força para manter a mesma velocidade, elevada a
+   0,4 para o nível não saturar).
+4. **Velocidade (corrida)** — a minha sugestão é **«Esforço constante»**: a passadeira
+   ajusta a velocidade a cada subida e descida e tu só tens de aguentar o mesmo esforço;
+   com **«Constante»** corres sempre à mesma velocidade, e com **«Livre»** decides tu (os
+   blocos passam a ser por distância e acabam quando a fizeres). A velocidade nunca passa
+   do **máximo da passadeira** (Definições → Desportos).
+
+A inclinação respeita o **máximo** da passadeira e o novo **Passo da inclinação** (0,1 · 0,5
+· 1 %: de quanto em quanto a tua passadeira sobe), que está em **Definições → Desportos**
+(corrida) ao lado da **velocidade máxima** e da **inclinação máxima**; o construtor
+arredonda a esse passo (←/→ e valores escritos).
+
+### Exercícios: grupos musculares, disciplinas e listas
+
+A lista de **Exercícios** (ecrã inicial) tem agora:
+
+- Uma tab por modalidade, com **novas**: **Mobilidade**, **Tendões** e **Isométrico**.
+  A tab **Longevidade** saiu (a Longevidade é um menu).
+- A tab **Grupos Musculares**: os **grupos** (pernas, anca, peito, costas, ombros, braços,
+  core, corpo inteiro, mobilidade) e os seus **subgrupos** (quadríceps, isquiotibiais,
+  dorsais…). **+ Novo grupo**; Enter abre um grupo, onde mudas o nome, juntas **+ Novo
+  subgrupo**, mudas o nome (Enter) ou apagas um subgrupo (Del) e podes apagar o grupo (os
+  exercícios passam a «corpo inteiro»).
+- Em cada exercício (Enter), **Grupo muscular** e **Subgrupo muscular** são **listas**
+  (Enter abre a lista com pesquisa; o subgrupo é um dos do grupo), e **Modalidades** e
+  **Material** abrem listas com pesquisa onde marcas o que quiseres (já não são setas).
+- **+ Nova disciplina** (botão em baixo, em todas as tabs): dás-lhe um nome e ela **ganha
+  logo o seu separador** (e passa a estar entre as modalidades do ginásio). Numa
+  disciplina tua, **Apagar esta disciplina** tira o separador (os exercícios só dela e os
+  treinos passam para a Força).
+
 ### Saúde
 
 O cartão **Saúde** tem:
@@ -1301,8 +1446,8 @@ O cartão **Saúde** tem:
   escolha ou hora), liga e desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
-- **A Saúde está em separadores**: **Análises**, **Testes de longevidade**,
-  **Diários**, **Tendências** e **Métricas**.
+- **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências** e
+  **Métricas**. (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
 - **Análises (o relatório):** em cima, **Colheita** (Enter abre a lista das
   datas, com pesquisa) e o **Comentário geral do médico**; por baixo, todos
   os resultados de uma vez, por área, cada um com o **valor atual, a
@@ -1322,7 +1467,6 @@ O cartão **Saúde** tem:
   ser mudado pelas importações) — útil para os que o texto não deixa
   calcular, como a HbA1c NGSP e a eTFG. **Evolução de um marcador** mostra o
   mesmo marcador ao longo das análises.
-- **Testes de longevidade** (acima).
 - **Importar dados:** CSV do HRV4Training, JSON do export do Garmin, o
   Excel das análises, o **GarminDB**, ou qualquer CSV com uma coluna de data.
   Do HRV4Training entram a FC e a rMSSD da manhã, os pontos de recuperação,
@@ -1347,6 +1491,15 @@ base da Perennia. Cada fonte tem o seu separador:
 - **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
   se quiseres, unidade, mínimo, máximo, laboratório), separador «,» ou «;»,
   datas AAAA-MM-DD ou DD/MM/AAAA. Também serve o Excel das análises.
+- **CSV** — **artigos, exercícios, grupos e subgrupos musculares, disciplinas, testes de
+  aptidão** e os **tipos de material**: para cada conjunto, **Descarregar o modelo
+  (.csv)** (o cabeçalho e uma linha de exemplo), **Exportar o que tenho (.csv)** e
+  **importar** um .csv preenchido (a Perennia descobre o conjunto pelo cabeçalho; cria o que
+  falta e atualiza o que já existe, pelo nome, sem duplicar). Os ficheiros são UTF-8
+  (com BOM, o Excel abre-os bem) com `;` a separar colunas (na importação aceita-se também
+  `,` e tab) e `|` a separar listas dentro de uma célula (`Isométrico|Força`). Os grupos,
+  subgrupos, modalidades (disciplinas) e material que não existirem **são criados**.
+  Gravam-se em Transferências. Os tipos de material são só de consulta.
 - **Upload manual** — **uma atividade** de cada vez, vinda do teu
   computador: um **.fit** (relógios Garmin, Wahoo, Zwift…) ou um **.tcx**.
   Escolhe-o na lista (a Perennia procura em `imports/`, Transferências e
@@ -1531,8 +1684,26 @@ python main.py --importar analises ~/Transferências/analises.csv
 python main.py --importar atividade ~/Transferências/corrida.fit
 ```
 
+```bash
+python main.py --importar csv ~/Transferências/perennia_exercicios.csv
+```
+
 (`atividade` lê um `.fit` ou `.tcx` e guarda-o no desporto respetivo, como o
-Upload manual.)
+Upload manual. `csv` importa um .csv de artigos, exercícios, grupos musculares,
+disciplinas ou testes — descobre o conjunto pelo cabeçalho.)
+
+**Modelos e exportações em CSV** (os mesmos da Sincronização → CSV; gravam em
+Transferências, ou na pasta de `--destino`):
+
+```bash
+python main.py --csv-modelo exercicios
+```
+
+```bash
+python main.py --csv-exportar grupos --destino ~/Documentos
+```
+
+Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
 
 ### Rotas (menu do ecrã inicial)
 
@@ -1809,10 +1980,12 @@ os caracteres que o Windows não aceita em nomes de ficheiro. Uma segunda
 sessão no mesmo dia e na mesma rota fica com `_2`, depois `_3`, e assim por
 diante. Sem rota, o nome usa o treino, `fuga`, `teste-ftp` ou `livre`.
 
-O mesmo nome vai dentro do `.fit`, no nome do perfil desportivo, e aparece
-no resumo da sessão. A atividade vai marcada como **virtual** (ciclismo,
-subtipo "virtual activity", o mesmo de uma sessão do Zwift). O Strava
-mostra-a como *Virtual Ride* e o Garmin Connect como ciclismo virtual.
+O nome vai também para o resumo da sessão; no `.fit`, o nome do perfil desportivo leva
+as **etiquetas** da sessão (ver «Etiquetas e tipo de sessão»). A atividade vai marcada
+como **virtual** (subtipo "virtual activity", o mesmo de uma sessão do Zwift ou do
+MyWhoosh) **quando segue uma rota .gpx** (ciclismo e corrida); sem rota é «indoor»
+(rolo, passadeira, máquina de remo). O Strava mostra a virtual como *Virtual Ride* e o
+Garmin Connect como ciclismo virtual.
 
 Nota: o Strava e o Garmin Connect dão às atividades um título deles
 ("Treino da manhã"…) e não leem o título de dentro do `.fit`. O nome do
@@ -2096,6 +2269,34 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 10 acrescenta tabelas e colunas — e continua a ser tudo automático**: ao abrir a
+versão nova a Perennia cria o que falta (`CREATE TABLE IF NOT EXISTS` e `ALTER TABLE ADD
+COLUMN` só quando a coluna não existe), **não tens de fazer nada** nem de correr nenhum
+script — as tuas sessões, treinos, rotas e definições ficam como estão. (Se quiseres uma rede
+de segurança, faz um backup antes: Backups, ou `python main.py --backup`.)
+
+| Tabela / coluna / definição | Para quê |
+|---|---|
+| `workout_types` (`sport`, `workout_id`, `wtype`) | o **tipo de treino** de cada treino (o do construtor); vazio = «Automático» |
+| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `session` (Perennia, Indoor…) ou `custom` |
+| `tag_catalog` (`tag`) | as etiquetas livres já usadas (para sugerir ao escreveres) |
+| `muscle_groups` (`key`, `name_pt`, `name_en`) e `muscle_subgroups` | os **grupos e subgrupos musculares**; os de origem são criados uma vez (só se a tabela estiver vazia) |
+| `exercises.subgroup_id` | o subgrupo muscular de cada exercício (`exercises.category` continua a guardar a chave do grupo) |
+| `gym_disciplines` (`key`, `name_pt`, `name_en`, `icon`) | as **disciplinas** que juntas: cada uma é uma modalidade com o seu separador |
+| definição `treadmill_incline_step` | o **passo da inclinação** da passadeira (0,1 · 0,5 · 1 %) |
+
+Mais: três modalidades novas (**mobility**, **tendons**, **isometric**) com os seus exercícios
+entram na lista (o catálogo de origem é acrescentado, sem mexer nos teus exercícios). O
+**índice de longevidade não guarda nada**: calcula-se sempre de novo a partir das sessões, dos
+diários e dos testes (por isso corrige-se sozinho se apagares ou editares uma sessão). Os
+`.fit` **já gravados** não mudam (as etiquetas só entram nos novos); as sessões antigas não
+têm etiquetas, e a análise delas simplesmente não mostra a linha «Etiquetas».
+
+Os **backups** levam as tabelas novas: `workout_types` em «Treinos»; `session_tags` e
+`tag_catalog` em «Histórico de sessões»; `muscle_groups`, `muscle_subgroups` e
+`gym_disciplines` em «Ginásio e exercícios». A definição `treadmill_incline_step` vai em
+«Definições». O que **não** entra num backup por omissão continua a ser só as credenciais.
+
 **A ronda 9 não muda o esquema da base de dados** — não há tabelas nem
 colunas novas, **não tens de fazer nada** para que as alterações fiquem
 guardadas. O que muda no que já lá está:
@@ -2177,7 +2378,22 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (731 testes a passar).
+**Verificado com testes automáticos nesta versão** (777 testes a passar).
+
+*Novidades da ronda 10 (46 testes novos em `tests/test_round10.py`, e os antigos atualizados):*
+o diálogo de terminar (Esc pausa, F10 pergunta, Enter/S/Y, Esc/N, D) igual no ciclismo, na
+corrida e no remo, e a janela das etiquetas a seguir; os simuladores (cada um só com os seus
+dados, a passadeira); as etiquetas (a sugestão do tipo de treino pelo esforço, o tipo de sessão
+e o «virtual» só com rota, a deteção das etiquetas existentes, as etiquetas dentro do `.fit` e
+na base, o tipo de treino no construtor); o índice de longevidade (13 períodos, a saturação,
+Z2 → 100 % aeróbio, VO2máx + Z2, o impacto de cada sessão, os testes e os hábitos, o
+construtor), o menu Longevidade e o radar nas páginas das sessões; o GPX Conversor (as três
+fórmulas da passadeira e as duas do rolo, a média móvel, os troços, o passo e o máximo da
+passadeira, o separador do construtor); os grupos musculares, as novas modalidades, as listas
+no editor de exercícios, as disciplinas novas com o seu separador; os CSV (modelos, exportação,
+importação sem duplicar, deteção pelo cabeçalho, ida e volta) e o `--importar csv`; as
+tabelas novas nas componentes do backup. **Não foi testado com hardware real** (a passadeira
+simulada, o rolo e o remo são simuladores) nem com um Windows/macOS.
 
 *Novidades da ronda 9 (27 testes novos, e os antigos atualizados):* o número
 de métricas do ecrã da sessão (1 até ao máximo de cada desporto) e a sessão de

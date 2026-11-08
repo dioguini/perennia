@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from pyglet.window import key
 
-from velo.core import gym, inventory
+from velo.core import gym, inventory, muscles
 from velo.core.i18n import t, tr
 from velo.ui.app import Screen
 from velo.ui.sport_screens import EditPopup, EditScreen
@@ -277,28 +277,83 @@ class ExerciseInventory(Screen):
 
     TABBED = True
 
+    GROUPS_TAB = "__groups__"
+
     def __init__(self, app, modality: str | None = None, pick=None):
         self.fixed = modality
         self.pick = pick
         self.only_available = False
+        gym.ensure(app.db)                   # as disciplinas que juntaste entram no registo
         super().__init__(app)
         self.list.detail_below = True        # lista grande: a descrição vai por baixo
         if modality:
-            keys = [m.key for m in gym.modalities()]
+            keys = self.tab_keys()
             self.tab = keys.index(modality) if modality in keys else 0
             if self.tabs is not None:
                 self.tabs.select(self.tab)
 
+    def tab_keys(self) -> list[str]:
+        """Uma tab por modalidade (a Longevidade já é um menu à parte) e, no fim, os grupos
+        musculares. Quem escolhe exercícios para um treino não vê os grupos."""
+        keys = [m.key for m in gym.modalities() if m.key != "longevity" or self.fixed == m.key]
+        if not self.pick:
+            keys.append(self.GROUPS_TAB)
+        return keys
+
     def tab_labels(self) -> list[str]:
-        return [m.name for m in gym.modalities()]
+        return [tr("Grupos Musculares", "Muscle Groups") if k == self.GROUPS_TAB
+                else gym.modality(k).name for k in self.tab_keys()]
 
     def modality(self) -> str:
-        mods = gym.modalities()
-        return mods[self.tab % len(mods)].key
+        keys = self.tab_keys()
+        return keys[self.tab % len(keys)]
+
+    def _refresh_tabs(self, select: str | None = None) -> None:
+        keys = self.tab_keys()
+        if self.tabs is not None:
+            self.tabs.set_labels(self.tab_labels())
+        if select in keys:
+            self.tab = keys.index(select)
+        self.tab = min(self.tab, len(keys) - 1)
+        if self.tabs is not None:
+            self.tabs.select(self.tab)
+        self.on_resize(self.app.window.width, self.app.window.height)
+        self.enter()
+
+    def _new_discipline(self) -> None:
+        from velo.ui.goal_popup import GoalPopup
+
+        def save(name: str) -> None:
+            name = " ".join((name or "").split())
+            if not name:
+                return
+            key = gym.add_discipline(self.app.db, name)
+            self._refresh_tabs(select=key)
+        self.app.push(GoalPopup(self.app, tr("Nova disciplina", "New discipline"),
+                                tr("Ganha um separador próprio na lista de exercícios",
+                                   "Gets its own tab in the exercise list"), "", 40, save))
+
+    def _delete_discipline(self, key: str) -> None:
+        def go() -> None:
+            gym.delete_discipline(self.app.db, key)
+            self._refresh_tabs()
+        self.app.confirm(tr("Apagar esta disciplina?", "Delete this discipline?"),
+                         tr("Os exercícios só dela passam para a Força.",
+                            "Exercises only in it move to Strength."), go,
+                         yes=tr("Apagar", "Delete"))
 
     def enter(self) -> None:
         a = self.app
         mod = self.modality()
+        if mod == self.GROUPS_TAB:
+            from velo.ui import muscle_screens
+            self.chrome.set(tr("Exercícios", "Exercises"),
+                            tr("Grupos e subgrupos musculares · Enter abre um grupo",
+                               "Muscle groups and subgroups · Enter opens a group"),
+                            tr("Tab modalidade · Enter abrir · Esc voltar",
+                               "Tab modality · Enter open · Esc back"))
+            self.list.set_items(muscle_screens.group_items(a, self.enter), keep_index=True)
+            return
         m = gym.modality(mod)
         # adicionar e filtrar: em cima, à direita, alinhados; a lista fica só
         # com os exercícios (Enter abre um para editar, numa janela)
@@ -306,7 +361,12 @@ class ExerciseInventory(Screen):
                       tr("Só com o meu material", "Only my equipment"),
                       action=self._toggle, top=True),
                  Item(tr("+ Novo exercício", "+ New exercise"),
-                      action=lambda: a.push(ExerciseEditor(a, None, mod)), top=True)]
+                      action=lambda: a.push(ExerciseEditor(a, None, mod)), top=True),
+                 Item(tr("+ Nova disciplina", "+ New discipline"),
+                      action=self._new_discipline, top=True)]
+        if gym.is_custom(mod):
+            items.append(Item(tr("Apagar esta disciplina", "Delete this discipline"),
+                              action=lambda: self._delete_discipline(mod), top=True))
         exs = gym.exercises(a.db, mod, available_only=self.only_available)
         for e in exs:
             kit = ", ".join(inventory.kind_name(k) for k in e["equipment"]) or \
@@ -346,21 +406,20 @@ class ExerciseEditor(EditPopup):
     """Um exercício (nome, grupo, medida, modalidades, material), numa janela."""
 
     MAX_H = 720
-    GROUPS = ("legs", "hips", "chest", "back", "shoulders", "arms", "core", "full", "mobility")
 
     def __init__(self, app, eid: int | None, modality: str = "strength"):
         super().__init__(app)
         self.eid = eid
+        gym.ensure(app.db)
         e = gym.exercise(app.db, eid) if eid else None
         self.v = {"name": (e or {}).get("name") or "",
                   "group": (e or {}).get("category") or "full",
+                  "subgroup": (e or {}).get("subgroup_id"),
                   "measure": (e or {}).get("measure") or "reps",
                   "bodyweight": (e or {}).get("bodyweight") or 0.0,
                   "mods": list((e or {}).get("modalities") or [modality]),
                   "kit": list((e or {}).get("equipment") or []),
                   "description": (e or {}).get("description") or ""}
-        self.mod_cursor = 0
-        self.kit_cursor = 0
 
     def title(self) -> str:
         return tr("Exercício", "Exercise") if self.eid else tr("Novo exercício", "New exercise")
@@ -370,14 +429,16 @@ class ExerciseEditor(EditPopup):
 
     def rows(self) -> list[Item]:
         v = self.v
-        mods = gym.modalities()
-        kinds = list(inventory.KINDS)
-        mc = mods[self.mod_cursor % len(mods)]
-        kc = kinds[self.kit_cursor % len(kinds)]
+        db = self.app.db
         items = [
             Item(tr("Nome", "Name"), value=v["name"] + "▏", data="text:name"),
-            Item(tr("Grupo muscular", "Muscle group"), value=t(f"str.group.{v['group']}"),
-                 data="cyc:group"),
+            Item(tr("Grupo muscular", "Muscle group"), value=muscles.group_name(db, v["group"]),
+                 data="cyc:group",
+                 detail=tr("Enter abre a lista · os grupos geres no separador Grupos Musculares",
+                           "Enter opens the list · manage groups in the Muscle Groups tab")),
+            Item(tr("Subgrupo muscular", "Muscle subgroup"),
+                 value=muscles.subgroup_name(db, v["subgroup"]), data="cyc:subgroup",
+                 detail=tr("os do grupo escolhido", "the chosen group's")),
             Item(tr("Mede-se em", "Measured in"),
                  value=tr("repetições", "reps") if v["measure"] == "reps"
                  else tr("tempo (s)", "time (s)"), data="cyc:measure"),
@@ -386,54 +447,54 @@ class ExerciseEditor(EditPopup):
                  detail=tr("flexões ≈ 65 %, elevações ≈ 100 %", "push-ups ≈ 65 %, pull-ups ≈ 100 %")),
             Item(tr("Modalidades", "Modalities"),
                  value=", ".join(gym.modality(x).name for x in v["mods"]) or "—",
-                 enabled=False),
-            Item(("✓ " if mc.key in v["mods"] else "   ") + mc.name,
-                 detail=tr("←/→ outra modalidade · Enter junta/tira",
-                           "←/→ another modality · Enter adds/removes"),
-                 data="cyc:modcur", action=lambda: self._toggle_mod(mc.key)),
+                 detail=tr("Enter abre a lista com pesquisa e marca as que quiseres",
+                           "Enter opens the searchable list; tick as many as you like"),
+                 action=self._pick_mods),
             Item(tr("Material", "Equipment"),
                  value=", ".join(inventory.kind_name(k) for k in v["kit"]) or
-                 tr("nenhum", "none"), enabled=False),
-            Item(("✓ " if kc in v["kit"] else "   ") + inventory.kind_name(kc),
-                 detail=tr("←/→ outro material · Enter junta/tira",
-                           "←/→ another item · Enter adds/removes"),
-                 data="cyc:kitcur", action=lambda: self._toggle_kit(kc)),
+                 tr("nenhum", "none"),
+                 detail=tr("Enter abre a lista com pesquisa e marca o que usa",
+                           "Enter opens the searchable list; tick what it uses"),
+                 action=self._pick_kit),
             Item(tr("Descrição", "Description"), value=(v["description"] or "") + "▏",
                  data="text:description"),
         ]
         return items
 
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        cyc = self._field("cyc:")
-        if cyc in ("modcur", "kitcur") and symbol in (key.ENTER, key.RETURN, key.SPACE):
-            self.list.activate()
-            return True
-        return super().on_key(symbol, modifiers)
-
     def cycle(self, field: str, step: int) -> None:
         v = self.v
         if field == "group":
-            g = list(self.GROUPS)
-            v["group"] = g[(g.index(v["group"]) + step) % len(g)] if v["group"] in g else g[0]
+            g = [x["key"] for x in muscles.groups(self.app.db)] or ["full"]
+            new = g[(g.index(v["group"]) + step) % len(g)] if v["group"] in g else g[0]
+            if new != v["group"]:
+                v["group"], v["subgroup"] = new, None      # os subgrupos são do grupo
+        elif field == "subgroup":
+            subs = [None] + [s["id"] for x in muscles.groups(self.app.db)
+                             if x["key"] == v["group"] for s in x["subgroups"]]
+            cur = subs.index(v["subgroup"]) if v["subgroup"] in subs else 0
+            v["subgroup"] = subs[(cur + step) % len(subs)]
         elif field == "measure":
             v["measure"] = "time" if v["measure"] == "reps" else "reps"
-        elif field == "modcur":
-            self.mod_cursor += step
-        elif field == "kitcur":
-            self.kit_cursor += step
 
-    def _toggle_mod(self, key_: str) -> None:
-        mods = self.v["mods"]
-        if key_ in mods and len(mods) > 1:
-            mods.remove(key_)
-        elif key_ not in mods:
-            mods.append(key_)
-        self.enter()
+    def _pick_mods(self) -> None:
+        from velo.ui.pickers import MultiChoicePopup
 
-    def _toggle_kit(self, kind: str) -> None:
-        kit = self.v["kit"]
-        kit.remove(kind) if kind in kit else kit.append(kind)
-        self.enter()
+        def done(sel: list[str]) -> None:
+            self.v["mods"] = sel
+            self.enter()
+        self.app.push(MultiChoicePopup(
+            self.app, tr("Modalidades", "Modalities"),
+            [(m.key, m.name) for m in gym.modalities()], self.v["mods"], done, min_one=True))
+
+    def _pick_kit(self) -> None:
+        from velo.ui.pickers import MultiChoicePopup
+
+        def done(sel: list[str]) -> None:
+            self.v["kit"] = sel
+            self.enter()
+        self.app.push(MultiChoicePopup(
+            self.app, tr("Material", "Equipment"),
+            [(k, inventory.kind_name(k)) for k in inventory.KINDS], self.v["kit"], done))
 
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
         self.v["bodyweight"] = max(0.0, min(1.0, round(self.v["bodyweight"] + steps * 0.05, 2)))
@@ -460,5 +521,6 @@ class ExerciseEditor(EditPopup):
         self.eid = gym.save_exercise(self.app.db, self.eid, name=v["name"], mods=v["mods"],
                                      group=v["group"], measure=v["measure"],
                                      bodyweight=v["bodyweight"], equipment=v["kit"],
-                                     description=v["description"] or None)
+                                     description=v["description"] or None,
+                                     subgroup=v["subgroup"])
         return True

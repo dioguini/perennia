@@ -59,41 +59,41 @@ class BriefPanel:
         b = self.batch = pyglet.graphics.Batch()
         self.outline = pyglet.shapes.Rectangle(0, 0, 1, 1, color=BORDER, batch=b)
         self.card = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL, batch=b)
-        self.title = make_label("", font_size=18, bold=True, color=TEXT, anchor_y="top", batch=b)
-        self.meta = make_label("", font_size=11, color=DIM, anchor_y="top", batch=b)
-        self.intensity = make_label("", font_size=11, color=TEXT, anchor_y="top", batch=b)
-        self.goal = make_label("", font_size=12, color=TEXT, anchor_y="top", batch=b,
+        self.title = make_label("", font_size=24, bold=True, color=TEXT, anchor_y="top", batch=b)
+        self.meta = make_label("", font_size=14, color=DIM, anchor_y="top", batch=b)
+        self.intensity = make_label("", font_size=14, color=TEXT, anchor_y="top", batch=b)
+        self.goal = make_label("", font_size=16, color=TEXT, anchor_y="top", batch=b,
                                multiline=True, width=400)
-        self.auto_note = make_label("", font_size=9, color=DIM, anchor_y="top", batch=b)
+        self.auto_note = make_label("", font_size=11, color=DIM, anchor_y="top", batch=b)
         self.chart_bg = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL, batch=b)
         self.grid = [pyglet.shapes.Rectangle(0, 0, 1, 1, color=GRID, batch=b) for _ in range(4)]
-        self.yticks = [make_label("", font_size=8, color=DIM, anchor_x="right",
+        self.yticks = [make_label("", font_size=10, color=DIM, anchor_x="right",
                                   anchor_y="center", batch=b) for _ in range(4)]
         self.bars = [pyglet.shapes.Rectangle(0, 0, 0, 0, color=(200, 200, 200), batch=b)
                      for _ in range(self.MAX_BARS)]
         self.dashes = [pyglet.shapes.Rectangle(0, 0, 0, 1, color=DIM[:3], batch=b)
                        for _ in range(160)]
-        self.thr_label = make_label("", font_size=8, color=DIM, anchor_x="right",
+        self.thr_label = make_label("", font_size=10, color=DIM, anchor_x="right",
                                     anchor_y="bottom", batch=b)
-        self.xticks = [make_label("", font_size=8, color=DIM, anchor_x="center",
+        self.xticks = [make_label("", font_size=10, color=DIM, anchor_x="center",
                                   anchor_y="top", batch=b) for _ in range(7)]
         self.legend_sq = [pyglet.shapes.Rectangle(0, 0, 9, 9, color=c, batch=b)
                           for c in it.ZONE_COLORS[:6]]
-        self.legend_lab = [make_label(f"Z{i + 1}", font_size=9, color=DIM, anchor_y="bottom",
+        self.legend_lab = [make_label(f"Z{i + 1}", font_size=11, color=DIM, anchor_y="bottom",
                                       batch=b) for i in range(6)]
-        self.legend_note = make_label("", font_size=9, color=DIM, anchor_x="right",
+        self.legend_note = make_label("", font_size=11, color=DIM, anchor_x="right",
                                       anchor_y="bottom", batch=b)
         self.rows = []
         for _ in range(self.MAX_ROWS):
             self.rows.append({
                 "dot": pyglet.shapes.Circle(0, 0, 5, color=(180, 180, 180), batch=b),
-                "name": make_label("", font_size=11, bold=True, color=TEXT, anchor_y="top",
+                "name": make_label("", font_size=14, bold=True, color=TEXT, anchor_y="top",
                                    batch=b),
-                "goal": make_label("", font_size=10, color=TEXT, anchor_y="top", batch=b,
+                "goal": make_label("", font_size=13, color=TEXT, anchor_y="top", batch=b,
                                    multiline=True, width=300),
-                "target": make_label("", font_size=9, color=DIM, anchor_y="top", batch=b),
+                "target": make_label("", font_size=12, color=DIM, anchor_y="top", batch=b),
             })
-        self.more = make_label("", font_size=10, color=DIM, anchor_y="top", batch=b)
+        self.more = make_label("", font_size=13, color=DIM, anchor_y="top", batch=b)
         self.geometry = (0, 0, 600, 0)
         self.brief: ob.Brief | None = None
 
@@ -113,9 +113,9 @@ class BriefPanel:
         self.card.x, self.card.y, self.card.width, self.card.height = x, bottom, w, top - bottom
         ix, iw = x + pad, w - 2 * pad
         y = top - 14
-        self.title.text = wrap(brief.title, iw, 18, 1)
+        self.title.text = wrap(brief.title, iw, 24, 1)
         self.title.x, self.title.y = ix, y
-        y -= 30
+        y -= 38
         bits = [sport_kind(brief.sport), hms(brief.seconds) if brief.seconds < 3600
                 else f"{brief.seconds / 3600:.1f} h".replace(".", ",")]
         if brief.meters:
@@ -124,21 +124,21 @@ class BriefPanel:
             bits.append(f"TSS ≈ {brief.tss:.0f}")
         self.meta.text = " · ".join(bits)
         self.meta.x, self.meta.y = ix, y
-        y -= 18
+        y -= 22
         self.intensity.text = brief.intensity
         self.intensity.x, self.intensity.y = ix, y
-        y -= 22
-        text = wrap(brief.goal, iw, 12, 3)
+        y -= 26
+        text = wrap(brief.goal, iw, 16, 3)
         self.goal.text = text
         self.goal.width = int(iw)
         self.goal.x, self.goal.y = ix, y
-        y -= 17 * (text.count("\n") + 1) + 2
+        y -= 22 * (text.count("\n") + 1) + 2
         self.auto_note.text = "" if brief.goal_written else tr(
-            "Objetivo sugerido pela estrutura do treino · «Objetivos» para o escrever",
-            "Goal suggested from the workout structure · «Goals» to write your own")
+            "Objetivo sugerido pela estrutura do treino · «Editar» para o escrever",
+            "Goal suggested from the workout structure · «Edit» to write your own")
         self.auto_note.x, self.auto_note.y = ix, y
         if not brief.goal_written:
-            y -= 14
+            y -= 18
         avail = y - bottom
         chart_h = max(70, min(150, avail * 0.36))
         y -= 8
@@ -235,7 +235,7 @@ class BriefPanel:
     def _rows(self, x: float, top: float, w: float, bottom: float, brief: ob.Brief) -> None:
         cols = 2 if w > 520 else 1
         cw = (w - 20 * (cols - 1)) / cols
-        row_h = 54
+        row_h = 72
         per_col = max(1, int((top - bottom) // row_h))
         cap = min(len(self.rows), per_col * cols)
         shown = brief.blocks[:cap]
@@ -251,21 +251,21 @@ class BriefPanel:
                 row["dot"].opacity = 255
                 prefix = f"{blk.repeat} × " if blk.repeat > 1 else (
                     "↳ " if blk.repeat < 0 else "")
-                row["name"].text = wrap(f"{prefix}{blk.name}  ({blk.dur_text})", cw - 20, 11, 1)
+                row["name"].text = wrap(f"{prefix}{blk.name}  ({blk.dur_text})", cw - 20, 14, 1)
                 row["name"].x, row["name"].y = rx + 16, ry
-                row["goal"].text = wrap(blk.goal, cw - 20, 10, 1)
-                row["goal"].x, row["goal"].y = rx + 16, ry - 17
+                row["goal"].text = wrap(blk.goal, cw - 20, 13, 1)
+                row["goal"].x, row["goal"].y = rx + 16, ry - 22
                 row["goal"].width = int(cw - 20)
                 row["target"].text = tr("Alvo: {t}", "Target: {t}", t=blk.target)
-                row["target"].x, row["target"].y = rx + 16, ry - 32
+                row["target"].x, row["target"].y = rx + 16, ry - 42
             else:
                 row["dot"].opacity = 0
                 row["name"].text = row["goal"].text = row["target"].text = ""
         hidden = len(brief.blocks) - len(shown)
-        self.more.text = (tr("+ 1 bloco (ver em «Objetivos»)", "+ 1 block (see «Goals»)")
+        self.more.text = (tr("+ 1 bloco (ver no construtor)", "+ 1 block (see the builder)")
                           if hidden == 1 else
-                          tr("+ {n} blocos (ver em «Objetivos»)", "+ {n} blocks (see «Goals»)",
-                             n=hidden) if hidden > 1 else "")
+                          tr("+ {n} blocos (ver no construtor)", "+ {n} blocks (see the "
+                             "builder)", n=hidden) if hidden > 1 else "")
         self.more.x, self.more.y = x + 16, bottom + 4
 
     def draw(self) -> None:
@@ -311,8 +311,10 @@ class BriefScreen(Screen):
 
     def start(self) -> None: ...
 
-    def extra_actions(self) -> list[Item]:
-        return []
+    def edit(self) -> None:
+        """«Editar»: abre o treino no construtor do desporto."""
+        from velo.ui.builder_screens import BlockBuilder
+        self.app.push(BlockBuilder(self.app, self.SPORT, self.wid))
 
     def enter(self) -> None:
         a = self.app
@@ -322,11 +324,9 @@ class BriefScreen(Screen):
             return
         self.brief_data = b
         self.panel.set(b)
-        items = [Item(tr("Editar objetivos", "Edit goals"), button=True,
-                      action=lambda: a.push(_editor().GoalEditor(a, self.SPORT, self.wid, b)))]
-        for extra in self.extra_actions():
-            extra.button = True                     # tudo na barra de baixo, à direita
-            items.append(extra)
+        # as ações do treino: Editar (abre o construtor), Exportar e Configurar sessão;
+        # os objetivos vêm do próprio treino (escrevem-se no construtor)
+        items = [Item(tr("Editar", "Edit"), button=True, action=self.edit)]
         items.append(Item(tr("Exportar", "Export"), button=True, action=self.export,
                           primary=not self.CAN_START))
         if self.CAN_START:
@@ -356,11 +356,6 @@ class BriefScreen(Screen):
         self.panel.draw()
 
 
-def _editor():
-    from velo.ui import brief_edit
-    return brief_edit
-
-
 def endurance_brief(db, sport: str, wid: str) -> ob.Brief | None:
     """Ciclismo, remo, corrida e natação: lê os blocos como o construtor."""
     return ob.workout_brief(db, sport, wid)
@@ -376,11 +371,6 @@ class CyclingBrief(BriefScreen):
         from velo.ui.session_setup import SessionSetup
         self.app.push(SessionSetup(self.app, "cycling", kind="workout", workout_id=self.wid))
 
-    def extra_actions(self) -> list[Item]:
-        a = self.app
-        from velo.ui.builder_screens import BlockBuilder
-        return [Item(tr("Abrir no construtor", "Open in the builder"), button=True,
-                     action=lambda: a.push(BlockBuilder(a, "cycling", self.wid)))]
 
 
 class GymBrief(BriefScreen):

@@ -27,21 +27,24 @@ class TestBackWithChangesAsks(tg.GuiCase):
         self.assertEqual([i.label for i in scr.list.items],
                          ["Sair sem guardar", "Cancelar", "Sair e guardar"])
 
-    def test_goal_editor(self):
+    def test_goal_popup(self):
+        from velo.ui.goal_popup import GoalPopup
         self.pick("Lista de treinos")
         self.pick("Tempo 3×15")
-        self.pick("Editar objetivos")
-        ed = self.screen()
+        self.pick("Editar")
+        b = self.screen()
+        self.pick("Objetivo do treino")
+        pop = self.screen()
+        self.assertIsInstance(pop, GoalPopup)
         self.press(key.ESCAPE)                       # sem alterações: sai logo
-        self.assertIsNot(self.screen(), ed)
-        self.pick("Editar objetivos")
-        ed = self.screen()
-        self.select("Objetivo do treino")
+        self.assertIs(self.screen(), b)
+        self.pick("Objetivo do treino")
+        pop = self.screen()
         self.type("x")
         self.press(key.ESCAPE)
         self._is_unsaved_question()
         self.pick("Cancelar")
-        self.assertIs(self.screen(), ed)
+        self.assertIs(self.screen(), pop)
 
     def test_feedback_form(self):
         # uma sessão de ciclismo curta para ter onde dar feedback
@@ -54,7 +57,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
         for _ in range(40):
             self.app.hub.tick(0.5)
             ride.update(0.5)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         summ = self.screen()
         rid = summ.result["ride_id"]
         fb = fs.FeedbackScreen(self.app, "ride", rid)
@@ -67,7 +70,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
 
     def test_test_result_entry(self):
         self.press(key.ESCAPE)
-        self.pick("Saúde")
+        self.pick("Longevidade")
         self.pick("Testes de longevidade")
         self.pick("Flexões em 1 minuto")
         self.pick("Registar um resultado")
@@ -93,7 +96,7 @@ class TestDeleteAsks(tg.GuiCase):
         self.assertEqual(len(self.app.db.routes()), 1)
 
     def test_workout_delete_asks(self):
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         n = len(self.app.db.workouts())
         self.select("Tempo 3×15")
         self.press(key.DELETE)

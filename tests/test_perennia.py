@@ -32,6 +32,7 @@ from velo.gfx import theme  # noqa: E402
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
 from velo.ui import app as app_mod  # noqa: E402
 from velo.ui import brief as br  # noqa: E402
+from velo.ui import builder_screens as bs  # noqa: E402
 from velo.ui import calendar_screens as cs  # noqa: E402
 from velo.ui import feedback_screens as fs  # noqa: E402
 from velo.ui import session_setup  # noqa: E402
@@ -200,18 +201,27 @@ class TestBriefScreens(tg.GuiCase):
         self.pick("Configurar sessão")
         self.assertIsInstance(self.screen(), session_setup.SessionSetup)
 
-    def test_goal_editor_writes_the_goal(self):
+    def test_the_workout_page_has_only_edit_export_and_set_up(self):
         self.pick("Lista de treinos")
         self.pick("Tempo 3×15")
-        self.pick("Objetivos")
-        self.select("Objetivo do treino")
-        for _ in range(200):
-            self.press(key.BACKSPACE)
+        brief = self.screen()
+        self.assertEqual([i.label for i in brief.list.items],
+                         ["Editar", "Exportar", "Configurar sessão de treino"])
+        self.pick("Editar")                      # abre o construtor, onde estão os objetivos
+        b = self.screen()
+        self.assertIsInstance(b, bs.BlockBuilder)
+        self.pick("Objetivo do treino")
+        from velo.ui.goal_popup import GoalPopup
+        self.assertIsInstance(self.screen(), GoalPopup)
+        self.press(key.DELETE)
         self.type("Ritmo de estrada")
+        self.press(key.ENTER)
         self.pick("Guardar")
-        wid = self.screen().wid
+        wid = b.wid
         self.assertEqual(ob.stored(self.app.db, "cycling", wid)["goal"], "Ritmo de estrada")
-        self.assertEqual(self.screen().brief_data.goal, "Ritmo de estrada")
+        self.press(key.ENTER)                       # "Treino guardado" → OK
+        self.press(key.ESCAPE)                      # sai do construtor, volta à ficha
+        self.assertEqual(self.screen().brief_data.goal, "Ritmo de estrada")   # vem do treino
 
     def test_ride_hud_shows_the_block_goal(self):
         self.pick("Lista de treinos")
@@ -232,7 +242,7 @@ class TestBriefScreens(tg.GuiCase):
         self.assertIn("Alvo", text)
 
     def test_builder_saves_workout_and_block_goals(self):
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         self.pick("ERG")
         b = self.screen()
@@ -241,11 +251,13 @@ class TestBriefScreens(tg.GuiCase):
         self.pick("Objetivo do bloco")                 # os objetivos escrevem-se numa janela
         from velo.ui.goal_popup import GoalPopup
         self.assertIsInstance(self.screen(), GoalPopup)
+        self.press(key.DELETE)
         self.type("Z2 sem picos")
         self.press(key.ENTER)                          # Enter guarda
         self.assertIs(self.screen(), b)
         self.pick("Objetivo do treino")
         self.assertIsInstance(self.screen(), GoalPopup)
+        self.press(key.DELETE)                         # limpa a sugestão
         self.type("Base aeróbia")
         self.press(key.ENTER)
         self.pick("Guardar")
@@ -270,7 +282,7 @@ class TestFeedback(tg.GuiCase):
     def test_finishing_asks_for_feedback_and_saves_the_analysis(self):
         self.app.db.set("ask_feedback", True)
         self._ride_workout("Recuperação ativa", 120)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         scr = self.screen()
         self.assertIsInstance(scr, fs.FeedbackScreen)
         self.assertIsNotNone(scr.brief)               # o treino prescrito
@@ -302,7 +314,7 @@ class TestFeedback(tg.GuiCase):
 
     def test_analysis_crosses_goal_and_feedback(self):
         self._ride_workout("Recuperação ativa", 60)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         rid = self.screen().result["ride_id"]
         db = self.app.db
         sess = fbm.load_session(db, "ride", rid)

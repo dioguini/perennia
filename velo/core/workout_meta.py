@@ -132,7 +132,8 @@ def levels(db) -> dict:
 # Os aparelhos sem controlo (Definições → Desportos → Sessões Não ERG): o
 # construtor de treinos não deixa passar destes limites.
 DEVICE_DEFAULTS = {"rower_levels": 10, "treadmill_max_kmh": 20.0,
-                   "treadmill_max_incline": 15.0}
+                   "treadmill_max_incline": 15.0, "treadmill_incline_step": 0.5}
+INCLINE_STEPS = (0.1, 0.5, 1.0)         # o passo da inclinação da passadeira (%)
 
 
 def device_limits(db) -> dict:
@@ -142,6 +143,8 @@ def device_limits(db) -> dict:
     out["rower_levels"] = int(out["rower_levels"] or 10)
     out["treadmill_max_kmh"] = float(out["treadmill_max_kmh"] or 20.0)
     out["treadmill_max_incline"] = float(out["treadmill_max_incline"] or 15.0)
+    step = float(out["treadmill_incline_step"] or 0.5)
+    out["treadmill_incline_step"] = step if step in INCLINE_STEPS else 0.5
     return out
 
 

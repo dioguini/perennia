@@ -96,7 +96,7 @@ class TestTopBarClock(unittest.TestCase):
 
 class TestActionButtonsAndUnsaved(tg.GuiCase):
     def open_builder(self):
-        self.pick("Construtor de treinos")
+        self.pick("Lista de treinos")
         self.pick("Novo treino")
         self.pick("ERG")                       # o tipo do treino
         b = self.screen()
@@ -618,7 +618,7 @@ class TestRideInfographics(tg.GuiCase):
         for _ in range(int(seconds / 0.5)):
             self.app.hub.tick(0.5)
             ride.update(0.5)
-        self.press(key.F10, key.ENTER)
+        self.press(key.F10, key.ENTER, key.ENTER)
         return ride.engine.ride_id
 
     def test_detail_peaks_and_infographics(self):
