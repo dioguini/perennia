@@ -914,3 +914,88 @@ class TestFreeWorkoutEditAfterwards(tg.GuiCase):
         reps = self.app.db.conn.execute("SELECT reps FROM strength_sets WHERE session_id = ?"
                                         " ORDER BY id", (sid,)).fetchone()["reps"]
         self.assertEqual(reps, 12)
+
+
+# ============================================================ teste da FC por ANT+
+
+from velo.io import ant as ant_mod  # noqa: E402
+
+
+class FakeStick:
+    """Uma antena de brincar: abre, deixa abrir um canal e entrega pacotes de FC."""
+
+    def __init__(self, pages=(), opens=True):
+        self.pages, self.opens = list(pages), opens
+        self._on_event = lambda k, d: None
+        self.handler = None
+        self.opened_channels = []
+        self.closed = False
+
+    def open(self):
+        return self.opens
+
+    def on_broadcast(self, channel, handler):
+        self.handler = handler
+
+    def open_channel(self, channel, device_type, *a, **kw):
+        self.opened_channels.append((channel, device_type))
+        self._on_event("ant_device_found", {"device": ant_mod.AntDiscovered(
+            7125, ant_mod.DEVICE_HR, "ANT+ Cardio #7125")})
+
+    def close(self):
+        self.closed = True
+
+    def feed(self, n, hr):
+        for _ in range(n):
+            self.handler(0, bytes((0x04, 0, 0, 0, 0, 0, 0, hr)))
+
+
+class TestAntHrTest(tg.GuiCase):
+    def run_test(self, per_second, hr, seconds=5, opens=True):
+        stick = FakeStick(opens=opens)
+        lines = []
+        t = [0.0]
+
+        def sleep(dt):
+            t[0] += dt
+            if stick.handler:
+                stick.feed(per_second, hr)
+
+        res = ant_mod.hr_test(seconds, out=lines.append, stick_factory=lambda: stick,
+                              clock=lambda: t[0], sleep=sleep)
+        return res, stick, lines
+
+    def test_it_opens_a_single_hr_channel_and_reports_a_good_link(self):
+        res, stick, lines = self.run_test(4, 72)
+        self.assertEqual(stick.opened_channels, [(0, ant_mod.DEVICE_HR)])    # só o do cardio
+        self.assertEqual(res["found"], "ANT+ Cardio #7125")
+        self.assertEqual((res["min"], res["max"]), (72, 72))
+        self.assertIn("ligação rádio está bem", res["verdict"])
+        self.assertTrue(stick.closed)
+
+    def test_few_packets_point_to_interference(self):
+        res, _stick, _lines = self.run_test(1, 70)
+        self.assertIn("interferência", res["verdict"])
+
+    def test_nothing_received_says_the_watch_is_not_broadcasting(self):
+        res, _stick, _lines = self.run_test(0, 0)
+        self.assertEqual(res["packets"], 0)
+        self.assertIn("não está a transmitir", res["verdict"])
+
+    def test_zero_hr_means_the_sensor_has_not_measured_yet(self):
+        res, _stick, _lines = self.run_test(4, 0)
+        self.assertEqual(res["valid"], 0)
+        self.assertIn("FC 0", res["verdict"])
+
+    def test_a_stick_that_will_not_open_is_diagnosed(self):
+        res, stick, lines = self.run_test(0, 0, opens=False)
+        self.assertEqual(stick.opened_channels, [])
+        self.assertTrue(res["verdict"])
+        self.assertEqual(lines[-1], res["verdict"])
+
+    def test_diagnose_tells_the_truth_about_the_stick(self):
+        # sem antena (ou sem a biblioteca) diz porquê; nunca afirma «existe mas não abriu»
+        # sem a ter tentado abrir
+        msg = ant_mod.diagnose()
+        self.assertTrue(msg)
+        self.assertNotIn("Zwift", msg) if "não encontrada" in msg or "Falta" in msg else None

@@ -2279,6 +2279,23 @@ segundos, e volta aos pedais quando eles voltarem.
 Se a antena não for encontrada, a linha de estado do ecrã diz porquê (falta
 de biblioteca, driver ou permissão).
 
+### Se a FC (cinta ou relógio) não aparece por ANT+
+
+Testa **só a FC**, fora da aplicação — abre um único canal (sem procurar rolo nem potência ao mesmo
+tempo, que se atropelam) e escreve o que chega, ao segundo:
+
+```bash
+python main.py --testar-hr-ant 30
+```
+
+Com o relógio ou a cinta já a transmitir (no Garmin Swim 2: UP no widget da FC → **Transmitir FC**,
+ou «durante a atividade» e inicias uma atividade) e a 1–2 m da antena. Diz-te se **a antena abre**,
+se **o aparelho é encontrado** (`ANT+ Cardio #nnnn`), quantos **pacotes por segundo** chegam (o
+normal são ~4) e a **FC**. Leitura: *nada chega* → o aparelho não transmite ou está longe; *FC 0* →
+o sensor ainda não mediu; *poucos pacotes por segundo* → interferência (afasta a antena do PC com uma
+extensão USB, evita as portas USB 3 ao lado, aproxima o relógio). Eventos como «colisão com outro
+canal» aparecem quando há várias procuras em simultâneo — é normal durante **Procurar ANT+**.
+
 ### ANT+ primeiro, Bluetooth de reserva
 
 Basta emparelhar cada aparelho **uma vez**, por ANT+ e/ou por Bluetooth. A
@@ -2550,7 +2567,7 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (840 testes a passar).
+**Verificado com testes automáticos nesta versão** (846 testes a passar).
 
 *Novidades da ronda 12 (testes novos em `tests/test_round11.py`, e os antigos atualizados):* o
 calendário (um dia passado só carrega treino, hoje e o futuro planeiam; o seletor de datas do
