@@ -452,16 +452,20 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
     IN_SESSION = True
     SET_LINES = 3
 
-    def __init__(self, app, workout_id: str | None = None, resume: dict | None = None):
+    def __init__(self, app, workout_id: str | None = None, resume: dict | None = None,
+                 free: bool = False):
         super().__init__(app)
         self.chrome.title.font_size = 18
         a = app
         athlete = a.db.athlete()
         wid = workout_id or (resume or {}).get("config", {}).get("workout_id")
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
-                                          out_dir=a.data_dir / "strength", resume=resume)
+                                          out_dir=a.data_dir / "strength", resume=resume,
+                                          free=free)
         self.start_countdown(resume)
         self.init_finish()                    # o diálogo de terminar, como no ciclismo
+        self._plan_asked = False
+        self._here = None
         self._sig = None
         self.batch = pyglet.graphics.Batch()
         b = self.batch
@@ -497,6 +501,20 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         from velo.ui.widgets import SessionClock
         self.clock = SessionClock(app.window, batch=b)
         self._layout_panel()
+        if resume is None and not self.counting:      # sem contagem (0 s): começa já
+            self._auto_start()
+
+    # --------------------------------------------------- começar sozinho
+
+    def _auto_start(self) -> None:
+        """Como nas outras sessões: passados os 15 s (ou sem contagem) a sessão **começa**, com
+        o 1.º exercício; daí em diante o botão é só o «Lap»."""
+        if not self.session.started:
+            self.session.start_set()
+
+    def countdown_done(self) -> None:
+        self._auto_start()
+        self.enter()
 
     # ------------------------------------------------------------ medidas
 
@@ -569,16 +587,9 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         return t("str.start_set", n=n)
 
     def _short_action(self) -> str:
-        """A ação principal num botão curto (cabe ao lado do relógio): o ícone diz o resto."""
-        s = self.session
-        if s.phase == st.WORK:
-            return tr("Terminar série {n}", "Finish set {n}", n=s.set_no)
-        if s.phase == st.DONE or (s.phase == st.REST and s.all_done):
-            return tr("Treino completo", "Workout complete")
-        n = s.set_no if s.remaining(s.item_idx) > 0 else 1
-        if s.phase == st.REST:
-            n = s.done_sets(s.item_idx) + 1
-        return tr("Começar série {n}", "Start set {n}", n=n)
+        """Um só botão para avançar: **Lap** termina a série (ou o exercício) e passa ao descanso,
+        e do descanso passa à série seguinte. O ícone diz o resto."""
+        return "Lap"
 
     def _shown(self) -> int:
         """No descanso mostra-se o exercício que acabou de ser feito (é a série
@@ -586,35 +597,85 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         s = self.session
         return s.sets[-1].item_idx if s.editing_last else s.item_idx
 
+    def _cols_of(self, i: int, shown: int) -> tuple[str, str]:
+        """Repetições e carga que aparecem à frente de cada exercício: os da série em curso (os
+        campos), os da última série feita, ou o que o plano pede."""
+        s = self.session
+        ex = s.items[i]
+        if i == shown:
+            reps, load = s.field_value("reps"), s.field_value("load_kg")
+        else:
+            mine = [x for x in s.sets if x.item_idx == i]
+            if mine:
+                reps, load = mine[-1].reps, mine[-1].load_kg
+            elif s.free:
+                reps, load = None, None
+            else:
+                reps, load = ex.reps, ex.load_kg
+        return (_amount(reps, ex.measure) if reps else "—", _kg(load) if load else "—")
+
+    def _field_rows(self) -> list[Item]:
+        """Repetições, carga e RPE da série, mesmo por baixo do exercício em curso."""
+        s = self.session
+        it = s.items[self._shown()]
+        editing = s.editing_last
+        last = s.sets[-1] if editing else None
+        measure = it.measure if not editing else s.items[last.item_idx].measure
+        reps_label = t("str.seconds") if measure == "time" else t("str.reps")
+        suffix = f" ({t('str.fix_set', n=last.set_no)})" if editing else ""
+        pad = "        "
+        return [
+            Item(pad + reps_label + suffix, value=_amount(s.field_value("reps") or 0, measure),
+                 data="num:reps"),
+            Item(pad + t("str.load") + suffix, value=_kg(s.field_value("load_kg")),
+                 data="num:load_kg"),
+            Item(pad + "RPE" + suffix, value=_rpe(s.field_value("rpe")), data="num:rpe",
+                 detail=t("str.rpe_hint") if not editing else "")]
+
     def _exercise_rows(self) -> list[Item]:
-        """O treino todo em lista, para só o seguir: cada exercício com as séries feitas e o
-        alvo, e a seguir o **descanso** (entre as séries e até ao exercício seguinte)."""
+        """O treino todo em lista, para só o seguir. Cada exercício com as repetições e a carga
+        **à frente**, o alvo e as séries feitas; o exercício em curso traz por baixo os campos
+        da série; e a seguir a cada um o **descanso**."""
         s = self.session
         shown = self._shown()
         resting = s.phase == st.REST and bool(s.sets)
         rest_of = s.sets[-1].item_idx if resting else None
-        rows = []
+        rows = [Item(tr("Treino", "Workout"), header=True, value=tr("Séries", "Sets"),
+                     cols=(tr("Repetições", "Reps"), tr("Carga", "Load")))]
         for i, ex in enumerate(s.items):
             done, planned = s.done_sets(i), s.planned_sets(i)
             lab = (s.labels[i] + " · ") if getattr(s, "labels", None) else ""
+            value = f"{done}/{planned}" if not s.free else (f"×{done}" if done else "")
             if i in s.skipped:
                 mark, value = "– ", tr("saltado", "skipped")
             elif i == shown and not resting:
-                mark, value = "▶ ", f"{done}/{planned}"
+                mark = "▶ "
             elif s.remaining(i) == 0:
-                mark, value = "✓ ", f"{done}/{planned}"
+                mark = "✓ "
             else:
-                mark, value = "   ", f"{done}/{planned}"
+                mark = "   "
             rows.append(Item(f"{mark}{lab}{ex.name}", value=value,
-                             detail=ex.target_text(),
+                             detail="" if s.free else ex.target_text(),
+                             cols=self._cols_of(i, shown),
                              action=lambda k=i: self._start_exercise(k), data=("ex", i)))
-            if not ex.rest_s or i in s.skipped:
+            if i == shown and i not in s.skipped:
+                rows += self._field_rows()
+            if i in s.skipped or (s.free and rest_of != i):
+                continue
+            if not ex.rest_s and not s.free:
                 continue
             last = i == len(s.items) - 1
             detail = (tr("entre as séries", "between sets") if last else
                       tr("entre as séries e até ao exercício seguinte",
                          "between sets and until the next exercise"))
             if rest_of == i:
+                if s.free:
+                    rows.append(Item("▶ " + tr("Descanso", "Rest"),
+                                     value="+" + hms(max(0.0, s.t - s.sets[-1].end_t)),
+                                     detail=tr("Lap para o exercício seguinte",
+                                               "Lap for the next exercise"),
+                                     action=self._action, data=("rest", i)))
+                    continue
                 left = max(0.0, s.rest_until - s.t)
                 rows.append(Item("▶ " + tr("Descanso", "Rest"), value=hms(left), detail=detail,
                                  action=self._action, data=("rest", i)))
@@ -638,21 +699,7 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
 
     def enter(self) -> None:
         s = self.session
-        it = s.items[self._shown()]
-        editing = s.editing_last
-        last = s.sets[-1] if editing else None
-        measure = it.measure if not editing else s.items[last.item_idx].measure
-        reps_label = t("str.seconds") if measure == "time" else t("str.reps")
-        suffix = f" ({t('str.fix_set', n=last.set_no)})" if editing else ""
-        reps = s.field_value("reps")
-        # os campos da série (repetições, carga, RPE) em cima; por baixo, o treino todo
-        items = [
-            Item(reps_label + suffix, value=_amount(reps or 0, measure), data="num:reps"),
-            Item(t("str.load") + suffix, value=_kg(s.field_value("load_kg")),
-                 data="num:load_kg"),
-            Item("RPE" + suffix, value=_rpe(s.field_value("rpe")), data="num:rpe",
-                 detail=t("str.rpe_hint") if not editing else ""),
-        ] + self._exercise_rows() + self._buttons()
+        items = self._exercise_rows() + self._buttons()
         # sem título em cima: o painel já diz o exercício, a série e o alvo
         self.chrome.set("", "", self.footer())
         self.list.set_items(items, keep_index=True)
@@ -677,8 +724,14 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
     # -------------------------------------------------------------- ações
 
     def _action(self) -> None:
-        self.session.action()
+        """Lap. No treino livre, ao fechar o exercício abre-se logo a janela das repetições (o
+        descanso continua a contar por baixo)."""
+        s = self.session
+        was_work = s.phase == st.WORK
+        s.action()
         self.enter()
+        if s.free and was_work and s.phase == st.REST and s.sets:
+            self.app.push(FreeSetPopup(self.app, s))
 
     def _add_set(self) -> None:
         self.session.add_set()
@@ -795,6 +848,8 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         if self._signature() != self._sig:
             self.enter()
         self._update_panel()
+        self._update_cues()
+        self._check_plan_done()
         sub = ""
         if s.phase == st.WORK:
             sub = tr("série {t}", "set {t}", t=hms(s.t - s.set_start_t))
@@ -803,6 +858,44 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         elif not s.started:
             sub = tr("começa com a 1.ª série", "starts with the 1st set")
         self.clock.set(s.t, sub)
+
+    def _update_cues(self) -> None:
+        """Bips e contagem dos últimos segundos de cada série cronometrada e de cada descanso."""
+        from velo.ui.session_flow import drive_cues
+        s = self.session
+        n = None
+        if s.paused or s.finished:
+            n = None
+        elif s.phase == st.WORK:
+            it = s.item
+            tg = s.target(s.item_idx, s.set_no - 1)
+            secs = (tg.get("reps") if tg else None) or it.reps
+            left = (secs - (s.t - s.set_start_t)) if (it.measure == "time" and secs
+                                                      and not s.free) else None
+            n = drive_cues(self, ("set", len(s.sets)), "work", s.t - s.set_start_t, left)
+        elif s.phase == st.REST and s.sets and not s.free:
+            gone = s.t - s.sets[-1].end_t
+            n = drive_cues(self, ("rest", len(s.sets)), "rest", gone,
+                           None if s.all_done else s.rest_until - s.t)
+        elif s.phase == st.REST and s.sets:
+            n = drive_cues(self, ("rest", len(s.sets)), "rest", s.t - s.sets[-1].end_t, None)
+        else:
+            n = drive_cues(self, None, "work", 0.0, None)
+        self.clock.alert(n)
+
+    def _check_plan_done(self) -> None:
+        """Treino planeado cumprido (a última série acabou): o tempo pára e abre-se o diálogo
+        de terminar, como se tivesses carregado em «Terminar». (No treino livre és tu que
+        decides quando acaba.)"""
+        s = self.session
+        if s.free or s.finished or not s.sets:
+            return
+        done = s.all_done and s.phase in (st.REST, st.DONE)
+        if done and not self._plan_asked and not self.confirming:
+            self._plan_asked = True
+            self.plan_complete()
+        elif not done:
+            self._plan_asked = False
 
     def cancel_countdown(self) -> None:
         self._discard()
@@ -829,6 +922,10 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         elif s.phase == st.WORK:
             self.phase_label.text = f"{t('str.in_set', n=s.set_no)} · {hms(secs)}"
             self.phase_label.color = GOOD
+        elif s.phase == st.REST and s.free:            # treino livre: o descanso conta para cima
+            gone = max(0.0, s.t - s.sets[-1].end_t) if s.sets else 0.0
+            self.phase_label.text = f"{t('str.resting')} · {hms(gone)}"
+            self.phase_label.color = ACCENT
         elif s.phase == st.REST:
             over = secs < 0
             self.phase_label.text = (f"{t('str.resting')} · "
@@ -857,6 +954,10 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         elif s.phase == st.WORK:
             self.time_label.text = tr("série {t}", "set {t}", t=hms(s.t - s.set_start_t))
             self.time_label.color = GOOD
+        elif s.free:
+            self.time_label.text = tr("descanso {t}", "rest {t}",
+                                      t=hms(max(0.0, s.t - s.sets[-1].end_t)) if s.sets else "")
+            self.time_label.color = ACCENT
         else:
             left = s.rest_until - s.t
             self.time_label.text = tr("descanso {t}", "rest {t}",
@@ -891,8 +992,10 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
                        for x in s.sets)
         planned = sum(s.planned_sets(i) for i in range(len(s.items))
                       if i not in s.skipped)
+        if s.free:
+            planned = max(planned, len(s.sets))
         self.session_label.text = t("str.session_line", time=hms(s.t), sets=len(s.sets),
-                                    planned=planned, vol=f"{summ_vol:,.0f}".replace(",", " "),
+                                    planned=planned if not s.free else len(s.sets), vol=f"{summ_vol:,.0f}".replace(",", " "),
                                     hr=f"{s.avg_hr:.0f}" if s.avg_hr else "—")
         mine = [x for x in s.sets if x.item_idx == shown]
         self.sets_title.text = t("str.sets_of", name=it.name) if mine else t("str.no_sets_yet")
@@ -925,6 +1028,8 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         if k == "avg_hr":
             return f"{s.avg_hr:.0f}" if s.avg_hr else "—"
         if k == "sets":
+            if s.free:
+                return str(len(s.sets))
             total = sum(s.planned_sets(i) for i in range(len(s.items)))
             return f"{len(s.sets)}/{total}"
         if k == "reps":
@@ -982,6 +1087,64 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         super().draw()
         self.batch.draw()
         self.draw_finish()
+
+
+class FreeSetPopup(EditPopup):
+    """Treino livre: ao fechar um exercício com **Lap** abre esta janela para dizer quantas
+    repetições fizeste (e, se quiseres, a carga). O descanso continua a contar por baixo; Enter
+    fecha e o Lap seguinte passa ao exercício seguinte. (Mais tarde, na análise da sessão, ainda
+    se corrige.)"""
+
+    W = 640
+
+    def __init__(self, app, session):
+        super().__init__(app)
+        self.session = session
+        self.last = session.sets[-1]
+        self.ex = session.items[self.last.item_idx]
+
+    def title(self) -> str:
+        return tr("Quantas repetições?", "How many reps?")
+
+    def subtitle(self) -> str:
+        secs = max(0, self.last.end_t - self.last.start_t)
+        return f"{self.ex.name} · {tr('durou', 'took')} {hms(secs)}"
+
+    def has_unsaved(self) -> bool:
+        return False
+
+    def state(self):
+        return (self.last.reps, self.last.load_kg)
+
+    def rows(self) -> list[Item]:
+        unit = t("str.seconds") if self.ex.measure == "time" else t("str.reps")
+        return [Item(unit, value=_amount(self.last.reps or 0, self.ex.measure),
+                     data="num:reps",
+                     detail=tr("escreve o número · ←/→ ±1 · Enter fecha",
+                               "type the number · ←/→ ±1 · Enter closes")),
+                Item(t("str.load"), value=_kg(self.last.load_kg), data="num:load_kg",
+                     detail=tr("opcional · ←/→ muda", "optional · ←/→ changes"))]
+
+    def buttons(self) -> list[Item]:
+        return [Item("OK", button=True, primary=True, action=self.save_exit)]
+
+    def num_adjust(self, field: str, steps: int, big: bool) -> None:
+        self.session.adjust(field, steps * (5 if big else 1))
+
+    def num_set(self, field: str, value: float | None) -> None:
+        self.session.set_field(field, value)
+
+    def commit(self) -> bool:
+        return True
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if symbol in (key.ENTER, key.RETURN):
+            self.save_exit()
+            return True
+        if symbol == key.ESCAPE:
+            self.app.pop(force=True)
+            return True
+        return super().on_key(symbol, modifiers)
 
 
 class StrengthSummaryScreen(Screen):
@@ -2426,6 +2589,23 @@ class LapSessionScreen(FinishFlow, EditScreen):
         from velo.ui.widgets import SessionClock
         self.clock = SessionClock(app.window, batch=b)
         self._layout_panel()
+        if resume is None and not self.counting:       # sem contagem (0 s): começa já
+            self._auto_start()
+
+    def _auto_start(self) -> None:
+        """Como em todas as sessões de ginásio: passados os 15 s o relógio arranca (e, num plano
+        de voltas, começa a 1.ª volta)."""
+        s = self.session
+        if s.started:
+            return
+        if s.next_planned is not None:
+            s.start_planned()
+        else:
+            s.start()
+
+    def countdown_done(self) -> None:
+        self._auto_start()
+        self.enter()
 
     def _list_width(self, w: int) -> int:
         return int(w * 0.44) - 48

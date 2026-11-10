@@ -466,6 +466,8 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         self.refresh_buttons()
         for kind, data in e.drain_events():
             self._event(kind, data)
+        from velo.ui.session_flow import workout_step_cues
+        self.clock.alert(workout_step_cues(self, e.workout) if e.started else None)
         lap = e.lap_elapsed_s if e._lap is not None else 0.0
         self.clock.set(e.t, tr("volta {t}", "lap {t}", t=hms(lap)) + (
             f" · {tr('passo', 'step')} {e.workout.remaining_text()}"
@@ -590,6 +592,8 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         if msg:
             self.toast = msg
             self._toast_until = time.monotonic() + 3.0
+        if kind == "workout_done":
+            self.plan_complete()
 
     # ------------------------------------------------------------- teclas
 

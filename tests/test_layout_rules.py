@@ -289,7 +289,8 @@ class TestSettingsTabs(tg.GuiCase):
         self.pick("Definições")
         scr = self.screen()
         self.assertEqual(scr.tab_labels(), ["Atleta", "Geral", "Desportos", "Ecrã e idioma",
-                                            "Ligações Externas", "Atalhos de teclado"])
+                                            "Ligações Externas", "Atalhos de teclado",
+                                            "Configurações sonoras"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
         ftp = next(i for i in scr.list.items if i.label.startswith("FTP"))
         self.assertIn("limiar", ftp.detail)                   # cada métrica explicada

@@ -46,6 +46,15 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 12** — as **Configurações sonoras** (Definições): bips para os primeiros/últimos N
+  segundos de um bloco, de uma série ou de um descanso (por exemplo, os últimos 5 s com 2 bips por
+  segundo), e os últimos 5 segundos **sempre à vista** (a caixa do tempo pisca); ao acabar o **último
+  bloco** de um treino, o tempo pára e abre-se o diálogo de terminar; o **calendário** só planeia de
+  hoje para a frente (num dia passado carrega-se o ficheiro de treino); no **Ginásio**, a sessão
+  começa sozinha após os 15 s com um botão **Lap**, o treino é uma lista com as repetições e a carga
+  à frente de cada exercício e o seu descanso, e o **Treino livre** é só uma lista de exercícios:
+  marcas as voltas com Lap, abre-se a janela das repetições e, depois, edita-se o que faltou; o
+  botão **Começar treino** fica em baixo, à direita.
 - **Ronda 11** — o **Backups** é agora **Backups e Sincronização**, com três separadores
   (**Exportar**, **Repor** e **Sincronização**, que saiu das Definições); a Sincronização ganhou
   o separador **Saúde** (importa um .csv do diário por data, com modelo para descarregar); o
@@ -316,6 +325,7 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   file_import.py     as importações de ficheiros (ecrã e --importar)
   tags.py            etiquetas das sessões e tipos de treino (sugestão pelo esforço, .fit)
   longevity.py       índice de longevidade, eixos, radar, impacto de uma sessão, fórmula editável
+  cues.py            os avisos sonoros e visíveis do fim de um bloco, série ou descanso
   health_csv.py      o diário de saúde em .csv (modelo, exportação, importação por data)
   strength_import.py treinos de ginásio de um .csv, .json, .txt ou .fit (TrainingPeaks…)
   gpx_convert.py     GPX Conversor: percurso → níveis do rolo / inclinação da passadeira
@@ -333,6 +343,7 @@ velo/io/             rádio e sensores
   autoconnect.py     liga os aparelhos conhecidos: ANT+ primeiro, Bluetooth de reserva
   sim.py             trainer simulado — usar e testar sem hardware
   rower.py           máquinas de remo: Domyos (protocolo próprio) e FTMS, simulador
+  sound.py           os bips (um tom gerado em memória; sem som, o beep do terminal)
   strava.py          Strava: autorização e pedidos (só leitura)
   stall.py           pedais parados que continuam a emitir contam como zero
 velo/gfx/            world.py (estrada 3D) · hud.py (HUD e sinalética) · icons.py ·
@@ -361,7 +372,7 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      que prepara a sessão) · ride_report_screens.py
                      (infográficos) · feedback_screens.py ·
                      layout_screens.py (ecrã da sessão) · calendar_screens.py ·
-                     day_popups.py (a janela do dia e o planear) ·
+                     day_popups.py (a janela do dia e o planear) · sound_screens.py (configurações sonoras) ·
                      load_screens.py (carga e prontidão) ·
                      strength_builder_screens.py · strength_analysis_screens.py ·
                      exercise_stats_screens.py ·

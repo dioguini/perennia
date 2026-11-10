@@ -204,9 +204,9 @@ class SessionModePopup(PopupMixin, Screen):
         n = len(gym.workouts(a.db, mod))
         rows = [
             Item(tr("Treino livre", "Free workout"),
-                 detail=tr("Monta o plano e depois começa (podes guardá-lo)",
-                           "Build the plan, then start (you can save it)"),
-                 action=self._after(lambda: a.push(gs.GymPlanEditor(a, mod, None, draft=True)))),
+                 detail=tr("Só os exercícios: as voltas e as repetições marcas tu na sessão",
+                           "Just the exercises: you mark the laps and reps in the session"),
+                 action=self._after(lambda: a.push(gs.FreeWorkoutEditor(a, mod)))),
             Item(tr("Treino surpresa", "Surprise workout"),
                  detail=tr("Exercícios à sorte, só com o material que tens",
                            "Random exercises, only with the equipment you have"),

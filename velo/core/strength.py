@@ -356,6 +356,56 @@ class LoggedSet:
     max_hr: int | None = None
 
 
+FREE_MODE = "freeplan"     # `strength_sessions.mode` de um treino livre de ginásio
+
+
+def _ensure_mode(db: Database) -> None:
+    """A coluna `mode` (também usada pelas voltas): existe antes de a usarmos."""
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(strength_sessions)")}
+    if "mode" not in cols:
+        db.conn.execute("ALTER TABLE strength_sessions ADD COLUMN mode TEXT NOT NULL"
+                        " DEFAULT 'plan'")
+        db.conn.commit()
+
+
+def is_free_session(db: Database, session_id: str) -> bool:
+    """Foi um treino livre (exercícios sem séries nem repetições marcados de antemão)?"""
+    _ensure_mode(db)
+    r = db.conn.execute("SELECT mode FROM strength_sessions WHERE id = ?",
+                        (session_id,)).fetchone()
+    return bool(r and r["mode"] == FREE_MODE)
+
+
+def edit_free_set(db: Database, set_id: int, *, reps: int | None = None,
+                  load_kg: float | None = None, rpe: float | None = None) -> bool:
+    """Acrescenta ou corrige, depois da sessão, o que ficou em falta numa série de um treino
+    **livre** (repetições, carga, RPE). Só os treinos livres: nos outros, o treino é que manda.
+    Devolve False se a série não é de uma sessão livre."""
+    r = db.conn.execute("SELECT session_id FROM strength_sets WHERE id = ?", (set_id,)).fetchone()
+    if r is None or not is_free_session(db, r["session_id"]):
+        return False
+    if reps is not None:
+        db.conn.execute("UPDATE strength_sets SET reps = ? WHERE id = ?",
+                        (max(0, int(reps)), set_id))
+    db.conn.execute("UPDATE strength_sets SET load_kg = ?, rpe = ? WHERE id = ?",
+                    (None if not load_kg or load_kg <= 0 else round(float(load_kg), 2),
+                     None if not rpe or rpe <= 0 else max(1.0, min(10.0, float(rpe))), set_id))
+    db.conn.commit()
+    _refresh_totals(db, r["session_id"])
+    return True
+
+
+def _refresh_totals(db: Database, session_id: str) -> None:
+    """Repõe os totais da sessão (séries, repetições, volume) depois de uma correção."""
+    rows = db.conn.execute("SELECT reps, load_kg FROM strength_sets WHERE session_id = ?",
+                           (session_id,)).fetchall()
+    db.conn.execute("UPDATE strength_sessions SET total_sets = ?, total_reps = ?, volume_kg = ?"
+                    " WHERE id = ?", (len(rows), sum(x["reps"] or 0 for x in rows),
+                                      sum((x["reps"] or 0) * (x["load_kg"] or 0) for x in rows),
+                                      session_id))
+    db.conn.commit()
+
+
 class StrengthSession:
     """Corre um plano de força. Chamar `update(dt)` a cada frame.
 
@@ -371,8 +421,14 @@ class StrengthSession:
     def __init__(self, db: Database, athlete: Athlete, workout_id: str, *,
                  sensors: Any = None, out_dir: str | Path = "strength",
                  clock: Callable[[], float] = time.monotonic,
-                 resume: dict | None = None):
+                 resume: dict | None = None, free: bool = False):
         self.db = db
+        _ensure_mode(db)
+        if resume is not None:                    # a sessão livre continua livre ao retomar
+            row = db.conn.execute("SELECT mode FROM strength_sessions WHERE id = ?",
+                                  (resume["session_id"],)).fetchone()
+            free = bool(row and row["mode"] == FREE_MODE)
+        self.free = free             # treino livre: o atleta é que marca as voltas (ver abaixo)
         self.athlete = athlete
         self.workout_id = workout_id
         self.sensors = sensors
@@ -446,6 +502,9 @@ class StrengthSession:
                                 (workout_id, self.session_id))
             except Exception:
                 pass
+            if self.free:
+                db.conn.execute("UPDATE strength_sessions SET mode = ? WHERE id = ?",
+                                (FREE_MODE, self.session_id))
             db.conn.commit()
             self.started = False
             self._prefill()
@@ -514,6 +573,8 @@ class StrengthSession:
         it = self.item
         load = self.carry_load.get(self.item_idx, it.load_kg)
         reps, rpe = it.reps, it.rpe
+        if self.free:
+            reps, rpe = 0, None              # treino livre: nada marcado de antemão
         tg = self.target(self.item_idx, self.done_sets(self.item_idx))
         if tg is not None:
             reps = tg.get("reps") or reps
@@ -522,6 +583,8 @@ class StrengthSession:
         self.entry = {"reps": reps, "load_kg": load, "rpe": rpe}
 
     def _rest_after(self, idx: int, set_index: int) -> int:
+        if self.free:
+            return 0                 # sem descanso marcado: conta-se para cima até à volta seguinte
         if self.struct is not None:
             try:
                 from . import strength_builder as sb
@@ -569,7 +632,8 @@ class StrengthSession:
             self.paused_s += dt
             return
         self.t += dt
-        if self.phase == REST and self.t >= self.rest_until and not self._rest_done_sent:
+        if self.phase == REST and not self.free and self.t >= self.rest_until \
+                and not self._rest_done_sent:
             self._rest_done_sent = True
             self._emit("rest_done")
         self._accum += dt
@@ -669,7 +733,7 @@ class StrengthSession:
         if self.phase != WORK:
             return None
         it = self.item
-        reps = int(self.entry.get("reps") or it.reps)
+        reps = int(self.entry.get("reps") or (0 if self.free else it.reps))
         load = self.entry.get("load_kg")
         rpe = self.entry.get("rpe")
         hr = self._set_hr
@@ -677,8 +741,9 @@ class StrengthSession:
         mx = max(hr) if hr else None
         set_no = self.set_no
         tg = self.target(self.item_idx, set_no - 1)
-        plan_reps = (tg.get("reps") if tg else None) or it.reps
-        plan_load = tg.get("load_kg") if tg and tg.get("load_kg") is not None else it.load_kg
+        plan_reps = None if self.free else (tg.get("reps") if tg else None) or it.reps
+        plan_load = None if self.free else (
+            tg.get("load_kg") if tg and tg.get("load_kg") is not None else it.load_kg)
         cur = self.db.conn.execute(
             "INSERT INTO strength_sets(session_id, item_idx, exercise_id, set_no, reps,"
             " load_kg, rpe, start_t_s, end_t_s, avg_hr, max_hr, planned_reps,"

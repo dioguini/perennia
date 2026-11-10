@@ -1399,9 +1399,29 @@ class RideScreen(Screen):
             return
         a.hub.tick(dt)
         self.engine.update(dt)
+        done = False
         for event in self.engine.drain_events():
             self.hud.handle(event)
+            done = done or event.kind == "workout_done"
+        self.hud.alert_n = self._cue_tick()
         self.hud.update(self.engine)
+        if done:                      # o último bloco acabou: pára e pergunta, como em «Terminar»
+            self._ask_finish()
+
+    def _cue_tick(self) -> int | None:
+        """Bips e contagem dos últimos segundos de cada bloco do treino (ver `velo.core.cues`)."""
+        from velo.ui.session_flow import drive_cues
+        e = self.engine
+        wk = getattr(e, "workout", None)
+        if wk is None or getattr(e, "finished", False):
+            return None
+        plan = wk.plan(getattr(e, "_t", 0.0), ahead=0)
+        if not plan:
+            return drive_cues(self, None, "work", 0.0, None)
+        cur = plan[0]
+        kind = "rest" if cur["kind"] == "rest" else "work"
+        return drive_cues(self, ("step", cur["idx"]), kind,
+                          cur["duration_s"] - cur["remaining_s"], cur["remaining_s"])
 
     def on_device_lost(self, name: str) -> None:
         if self.hud is not None:
@@ -2213,7 +2233,8 @@ class SettingsScreen(Screen):
               ("@sports",),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
-              ("@shortcuts",))
+              ("@shortcuts",),
+              ("@sounds",))
     ATH_FIELDS = ("name", "birth_year", "weight_kg", "ftp_w", "lthr")
 
     def __init__(self, app: "App"):
@@ -2251,7 +2272,8 @@ class SettingsScreen(Screen):
         return [tr("Atleta", "Athlete"), tr("Geral", "General"), tr("Desportos", "Sports"),
                 tr("Ecrã e idioma", "Display & language"),
                 tr("Ligações Externas", "External connections"),
-                tr("Atalhos de teclado", "Keyboard shortcuts")]
+                tr("Atalhos de teclado", "Keyboard shortcuts"),
+                tr("Configurações sonoras", "Sound settings")]
 
     def group(self) -> tuple:
         return self.GROUPS[self.tab % len(self.GROUPS)]
@@ -2563,6 +2585,11 @@ class SettingsScreen(Screen):
                       "PgUp/PgDn sport · Ctrl+←/→ section · Enter/←/→ changes · Ctrl+S save")
         elif group == ("@shortcuts",):
             items = self.shortcut_items()
+        elif group == ("@sounds",):
+            from velo.ui import sound_screens
+            items = sound_screens.sound_items(self)
+            foot = tr("←/→ muda · Enter edita · Del apaga a regra · Ctrl+S guardar",
+                      "←/→ changes · Enter edits · Del deletes the rule · Ctrl+S save")
         else:
             rows = self._rows()
             items = [rows[k] for k in group]
@@ -2905,8 +2932,18 @@ class SettingsScreen(Screen):
             return open_choices(self, item, lambda s=1, f=d: self._adjust(f, s))
         return False
 
+    def update(self, dt: float) -> None:
+        if getattr(self, "_sound_test", None):
+            from velo.ui import sound_screens
+            sound_screens.tick_test(self, dt)
+
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
+        if self.group() == ("@sounds",) and symbol in (key.DELETE, key.BACKSPACE) and \
+                item is not None and str(item.data or "").startswith("rule:"):
+            from velo.ui import sound_screens
+            sound_screens.delete_rule(self, str(item.data)[5:])
+            return True
         if self.group() == ("@sports",):
             if symbol in (key.PAGEUP, key.PAGEDOWN):
                 self.set_sport(self.sport_tab + (1 if symbol == key.PAGEDOWN else -1))
@@ -2981,6 +3018,10 @@ class SettingsScreen(Screen):
                 self.draft.pop("trainer_levels", None)      # voltou ao que estava
         elif field == "pmc_synced":
             self.put("pmc_synced", not self.get("pmc_synced", True))
+        elif field == "sound_on":
+            self.put("sound_on", not self.get("sound_on", True))
+        elif field == "sound_end":
+            self.put("sound_end", not self.get("sound_end", True))
         elif field == "lookahead":
             self.put("workout_lookahead", max(0, min(4, int(self.get("workout_lookahead", 2))
                                                     + unit)))
@@ -4034,6 +4075,8 @@ class App:
             self.db.set("extra_resistance_pct", 0.0)
         set_language(self.db.get("language", PT))
         self.units = self.db.get("units", "metric")
+        from velo.io.sound import Beeper
+        self.beeper = Beeper()               # os bips dos avisos (ver velo.core.cues)
         from velo.gfx import theme as _theme_mod
         _theme_mod.apply(str(self.db.get("theme", _theme_mod.DEFAULT)))
 
@@ -4343,6 +4386,13 @@ class App:
             except Exception:
                 pass
         self.treadmill = treadmill
+
+    def new_cues(self):
+        """Um acompanhante dos avisos sonoros com as regras de Definições → Configurações
+        sonoras (ver `velo.core.cues`)."""
+        from velo.core import cues
+        return cues.CueTracker(cues.rules(self.db), self.beeper.beep,
+                               on=cues.enabled(self.db), long_at_end=cues.end_beep(self.db))
 
     def message(self, text: str) -> None:
         self._message = text

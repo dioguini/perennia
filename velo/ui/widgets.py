@@ -125,6 +125,7 @@ class Item:
     top: bool = False             # botão no topo, à direita (Adicionar, filtros)
     header: bool = False          # título de secção (sombreado, saltado pelas setas)
     head: bool = False            # numa faixa à parte, por cima (ver ListView.head_y)
+    cols: tuple = ()              # colunas à frente do valor (à direita): «10», «22 kg»…
 
     def __post_init__(self):
         if self.top:
@@ -200,6 +201,27 @@ class ListView:
         self.page_label = make_label("", font_size=10, color=DIM, anchor_x="right",
                                      anchor_y="center", batch=self.batch)
         self._add_rows(visible_rows)
+
+    COL_W = 112                       # a largura de cada coluna extra (`Item.cols`)
+
+    def _place_cols(self, label, item: Item, x: float, col_w: float, row_y: float) -> None:
+        """As colunas à frente do valor (por exemplo, repetições e carga de um exercício)."""
+        cl = getattr(label, "_cols", None)
+        if cl is None:
+            cl = label._cols = []
+        want = list(item.cols)
+        while len(cl) < len(want):
+            cl.append(make_label("", font_size=13, color=DIM, anchor_x="right",
+                                 anchor_y="center", batch=self.batch))
+        for j, lab in enumerate(cl):
+            if j < len(want):
+                lab.text = want[j]
+                lab.x = x + col_w - 96 - (len(want) - 1 - j) * self.COL_W
+                lab.y = row_y
+                lab.bold = bool(item.header)
+                lab.color = TEXT if (item.enabled and not item.header) else DIM
+            else:
+                lab.text = ""
 
     def _add_rows(self, n: int) -> None:
         for _ in range(n):
@@ -387,6 +409,8 @@ class ListView:
             if k >= len(slots):
                 highlight.opacity = highlight._bar.opacity = 0
                 label.text = value.text = detail.text = head.text = ""
+                for lab in getattr(label, "_cols", ()):
+                    lab.text = ""
                 continue
             idx, x, row_y, col_w, c = slots[k]
             self._cells.append((idx, x, row_y, col_w))
@@ -411,7 +435,7 @@ class ListView:
                 value.anchor_x = "right"
                 value.x, value.y = x + col_w, row_y
             # o rótulo e a nota não podem passar por baixo do valor à direita
-            free = col_w - text_px(item.value, 13) - 18
+            free = col_w - text_px(item.value, 13) - 18 - self.COL_W * len(item.cols)
             d = item.detail or ""
             if item.header:
                 label.text = ""
@@ -438,6 +462,7 @@ class ListView:
                 room = x + free - dx
                 detail.text = fit_text(d, room, 11) if room > 40 else ""
                 detail.x, detail.y = dx, row_y
+            self._place_cols(label, item, x, col_w, row_y)
         pages = -(-len(rows) // page) if rows else 1
         self.page_label.text = (f"{self.scroll // page + 1}/{pages}  ↑↓"
                                 if pages > 1 else "")
@@ -1768,7 +1793,24 @@ class SessionClock:
         from velo.core.units import hms
         self.cap.text = caption if caption is not None else tr("TEMPO TOTAL", "TOTAL TIME")
         self.value.text = hms(total_s)
-        self.sub.text = sub
+        if self._alert is None:
+            self.sub.text = sub
+
+    _alert: int | None = None
+
+    def alert(self, n: int | None) -> None:
+        """Nos últimos segundos de um bloco, uma série ou um descanso: a caixa pisca a vermelho e
+        mostra os segundos que faltam (5, 4, 3, 2, 1). `None` volta ao normal."""
+        import time
+        self._alert = n
+        if n is None:
+            self.bg.color = HEADER
+            self.sub.font_size = 11
+            return
+        on = int(time.monotonic() * 3) % 2 == 0          # pisca três vezes por segundo
+        self.bg.color = _theme.P.danger[:3] if on else HEADER
+        self.sub.font_size = 22
+        self.sub.text = str(n)
 
     def draw(self) -> None:
         if self._own:

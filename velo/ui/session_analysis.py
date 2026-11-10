@@ -289,6 +289,10 @@ class SessionAnalysis(RadarSide, Screen):
                 items = [Item(tr("Análise detalhada (séries, 1RM)", "Detailed analysis (sets, "
                                  "1RM)"), button=True, primary=True,
                               action=lambda: a.push(_strength_detail(a, self.sid)))]
+                from velo.core import strength as st_core
+                if st_core.is_free_session(a.db, self.sid):      # só os treinos livres
+                    items.insert(0, Item(tr("Editar séries", "Edit sets"), button=True,
+                                         action=lambda: a.push(_free_sets(a, self.sid))))
             else:
                 rows = rv.block_compliance(a.db, s)
                 if rows:
@@ -496,6 +500,11 @@ class SessionAnalysis(RadarSide, Screen):
                 self.chart.draw()
             else:
                 self.ride.draw()
+
+
+def _free_sets(app, sid: str):
+    from velo.ui.strength_analysis_screens import FreeSetsScreen
+    return FreeSetsScreen(app, sid)
 
 
 def _strength_detail(app, sid: str):
