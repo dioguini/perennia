@@ -62,15 +62,6 @@ class EnduranceHub(SportHub):
         self.SPORT = sport
         super().__init__(app)
 
-    def subtitle(self) -> str:
-        db = self.app.db
-        if self.SPORT == "running":
-            return tr("Ritmo de limiar {p} /km (nas Definições)",
-                      "Threshold pace {p} /km (in Settings)",
-                      p=hms(float(db.get("run_threshold_pace_s", 300))))
-        return tr("Ritmo crítico {p} /100 m (nas Definições)", "CSS {p} /100 m (in Settings)",
-                  p=hms(float(db.get("swim_css_s", 120))))
-
     def items_train(self) -> list[Item]:
         from velo.ui.challenge_screens import train_items
         a = self.app
@@ -308,7 +299,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
     def enter(self) -> None:
         e = self.engine
         self.list.y = -1000
-        self.list.set_items([])
+        self.refresh_buttons(force=True)                  # − + Pausa Terminar, em baixo
         self.chrome.set(e.title, sp.name(e.sport), self.footer())
 
     def cells_data(self) -> list[tuple[str, str]]:
@@ -395,6 +386,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             while size > 12 and len(v) * size * 0.66 > bg.width - 20:
                 size -= 2
             val.font_size = size
+        self.refresh_buttons()
         status = {"waiting": tr("ESPAÇO PARA COMEÇAR", "SPACE TO START"),
                   "paused": tr("EM PAUSA (P)", "PAUSED (P)")}.get(e.status, "")
         if self.typing is not None:
@@ -578,14 +570,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         plus = symbol in (key.PLUS, key.EQUAL, key.NUM_ADD)
         minus = symbol in (key.MINUS, key.NUM_SUBTRACT)
         if plus or minus:
-            if e.sport == "running":
-                if e.speed_locked:
-                    self._locked_toast()
-                    return True
-                e.set_speed(e.speed_kmh + (0.5 if plus else -0.5) *
-                            (2 if modifiers & key.MOD_SHIFT else 1))
-            else:
-                e.add_length(1 if plus else -1)
+            self._flow_adjust(1 if plus else -1, 2 if modifiers & key.MOD_SHIFT else 1)
             return True
         if symbol == key.T and e.sport == "running":
             if e.speed_locked:
@@ -619,6 +604,19 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         return (e.sport, e.workout_id, bool(e.route_id),
                 {"load": s.get("load"), "moving_s": s.get("moving_s"),
                  "elapsed_s": s.get("elapsed_s")})
+
+    def _flow_adjust(self, step: int, mult: int = 1) -> None:
+        e = self.engine
+        if e.sport == "running":
+            if e.speed_locked:
+                self._locked_toast()
+                return
+            e.set_speed(e.speed_kmh + 0.5 * step * mult)
+        else:
+            e.add_length(step)
+
+    def _flow_toggle_pause(self) -> None:
+        self.engine.toggle_pause()
 
     def _flow_paused(self) -> bool:
         return bool(self.engine.paused)
@@ -672,6 +670,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
+        self.list.draw()                                  # os botões em baixo, à direita
         self.draw_finish()
 
 

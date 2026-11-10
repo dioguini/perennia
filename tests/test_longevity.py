@@ -482,9 +482,13 @@ class TestHealthGui(tg.GuiCase):
         self.assertIsInstance(menu, hs.HealthMenu)
         menu.enter()
         labels = [i.label for i in menu.list.items]
-        self.assertIn("Colheita", labels)
-        general = next(i for i in menu.list.items if i.label == "Comentário geral do médico")
+        self.assertIn("2026-10-15", labels)                    # a lista das colheitas
+        self.assertNotIn("Comentário geral do médico", labels)  # só dentro da colheita
+        self.pick("2026-10-15")
+        general = next(i for i in menu.list.items if i.label == "Comentário do médico")
         self.assertIn("Repetir em 3 meses", general.detail)
+        self.assertIn("Comentário geral do médico", [i.label for i in menu.list.items
+                                                      if i.button])
         self.pick("LDL")
         self.app._on_text("Dieta e voltar a medir.")
         self.pick("Guardar")
@@ -517,11 +521,7 @@ class TestHealthGui(tg.GuiCase):
         imports = Path(self.tmp) / "imports"
         imports.mkdir(exist_ok=True)
         (imports / "My_Measurements.csv").write_text("date,rMSSD\n2026-10-28,70\n")
-        self.pick("Definições")
-        scr = self.screen()
-        scr.tab_named("Sincronização")
-        scr.sync_tab = 1                                       # HRV4Training
-        scr.enter()
+        scr = self.open_sync("HRV4Training")
         self.pick("My_Measurements.csv")
         self.assertEqual(scr.sync.last_report["values"], 1)
         self.assertIn("1 valores", scr.list.items[0].value)
@@ -616,8 +616,7 @@ class TestLapSessionGui(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.pick("Sessão de treino")
-        self.pick("Conditioning")
-        self.assertIsInstance(self.screen(), gs.ModalityScreen)
+        self.pick("Conditioning")                              # a modalidade, na mesma janela
         self.pick("Treino livre")
         plan = self.screen()
         self.assertIsInstance(plan, gs.LapPlanEditor)
@@ -653,9 +652,10 @@ class TestLapSessionGui(tg.GuiCase):
         self.press(key.SPACE)
         self.assertEqual(scr.session.current.kind, "rest")
         self.app._on_draw()
-        self.press(key.ESCAPE)
-        self.assertTrue(any("sem guardar" in i.label for i in scr.list.items))
-        self.pick("Sim")
+        self.press(key.F10)                                     # pergunta (Esc só pausa)
+        self.assertTrue(scr.finish_dialog.visible)
+        self.press(key.ENTER)                                   # «Sim, terminar»
+        self.press(key.ENTER)                                   # «Guardar e terminar» (etiquetas)
         summ = self.screen()
         self.assertIsInstance(summ, ss.LapSummaryScreen)
         self.assertTrue(Path(summ.result["fit_path"]).exists())
@@ -669,8 +669,8 @@ class TestLapSessionGui(tg.GuiCase):
         for _ in range(10):
             self.app._tick(0.5)
         sid = scr.session.session_id
-        self.press(key.ESCAPE)
-        self.pick("sem guardar")
+        self.press(key.F10)
+        self.press(key.D)                                       # terminar sem guardar
         row = self.app.db.conn.execute("SELECT * FROM strength_sessions WHERE id = ?",
                                        (sid,)).fetchone()
         self.assertIsNone(row)

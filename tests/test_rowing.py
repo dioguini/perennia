@@ -344,7 +344,7 @@ class TestRowingGui(tg.GuiCase):
         self.assertNotIn("Rota (.gpx)", labels)                  # o remo não tem rota
         self.pick("Começar")
         dev = self.screen()
-        self.assertIsInstance(dev, rs.RowerDeviceScreen)          # pede a máquina
+        self.assertIsInstance(dev, app_mod.DeviceScreen)          # pede a máquina, no popup
         self.pick("SEM HARDWARE - Remo")
         self.assertIsInstance(self.app.rower, rio.SimulatedRower)
         self.press(key.ESCAPE)                                  # volta à janela da sessão

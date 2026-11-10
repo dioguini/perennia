@@ -697,13 +697,18 @@ class LapSession:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         path, name = naming.unique_path(self.out_dir, base)
         fit_path = None
+        from . import tags as tags_mod
+        tag_info = tags_mod.resolve(
+            self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
+            summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit
             hr_rows = self.db.conn.execute(
                 "SELECT t_s, hr_bpm FROM strength_hr WHERE session_id = ? ORDER BY t_s",
                 (self.session_id,)).fetchall()
             fit.write_lap_session(path, self.athlete, [(r["t_s"], r["hr_bpm"]) for r in hr_rows],
-                                  self.laps, summ, start_unix=self.start_unix, name=name)
+                                  self.laps, summ, start_unix=self.start_unix, name=name,
+                                  tags=tags_mod.fit_text(tag_info))
             fit_path = str(path)
         except Exception as e:
             self.events.append(("fit_error", {"message": str(e)}))
@@ -719,7 +724,7 @@ class LapSession:
         self.db.conn.commit()
         self.db.delete_checkpoint(self.session_id)
         summ.update(session_id=self.session_id, name=name, fit_path=fit_path,
-                    title=self.title)
+                    title=self.title, tags=tag_info)
         return summ
 
     def abort(self) -> None:

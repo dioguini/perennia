@@ -226,7 +226,7 @@ Doze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira f
 **Saúde**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
 gerais**, **Inventário de artigos**, **Exercícios** e **Longevidade**. O Calendário deixou
 de ser um cartão: **está no próprio ecrã inicial** (ver abaixo), e os
-**Backups** passaram para a barra do topo. Um título que não caiba numa linha parte-se em
+**Backups e Sincronização** estão na barra do topo. Um título que não caiba numa linha parte-se em
 duas (a letra nunca fica abaixo de 12 px). O título fica sempre por baixo do ícone, com a
 letra a ajustar-se à largura do cartão. Escolhe-se com as setas e Enter, ou
 com o rato.
@@ -237,8 +237,9 @@ clique abre o dia); ao centro da página, **o calendário do mês**, grande
 (com os treinos feitos e planeados). ↓ a partir da segunda fila de cartões
 entra no calendário: setas mudam o dia, PgUp/PgDn o mês, T volta a hoje,
 ↑ na primeira semana regressa aos cartões. **Enter (ou um clique) num dia
-abre-o**, e aí podes adicionar: **um treino planeado**, **a nota do dia** e
-**o diário de saúde desse dia**.
+abre-o**, numa janela: o que fizeste e o que estava planeado, a **nota do dia** (em baixo, na
+própria janela), o botão **Diário de saúde** (abre a Saúde nesse dia) e **+ Planear treino**
+(ver «Calendário»). O título do ecrã inicial já não tem mensagem por baixo.
 
 **A barra do topo** (um pouco mais alta) está sempre visível, em todos os
 ecrãs:
@@ -264,8 +265,9 @@ ecrãs:
   Duram uns segundos; as compridas passam a duas ou três linhas.
 
 **As Definições estão em separadores**: Atleta, **Geral**, **Desportos**,
-Ecrã e idioma, Ligações Externas, **Sincronização** e **Atalhos de
-teclado**. Tab e Shift+Tab mudam de separador; também podes clicar.
+Ecrã e idioma, Ligações Externas e **Atalhos de
+teclado** (a Sincronização mudou-se para o menu **Backups e Sincronização**). Tab e Shift+Tab
+mudam de separador; também podes clicar.
 
 - **Atleta**: os limiares de todos os desportos — a FTP do ciclismo, a
   LTHR, a **FTP do remo**, o **ritmo de limiar da corrida** (min/km) e a
@@ -584,16 +586,25 @@ menu à parte). Mostra o mês, de segunda a domingo, com as sessões feitas e
 os treinos planeados de cada dia.
 
 Teclas: ↓ a partir dos cartões entra no calendário; ←/→ dia, ↑/↓ semana,
-**PgUp/PgDn** mês, **T** hoje, **Enter** abre o dia; ↑ na primeira semana
-volta aos cartões. Com o rato, um clique num dia abre-o.
+**PgUp/PgDn** mês, **T** hoje, **D** (ou o botão por cima do calendário) abre o **seletor de
+datas** para saltares para qualquer mês ou dia, **Enter** abre o dia; ↑ na primeira semana
+volta aos cartões. Com o rato, as setas ‹ › do título mudam de mês e um clique num dia abre-o.
 
-**Ao abrir um dia** vês o que fizeste, com o feedback, e o que estava
-planeado. Daí podes adicionar:
+**Ao abrir um dia** (uma janela) vês o que fizeste, com o feedback, e o que estava
+planeado. Em baixo, a **nota do dia** (o texto aparece na própria janela) e os botões:
 
-- **+ Planear um treino neste dia**: escolhe o desporto e o treino;
-- **Nota do dia**: um texto livre (como te sentiste, o tempo, a viagem…);
-- **Diário de saúde deste dia**: os valores da Saúde (sono, HRV, peso…)
-  desse dia.
+- **Nota do dia** (ou **N**): um texto livre (como te sentiste, o tempo, a viagem…);
+- **Diário de saúde**: vai para a Saúde, nesse dia (sono, HRV, peso…);
+- **+ Planear treino**: 1.º o **desporto**, 2.º **de onde vem o treino**. Num dia **de hoje
+  para a frente**: *importar um treino da lista* (com pesquisa), *importar um treino do
+  computador* (.zwo, .fit, .mrc, .erg… — pergunta se fica na lista) ou *criar um treino no
+  construtor* (fica na lista e já planeado nesse dia). Num dia **que já passou**: *carregar uma
+  atividade (.fit)* (Upload manual), *sincronizar a HRV* (HRV4Training), *sincronizar dados de
+  saúde (.csv)* ou *sincronizar o GarminDB* — abrem o menu Backups e Sincronização no
+  separador certo.
+
+A ficha de qualquer treino (ciclismo, remo, corrida, natação e ginásio) tem também o botão
+**Planear**: escolhes o dia no seletor de datas e o treino entra no calendário (sem duplicar).
 
 Enter num treino planeado abre o resumo, para começares; **Del** tira-o do
 plano. Um treino planeado fica **✓ feito** quando nesse dia há uma sessão
@@ -653,7 +664,20 @@ como no intervals.icu. Há três gráficos:
 Em cima ficam os números de hoje. ←/→ muda o período: 30, 60, 90, 180 ou
 365 dias.
 
+### Botões com ícone
+
+**Todo o botão** — nos menus, nas janelas e nos diálogos — leva um **ícone ao lado da etiqueta**,
+e **o mesmo ícone para a mesma ação**: **+** para acrescentar (o «+» da etiqueta é desenhado
+pelo ícone), disquete para Guardar, caixote para Apagar / Remover / Terminar sem guardar, **×**
+para Cancelar / Fechar, lápis para Editar, calendário para Planear, um ícone próprio para
+Exportar e outro para Importar, ▶ para Começar / Retomar, ⏸ para Pausa, ■ para Terminar, ✓ para
+Sim / OK / Aplicar e ← para Voltar. (Os ícones vêm de `velo/assets/icons`, gerados por
+`tools/make_icons.py`, e a regra de qual vai com cada etiqueta está em `velo/gfx/icons.py`.)
+
 ### Os menus de cada desporto
+
+Por baixo do título, o menu de cada desporto diz sempre **o nome do atleta, a FTP e a LTHR**
+(`Daniel · FTP 250 W · LTHR 165 bpm`); o **Ginásio** não mostra nada.
 
 Ciclismo, Remo, Corrida, Natação e Ginásio têm o mesmo menu, com quatro
 separadores em cima: **Treinar**, **Lista de treinos**, **Histórico** e
@@ -812,8 +836,12 @@ O antigo menu **Força** passou a ser **Ginásio**, com as modalidades:
 - Elásticos
 - Kettlebell
 - Sandbag
-- Longevidade
+- Mobilidade, Tendões e Isométrico
 - Conditioning (voltas: passadeira, remo, bicicleta, exercícios)
+
+(A modalidade **Longevidade** deixou de existir: o índice tem o seu menu. Os teus treinos e
+sessões dessa modalidade passam sozinhos para a Força e o treino de origem passou a chamar-se
+«Força e equilíbrio». O «Novo treino de ginásio» já não tem a Longevidade.)
 
 Cada modalidade tem:
 
@@ -826,8 +854,24 @@ Cada modalidade tem:
   equipamento que tens. Outro sorteio dá outro treino.
 - **Os teus treinos** e o **histórico** da modalidade.
 
-A **Longevidade** é a única que junta desportos: mistura força, mobilidade,
-equilíbrio e blocos de tempo de remo, bicicleta, passadeira ou natação.
+**«Sessão de treino» no Ginásio é uma janela só** (não há páginas): escolhes a **modalidade** e
+a janela passa às opções dessa modalidade — **Treino livre**, **Treino surpresa**, **Carregar
+treino** (a lista dessa modalidade), **Treino livre por blocos**, **Do computador**,
+**Challenge** e **Testes**. Esc volta atrás (da lista ou das opções para as modalidades, e daí
+fecha). **Do computador** lê um `.csv`, `.json`, `.txt` ou `.fit` (por exemplo, um treino de
+força criado no TrainingPeaks) e pergunta se fica na lista; a **Lista de treinos** tem o mesmo
+«Do computador». Num treino, **Configurar sessão de treino** abre uma janela só com os
+**aparelhos** (a banda de FC) e o **auto lap**, que aparece **bloqueado** porque o ginásio faz
+auto lap a cada bloco do treino.
+
+**A sessão de força** tem os mesmos botões, em baixo e à direita, das outras (**Pausa** e
+**Terminar**; mais **+ Série** e **Saltar**) e o mesmo diálogo de terminar (Esc pausa, F10
+pergunta; Sim · Não · Terminar sem guardar) seguido das etiquetas do `.fit`. O treino está **numa
+lista, num só ecrã**: cada exercício com as séries feitas (`2/4`), o alvo e o descanso — ▶ é o
+exercício da série, ✓ os que estão feitos. **Enter num exercício** vai para ele e começa a
+série (ou termina-a, se for a que está a correr); por baixo ficam os campos da série (repetições,
+carga, RPE) e, à direita, o painel com a FC e as séries do exercício. *Esta lista é uma proposta
+para avaliares: diz-me o que mudarias.*
 
 No **Conditioning**, o treino livre também começa pelo plano: escolhes as
 voltas (força, passadeira, remo, cardio, descanso), por tempo ou à vontade, e só
@@ -1023,8 +1067,8 @@ seguintes aparecem no plano (0 a 4; vem com 2).
 Em cima há quatro linhas que se mudam com ←/→ (ou Enter):
 
 - **Gráfico:** curva de potência, evolução, tempo em zona, tempo em zona por
-  período, fitness/fadiga/forma, FTP estimada, perfil de potência, cadência
-  e balanço E/D.
+  período, fitness/fadiga/forma, FTP estimada, perfil de potência, cadência,
+  balanço E/D e **Decoupling**.
 - **Métrica** (na evolução): distância, tempo, subida, carga (TSS),
   sessões, potência média, FC média e trabalho (kJ).
 - **Agrupar por:** dia, semana, mês, trimestre, semestre ou ano.
@@ -1036,6 +1080,13 @@ Por baixo aparecem os totais do período e o **percentil** do período atual
 em relação a todo o teu histórico. Por exemplo: "Esta semana: 145 km —
 percentil 88 das tuas semanas · melhor 212 km". Os grupos sem sessões também
 contam, porque treinar sempre um pouco pesa mais do que um pico isolado.
+
+O **Decoupling** (ciclismo; Pa:HR) compara a **eficiência** — potência ÷ FC — da 1.ª metade de
+cada sessão com a da 2.ª: `(EF₁ − EF₂) / EF₁ × 100`. Positivo = a FC subiu para a mesma potência
+(deriva cardíaca). Só entram sessões **com FC e com pelo menos 40 minutos** (o cálculo precisa
+de 20 min). Lê-se assim: **menos de 5 %** base aeróbia forte · **5–10 %** ainda a construir ·
+**mais de 10 %** deriva a mais (fadiga, calor, desidratação ou base fraca). O gráfico mostra a
+evolução ao longo do tempo.
 
 A **curva de potência** é sempre do histórico todo. Tem os watts no eixo
 vertical e, ao clicares num ponto (ou com ←/→ na linha "Ponto"), mostra a
@@ -1325,8 +1376,9 @@ passadeira); a FC vem **só** da **SEM HARDWARE - Banda cardíaca**.
 
 Cada sessão (e o seu `.fit`) leva três géneros de etiquetas:
 
-- **Tipo de sessão** — automático: `Perennia` + onde foi (`Indoor Cycling`, `Indoor Rowing`,
-  `Indoor Running`, `Pool Swimming`). Uma sessão **que segue um .gpx** também leva
+- **Tipo de sessão** — automático: `Perennia` (**sempre**) + onde foi, **pelo desporto**
+  (`Indoor Cycling`, `Indoor Rowing`, `Indoor Running`, `Pool Swimming`, `Indoor Strength` no
+  ginásio — vão sempre, mesmo que a janela não as mostre). Uma sessão **que segue um .gpx** também leva
   `Virtual Cycling` / `Virtual Running` e o `.fit` vai com o subtipo **virtual** (como o
   Zwift e o MyWhoosh). **Correr na passadeira não é virtual**, a não ser que sigas um
   .gpx; uma sessão sem rota é «indoor» à secura.
@@ -1343,7 +1395,8 @@ Ao terminar, a **janela «Etiquetas da sessão»** mostra o tipo de treino (Ente
 pesquisa), o tipo de sessão, as tuas etiquetas e a linha **No .fit** com tudo como vai ficar.
 **+ Adicionar etiqueta** abre uma janela onde, **ao escreveres, aparecem as etiquetas que já
 existem** (sem contar maiúsculas nem acentos — «pre» acha «Pré-prova»); escolhe uma ou
-**Criar «…»**. **Guardar e terminar** grava; **Voltar à sessão** (ou Esc) volta atrás.
+**Criar «…»** (também há o botão **+ Criar etiqueta nova**), e fica no catálogo para as
+próximas. **Guardar e terminar** grava; **Voltar à sessão** (ou Esc) volta atrás.
 No `.fit` as etiquetas vão no **nome do perfil desportivo** (mensagem `sport`, campo
 `name`: `Limiar · Perennia · Indoor Cycling · Pré-prova`), onde o Garmin Connect, o Strava e
 o TrainingPeaks as mostram. Ficam também na base (`session_tags`) e na análise da sessão
@@ -1382,6 +1435,16 @@ vale 60). Até haver `D` dias de histórico divide-se pelos dias que há (no mí
   (1 semana · 1 mês · 3 meses) e os eixos onde mais mexeu.
 - **No construtor**: o subtítulo mostra, ao mexeres nos blocos, o que o treino
   acrescentaria ao índice se o fizesses hoje.
+
+**A fórmula (separador «Fórmula»)**: mostra a fórmula escrita com os números em vigor e **deixa
+editá-la** — o índice recalcula-se logo. **Enter num eixo** muda o **peso** e a **dose de
+referência T** (minutos por semana); também se mudam a **mistura com os testes** (0,25 por
+omissão) e os **hábitos** (os minutos de recuperação por dia com 7 h+ de sono e por dia com HRV).
+**+ Novo parâmetro** acrescenta um eixo teu, de dois tipos: uma **métrica da Saúde** (a média no
+período face ao alvo; «melhor mais alto» ou «mais baixo») ou **os minutos de um desporto** (por
+semana, face a uma dose de referência), cada um com o seu **peso**; entra no índice e no radar
+(até 16 eixos). **Repor a fórmula original** volta à de origem. A fórmula fica na base, na
+definição `longevity_formula`, e viaja no backup («Definições»).
 
 ### GPX Conversor (construtor de treinos manuais: ciclismo e corrida)
 
@@ -1442,18 +1505,19 @@ O cartão **Saúde** tem:
   a confeção, "comi doces ao almoço?", "comi doces ao jantar?", "comi fora?",
   proteína, álcool, cafés, água e hora de deitar. Cada métrica tem uma
   **nota** (tecla **N**) e o dia tem uma nota livre.
-- **Métricas do diário:** cria as tuas (sim/não, número, escala 1–5, texto,
-  escolha ou hora), liga e desliga (**A**) e ordena (←/→). Dá para chegares às
+- **Métricas do diário:** cria as tuas com **+ Nova métrica** (em baixo, à direita, como os
+  outros botões de adicionar; sim/não, número, escala 1–5, texto, escolha ou hora), liga e
+  desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
 - **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências** e
   **Métricas**. (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
-- **Análises (o relatório):** em cima, **Colheita** (Enter abre a lista das
-  datas, com pesquisa) e o **Comentário geral do médico**; por baixo, todos
-  os resultados de uma vez, por área, cada um com o **valor atual, a
-  tendência e os 3 valores anteriores**, e o **comentário do médico** dessa
-  análise (Enter numa linha escreve-o). Botões: + Nova análise, Catálogo e
-  Editar esta colheita.
+- **Análises:** a lista das **colheitas** (uma por data, com o laboratório e o número de
+  resultados; **+ Nova análise** em baixo, à direita). **Enter numa colheita** abre-a: todos
+  os resultados, por área, cada um com o **valor atual, a tendência e os 3 valores
+  anteriores**, e o **comentário do médico** dessa análise (Enter numa linha escreve-o);
+  **Comentário geral do médico** é um botão **em baixo**, dentro da colheita (já não está no
+  topo da lista). Botões: Catálogo e Editar esta colheita; **Colheitas** volta à lista.
 - **Análises clínicas:** uma por data, com laboratório, notas e a caixa do
   **comentário do médico**; os resultados aparecem agrupados por área e exame
   (Hematologia · Hemograma, Bioquímica · Ferro…), com ▲/▼ quando estão fora.
@@ -1483,9 +1547,16 @@ O cartão **Saúde** tem:
 
 ### Sincronização (GarminDB)
 
-Em **Definições → Sincronização** trazes os teus dados de uma fonte para a
-base da Perennia. Cada fonte tem o seu separador:
+Em **Backups e Sincronização → Sincronização** (o botão da barra do topo; a Sincronização já
+não está nas Definições) trazes os teus dados de uma fonte para a
+base da Perennia. As opções gravam-se logo. Cada fonte tem o seu separador:
 
+- **Saúde (.csv)** — o diário de saúde **por data**: uma linha por dia, a coluna `data`, uma
+  coluna por métrica do diário **com o nome que ela tem na Perennia** (número, sim/não, escala,
+  hora, escolha ou texto) e a `nota` do dia. **Descarregar o modelo (.csv)** dá o cabeçalho e
+  uma linha de exemplo; **Exportar o diário (.csv)** dá o que já tens, no mesmo formato.
+  Colunas desconhecidas ignoram-se e os valores inválidos contam-se (não param a importação).
+  Também por `--csv-modelo saude`, `--csv-exportar saude` e `--importar saude ficheiro.csv`.
 - **HRV4Training (.csv)** — o export da app (Definições → Exportar
   medições). Entra no diário da Saúde.
 - **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
@@ -1575,12 +1646,13 @@ Importar outra vez não as duplica.
 
 A Saúde (**Importar dados → Sincronização (GarminDB)**) abre o mesmo ecrã.
 
-### Backups e reposição (botão na barra do topo)
+### Backups e Sincronização (botão na barra do topo)
 
 Tudo o que a Perennia guarda — **mesmo tudo** — sai num só ficheiro `.zip`,
-e volta a entrar com um clique. Abre-se no botão **Backups** da barra do
+e volta a entrar com um clique. Abre-se no botão **Backups e Sincronização** da barra do
 topo (ao lado de Dispositivos e Definições), em qualquer ecrã fora de uma
-sessão. Tem dois separadores:
+sessão. Tem três separadores — **Exportar**, **Repor** e **Sincronização** (esta última é a
+secção acima):
 
 **Exportar** — marca **Tudo (exportação completa)** ou só as componentes que
 quiseres (Enter ou ←/→ marca e desmarca) e carrega em **Exportar** (ou
@@ -1591,7 +1663,7 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, preferências… |
+| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
 | Atalhos de teclado | as teclas que mudaste |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
@@ -1701,6 +1773,16 @@ python main.py --csv-modelo exercicios
 
 ```bash
 python main.py --csv-exportar grupos --destino ~/Documentos
+```
+
+O diário de saúde tem o seu conjunto, `saude` (o `--importar saude` lê o .csv por data):
+
+```bash
+python main.py --csv-modelo saude
+```
+
+```bash
+python main.py --importar saude ~/Transferências/perennia_saude.csv
 ```
 
 Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
@@ -2269,6 +2351,25 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 11 NÃO cria tabelas nem colunas — e continua a ser tudo automático**: **não tens de
+fazer nada** (nem correr scripts) para que as alterações fiquem guardadas na base local; ao
+abrir a versão nova a Perennia faz sozinha o que precisa. O que muda no que já lá está:
+
+| Onde | O quê |
+|---|---|
+| definição `longevity_formula` (tabela `settings`) | a **fórmula da Longevidade** que editaste (pesos e doses de referência dos eixos, mistura com os testes, minutos dos hábitos e os **parâmetros próprios**). Vazia = a fórmula de origem. O índice continua a não guardar nada: recalcula-se sempre. Vai no backup, na componente «Definições» |
+| `strength_workouts.modality`, `strength_sessions.modality`, `exercise_modalities` | a modalidade **Longevidade** deixou de existir: **uma vez** (ao abrir), os treinos e as sessões que lhe pertenciam passam para a **Força**, o treino de origem passa de «Longevidade · força e equilíbrio» para «Força e equilíbrio» e os exercícios que só estavam na Longevidade ficam na Força. Nada se apaga (as tuas sessões e o histórico mantêm-se) |
+| `session_tags` / `tag_catalog` | as sessões de **ginásio** passam a ter etiquetas (`sport = 'strength'`: `Perennia`, `Indoor Strength` e as que escolhas) e o `.fit` leva-as; as sessões antigas não têm etiquetas (não se alteram) |
+| `daily_values`, `day_notes` | o **.csv da Saúde** escreve aqui, com `source = 'csv'` (para as apagares: `DELETE FROM daily_values WHERE source = 'csv'`) |
+| `strength_workouts` | os treinos de ginásio importados **do computador** (.csv, .json, .txt, .fit) entram aqui (e os exercícios que ainda não existiam em `exercises`); os que escolheres «só para esta sessão» ficam escondidos da lista |
+| `training_plan` | o botão **Planear** e a janela do dia escrevem aqui (um treino por dia e por desporto, sem duplicar) |
+
+A **Sincronização mudou de sítio** (de Definições para Backups e Sincronização), mas as suas
+opções continuam nas mesmas definições (`sync_*`, `garmindb_*`) — **não perdes nada**. A
+password do GarminDB continua só na configuração do próprio GarminDB, e os backups continuam a
+deixar de fora as credenciais por omissão. Se quiseres uma rede de segurança antes de abrires
+a versão nova: **Backups e Sincronização → Exportar → Tudo**, ou `python main.py --backup`.
+
 **A ronda 10 acrescenta tabelas e colunas — e continua a ser tudo automático**: ao abrir a
 versão nova a Perennia cria o que falta (`CREATE TABLE IF NOT EXISTS` e `ALTER TABLE ADD
 COLUMN` só quando a coluna não existe), **não tens de fazer nada** nem de correr nenhum
@@ -2378,7 +2479,23 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (777 testes a passar).
+**Verificado com testes automáticos nesta versão** (812 testes a passar).
+
+*Novidades da ronda 11 (35 testes novos em `tests/test_round11.py`, e os antigos atualizados):*
+o .csv da Saúde (modelo, exportação, ida e volta por data, colunas desconhecidas e valores
+inválidos) e o separador na Sincronização; o menu **Backups e Sincronização** com os três
+separadores e a Sincronização fora das Definições; o decoupling (Pa:HR, os limiares de leitura,
+o histórico lido das sessões com FC e a vista nas estatísticas do ciclismo); os ícones dos botões
+(o mesmo para a mesma ação, o «+» desenhado pelo ícone, todos os ficheiros existem); as etiquetas
+(`Perennia` e `Indoor …` sempre, criar uma etiqueta nova, o `.fit` e a base nas sessões de
+ginásio); o calendário (seletor de datas, a janela do dia com nota, diário e planear, o planear
+de um dia futuro e de um dia passado); a fórmula da Longevidade (editar, recalcular, parâmetros
+próprios, o separador); o ginásio sem Longevidade (modalidades, importar de .txt/.csv/.json/.fit,
+a janela da sessão por níveis, a configuração com o auto lap bloqueado); a sessão de força em
+lista (Enter começa a série, botões em baixo, Esc pausa, F10 pergunta, etiquetas) e o ecrã das
+voltas com o mesmo fluxo; o botão **Planear** na ficha de todos os desportos; o subtítulo
+*atleta · FTP · LTHR*; e a fórmula e o .csv a viajarem no backup. **Não foi testado com
+hardware real** nem com Windows/macOS.
 
 *Novidades da ronda 10 (46 testes novos em `tests/test_round10.py`, e os antigos atualizados):*
 o diálogo de terminar (Esc pausa, F10 pergunta, Enter/S/Y, Esc/N, D) igual no ciclismo, na
@@ -2560,8 +2677,8 @@ respostas no formato da API.
 - A volta automática existe no ciclismo, no remo, na corrida, na natação e
   no Conditioning. Nas sessões de séries do ginásio não, porque aí as
   voltas são as próprias séries.
-- Com 12 modalidades, a lista do Ginásio desloca-se um pouco num ecrã de
-  1024×640.
+- Com 14 modalidades, a lista de modalidades da janela do Ginásio desloca-se um pouco num
+  ecrã de 1024×640.
 
 **Não está incluído**: envio automático para o Strava, Garmin ou
 Intervals.icu (o `.fit` fica gravado e envias à mão), o top 15 dos segmentos

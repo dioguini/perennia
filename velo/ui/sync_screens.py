@@ -52,6 +52,22 @@ def _day(iso: str | None) -> str:
     return d.strftime("%d/%m/%Y")
 
 
+class SyncStore:
+    """O «rascunho» da sincronização no menu Backups e Sincronização: aqui não há Guardar,
+    por isso cada opção grava-se logo na base de dados."""
+
+    dirty = False
+
+    def __init__(self, db):
+        self.db = db
+
+    def get(self, key_: str, default=None):
+        return self.db.get(key_, default)
+
+    def put(self, key_: str, value) -> None:
+        self.db.set(key_, value)
+
+
 class SyncPanel:
     """As linhas e o comportamento da sincronização, dentro de um ecrã.
 
@@ -61,7 +77,7 @@ class SyncPanel:
 
     SOURCES = (("garmindb", "GarminDB"), ("hrv4training", "HRV4Training"),
                ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"),
-               ("upload", "Upload manual"), ("csv", "CSV"))
+               ("upload", "Upload manual"), ("csv", "CSV"), ("saude", "Saúde"))
     FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
                     "~/Desktop")
 
@@ -211,6 +227,70 @@ class SyncPanel:
             rows.insert(0, Item(tr("Último CSV", "Last CSV"),
                                 value=self.last_report.get("_text", ""), enabled=False))
         return rows
+
+    def items_saude(self) -> list[Item]:
+        """Os dados de saúde de uma ou mais datas por .csv: os campos são os do diário da
+        Perennia (uma coluna por métrica). Modelo para descarregar, exportação e importação."""
+        from velo.core import health_csv as hc
+        from velo.core.workout_download import downloads_dir
+        db = self.app.db
+
+        def write(what: str) -> None:
+            try:
+                path = hc.write(db, downloads_dir(), what=what)
+            except Exception as e:
+                self.app.message(f"{t('common.error')}: {e}")
+                return
+            self._csv_done(tr("Guardado em {p}", "Saved to {p}", p=path))
+            self.app.message(tr("Guardado em {p}", "Saved to {p}", p=path))
+        rows = [Item(tr("Descarregar o modelo (.csv)", "Download the template (.csv)"),
+                     detail=tr("uma linha por data: data, uma coluna por métrica do diário e a "
+                               "nota do dia · grava em {p}", "one row per date: date, one column "
+                               "per log metric and the day's note · saved in {p}",
+                               p=str(downloads_dir())),
+                     action=lambda: write("template")),
+                Item(tr("Exportar o diário (.csv)", "Export the log (.csv)"),
+                     value=tr("{n} métricas", "{n} metrics", n=len(hc.metrics(db))),
+                     detail=tr("todos os dias com valores, no mesmo formato do modelo",
+                               "every day with values, in the template's format"),
+                     action=lambda: write("export")),
+                Item(tr("Ficheiros .csv encontrados", "CSV files found"), header=True)]
+        known = 0
+        for p in self.files(("*.csv",)):
+            try:
+                if not hc.detect(db, p.read_text(encoding="utf-8-sig", errors="replace")):
+                    continue
+            except Exception:
+                continue
+            known += 1
+            rows.append(Item(p.name, value=tr("saúde", "health"), detail=str(p.parent),
+                             action=lambda q=p: self.import_health_csv(q)))
+        if not known:
+            rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
+                             detail=tr("descarrega o modelo, preenche as datas e põe o .csv em "
+                                       "{p}, Transferências ou Documentos",
+                                       "download the template, fill in the dates and put the "
+                                       ".csv in {p}, Downloads or Documents",
+                                       p=self.app.data_dir / "imports")))
+        rows += [Item(tr("Como funciona", "How it works"), header=True),
+                 Item(tr("A primeira coluna é a data (AAAA-MM-DD ou DD/MM/AAAA); cada outra é uma "
+                         "métrica do diário com o nome que tem na Perennia — número (7,5), sim/não, "
+                         "escala 1–5, hora (22:30), texto ou uma das opções. A coluna «nota» é a "
+                         "nota do dia. As colunas que não conhecer ignora-se. Os valores novos "
+                         "substituem os do mesmo dia.",
+                         "The first column is the date (YYYY-MM-DD or DD/MM/YYYY); every other "
+                         "one is a log metric with the name it has in Perennia — number (7.5), "
+                         "yes/no, 1–5 scale, time (22:30), text or one of the options. The "
+                         "“nota” column is the day's note. Unknown columns are ignored. New "
+                         "values replace the ones of the same day."), enabled=False)]
+        if self.last_report and self.last_report.get("_kind") == "saude":
+            rows.insert(0, Item(tr("Última importação", "Last import"),
+                                value=self.last_report.get("_text", ""), enabled=False))
+        return rows
+
+    def import_health_csv(self, path) -> None:
+        from velo.core import file_import
+        self.import_file("saude", path)
 
     def open_csv(self, key: str) -> None:
         from velo.ui.csv_screens import CsvDatasetPopup

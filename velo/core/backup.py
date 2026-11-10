@@ -115,9 +115,9 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("athlete",)),
     Component("definicoes", "Definições", "Settings",
               "unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, forma e "
-              "fadiga, preferências de ligação…",
+              "fadiga, a fórmula da Longevidade, preferências de ligação…",
               "units, theme, zones, General, non-ERG device limits, form and fatigue, "
-              "connection preferences…",
+              "the Longevity formula, connection preferences…",
               settings=_is_definicao),
     Component("atalhos", "Atalhos de teclado", "Keyboard shortcuts",
               "as teclas que mudaste", "the keys you changed", settings=_is_atalho),

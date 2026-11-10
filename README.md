@@ -39,10 +39,26 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   com visão geral e melhores tempos; contam sozinhos nas sessões.
 - Treinos do computador (`.zwo`, `.fit`, `.mrc`, `.erg`) perguntam se ficam
   na lista; cada sessão guarda a sua cópia do treino.
-- **Terminar uma sessão** é igual no ciclismo, na corrida e no remo (Esc pausa, F10 pergunta,
-  Sim / Não / Terminar sem guardar) e abre a janela das **etiquetas** do `.fit`: tipo de treino
-  (sugerido pelo esforço nas sessões livres), tipo de sessão (`Perennia`, `Indoor Cycling`,
-  `Virtual …` só quando segue um .gpx) e etiquetas livres com sugestão das que já existem.
+- **Terminar uma sessão** é igual no ciclismo, na corrida, no remo e no ginásio (Esc pausa, F10
+  pergunta, Sim / Não / Terminar sem guardar) e abre a janela das **etiquetas** do `.fit`: tipo
+  de treino (sugerido pelo esforço nas sessões livres), tipo de sessão (`Perennia` sempre; o
+  `Indoor …` do desporto sozinho — `Indoor Cycling`, `Indoor Strength`…; `Virtual …` só quando
+  segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
+  Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
+  ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 11** — o **Backups** é agora **Backups e Sincronização**, com três separadores
+  (**Exportar**, **Repor** e **Sincronização**, que saiu das Definições); a Sincronização ganhou
+  o separador **Saúde** (importa um .csv do diário por data, com modelo para descarregar); o
+  **calendário** do ecrã inicial tem seletor de datas e, ao escolher um dia, uma janela com a
+  nota, o diário de saúde e **Planear treino** (desporto → de onde vem o treino: lista,
+  computador ou construtor; num dia passado, carregar um .fit ou sincronizar a HRV e os dados de
+  saúde); a ficha de qualquer treino tem o botão **Planear**; o ciclismo ganhou a análise do
+  **decoupling** (Pa:HR) nas estatísticas; a **fórmula da Longevidade** vê-se, edita-se e pode
+  receber parâmetros novos; todos os desportos mostram *atleta · FTP · LTHR* por baixo do
+  título (o ginásio não); e o **Ginásio** perdeu a modalidade Longevidade, escolhe a modalidade
+  na mesma janela da sessão (treino livre, surpresa, carregar, por blocos, do computador,
+  Challenge e Testes), configura a sessão numa janela (com o auto lap bloqueado, porque é a
+  cada bloco) e a sessão de força mostra o treino **numa lista** (Enter começa a série).
 - **Longevidade**: um índice (0–100) para 1 dia … 20 anos, com a tendência e um **radar**
   de onde o corpo tem estado mais ou menos concentrado; cada sessão mostra o seu radar (o que
   treinou) e o que acrescentou ao índice, e o construtor mostra o impacto do treino antes de o
@@ -52,12 +68,14 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Exercícios** com grupos e subgrupos musculares, modalidades novas (Mobilidade, Tendões,
   Isométrico) e disciplinas que crias tu (cada uma ganha o seu separador).
 - **CSV**: modelos, exportação e importação de artigos, exercícios, grupos musculares,
-  disciplinas e testes (Definições → Sincronização → CSV, ou `--csv-modelo`, `--csv-exportar`
-  e `--importar csv`).
-- **Backups e reposição**: tudo, ou só algumas componentes, num `.zip`
+  disciplinas e testes (Backups e Sincronização → Sincronização → CSV, ou `--csv-modelo`,
+  `--csv-exportar` e `--importar csv`); e, no separador **Saúde**, o diário por data (`--csv-modelo
+  saude`, `--importar saude`).
+- **Backups e Sincronização**: tudo, ou só algumas componentes, num `.zip`
   segmentado (uma pasta por componente, um `.jsonl` por tabela, os `.fit`);
   repor é arrastar o ficheiro para a janela (substituir ou juntar), com um
-  backup automático antes. Abre-se no botão **Backups** da barra do topo.
+  backup automático antes; e a **Sincronização** (GarminDB, HRV4Training, Análises, TrainingPeaks,
+  Upload manual, CSV e Saúde). Abre-se no botão **Backups e Sincronização** da barra do topo.
   Também por `--backup` / `--restore`, e as importações por `--importar`.
 - Mostra em tempo real distância, falta, declive, declives médios a 500 m /
   1 / 3 / 5 / 10 km, potência, balanço esquerda/direita, zonas, torque,
@@ -133,9 +151,9 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   desporto e o total) e **Picos** no ciclismo (melhor potência, FC, cadência
   e velocidade em cada duração). Entrando por um desporto, o desporto fica
   fixo.
-- **Ginásio** com 12 modalidades (Força, Pliométricos, Animal Flow, Cardio,
-  HIIT, Calisténicos, Argolas, Elásticos, Kettlebell, Sandbag, Longevidade,
-  Conditioning). Cada uma tem treino livre (plano primeiro, depois
+- **Ginásio** com as modalidades Força, Pliométricos, Animal Flow, Cardio,
+  HIIT, Calisténicos, Argolas, Elásticos, Kettlebell, Sandbag, Mobilidade, Tendões,
+  Isométrico e Conditioning (a Longevidade saiu: o índice tem o seu menu). Cada uma tem treino livre (plano primeiro, depois
   começar), treino surpresa e os seus treinos. Acrescentar uma modalidade é
   um bloco no `gym.py`.
 - **Construtor de treinos de força por blocos** (como o do TrainingPeaks):
@@ -166,10 +184,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   (nome e formato, para Transferências).
 - **Barra do topo** com os aparelhos e o estado de cada um, e uma janela de
   dispositivos que funciona a meio da sessão. Avisa quando um aparelho se
-  desliga. Também tem Backups, Definições (em separadores: Atleta, Geral,
+  desliga. Também tem Backups e Sincronização, Definições (em separadores: Atleta, Geral,
   **Desportos** — métricas de sessão, disposição do ecrã e limites Não ERG
   de cada desporto, que o construtor respeita —, Ecrã e idioma, Ligações
-  Externas, Sincronização, Atalhos) e Desligar, que pede confirmação.
+  Externas, Atalhos) e Desligar, que pede confirmação.
 - **Contagem de 15 s** antes de qualquer sessão; nos treinos estruturados,
   uma volta por bloco (sem auto lap).
 - **Atalhos de teclado personalizáveis**, por contexto.
@@ -191,14 +209,14 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Testes de aptidão** de ciclismo, remo, corrida, natação e longevidade,
   editáveis. Os do rolo e da máquina de remo abrem a janela da sessão em
   **Configurar sessão** (Enter); o resultado vem da própria sessão.
-- **Saúde** em separadores (Análises, Testes de longevidade, Diários,
-  Tendências, Métricas): diário com métricas tuas e notas; as **análises
-  clínicas como um relatório** — a colheita escolhida numa lista, o
-  comentário geral do médico em cima, todos os resultados com o valor atual
-  e os 3 anteriores e o comentário do médico de cada análise — e a
+- **Saúde** em separadores (Análises, Diários, Tendências, Métricas):
+  diário com métricas tuas e notas (a **+ Nova métrica** fica em baixo, à
+  direita); as **análises clínicas** — a lista das colheitas e, dentro de uma
+  colheita, os resultados com o valor atual e os 3 anteriores, o comentário do
+  médico de cada análise e, em baixo, o **Comentário geral do médico** — e a
   importação do teu Excel (catálogo de parâmetros e intervalos de
   referência), HRV4Training e Garmin.
-- **Sincronização** (Definições), com separadores **HRV4Training (.csv)**,
+- **Sincronização** (Backups e Sincronização), com separadores **HRV4Training (.csv)**,
   **Análises (.csv)** e **TrainingPeaks (.csv de atividades**, com a TSS),
   e o **GarminDB**, que traz os dados para a base
   da Perennia — tudo, só o mais recente ou um intervalo de datas, e que
@@ -297,7 +315,9 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   tp_import.py       .csv de atividades do TrainingPeaks
   file_import.py     as importações de ficheiros (ecrã e --importar)
   tags.py            etiquetas das sessões e tipos de treino (sugestão pelo esforço, .fit)
-  longevity.py       índice de longevidade, eixos, radar, impacto de uma sessão
+  longevity.py       índice de longevidade, eixos, radar, impacto de uma sessão, fórmula editável
+  health_csv.py      o diário de saúde em .csv (modelo, exportação, importação por data)
+  strength_import.py treinos de ginásio de um .csv, .json, .txt ou .fit (TrainingPeaks…)
   gpx_convert.py     GPX Conversor: percurso → níveis do rolo / inclinação da passadeira
   muscles.py         grupos e subgrupos musculares
   csv_sync.py        modelos, exportação e importação em CSV
@@ -341,6 +361,7 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      que prepara a sessão) · ride_report_screens.py
                      (infográficos) · feedback_screens.py ·
                      layout_screens.py (ecrã da sessão) · calendar_screens.py ·
+                     day_popups.py (a janela do dia e o planear) ·
                      load_screens.py (carga e prontidão) ·
                      strength_builder_screens.py · strength_analysis_screens.py ·
                      exercise_stats_screens.py ·

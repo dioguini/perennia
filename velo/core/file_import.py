@@ -8,7 +8,7 @@ from .i18n import tr
 
 KINDS = {"hrv4training": "hrv4training", "analises": "labs", "labs": "labs",
          "trainingpeaks": "trainingpeaks", "tp": "trainingpeaks",
-         "atividade": "upload", "upload": "upload", "csv": "csv"}
+         "atividade": "upload", "upload": "upload", "csv": "csv", "saude": "saude"}
 
 
 def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
@@ -32,6 +32,11 @@ def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
         rep = {"activities": 1, "sport": info["sport"]}
         text = tr("Atividade «{n}» guardada em {s}", "Activity «{n}» saved to {s}",
                   n=info["name"], s=info["sport"])
+    elif kind == "saude":
+        from . import health_csv
+        text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+        rep = health_csv.import_csv(db, text)
+        text = health_csv.report_text(rep)
     elif kind == "csv":
         from . import csv_sync
         key, r = csv_sync.import_file(db, path)

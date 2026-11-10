@@ -250,9 +250,7 @@ class TestManualUpload(tg.GuiCase):
         from velo.core import garmin_sync as gs
         from velo.ui import upload_screens as up
         f = _write_fit(Path(self.tmp) / "ride.fit")
-        self.pick("Definições")
-        scr = self.screen()
-        scr.tab_named("Sincronização")
+        scr = self.open_sync()
         labels = scr.sync.source_labels()
         self.assertIn("Upload manual", labels)
         scr.sync_tab = labels.index("Upload manual")

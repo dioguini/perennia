@@ -89,11 +89,9 @@ class TestShortcutsSettings(tg.GuiCase):
 
 class TestSyncTabs(tg.GuiCase):
     def test_sync_has_a_tab_per_source(self):
-        self.pick("Definições")
-        scr = self.screen()
-        scr.tab_named("Sincronização")
+        scr = self.open_sync()
         self.assertEqual(scr.sync.source_labels(), ["GarminDB", "HRV4Training", "Análises",
-                                                    "TrainingPeaks", "Upload manual", "CSV"])
+                                                    "TrainingPeaks", "Upload manual", "CSV", "Saúde"])
         self.assertEqual(scr.sync_tabs.current, "GarminDB")
         self.assertNotIn("Fonte", [i.label for i in scr.list.items])
         self.app._on_draw()

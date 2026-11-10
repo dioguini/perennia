@@ -96,19 +96,21 @@ class TestAutoLapAndIntensity(Base):
 
 
 class TestGymCore(Base):
-    def test_every_modality_has_exercises_and_longevity_sees_all(self):
+    def test_every_modality_has_exercises_and_longevity_is_gone(self):
         gym.ensure(self.db)
         keys = [m.key for m in gym.modalities()]
         for k in ("strength", "plyometrics", "animal_flow", "cardio", "hiit", "calisthenics",
-                  "rings", "bands", "kettlebell", "sandbag", "longevity", "conditioning"):
+                  "rings", "bands", "kettlebell", "sandbag", "mobility", "tendons",
+                  "isometric", "conditioning"):
             self.assertIn(k, keys)
             self.assertGreater(len(gym.exercises(self.db, k)), 4, k)
+        self.assertNotIn("longevity", keys)             # a Longevidade é um menu à parte
         everything = len(gym.exercises(self.db))
-        self.assertEqual(len(gym.exercises(self.db, "longevity")), everything)
         self.assertLess(len(gym.exercises(self.db, "kettlebell")), everything)
-        # só a Longevidade junta desportos
-        self.assertTrue(gym.modality("longevity").multi)
-        self.assertFalse(any(m.multi for m in gym.modalities() if m.key != "longevity"))
+        # nenhum exercício ficou com a modalidade antiga
+        self.assertEqual(self.db.conn.execute(
+            "SELECT COUNT(*) FROM exercise_modalities WHERE modality = 'longevity'"
+        ).fetchone()[0], 0)
 
     def test_new_modality_plugs_in(self):
         gym.register(gym.Modality("yoga", "Yoga", "Yoga", "pulse"),
@@ -132,9 +134,10 @@ class TestGymCore(Base):
             for i in items:
                 ex = gym.exercise(self.db, i["exercise_id"])
                 self.assertTrue(set(ex["equipment"]) <= {"kettlebell"}, ex["name"])
-        lon = gym.surprise(self.db, "longevity", 3)
-        mods = {m for i in lon for m in gym.exercise(self.db, i["exercise_id"])["modalities"]}
-        self.assertIn("cardio", mods)                       # um bloco de outro desporto
+        iso = gym.surprise(self.db, "isometric", 3)
+        self.assertTrue(iso)
+        for i in iso:
+            self.assertIn("isometric", gym.exercise(self.db, i["exercise_id"])["modalities"])
 
     def test_exercise_with_modalities_and_equipment(self):
         gym.ensure(self.db)

@@ -492,7 +492,24 @@ class SportHub(Screen):
         return sp.name(self.SPORT)
 
     def subtitle(self) -> str:
-        return ""
+        """Por baixo do nome do desporto, sempre o mesmo: o atleta, a FTP e o limiar de FC
+        (o ginásio não leva nada)."""
+        if self.SPORT == "gym":
+            return ""
+        ath = self.app.db.athlete()
+        bits = [ath.name or "—"]
+        if ath.ftp_w:
+            bits.append(f"FTP {ath.ftp_w} W")
+        lthr = getattr(ath, "lthr", None)
+        if not lthr:
+            try:
+                from velo.core.ride import estimate_lthr
+                lthr = estimate_lthr(ath)
+            except Exception:
+                lthr = None
+        if lthr:
+            bits.append(f"LTHR {int(lthr)} bpm")
+        return " · ".join(bits)
 
     def items_for(self, key_: str) -> list[Item]:
         return getattr(self, f"items_{key_}")()
@@ -584,13 +601,6 @@ class MainMenu(SportHub):
         if which == "chase":
             return boards.chase_board(a.db, a.db.get("chase_level", "normal"), None)
         return boards.records_board(a.db, a.units)
-
-    def subtitle(self) -> str:
-        a = self.app
-        athlete = a.db.athlete()
-        wv, wu = weight(athlete.weight_kg, a.units)
-        return (f"{athlete.name or '—'} · FTP {athlete.ftp_w} W · {wv:.1f} {wu} · "
-                f"{a.device_summary()}")
 
     def items_train(self) -> list[Item]:
         a = self.app
@@ -781,8 +791,9 @@ class HomeScreen(Screen):
     def enter(self) -> None:
         a = self.app
         athlete = a.db.athlete()
-        self.chrome.set("Perennia", f"{athlete.name or '—'} · {a.device_summary()}",
-                        "←→↑↓ escolher · Enter abrir")
+        self.chrome.set("Perennia", "",                 # sem texto por baixo do título
+                        "←→↑↓ escolher · Enter abrir · no calendário: PgUp/PgDn mês · T hoje · "
+                        "D escolher data")
         # a lista (invisível) serve o teclado e os testes; os cartões são o que se vê
         self.list.set_items([Item(tile.title_text, action=act)
                              for tile, act in zip(self.tiles, self._actions())],
@@ -871,7 +882,31 @@ class HomeScreen(Screen):
             self._actions()[i]()
 
     def open_day(self, d) -> None:
-        self.app.push(_calendar().DayScreen(self.app, d))
+        from velo.ui.day_popups import DayPopup
+        self.app.push(DayPopup(self.app, d))
+
+    def pick_date(self) -> None:
+        """O seletor de datas: salta para qualquer mês/dia do calendário."""
+        from datetime import date as _date
+        from velo.ui.pickers import pick_date
+
+        def go(iso: str) -> None:
+            self._focus_calendar()
+            self.cal.go(_date.fromisoformat(iso))
+        pick_date(self.app, tr("Ir para a data", "Go to date"), self.cal.sel, go)
+
+    def _cal_nav(self, kind: str) -> None:
+        from datetime import date as _date
+        if kind == "pick":
+            self.pick_date()
+            return
+        self._focus_calendar()
+        if kind == "today":
+            self.cal.go(_date.today())
+        else:
+            y, m = _calendar().cv.shift_month(self.cal.year, self.cal.month,
+                                              1 if kind == "next" else -1)
+            self.cal.go(_date(y, m, 1))
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         from datetime import date as _date, timedelta as _td
@@ -888,6 +923,8 @@ class HomeScreen(Screen):
                 self.cal.go(_date(y, m, 1))
             elif symbol == key.T:
                 self.cal.go(_date.today())
+            elif symbol in (key.D, key.G):
+                self.pick_date()
             elif symbol in (key.ENTER, key.RETURN, key.SPACE):
                 self.open_day(self.cal.sel)
             elif symbol == key.ESCAPE:
@@ -921,6 +958,10 @@ class HomeScreen(Screen):
                 self._select(i)
                 self._open(i)
                 return True
+        nav = self.cal.hit_nav(x, y)
+        if nav is not None:
+            self._cal_nav(nav)
+            return True
         d = self.cal.hit(x, y)
         if d is not None:
             self._focus_calendar()
@@ -2149,7 +2190,8 @@ class DeviceScreen(ModalScreen):
 
 class SettingsScreen(Screen):
     """Definições por separadores: Atleta · Geral · Desportos · Ecrã e idioma ·
-    Ligações Externas · Sincronização · Atalhos de teclado.
+    Ligações Externas · Atalhos de teclado. (A Sincronização está no menu
+    «Backups e Sincronização».)
 
     **Desportos** tem um separador por desporto e, em cada um, três: as
     métricas disponíveis (as desligadas não aparecem no editor do ecrã), o
@@ -2171,22 +2213,16 @@ class SettingsScreen(Screen):
               ("@sports",),
               ("theme", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
-              ("@sync",),
               ("@shortcuts",))
     ATH_FIELDS = ("name", "birth_year", "weight_kg", "ftp_w", "lthr")
 
     def __init__(self, app: "App"):
         super().__init__(app)
-        from velo.ui.sync_screens import SyncPanel
         self.draft: dict = {}
         self._orig: dict = {}
         self.ath = app.db.athlete()
         self._ath0 = self._ath_sig()
-        self.sync = SyncPanel(self)
-        # Sincronização: um separador por fonte de dados (por agora, o GarminDB)
         w, h = app.window.width, app.window.height
-        self.sync_tab = 0
-        self.sync_tabs = TabBar(self.sync.source_labels(), 48, self.content_top(h) + 6, w - 96)
         # Desportos: um separador por desporto e, em cada um, três secções
         self.sport_tab = 0
         self.section_tab = 0
@@ -2215,7 +2251,7 @@ class SettingsScreen(Screen):
         return [tr("Atleta", "Athlete"), tr("Geral", "General"), tr("Desportos", "Sports"),
                 tr("Ecrã e idioma", "Display & language"),
                 tr("Ligações Externas", "External connections"),
-                tr("Sincronização", "Sync"), tr("Atalhos de teclado", "Keyboard shortcuts")]
+                tr("Atalhos de teclado", "Keyboard shortcuts")]
 
     def group(self) -> tuple:
         return self.GROUPS[self.tab % len(self.GROUPS)]
@@ -2314,10 +2350,6 @@ class SettingsScreen(Screen):
         novas ficam com o rascunho das antigas."""
         self.draft, self._orig = old.draft, old._orig
         self.ath, self._ath0 = old.ath, old._ath0
-        self.sync = old.sync
-        self.sync.screen = self
-        if getattr(self.sync, "store", None) is old:
-            self.sync.store = self
 
     def _preview_theme(self) -> None:
         """Mostra já o tema escolhido (ou o gravado), sem o gravar."""
@@ -2441,7 +2473,7 @@ class SettingsScreen(Screen):
                 action=lambda: a.push(_connect().StravaScreen(a))),
             "@garmin_head": Item(tr("— GarminDB (Garmin Connect) —",
                                     "— GarminDB (Garmin Connect) —"), enabled=False,
-                                 detail=tr("a autenticação; o resto está em Sincronização",
+                                 detail=tr("a autenticação; o resto está em Backups e Sincronização",
                                            "the sign-in; the rest is in Sync")),
             "garmin_user": Item(tr("Utilizador do Garmin Connect", "Garmin Connect user"),
                                 value=(user if user is not None else user0) + "▏",
@@ -2529,12 +2561,6 @@ class SettingsScreen(Screen):
             items = self.sports_items()
             foot = tr("PgUp/PgDn desporto · Ctrl+←/→ secção · Enter/←/→ muda · Ctrl+S guardar",
                       "PgUp/PgDn sport · Ctrl+←/→ section · Enter/←/→ changes · Ctrl+S save")
-        elif group == ("@sync",):
-            src = self.sync.SOURCES[self.sync_tab % len(self.sync.SOURCES)][0]
-            self.sync_tabs.set_labels(self.sync.source_labels())
-            self.sync_tabs.select(self.sync_tab)
-            self.list.y = self.content_top(h) - 52          # por baixo dos separadores
-            items = self.sync.items(src)
         elif group == ("@shortcuts",):
             items = self.shortcut_items()
         else:
@@ -2549,9 +2575,6 @@ class SettingsScreen(Screen):
                      "Press the new key for «{a}» · Esc cancels", a=keymap.label(self.capturing))
         self.chrome.set(t("menu.settings"), sub, foot)
         self.list.set_items(items + self.buttons(), keep_index=True)
-
-    def update(self, dt: float) -> None:
-        self.sync.update()
 
     # ----------------------------------------------------------- desportos
 
@@ -2788,19 +2811,11 @@ class SettingsScreen(Screen):
 
     def draw(self) -> None:
         super().draw()
-        if self.group() == ("@sync",):
-            self.sync_tabs.draw()
-        elif self.group() == ("@sports",):
+        if self.group() == ("@sports",):
             self.sport_tabs.draw()
             self.section_tabs.draw()
 
     def on_mouse(self, x: int, y: int) -> bool:
-        if self.group() == ("@sync",):
-            i = self.sync_tabs.hit(x, y)
-            if i is not None:
-                self.sync_tab = i
-                self.enter()
-                return True
         if self.group() == ("@sports",):
             i = self.sport_tabs.hit(x, y)
             if i is not None:
@@ -2825,7 +2840,6 @@ class SettingsScreen(Screen):
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
-        self.sync_tabs.layout(48, self.content_top(h) + 6, w - 96)
         self.sport_tabs.layout(48, self.content_top(h) + 6, w - 96)
         self.section_tabs.layout(48, self.content_top(h) - 38, w - 96)
         self.enter()
@@ -2833,8 +2847,6 @@ class SettingsScreen(Screen):
     # -------------------------------------------------------------- texto
 
     def text_input(self, field: str, text: str) -> None:
-        if self.sync.text(field, text):
-            return
         if field == "name":
             self.ath.name = ((self.ath.name or "") + text)[:40]
         elif field == "garmin_user":
@@ -2850,8 +2862,6 @@ class SettingsScreen(Screen):
         self.enter()
 
     def text_backspace(self, field: str) -> None:
-        if self.sync.text(field, None):
-            return
         if field == "name":
             self.ath.name = (self.ath.name or "")[:-1]
         elif field == "garmin_user":
@@ -2878,24 +2888,6 @@ class SettingsScreen(Screen):
 
     def _enter_row(self, item) -> bool:
         d = item.data
-        if d in ("sync:start", "sync:end"):
-            from velo.ui.pickers import pick_date
-            field = d[5:]
-            o = self.sync.opts
-            o.clean()
-
-            def put(iso: str, f=field) -> None:
-                setattr(o, f, iso)
-                if o.start and o.end and o.start > o.end:
-                    if f == "start":
-                        o.end = o.start
-                    else:
-                        o.start = o.end
-                self.sync.save(o)
-                self.enter()
-            pick_date(self.app, item.label, getattr(o, field) or date.today().isoformat(),
-                      put, max_day=date.today())
-            return True
         if d == "theme":
             from velo.gfx import theme as theme_mod
             from velo.ui.pickers import ChoicePopup
@@ -2909,8 +2901,6 @@ class SettingsScreen(Screen):
                                       keys.index(cur) if cur in keys else 0, pick_theme))
             return True
         from velo.ui.pickers import open_choices
-        if d == "sync:period" or str(d).startswith(("sync:opt:", "sync:stat:")):
-            return open_choices(self, item, lambda s=1, f=d[5:]: self.sync.adjust(f, s, False))
         if d in self.CHOICE_ROWS:
             return open_choices(self, item, lambda s=1, f=d: self._adjust(f, s))
         return False
@@ -2936,11 +2926,6 @@ class SettingsScreen(Screen):
                 return True
         if item is not None and symbol in (key.ENTER, key.RETURN) and item.action is None \
                 and isinstance(item.data, str) and self._enter_row(item):
-            return True
-        if item is not None and isinstance(item.data, str) and item.data.startswith("sync:") \
-                and symbol in (key.LEFT, key.RIGHT):
-            self.sync.adjust(item.data[5:], 1 if symbol == key.RIGHT else -1,
-                             bool(modifiers & key.MOD_SHIFT))
             return True
         if item is not None and item.data and symbol in (key.LEFT, key.RIGHT) and \
                 not str(item.data).startswith("text:"):
@@ -3494,7 +3479,7 @@ class StatsScreen(Screen):
     VIEW_KEY = "stats.view."
     STATS_SPORT = "cycling"        # o desporto escolhido na linha «Desporto»
     VIEWS = ("general", "power_curve", "evolution", "zones", "zones_period", "load", "eftp",
-             "profile", "peaks", "cadence", "balance")
+             "profile", "peaks", "cadence", "balance", "decoupling")
     SPORTS = ("cycling",)          # de que desportos vem a carga (fitness/fadiga/forma)
     COUNTS = (4, 6, 8, 12, 16, 24, 36, 52, 104)
     RECORD_ROWS = 4
@@ -3659,7 +3644,8 @@ class StatsScreen(Screen):
                              data="apply_eftp" if est else None, enabled=bool(est)))
         else:
             rows.append(Item(t("stats.row.metric"), value="—", enabled=False))
-        periodic = view in ("evolution", "zones", "zones_period", "load", "eftp", "balance")
+        periodic = view in ("evolution", "zones", "zones_period", "load", "eftp", "balance",
+                            "decoupling")
         rows.append(Item(t("stats.row.group"), value=t(f"stats.group.{self.grouping}"),
                          data="group", enabled=periodic))
         rows.append(Item(t("stats.row.range"),
@@ -3737,7 +3723,7 @@ class StatsScreen(Screen):
 
     def on_mouse(self, x: int, y: int) -> bool:
         if self.VIEWS[self.view] in ("power_curve", "evolution", "load", "balance",
-                                     "zones_period", "eftp"):
+                                     "zones_period", "eftp", "decoupling"):
             idx = self.chart.hit(x, y)
             if idx is not None:
                 if self.VIEWS[self.view] == "power_curve":
@@ -3773,6 +3759,8 @@ class StatsScreen(Screen):
             return (f"{label}: {t('form.short', ctl=f'{value[0]:.0f}', atl=f'{value[1]:.0f}', tsb=f'{value[2]:+.0f}')}")
         if view == "eftp":
             return f"{label}: {value:.0f} W" if value else f"{label}: —"
+        if view == "decoupling":
+            return f"{label}: {value:+.1f} % · {stats.decoupling_label(value)}"
         return f"{label}: {self._fmt_metric(value)}"
 
     def _fmt_metric(self, v: float, metric: str | None = None) -> str:
@@ -3894,6 +3882,8 @@ class StatsScreen(Screen):
             self.chart.empty.text = "" if has else empty
             self.bars.set_rows(self._profile_rows(prof) if has else [])
             self.summary[0].text = t("stats.profile_hint")
+        elif view == "decoupling":
+            self._decoupling_chart()
         elif view == "cadence":
             hist = stats.cadence_histogram(a.db)
             self.chart.show_bars(t("stats.avg_cadence"), [n / 60.0 for _, n in hist],
@@ -3908,6 +3898,32 @@ class StatsScreen(Screen):
             bal = stats.avg_balance(a.db)
             if bal is not None:
                 self.summary[0].text = f"{t('stats.avg_balance')}: {balance_text(bal)}"
+
+    def _decoupling_chart(self) -> None:
+        """A deriva cardíaca (Pa:HR) de cada sessão longa: quanto a FC sobe, na 2.ª metade,
+        para a mesma potência. Menos de 5 % é uma base aeróbia forte."""
+        a = self.app
+        days = stats.GROUPING_DAYS[self.grouping] * self.count
+        hist = stats.decoupling_history(a.db, days=days)
+        self._series = [(h["day"][5:], h["decoupling"]) for h in hist]
+        self.chart.show_line(t("stats.view.decoupling") + " · Pa:HR", [h["decoupling"] for h in hist],
+                             [h["day"][5:] for h in hist],
+                             tr("Sem sessões de 40+ min com potência e FC neste período",
+                                "No 40+ min sessions with power and HR in this period"),
+                             fmt=lambda v: f"{v:+.1f} %")
+        if hist:
+            self.chart.select(len(hist) - 1, self._bar_tip(len(hist) - 1))
+            recent = [h["decoupling"] for h in hist[-5:]]
+            avg = sum(recent) / len(recent)
+            self.summary[0].text = tr("Últimas {n} sessões: média {v:+.1f} % — {d}",
+                                      "Last {n} sessions: average {v:+.1f} % — {d}",
+                                      n=len(recent), v=avg, d=stats.decoupling_label(avg))
+            last = hist[-1]
+            vi = f" · VI {last['vi']:.2f}" if last.get("vi") else ""
+            self.summary[1].text = tr("A mais recente ({d}): {v:+.1f} % · eficiência {a:.2f} → "
+                                      "{b:.2f} W/bpm{vi}", "Latest ({d}): {v:+.1f} % · efficiency "
+                                      "{a:.2f} → {b:.2f} W/bpm{vi}", d=last["day"],
+                                      v=last["decoupling"], a=last["ef1"], b=last["ef2"], vi=vi)
 
     def _summary_period(self) -> None:
         a = self.app
@@ -4394,7 +4410,8 @@ class App:
 
     def _topbar_texts(self) -> None:
         self.topbar.set_texts(tr("Dispositivos", "Devices"), tr("Definições", "Settings"),
-                              tr("Desligar", "Power off"), tr("Backups", "Backups"))
+                              tr("Desligar", "Power off"),
+                              tr("Backups e Sincronização", "Backups and Sync"))
 
     @property
     def in_session(self) -> bool:
@@ -4442,18 +4459,24 @@ class App:
             self.pop()
         self.push(SettingsScreen(self))
 
-    def open_backups(self) -> None:
-        """O botão Backups da faixa do topo (fora das sessões)."""
+    def open_backups(self, source: str | None = None) -> None:
+        """O botão «Backups e Sincronização» da faixa do topo (fora das sessões). Com `source`
+        abre logo o separador Sincronização nessa fonte (HRV4Training, Saúde, GarminDB…)."""
         if self.in_session:
             self.message(tr("Os backups não estão disponíveis durante uma sessão de treino.",
                             "Backups are not available during a workout."))
             return
         bs = _backups()
-        if isinstance(self.current, bs.BackupScreen):
+        if isinstance(self.current, bs.BackupScreen) and source is None:
             return
         while self.current is not None and self.current.MODAL:
             self.pop()
-        self.push(bs.BackupScreen(self))
+        scr = bs.BackupScreen(self, tab=2 if source else 0)
+        if source:
+            labels = scr.sync.source_labels()
+            if source in labels:
+                scr.sync_tab = labels.index(source)
+        self.push(scr)
 
     def ask_quit(self) -> None:
         if self.in_session:

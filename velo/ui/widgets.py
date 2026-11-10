@@ -145,8 +145,16 @@ BUTTON_Y = 14
 TOP_BUTTON_H = 30
 
 
+ICON_W = 18                    # o ícone de um botão e o espaço até à etiqueta (8)
+
+
 def button_width(text: str) -> float:
-    return max(110.0, text_px(text, 13, bold=True) + 36)
+    """A largura de um botão: etiqueta + ícone (um botão só com ícone é estreito)."""
+    from velo.gfx import icons
+    label = icons.button_text(text)
+    if not label:
+        return 46.0
+    return max(116.0, text_px(label, 13, bold=True) + 36 + ICON_W + 8)
 
 
 class ListView:
@@ -215,8 +223,10 @@ class ListView:
     def _add_button(self) -> None:
         outline = pyglet.shapes.Rectangle(0, 0, 10, BUTTON_H + 2, color=BORDER, batch=self.batch)
         bg = pyglet.shapes.Rectangle(0, 0, 10, BUTTON_H, color=PANEL, batch=self.batch)
-        lab = make_label("", font_size=13, bold=True, color=TEXT, anchor_x="center",
+        lab = make_label("", font_size=13, bold=True, color=TEXT, anchor_x="left",
                          anchor_y="center", batch=self.batch)
+        lab._icon = None                     # o ícone da ação (ver velo.gfx.icons.button_icon)
+        lab._icon_name = ""
         self._buttons.append((outline, bg, lab))
 
     def set_visible_rows(self, n: int) -> None:
@@ -461,6 +471,8 @@ class ListView:
             if k >= len(places):
                 outline.opacity = bg.opacity = 0
                 lab.text = ""
+                if lab._icon is not None:
+                    lab._icon.opacity = 0
                 continue
             idx, x, bw, y, bh = places[k]
             item = self.items[idx]
@@ -471,13 +483,33 @@ class ListView:
             outline.color = ACCENT[:3] if (on or item.primary) else BORDER
             bg.color = ACCENT[:3] if item.primary and item.enabled else (SELECT if on else PANEL)
             outline.opacity = bg.opacity = 255
-            lab.text = item.label
+            from velo.gfx import icons
+            text = icons.button_text(item.label)
+            lab.text = text
             lab.font_size = 13 if bh >= BUTTON_H else 11
-            lab.x, lab.y = x + bw / 2, y + bh / 2
             if item.primary and item.enabled:
                 lab.color = ACCENT_TEXT
             else:
                 lab.color = ACCENT if on else (TEXT if item.enabled else DIM)
+            # o ícone (sempre o mesmo para a mesma ação) e a etiqueta, juntos e ao centro
+            size = ICON_W if bh >= BUTTON_H else 14
+            content = size + (8 + text_px(text, lab.font_size, bold=True) if text else 0)
+            start = x + (bw - content) / 2
+            name = icons.button_icon(item.label)
+            if lab._icon_name != name:
+                if lab._icon is not None:
+                    try:
+                        lab._icon.delete()
+                    except Exception:
+                        pass
+                lab._icon = icons.sprite(name, 0, 0, size, batch=self.batch, opacity=235)
+                lab._icon_name = name
+            if lab._icon is not None:
+                lab._icon.x, lab._icon.y = start, y + (bh - size) / 2
+                lab._icon.opacity = 235 if item.enabled else 110
+                icons.set_tint(lab._icon, ACCENT_TEXT if item.primary and item.enabled
+                               else (ACCENT if on else (TEXT if item.enabled else DIM)))
+            lab.x, lab.y = start + size + 8, y + bh / 2
             self._button_rects.append((idx, x, bw, y, bh))
 
     @property

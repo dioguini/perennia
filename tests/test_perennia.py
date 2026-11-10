@@ -201,12 +201,12 @@ class TestBriefScreens(tg.GuiCase):
         self.pick("Configurar sessão")
         self.assertIsInstance(self.screen(), session_setup.SessionSetup)
 
-    def test_the_workout_page_has_only_edit_export_and_set_up(self):
+    def test_the_workout_page_has_only_edit_plan_export_and_set_up(self):
         self.pick("Lista de treinos")
         self.pick("Tempo 3×15")
         brief = self.screen()
         self.assertEqual([i.label for i in brief.list.items],
-                         ["Editar", "Exportar", "Configurar sessão de treino"])
+                         ["Editar", "Planear", "Exportar", "Configurar sessão de treino"])
         self.pick("Editar")                      # abre o construtor, onde estão os objetivos
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
@@ -413,6 +413,7 @@ class TestLayouts(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Força")
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         scr = self.screen()

@@ -26,6 +26,7 @@ from velo.io import strava  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
 from velo.ui import app as app_mod  # noqa: E402
+from velo.ui import backup_screens as bks  # noqa: E402
 from velo.ui import connect_screens as cs  # noqa: E402
 from velo.ui import health_screens as hs  # noqa: E402
 
@@ -323,10 +324,8 @@ class TestGarminDBGui(tg.GuiCase):
     def test_screen_imports(self):
         folder = make_garmindb(Path(self.tmp) / "g")
         self.app.db.set("garmindb_dir", str(folder))
-        self.pick("Definições")
-        self.pick("Sincronização")                 # o separador das Definições
-        scr = self.screen()
-        self.assertIsInstance(scr, app_mod.SettingsScreen)
+        scr = self.open_sync()                     # Backups e Sincronização → Sincronização
+        self.assertIsInstance(scr, bks.BackupScreen)
         self.assertEqual(scr.sync_tabs.current, "GarminDB")     # a fonte é um separador
         self.assertIn("garmin.db ✓", scr.list.items[0].detail)
         self.pick("Só importar")
@@ -487,19 +486,15 @@ class TestLabsGui(tg.GuiCase):
         make_lab_xlsx(self.app.data_dir / "imports" / "analises.xlsx") \
             if (self.app.data_dir / "imports").mkdir(parents=True, exist_ok=True) is None \
             else None
-        self.pick("Definições")                       # Sincronização → Análises
-        scr = self.screen()
-        scr.tab_named("Sincronização")
-        scr.sync_tab = 2
-        scr.enter()
+        scr = self.open_sync("Análises")              # Backups e Sincronização → Análises
         self.pick("analises.xlsx")
         self.assertEqual(scr.sync.last_report["reports"], 2)
         self.app.reset_to_menu()
         self.press(key.ESCAPE)                       # volta ao ecrã inicial
         self.pick("Saúde")                           # o separador Análises: o report
         rep = self.screen()
-        self.pick("Colheita")                        # a lista das colheitas
-        self.pick("2025-07-23")
+        self.assertNotIn("Comentário geral do médico", [i.label for i in rep.list.items])
+        self.pick("2025-07-23")                      # a lista das colheitas → o relatório
         labels = [i.label for i in rep.list.items]
         self.assertIn("Bioquímica · Ferro", labels)              # um título de secção
         head = next(i for i in rep.list.items if i.label == "Bioquímica · Ferro")

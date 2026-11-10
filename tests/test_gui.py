@@ -70,6 +70,16 @@ class GuiCase(unittest.TestCase):
     def screen(self):
         return self.app.current
 
+    def open_sync(self, source: str | None = None):
+        """O menu «Backups e Sincronização», no separador Sincronização (e na fonte pedida)."""
+        self.app.open_backups()
+        scr = self.screen()
+        scr.tab_named("Sincronização")
+        if source:
+            scr.sync_tab = scr.sync.source_labels().index(source)
+            scr.enter()
+        return scr
+
     def open_routes(self) -> None:
         """O menu Rotas (ecrã inicial): é lá que estão as rotas .gpx."""
         from velo.ui import route_screens
@@ -1531,15 +1541,17 @@ class TestHomeScreen(GuiCase):
         self.press(key.DOWN, key.DOWN)                           # dos cartões para o calendário
         self.assertTrue(home.cal.focused)
         self.press(key.RIGHT, key.RIGHT, key.ENTER)
-        from velo.ui import calendar_screens as cs_
+        from velo.ui import day_popups as dp
         day = self.screen()
-        self.assertIsInstance(day, cs_.DayScreen)
+        self.assertIsInstance(day, dp.DayPopup)               # o dia é uma janela
         self.assertEqual(day.day, when)
         labels = [i.label for i in day.list.items]
         self.assertTrue(any("Plano A" in x for x in labels))
-        for want in ("+ Planear um treino neste dia", "Nota do dia",
-                     "Diário de saúde deste dia"):
-            self.assertIn(want, labels)
+        buttons = [i.label for i in day.list.items if i.button]
+        self.assertEqual(buttons[0], "Nota do dia")
+        self.assertTrue(buttons[1].startswith("Diário de saúde"))
+        self.assertEqual(buttons[2], "+ Planear treino")
+        self.assertTrue(day.note_text.text)                    # a secção da nota, por baixo
 
     def test_running_hub_and_back_arrow_returns(self):
         self.press(key.ESCAPE)

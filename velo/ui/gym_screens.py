@@ -16,7 +16,7 @@ from velo.core import laps_session as ls
 from velo.core import strength as st
 from velo.core.i18n import t, tr
 from velo.core.units import hms
-from velo.ui.app import Screen, SportHub, StartOptions
+from velo.ui.app import PopupMixin, Screen, SportHub, StartOptions
 from velo.ui.sport_screens import (EditScreen, LapSessionScreen, StrengthPreview,
                                    StrengthSessionDetail, StrengthSessionScreen,
                                    StrengthWorkoutEditor)
@@ -30,18 +30,6 @@ def _kind(k: str) -> str:
 class GymHub(SportHub):
     SPORT = "gym"
 
-    def subtitle(self) -> str:
-        hub = self.app.hub
-        try:
-            hr = hub.reading().hr_bpm
-        except Exception:
-            hr = None
-        hr_txt = tr("FC {b} bpm", "HR {b} bpm", b=hr) if hr else tr(
-            "sem FC (liga a banda ou o relógio em Dispositivos)",
-            "no HR (connect the strap or watch in Devices)")
-        return tr("{n} modalidades · {h}", "{n} modalities · {h}", n=len(gym.modalities()),
-                  h=hr_txt)
-
     def items_train(self) -> list[Item]:
         from velo.ui.challenge_screens import train_items
         from velo.ui.session_setup import ask_start
@@ -54,7 +42,9 @@ class GymHub(SportHub):
 
     def items_library(self) -> list[Item]:
         a = self.app
-        items = []
+        from velo.ui.workout_import import import_item
+        # «+ Carregar do computador»: um treino de força criado noutro sítio (TrainingPeaks…)
+        items = [import_item(a, "gym", on_done=lambda wid: self.enter())]
         for m in gym.modalities():
             ws = gym.workouts(a.db, m.key) if not m.laps else []
             ps = ls.plans(a.db, "conditioning") if m.laps else []
@@ -109,13 +99,67 @@ class GymHub(SportHub):
 
 
 class ModalityPicker(Screen):
-    def enter(self) -> None:
+    def __init__(self, app, plan_day=None):
+        super().__init__(app)
+        self.plan_day = plan_day               # se vier do calendário, o treino fica planeado
+
+    def _open(self, k: str) -> None:
         a = self.app
+        if gym.modality(k).laps:
+            a.replace(LapPlanEditor(a, None))
+            return
+        b = _builder(a, k)
+        b.plan_day = self.plan_day
+        a.replace(b)
+
+    def enter(self) -> None:
         self.chrome.set(tr("Novo treino de ginásio", "New gym workout"),
                         tr("Escolhe a modalidade", "Pick the modality"), self.footer())
-        self.list.set_items([Item(m.name, detail=m.desc, action=lambda k=m.key: a.replace(
-            LapPlanEditor(a, None) if gym.modality(k).laps else _builder(a, k)))
-            for m in gym.modalities()])
+        self.list.set_items([Item(m.name, detail=m.desc, action=lambda k=m.key: self._open(k))
+                             for m in gym.modalities()])
+
+
+class GymSessionSetup(PopupMixin, Screen):
+    """«Configurar sessão de treino» do ginásio: só os aparelhos (a FC, por exemplo) — o
+    auto lap está lá, mas bloqueado: faz-se sozinho a cada bloco do treino."""
+
+    W, H = 760, 460
+    SEARCH = False
+    AGENT = False
+
+    def __init__(self, app, wid: str):
+        super().__init__(app)
+        self.wid = wid
+        self.back_button = None
+        self._init_popup()
+
+    def enter(self) -> None:
+        a = self.app
+        wk = st.workout(a.db, self.wid) or {}
+        items = [Item(tr("Aparelhos", "Devices"), value=a.device_summary(),
+                      detail=tr("Enter abre o emparelhamento (banda de FC, relógio…)",
+                                "Enter opens pairing (HR strap, watch…)"),
+                      action=a.open_devices, data="devices"),
+                 Item(tr("Auto lap", "Auto lap"), value=tr("a cada bloco", "every block"),
+                      detail=tr("o auto lap é feito a cada bloco do treino e não se pode mudar",
+                                "auto lap is made at every block of the workout and cannot be "
+                                "changed"), enabled=False),
+                 Item(tr("Cancelar", "Cancel"), button=True, action=a.pop),
+                 Item(tr("Começar", "Start"), button=True, primary=True, action=self._start)]
+        self.chrome.set(tr("Configurar sessão de treino", "Set up the training session"),
+                        wk.get("name") or "", "")
+        self.list.set_items(items, keep_index=True)
+
+    def _start(self) -> None:
+        a = self.app
+        try:
+            scr = StrengthSessionScreen(a, self.wid)
+        except ValueError as e:
+            a.message(f"{t('common.error')}: {e}")
+            return
+        a.pop()
+        from velo.ui.brief import BriefScreen
+        (a.replace if isinstance(a.current, BriefScreen) else a.push)(scr)
 
 
 class ModalityScreen(Screen):
@@ -246,7 +290,7 @@ class GymPlanEditor(StrengthWorkoutEditor):
         super().enter()
         m = gym.modality(self.mod)
         rows = list(self.list.items)
-        # o seletor de exercícios é o da modalidade (a Longevidade vê todos)
+        # o seletor de exercícios é o da modalidade
         for r in rows:
             if r.label == t("str.add_exercise"):
                 r.action = self._pick

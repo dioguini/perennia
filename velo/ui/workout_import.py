@@ -35,18 +35,24 @@ class WorkoutFilePopup(PopupMixin, Screen):
     W, H = 820, 560
 
     def __init__(self, app, sport: str, mode: str = "session", on_done=None,
-                 folders: list[str] | None = None):
+                 folders: list[str] | None = None, modality: str | None = None):
         super().__init__(app)
         self.sport = sport
-        self.mode = mode if sport in SESSION_SPORTS else "list"
+        self.modality = modality              # o ginásio: a modalidade onde fica o treino
+        self.mode = mode if sport in SESSION_SPORTS or sport == "gym" else "list"
         self.on_done = on_done
         self.folders = folders
         self.files = []
         self._init_popup()
 
     def enter(self) -> None:
-        self.files = wf.scan(self.sport, self.folders)
-        exts = " ".join(wf.EXTS.get(self.sport, ()))
+        if self.sport == "gym":
+            from velo.core import strength_import as si
+            self.files = si.scan(self.folders)
+            exts = " ".join(si.EXTS)
+        else:
+            self.files = wf.scan(self.sport, self.folders)
+            exts = " ".join(wf.EXTS.get(self.sport, ()))
         items = [Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
                       action=lambda q=p: self.pick(q)) for p in self.files]
         if not items:
@@ -67,6 +73,9 @@ class WorkoutFilePopup(PopupMixin, Screen):
 
     def pick(self, path) -> None:
         a = self.app
+        if self.sport == "gym":
+            self._pick_gym(path)
+            return
         ftp, thr = wf.context(a.db, self.sport)
         try:
             loaded = wf.read(path, self.sport, ftp, thr)
@@ -107,6 +116,65 @@ class WorkoutFilePopup(PopupMixin, Screen):
                  "session always keeps its own copy of the workout.", f=path.name),
             options, default=2, buttons=True, cancel=a.pop))
 
+    # ----------------------------------------------------- ginásio (treino de força)
+
+    def _pick_gym(self, path) -> None:
+        """Um treino de força de um ficheiro (.csv, .json, .txt, .fit): ver strength_import."""
+        from velo.core import gym
+        from velo.core import strength_import as si
+        from velo.ui.pickers import ChoicePopup
+        a = self.app
+        try:
+            loaded = si.read(path)
+        except Exception as e:
+            a.message(tr("Não consegui ler {f}: {e}", "Could not read {f}: {e}", f=path.name,
+                         e=e))
+            return
+        if self.modality is not None:
+            self._gym_keep_or_session(loaded, self.modality, path)
+            return
+        mods = [m for m in gym.modalities() if not m.laps]
+        keys = [m.key for m in mods]
+
+        def chosen(k: int) -> None:                     # em que modalidade fica
+            self._save_gym(loaded, keys[k], keep=True)
+        a.push(ChoicePopup(a, tr("Em que modalidade fica «{n}»?", "Which modality does «{n}» go "
+                                 "in?", n=loaded.name), [m.name for m in mods],
+                           keys.index("strength") if "strength" in keys else 0, chosen))
+
+    def _gym_keep_or_session(self, loaded, mod: str, path) -> None:
+        a = self.app
+        n = len(loaded.rows)
+        a.push(ConfirmScreen(
+            a, tr("Guardar «{n}» na lista de treinos?", "Keep «{n}» in the workout list?",
+                  n=loaded.name),
+            (tr("1 exercício", "1 exercise") if n == 1 else
+             tr("{k} exercícios", "{k} exercises", k=n)) + f" · {path.name}",
+            [(tr("Cancelar", "Cancel"), a.pop),
+             (tr("Só para esta sessão", "Just this session"),
+              lambda: self._save_gym(loaded, mod, keep=False)),
+             (tr("Guardar na lista", "Keep in the list"),
+              lambda: self._save_gym(loaded, mod, keep=True))],
+            default=2, buttons=True, cancel=a.pop))
+
+    def _save_gym(self, loaded, mod: str, keep: bool) -> None:
+        from velo.core import strength_import as si
+        a = self.app
+        if isinstance(a.current, ConfirmScreen):
+            a.pop()
+        wid = si.save(a.db, loaded, mod, keep=keep)
+        a.message(tr("«{n}» guardado na lista de treinos", "«{n}» kept in the workout list",
+                     n=loaded.name) if keep else
+                  tr("«{n}» carregado só para esta sessão", "«{n}» loaded just for this session",
+                     n=loaded.name))
+        if a.current is self:
+            a.pop()
+        if self.on_done is not None:
+            self.on_done(wid)
+        if self.mode == "session":
+            from velo.ui.gym_screens import GymSessionSetup
+            a.push(GymSessionSetup(a, wid))
+
     def _save(self, loaded, keep: bool) -> None:
         a = self.app
         if isinstance(a.current, ConfirmScreen):
@@ -132,7 +200,8 @@ class WorkoutFilePopup(PopupMixin, Screen):
 def import_item(app, sport: str, on_done=None) -> Item:
     """O botão «+ Carregar do computador» (em cima, à direita) das listas de treinos."""
     return Item(tr("+ Carregar do computador", "+ Load from the computer"), top=True,
-                detail=tr(".zwo, .fit… pergunta se fica na lista",
-                          ".zwo, .fit… asks whether to keep it in the list"),
+                detail=tr(".zwo, .fit… (no ginásio: .csv, .json, .txt, .fit) · pergunta se fica "
+                          "na lista", ".zwo, .fit… (gym: .csv, .json, .txt, .fit) · asks "
+                          "whether to keep it in the list"),
                 action=lambda: app.push(WorkoutFilePopup(app, sport, mode="list",
                                                          on_done=on_done)))

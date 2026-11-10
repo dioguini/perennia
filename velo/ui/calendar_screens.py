@@ -569,6 +569,16 @@ class MiniCalendar:
                                 anchor_y="top", batch=batch)
         self.hint = make_label("", font_size=9, color=dim, anchor_x="right", anchor_y="top",
                                batch=batch)
+        # a navegação por datas: ‹ mês anterior · mês seguinte › · Hoje · Escolher data
+        from velo.gfx import icons as _icons
+        self.nav = []
+        for kind in ("prev", "next", "today", "pick"):
+            r = pyglet.shapes.Rectangle(0, 0, 10, 10, color=P.panel2, batch=batch)
+            lab = make_label("", font_size=11, bold=True, color=txt, anchor_x="center",
+                             anchor_y="center", batch=batch)
+            ic = _icons.sprite("calendar", 0, 0, 16, batch=batch, opacity=235) \
+                if kind == "pick" else None
+            self.nav.append((kind, r, lab, ic))
         self.heads = [make_label("", font_size=9, bold=True, color=dim, anchor_x="center",
                                  anchor_y="center", batch=batch) for _ in range(7)]
         self.cells = []
@@ -601,10 +611,8 @@ class MiniCalendar:
         x, top, w, h = self.geo
         self.title.text = f"{cv.month_name(self.month).capitalize()} {self.year}"
         self.title.x, self.title.y = x, top
-        self.hint.text = tr("PgUp/PgDn mês · T hoje · Enter abre o dia",
-                            "PgUp/PgDn month · T today · Enter opens the day") \
-            if self.focused else tr("↓ para escolher um dia", "↓ to pick a day")
-        self.hint.x, self.hint.y = x + w, top - 4
+        self.hint.text = ""
+        self._place_nav(x, top, w)
         weeks = self.data.get("weeks") or cv.weeks_of(self.year, self.month)
         cw = w / 7
         gy = top - 26
@@ -650,6 +658,35 @@ class MiniCalendar:
             for dot in dots:
                 dot.width = dot.height = 0
         self._place_sel()
+
+    def _place_nav(self, x: float, top: float, w: float) -> None:
+        """Os botões de data, alinhados à direita, na linha do mês."""
+        labels = {"prev": "‹", "next": "›", "today": tr("Hoje", "Today"),
+                  "pick": tr("Escolher data", "Pick date")}
+        widths = {"prev": 30.0, "next": 30.0, "today": 58.0, "pick": 128.0}
+        right = x + w
+        self._nav_rects = []
+        for kind, r, lab, ic in reversed(self.nav):
+            bw = widths[kind]
+            r.x, r.y, r.width, r.height = right - bw, top - 24, bw, 24
+            r.opacity = 255
+            lab.text = labels[kind]
+            cx = right - bw / 2
+            lab.x, lab.y = cx + (10 if ic is not None else 0), top - 12
+            if ic is not None:
+                ic.x, ic.y = right - bw + 10, top - 20
+            self._nav_rects.append((right - bw, top - 24, bw, 24, kind))
+            right -= bw + 6
+
+    def hit_nav(self, mx: float, my: float) -> str | None:
+        """Qual dos botões de data (ou o título do mês) foi tocado."""
+        for x, y, w, h, kind in getattr(self, "_nav_rects", []):
+            if x <= mx <= x + w and y <= my <= y + h:
+                return kind
+        tx, ty = self.title.x, self.title.y
+        if tx <= mx <= tx + 220 and ty - 22 <= my <= ty + 4:
+            return "pick"
+        return None
 
     def _place_sel(self) -> None:
         rect = next((r for r in self._rects if r[4] == self.sel), None)

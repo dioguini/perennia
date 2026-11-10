@@ -13,9 +13,8 @@ histórico e estatísticas — aparece sozinho.
 
 Os exercícios vivem numa só tabela (`exercises`) e cada um pertence a uma ou
 mais modalidades (`exercise_modalities`) e pode pedir material
-(`exercise_equipment`, com os tipos do inventário de artigos). Só a
-modalidade Longevidade junta exercícios de todas as outras — incluindo
-blocos de outros desportos (remo, bicicleta, corrida).
+(`exercise_equipment`, com os tipos do inventário de artigos). Podes juntar as tuas
+disciplinas (cada uma ganha o seu separador): ver `add_discipline`.
 """
 from __future__ import annotations
 
@@ -49,7 +48,6 @@ class Modality:
     icon: str = "dumbbell"
     description: tuple[str, str] = ("", "")
     surprise: Scheme = Scheme()
-    multi: bool = False            # junta exercícios de todas as modalidades (e desportos)
     laps: bool = False             # sessão por voltas (Conditioning)
 
     @property
@@ -303,17 +301,16 @@ register(Modality("isometric", "Isométrico", "Isometric", "stopwatch",
     ("Posição de lunge isométrico", "legs", "lunge", 0.0, "time", ()),
 ])
 
-register(Modality("longevity", "Longevidade", "Longevity", "heart",
-                  ("Junta tudo: força, equilíbrio, mobilidade e cardio de outros desportos.",
-                   "Brings it all together: strength, balance, mobility and other sports' cardio."),
-                  Scheme(n=6, sets=3, reps=10, rest_s=75, rpe=7.0), multi=True), [
-    ("Equilíbrio numa perna", "mobility", "hip_stability", 0.0, "time", ()),
-    ("Sentar e levantar", "legs", "squat", 0.0, "reps", ()),
-    ("Suspensão na barra", "back", "pull_up", 0.0, "time", ("pullup_bar",)),
-    ("Agachamento profundo (estático)", "mobility", "squat", 0.0, "time", ()),
-    ("Mobilidade / aquecimento", "mobility", "warm_up", 0.0, "time", ()),
-    ("Caminhada rápida", "legs", "cardio", 0.0, "time", ()),
-])
+# Os exercícios que viviam na antiga modalidade «Longevidade» passaram para as modalidades a que
+# pertencem (a Longevidade é um menu à parte: ver velo.core.longevity).
+for _ex in (("Equilíbrio numa perna", "isometric", "mobility", "hip_stability", 0.0, "time", ()),
+            ("Sentar e levantar", "strength", "legs", "squat", 0.0, "reps", ()),
+            ("Suspensão na barra", "isometric", "back", "pull_up", 0.0, "time", ("pullup_bar",)),
+            ("Agachamento profundo (estático)", "mobility", "mobility", "squat", 0.0, "time",
+             ()),
+            ("Mobilidade / aquecimento", "mobility", "mobility", "warm_up", 0.0, "time", ()),
+            ("Caminhada rápida", "cardio", "legs", "cardio", 0.0, "time", ())):
+    SEED_EXERCISES.append(_ex)
 
 register(Modality("conditioning", "Conditioning", "Conditioning", "stopwatch",
                   ("Voltas de passadeira, remo, força e descanso, com a FC do relógio.",
@@ -321,9 +318,6 @@ register(Modality("conditioning", "Conditioning", "Conditioning", "stopwatch",
                   Scheme(n=4, sets=1, reps=300, measure="time", time_s=300, rest_s=60),
                   laps=True))
 
-# Os desportos que a Longevidade pode juntar: um bloco de tempo de cada um.
-SPORT_BLOCKS = {"rowing": "Remo (máquina)", "cycling": "Bicicleta (rolo)",
-                "running": "Passadeira", "swimming": "Natação (piscina)"}
 SEED_EXERCISES.append(("Natação (piscina)", "cardio", "full", "cardio", 0.0, "time", ()))
 
 
@@ -456,9 +450,19 @@ def seed(db: Database) -> None:
     # os teus exercícios antigos (sem modalidade) ficam na Força
     db.conn.execute("INSERT OR IGNORE INTO exercise_modalities SELECT id, 'strength' FROM"
                     " exercises WHERE id NOT IN (SELECT exercise_id FROM exercise_modalities)")
-    # planos antigos sem modalidade: os de longevidade passam para lá
-    db.conn.execute("UPDATE strength_workouts SET modality = 'longevity' WHERE"
-                    " name LIKE 'Longevidade%' AND modality = 'strength'")
+    # A modalidade «Longevidade» já não existe (é um menu à parte): o que lhe pertencia passa
+    # para a Força e os exercícios ficam só nas modalidades a que pertencem.
+    db.conn.execute("UPDATE strength_workouts SET modality = 'strength' WHERE modality ="
+                    " 'longevity'")
+    db.conn.execute("UPDATE strength_sessions SET modality = 'strength' WHERE modality ="
+                    " 'longevity'")
+    db.conn.execute("UPDATE strength_workouts SET name = 'Força e equilíbrio' WHERE name ="
+                    " 'Longevidade · força e equilíbrio'")
+    db.conn.execute("INSERT OR IGNORE INTO exercise_modalities SELECT exercise_id, 'strength'"
+                    " FROM exercise_modalities WHERE modality = 'longevity' AND exercise_id NOT"
+                    " IN (SELECT exercise_id FROM exercise_modalities WHERE modality !="
+                    " 'longevity')")
+    db.conn.execute("DELETE FROM exercise_modalities WHERE modality = 'longevity'")
     db.conn.commit()
     db.set("gym_seed_version", version)
 
@@ -468,7 +472,7 @@ def seed(db: Database) -> None:
 
 def exercises(db: Database, mod: str | None = None, *, available_only: bool = False,
               include_archived: bool = False) -> list[dict]:
-    """Exercícios de uma modalidade (a Longevidade vê todos), com o material
+    """Exercícios de uma modalidade, com o material
     e as modalidades a que pertencem."""
     ensure(db)
     m = MODALITIES.get(mod or "")
@@ -486,7 +490,7 @@ def exercises(db: Database, mod: str | None = None, *, available_only: bool = Fa
             continue
         r["modalities"] = mods.get(r["id"], [])
         r["equipment"] = kit.get(r["id"], [])
-        if mod and not (m and m.multi) and mod not in r["modalities"] and not (
+        if mod and mod not in r["modalities"] and not (
                 m and m.laps and set(r["modalities"]) & {"strength", "cardio"}):
             continue
         if available_only and not set(r["equipment"]) <= have:
@@ -590,30 +594,19 @@ def surprise(db: Database, mod: str, seed: int | None = None,
     rng = random.Random(seed)
     have_inventory = bool(inventory.items(db))
     pool = exercises(db, m.key, available_only=have_inventory)
-    if m.multi:
-        pool = [e for e in pool if e["category"] != "mobility" or "longevity" in e["modalities"]]
     if not pool:
         pool = exercises(db, m.key)
     sc = m.surprise
     picked: list[dict] = []
-    if m.multi:
-        # Longevidade: um bloco de cardio de outro desporto, força, equilíbrio, mobilidade
-        cardio = [e for e in pool if "cardio" in e["modalities"]]
-        balance = [e for e in pool if e["category"] == "mobility"]
-        strength_like = [e for e in pool if e not in cardio and e not in balance]
-        for group, n in ((cardio, 1), (strength_like, max(1, sc.n - 3)), (balance, 2)):
-            rng.shuffle(group)
-            picked += [g for g in group if g not in picked][:n]
-    else:
-        rng.shuffle(pool)
-        groups_seen: dict[str, int] = {}
-        for e in pool:                         # variedade: no máximo 2 do mesmo grupo
-            if groups_seen.get(e["category"], 0) >= 2:
-                continue
-            picked.append(e)
-            groups_seen[e["category"]] = groups_seen.get(e["category"], 0) + 1
-            if len(picked) >= sc.n:
-                break
+    rng.shuffle(pool)
+    groups_seen: dict[str, int] = {}
+    for e in pool:                             # variedade: no máximo 2 do mesmo grupo
+        if groups_seen.get(e["category"], 0) >= 2:
+            continue
+        picked.append(e)
+        groups_seen[e["category"]] = groups_seen.get(e["category"], 0) + 1
+        if len(picked) >= sc.n:
+            break
     items = []
     for e in picked:
         timed = e.get("measure") == "time"

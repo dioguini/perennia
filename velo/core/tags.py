@@ -42,7 +42,7 @@ TYPE_KEYS = tuple(k for k, _p, _e in WORKOUT_TYPES)
 
 # etiquetas de «tipo de sessão» por desporto (a sua base, sem rota)
 INDOOR = {"cycling": "Indoor Cycling", "rowing": "Indoor Rowing", "running": "Indoor Running",
-          "swimming": "Pool Swimming", "strength": "Gym"}
+          "swimming": "Pool Swimming", "strength": "Indoor Strength"}
 VIRTUAL = {"cycling": "Virtual Cycling", "running": "Virtual Running"}
 APP_TAG = "Perennia"
 
@@ -340,9 +340,13 @@ def resolve(db, sport: str, sid: str, chosen: dict | None, *, workout_id: str | 
     omissão; guarda-as e devolve-as (o .fit e o resumo usam o mesmo)."""
     info = dict(defaults(db, sport, workout_id=workout_id, has_route=has_route,
                          summary=summary))
+    base = list(info["session"])
     if chosen:
         for k in ("workout_type", "session", "custom"):
             if k in chosen and chosen[k] is not None:
                 info[k] = chosen[k]
+    # `Perennia` e o `Indoor …` do desporto estão SEMPRE lá, venha o que vier da janela
+    info["session"] = base + [x for x in info["session"] if x not in base]
+    info["custom"] = [x for x in info["custom"] if x not in info["session"]]
     save(db, sport, sid, info)
     return info
