@@ -1952,7 +1952,21 @@ class DeviceScreen(ModalScreen):
                 caps.append("spindown")
             transport = {"ant": "ANT+", "ble": "Bluetooth"}.get(
                 getattr(src, "transport", ""), "")
-            items.append(Item(f"✓ {name}", value=transport or t("dev.connected"),
+            # ao vivo: o que o aparelho está mesmo a mandar (ou «sem dados», se calou)
+            live_src = a.hub.live_of(getattr(src, "device_id", "")) \
+                if hasattr(a.hub, "live_of") else {}
+            bits = []
+            if "power" in live_src:
+                bits.append(f"{int(live_src['power'][0])} W")
+            if "cadence" in live_src:
+                bits.append(f"{int(live_src['cadence'][0])} rpm")
+            if "hr" in live_src:
+                bits.append(f"{int(live_src['hr'][0])} bpm")
+            if "speed" in live_src and not bits:
+                bits.append(f"{live_src['speed'][0] * 3.6:.1f} km/h")
+            shown = (transport + " · " if transport else "") + (
+                " · ".join(bits) if bits else tr("sem dados", "no data"))
+            items.append(Item(f"✓ {name}", value=shown or t("dev.connected"),
                               detail=" · ".join(caps),
                               action=lambda s=src: self._disconnect(s)))
         from velo.io import rower as rower_io
@@ -2028,6 +2042,11 @@ class DeviceScreen(ModalScreen):
     def update(self, dt: float) -> None:
         if not self.app.in_session:          # a sessão de baixo já avança os sensores
             self.app.hub.tick(dt)
+        # uma vez por segundo: os valores ao vivo (o título e os aparelhos ligados)
+        self._live_t = getattr(self, "_live_t", 0.0) + dt
+        if self._live_t >= 1.0 and self.app.hub.sources:
+            self._live_t = 0.0
+            self.enter()
         res = getattr(self, "_rower_result", None)
         if res is not None:
             self._rower_result = None
