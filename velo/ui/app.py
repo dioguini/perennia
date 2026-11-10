@@ -1979,7 +1979,7 @@ class DeviceScreen(ModalScreen):
                                         "to row without the machine (tests, demo)"),
                               action=self._add_sim_rower))
         if getattr(a, "treadmill", None) is None:
-            items.append(Item(tr("SEM HARDWARE - PASSADEIRA", "NO HARDWARE - TREADMILL"),
+            items.append(Item(tr("SEM HARDWARE - Passadeira", "NO HARDWARE - TREADMILL"),
                               detail=tr("passadeira simulada: velocidade, inclinação e passos "
                                         "(sem FC) · corrida", "simulated treadmill: speed, "
                                         "incline and steps (no HR) · running"),
@@ -2162,7 +2162,7 @@ class DeviceScreen(ModalScreen):
         lim = wm.device_limits(self.app.db)
         self.app.set_treadmill(SimulatedTreadmill(lim["treadmill_max_kmh"],
                                                   lim["treadmill_max_incline"]))
-        self.note = tr("SEM HARDWARE - PASSADEIRA ligada", "NO HARDWARE - TREADMILL connected")
+        self.note = tr("SEM HARDWARE - Passadeira ligada", "NO HARDWARE - TREADMILL connected")
         self.enter()
 
     def _add_sim_hr(self) -> None:

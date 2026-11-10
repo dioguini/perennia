@@ -49,7 +49,7 @@ class TestSimulators(tg.GuiCase):
         rower = rio.SimulatedRower()
         self.assertIsNone(getattr(rower, "hr_bpm", None))
         tm = SimulatedTreadmill(20.0, 15.0)
-        self.assertEqual(tm.name, "SEM HARDWARE - PASSADEIRA")
+        self.assertEqual(tm.name, "SEM HARDWARE - Passadeira")
         tm.set_speed(10.0)
         for _ in range(40):
             tm.tick(0.5)
@@ -60,7 +60,7 @@ class TestSimulators(tg.GuiCase):
     def test_device_screen_lists_the_treadmill(self):
         self.press(key.ESCAPE)
         self.pick("Dispositivos")
-        self.assertIn("SEM HARDWARE - PASSADEIRA", [i.label for i in self.screen().list.items])
+        self.assertIn("SEM HARDWARE - Passadeira", [i.label for i in self.screen().list.items])
 
 
 # ================================================== terminar como no ciclismo
