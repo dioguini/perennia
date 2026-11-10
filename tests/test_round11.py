@@ -1019,3 +1019,73 @@ class TestDevicesShowLiveValues(tg.GuiCase):
         self.assertEqual(row().value, "ANT+ · 61 bpm")
         self.assertIn("61 bpm", scr.chrome.subtitle.text)
         self.assertEqual(a.hub.live_of("ant:7125:120")["hr"][0], 61)
+
+
+class TestAntReadLoopDoesNotSpin(tg.GuiCase):
+    """Uma antena que falha de vez não pode deixar a leitura a girar a 100 % de um núcleo."""
+
+    def make_stick(self, ep, **attrs):
+        stick = ant_mod.AntStick(on_event=lambda k, d: self.events.append((k, d)))
+        stick._ep_in = ep
+        stick._running = True
+        for k, v in attrs.items():
+            setattr(stick, k, v)
+        return stick
+
+    def setUp(self):
+        super().setUp()
+        self.events = []
+
+    def test_a_hard_error_backs_off_and_finally_gives_up(self):
+        reads = []
+
+        class Broken:
+            def read(self, n, timeout=0):
+                reads.append(1)
+                raise OSError("Input/Output Error")
+
+        stick = self.make_stick(Broken(), ERROR_SLEEP_S=0.002, MAX_ERRORS=30)
+        stick._read_loop()                                   # corre até desistir
+        self.assertEqual(len(reads), 30)
+        self.assertFalse(stick._running)
+        self.assertTrue(any(k == "ant_error" for k, _ in self.events))
+
+    def test_timeouts_are_normal_and_never_give_up(self):
+        calls = [0]
+
+        class Quiet:
+            def read(self, n, timeout=0):
+                calls[0] += 1
+                if calls[0] > 100:
+                    stick._running = False
+                raise OSError(110, "Operation timed out")
+
+        stick = self.make_stick(Quiet(), ERROR_SLEEP_S=0.5, MAX_ERRORS=3)
+        stick._read_loop()
+        self.assertEqual(calls[0], 101)                      # nunca desistiu nem dormiu
+        self.assertFalse([e for e in self.events if e[0] == "ant_error"])
+
+    def test_garbage_does_not_grow_the_buffer_without_limit(self):
+        class Noise:
+            n = 0
+
+            def read(self, n, timeout=0):
+                Noise.n += 1
+                if Noise.n > 400:
+                    stick._running = False
+                return bytes((0xA4, 0xFF)) + bytes(60)       # SYNC + comprimento enorme, sem fim
+
+        stick = self.make_stick(Noise())
+        stick._read_loop()
+        self.assertLessEqual(len(stick._buffer), stick.MAX_BUFFER + 64)
+
+    def test_only_one_reopen_per_channel_at_a_time(self):
+        stick = ant_mod.AntStick()
+        stick._running = True
+        stick._handlers[2] = lambda c, d: None
+        started = []
+        stick.reopen = lambda ch: started.append(ch) or __import__("time").sleep(0.2)
+        for _ in range(5):                                   # cinco eventos «canal fechado» seguidos
+            stick._dispatch(ant_mod.MSG_CHANNEL_EVENT, bytes((2, 1, ant_mod.EVENT_CHANNEL_CLOSED)))
+        __import__("time").sleep(0.4)
+        self.assertEqual(started, [2])

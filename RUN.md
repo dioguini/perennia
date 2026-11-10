@@ -2300,6 +2300,12 @@ No ecrã **Dispositivos**, cada aparelho ligado mostra **ao vivo** o que está a
 (`ANT+ · 59 bpm`, ou `ANT+ · sem dados` se ligou mas calou-se), e o subtítulo atualiza-se ao segundo.
 Assim vês logo se uma cinta ou um relógio ligado está mesmo a dar dados.
 
+Se o **computador fica pesado ao procurar** (ventoinhas, CPU ou memória a subir): abre o
+Gestor de Tarefas → **Detalhes** e vê se é o `python.exe` e quanto gasta de CPU e de memória; depois
+experimenta **só Procurar ANT+** e **só Procurar Bluetooth** (e com a antena desligada) para ver
+qual dos dois é. A leitura da antena desiste sozinha (≈ 10 s) se a antena deixar de responder, em
+vez de ficar a tentar sem parar, e diz-te «a antena deixou de responder».
+
 ### ANT+ primeiro, Bluetooth de reserva
 
 Basta emparelhar cada aparelho **uma vez**, por ANT+ e/ou por Bluetooth. A
@@ -2571,7 +2577,7 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (847 testes a passar).
+**Verificado com testes automáticos nesta versão** (851 testes a passar).
 
 *Novidades da ronda 12 (testes novos em `tests/test_round11.py`, e os antigos atualizados):* o
 calendário (um dia passado só carrega treino, hoje e o futuro planeiam; o seletor de datas do
