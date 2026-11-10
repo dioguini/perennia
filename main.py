@@ -93,6 +93,10 @@ def main() -> int:
                              "disciplinas, testes, material) e sai")
     parser.add_argument("--csv-exportar", default=None, metavar="CONJUNTO",
                         help="exporta um conjunto para .csv e sai")
+    parser.add_argument("--testar-hr-ant", nargs="?", const=30.0, default=None, type=float,
+                        metavar="SEGUNDOS",
+                        help="testa só a FC por ANT+ (cinta ou relógio a transmitir) e sai: abre "
+                             "um único canal e escreve o que chega, ao segundo")
     parser.add_argument("--destino", default=None,
                         help="pasta onde gravar os .csv (por omissão, Transferências)")
     args = parser.parse_args()
@@ -101,6 +105,10 @@ def main() -> int:
         return self_test()
     if args.backup is not None or args.restore:
         return backup_cli(args)
+    if args.testar_hr_ant is not None:
+        from velo.io import ant
+        res = ant.hr_test(args.testar_hr_ant)
+        return 0 if res["valid"] else 1
     if args.importar:
         return import_cli(args)
     if args.csv_modelo or args.csv_exportar:

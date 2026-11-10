@@ -391,7 +391,8 @@ def find_stick() -> Any:
 
 
 def diagnose() -> str:
-    """Explica porque é que a antena não aparece, em português simples."""
+    """Explica porque é que a antena não aparece (ou não abre), em português simples. Se a
+    antena abrir bem, diz que está tudo bem com ela."""
     if not pyusb_available():
         return "Falta a biblioteca pyusb: pip install pyusb libusb-package"
     import usb.core
@@ -405,9 +406,98 @@ def diagnose() -> str:
     if dev is None:
         return ("Antena ANT+ não encontrada. Está ligada? No Windows precisa do "
                 "driver WinUSB (Zadig) — vê o RUN.md, secção ANT+.")
+    # existe: tenta mesmo abri-la (é o único teste que não engana)
+    stick = AntStick()
+    try:
+        if stick.open():
+            return "A antena ANT+ está bem: abriu sem problemas."
+    except Exception:
+        pass
+    finally:
+        try:
+            stick.close()
+        except Exception:
+            pass
     return ("A antena existe mas não abriu: no Windows, instala o driver WinUSB "
             "com o Zadig; no Linux, falta a regra udev (RUN.md, secção ANT+). "
             "Fecha também outras aplicações que a estejam a usar (Zwift, Garmin Express).")
+
+
+# Os códigos de evento de canal que interessam a quem testa (ver o manual do ANT).
+EVENT_NAMES = {1: "procura sem resultado (tempo esgotado)", 2: "um pacote falhou",
+               7: "o canal fechou", 8: "perdeu o sinal e voltou a procurar",
+               9: "colisão com outro canal"}
+
+
+def hr_test(seconds: float = 30.0, out: Callable[[str], None] = print,
+            stick_factory: Callable[[], Any] | None = None,
+            clock: Callable[[], float] = time.monotonic,
+            sleep: Callable[[float], None] = time.sleep) -> dict:
+    """Testa só a cinta ou o relógio que transmite a FC por ANT+: abre **um único canal** (sem
+    procurar rolo nem potência ao mesmo tempo, que se atropelam) e escreve, a cada segundo, o que
+    chega. Devolve {"found", "packets", "valid", "min", "max", "verdict"}."""
+    res: dict = {"found": None, "packets": 0, "valid": 0, "min": None, "max": None,
+                 "last": None, "verdict": ""}
+    events: list[tuple[int, int]] = []
+
+    def on_event(kind: str, data: dict) -> None:
+        if kind == "ant_channel_event" and data.get("message") == 1:
+            events.append((data["code"], 0))
+        elif kind == "ant_device_found":
+            res["found"] = data["device"].name
+        elif kind == "ant_error":
+            out(f"  erro: {data.get('error')}")
+
+    stick = (stick_factory or AntStick)()
+    stick._on_event = on_event
+    if not stick.open():
+        res["verdict"] = diagnose()
+        out(res["verdict"])
+        return res
+
+    def on_page(_channel: int, data: bytes) -> None:
+        res["packets"] += 1
+        hr = decode_hr(data).get("hr_bpm")
+        res["last"] = hr
+        if hr:
+            res["valid"] += 1
+            res["min"] = hr if res["min"] is None else min(res["min"], hr)
+            res["max"] = hr if res["max"] is None else max(res["max"], hr)
+
+    stick.on_broadcast(0, on_page)
+    stick.open_channel(0, DEVICE_HR, search_timeout=SEARCH_FOREVER, note="teste")
+    out(f"A ouvir a FC por ANT+ durante {seconds:.0f} s (só o canal do cardio)…")
+    end = clock() + seconds
+    last_packets = 0
+    try:
+        while clock() < end:
+            sleep(1.0)
+            now = res["packets"]
+            codes = sorted({c for c, _ in events})
+            events.clear()
+            out(f"  {res['found'] or 'à procura…':<24} pacotes/s: {now - last_packets:>2}   "
+                f"FC: {res['last'] if res['last'] else '—':>4}"
+                + (f"   eventos: {', '.join(EVENT_NAMES.get(c, str(c)) for c in codes)}"
+                   if codes else ""))
+            last_packets = now
+    finally:
+        stick.close()
+    if res["packets"] == 0:
+        res["verdict"] = ("Não chegou nada: o relógio não está a transmitir, ou está longe, ou a "
+                          "antena está atrás do PC. Põe a transmitir (Transmitir FC), a 1–2 m da "
+                          "antena, e repete.")
+    elif res["valid"] == 0:
+        res["verdict"] = ("Chegam pacotes mas com FC 0: o sensor do relógio ainda não mediu — "
+                          "aperta o relógio ao pulso e espera uns segundos.")
+    else:
+        rate = res["packets"] / max(1.0, seconds)
+        res["verdict"] = (f"FC recebida: {res['min']}–{res['max']} bpm, {res['packets']} pacotes "
+                          f"(≈ {rate:.1f} por segundo; o normal são ~4). "
+                          + ("A ligação rádio está bem." if rate >= 2.5 else
+                             "Poucos pacotes por segundo: há interferência (afasta a antena do "
+                             "PC com uma extensão USB e aproxima o relógio)."))
+    out(res["verdict"])
+    return res
 
 
 @dataclass
