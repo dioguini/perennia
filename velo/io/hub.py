@@ -206,6 +206,19 @@ class SensorHub:
             torque_nm=float(torque) if torque is not None else None,
         )
 
+    def live_of(self, device_id: str) -> dict[str, tuple[Any, float]]:
+        """O que este aparelho está a mandar agora: {métrica: (valor, há quantos segundos)}.
+        Só o que chegou há pouco (a janela de «dados frescos»); serve para o ecrã dos
+        Dispositivos mostrar, ao vivo, se um sensor ligado está mesmo a dar dados."""
+        now = self._clock()
+        out: dict[str, tuple[Any, float]] = {}
+        with self._lock:
+            for metric, vals in self._values.items():
+                for v in vals:
+                    if v.device_id == device_id and now - v.at <= self._stale:
+                        out[metric] = (v.value, now - v.at)
+        return out
+
     def source_of(self, metric: str) -> str | None:
         """Qual o dispositivo que está a fornecer esta métrica, para a UI mostrar."""
         now = self._clock()

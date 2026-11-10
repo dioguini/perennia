@@ -999,3 +999,23 @@ class TestAntHrTest(tg.GuiCase):
         msg = ant_mod.diagnose()
         self.assertTrue(msg)
         self.assertNotIn("Zwift", msg) if "não encontrada" in msg or "Falta" in msg else None
+
+
+class TestDevicesShowLiveValues(tg.GuiCase):
+    def test_a_connected_ant_hr_sensor_shows_its_bpm_and_then_no_data(self):
+        a = self.app
+        stick = ant_mod.AntStick()
+        stick._ep_out = object()
+        stick._send = lambda *x: None
+        info = ant_mod.AntDiscovered(7125, ant_mod.DEVICE_HR, "ANT+ Cardio #7125")
+        sensor = ant_mod.AntSensor(stick, 2, info, a.hub)
+        a.hub.add_source(sensor, role=info.role)
+        self.press(key.F4)                                    # Dispositivos
+        scr = self.screen()
+        row = lambda: next(i for i in scr.list.items if "ANT+ Cardio #7125" in i.label)  # noqa
+        self.assertEqual(row().value, "ANT+ · sem dados")      # ligado, mas ainda mudo
+        stick._dispatch(ant_mod.MSG_BROADCAST_DATA, bytes((2, 0x04, 0, 0, 0, 0, 0, 0, 61)))
+        scr.update(1.2)                                        # refresca ao segundo
+        self.assertEqual(row().value, "ANT+ · 61 bpm")
+        self.assertIn("61 bpm", scr.chrome.subtitle.text)
+        self.assertEqual(a.hub.live_of("ant:7125:120")["hr"][0], 61)
