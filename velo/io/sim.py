@@ -188,12 +188,12 @@ class SimulatedHeartStrap:
 
 
 class SimulatedTreadmill:
-    """Passadeira simulada («SEM HARDWARE - PASSADEIRA»): recebe a velocidade e a
+    """Passadeira simulada («SEM HARDWARE - Passadeira»): recebe a velocidade e a
     inclinação (como uma passadeira FTMS), chega lá aos poucos e devolve o que
     uma passadeira dá — velocidade, inclinação e cadência dos passos. **Não dá
     FC** (vem da banda cardíaca)."""
 
-    name = "SEM HARDWARE - PASSADEIRA"
+    name = "SEM HARDWARE - Passadeira"
     device_id = "sim:treadmill"
     profiles = ("ftms-treadmill",)
     connected = True

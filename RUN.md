@@ -864,11 +864,16 @@ força criado no TrainingPeaks) e pergunta se fica na lista; a **Lista de treino
 **aparelhos** (a banda de FC) e o **auto lap**, que aparece **bloqueado** porque o ginásio faz
 auto lap a cada bloco do treino.
 
-**A sessão de força** tem os mesmos botões, em baixo e à direita, das outras (**Pausa** e
-**Terminar**; mais **+ Série** e **Saltar**) e o mesmo diálogo de terminar (Esc pausa, F10
+**A sessão de força** tem os mesmos botões das outras, **em cima, à direita, ao lado do relógio**
+(a ação da série, **+ Série**, **Saltar**, **Pausa** e o **Terminar a vermelho**, como no ciclismo;
+em janelas estreitas descem para a barra de baixo). O ecrã tem, de cima para baixo, o painel da
+série (fase, alvo e **o tempo da série ou do descanso** ao lado do alvo, quadrados e zonas de FC), as
+séries do exercício e o que vem a seguir, e o treino em lista. Na corrida e no remo os botões
+ficam também em cima e o Terminar a vermelho e o mesmo diálogo de terminar (Esc pausa, F10
 pergunta; Sim · Não · Terminar sem guardar) seguido das etiquetas do `.fit`. O treino está **numa
-lista, num só ecrã**: cada exercício com as séries feitas (`2/4`), o alvo e o descanso — ▶ é o
-exercício da série, ✓ os que estão feitos. **Enter num exercício** vai para ele e começa a
+lista, num só ecrã**: cada exercício com as séries feitas (`2/4`) e o alvo, **seguido do seu
+descanso** (assim o treino está todo descrito e é só segui-lo) — ▶ é o exercício (ou o descanso, com a
+contagem) em curso, ✓ os que estão feitos. **Enter num exercício** vai para ele e começa a
 série (ou termina-a, se for a que está a correr); por baixo ficam os campos da série (repetições,
 carga, RPE) e, à direita, o painel com a FC e as séries do exercício. *Esta lista é uma proposta
 para avaliares: diz-me o que mudarias.*
@@ -1368,7 +1373,7 @@ O **ciclismo é a base** e a corrida e o remo fazem agora **exatamente o mesmo**
 
 **Simuladores** (Dispositivos): cada um dá **só os dados do seu aparelho**.
 **SEM HARDWARE - Trainer** dá potência, cadência e velocidade, **sem FC**;
-**SEM HARDWARE - Remo**, a remada; **SEM HARDWARE - PASSADEIRA** (novo), a velocidade
+**SEM HARDWARE - Remo**, a remada; **SEM HARDWARE - Passadeira** (novo), a velocidade
 e a distância da corrida (a inclinação que o treino ou a rota pedem fica registada na
 passadeira); a FC vem **só** da **SEM HARDWARE - Banda cardíaca**.
 

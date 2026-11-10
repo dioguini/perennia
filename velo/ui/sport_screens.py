@@ -24,7 +24,7 @@ from velo.ui.app import (DeviceScreen, RideScreen, Screen, StatsScreen, SummaryS
 from velo.gfx import theme as _theme
 from velo.ui.brief import GymBrief
 from velo.ui.session_flow import FinishFlow
-from velo.ui.widgets import ACCENT, BAD, DIM, GOOD, PANEL, TEXT, Item
+from velo.ui.widgets import ACCENT, BAD, DIM, GOOD, PANEL, TEXT, Item, text_px
 
 NUM_CHARS = "0123456789.,"
 
@@ -450,7 +450,7 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
 
     AGENT = False
     IN_SESSION = True
-    SET_LINES = 8
+    SET_LINES = 3
 
     def __init__(self, app, workout_id: str | None = None, resume: dict | None = None):
         super().__init__(app)
@@ -490,6 +490,10 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
                           for _ in range(self.SET_LINES)]
         self.next_label = make_label("", font_size=13, color=DIM, anchor_y="top", batch=b,
                                      multiline=True, width=400)
+        # o tempo da série (ou do descanso) logo a seguir ao alvo
+        self.time_label = make_label("", font_size=15, bold=True, color=GOOD, anchor_y="top",
+                                     batch=b)
+        self.list.max_columns = 1
         from velo.ui.widgets import SessionClock
         self.clock = SessionClock(app.window, batch=b)
         self._layout_panel()
@@ -497,23 +501,27 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
     # ------------------------------------------------------------ medidas
 
     def _list_width(self, w: int) -> int:
-        return int(w * 0.44) - 48
+        return w - 96
 
     def _layout_panel(self) -> None:
+        """Em cima, o painel da série (fase, alvo e tempo, quadrados, zonas de FC); por baixo,
+        as séries do exercício e o que vem a seguir; e, a toda a largura, o treino em lista."""
         w, h = self.app.window.width, self.app.window.height
-        x = int(w * 0.44) + 24
+        x = 48
         top = h - 120
-        pw = w - 48 - x
-        self.panel.x, self.panel.y, self.panel.width, self.panel.height = x, 96, pw, top - 96
+        pw = w - 96
         px = x + 20
+        from velo.core import layouts
+        cols, rows = layouts.grid_for(len(self.tiles), "gym")
+        dy = (rows - 1) * 62               # o resto desce quando há mais filas de métricas
+        self.panel.x, self.panel.y = x, top - 196 - dy
+        self.panel.width, self.panel.height = pw, 196 + dy
         self.phase_label.x, self.phase_label.y = px, top - 16
         self.target_label.x, self.target_label.y = px, top - 60
         # FC e zona passaram para os quadrados; as etiquetas antigas ficam fora do ecrã
         self.hr_label.x, self.hr_label.y = -2000, -2000
         self.hr_zone_label.anchor_x = "right"
         self.hr_zone_label.x, self.hr_zone_label.y = -2000, -2000
-        from velo.core import layouts
-        cols, rows = layouts.grid_for(len(self.tiles), "gym")
         tw = (pw - 40 - (cols - 1) * 8) / cols
         for i, (bg, cap, val) in enumerate(self.tiles):
             r, c = divmod(i, cols)
@@ -521,19 +529,24 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
             bg.x, bg.y, bg.width, bg.height = tx, ty, tw, 54
             cap.x, cap.y = tx + 8, ty + 50
             val.x, val.y = tx + 8, ty + 36
-        dy = (rows - 1) * 62               # o resto desce quando há mais filas de métricas
         seg_w = (pw - 40) / 5
         for i, r in enumerate(self.hr_segs):
             r.x, r.y, r.width, r.height = px + i * seg_w, top - 152 - dy, seg_w - 2, 10
         self.hr_marker.y = top - 156 - dy
         self.session_label.x, self.session_label.y = px, top - 172 - dy
-        self.sets_title.x, self.sets_title.y = px, top - 204 - dy
+        # por baixo do painel: as séries deste exercício (à esquerda) e o que vem a seguir
+        sy = top - 212 - dy
+        self.sets_title.x, self.sets_title.y = px, sy
         for i, lab in enumerate(self.set_lines):
-            y = top - 228 - dy - i * 22
-            lab.x, lab.y = (px, y) if y > 150 else (-3000, y)
-        self.next_label.x = px
-        self.next_label.y = max(140, top - 228 - dy - self.SET_LINES * 22 - 10)
-        self.next_label.width = max(200, pw - 40)
+            lab.x, lab.y = px, sy - 26 - i * 22
+        self.next_label.x = x + int(pw * 0.5)
+        self.next_label.y = sy
+        self.next_label.width = max(200, int(pw * 0.5) - 20)
+        # o treino em lista, a toda a largura, até ao rodapé
+        list_top = sy - 26 - self.SET_LINES * 22 - 12
+        self.list.x, self.list.y = x, list_top
+        self.list.width = pw
+        self.list.set_visible_rows(max(3, int((list_top - 76) // 38)))
         self.clock.layout()
         self._layout_finish()
 
@@ -555,6 +568,18 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
             return t("str.next_set", n=s.done_sets(nxt) + 1, name=s.items[nxt].name)
         return t("str.start_set", n=n)
 
+    def _short_action(self) -> str:
+        """A ação principal num botão curto (cabe ao lado do relógio): o ícone diz o resto."""
+        s = self.session
+        if s.phase == st.WORK:
+            return tr("Terminar série {n}", "Finish set {n}", n=s.set_no)
+        if s.phase == st.DONE or (s.phase == st.REST and s.all_done):
+            return tr("Treino completo", "Workout complete")
+        n = s.set_no if s.remaining(s.item_idx) > 0 else 1
+        if s.phase == st.REST:
+            n = s.done_sets(s.item_idx) + 1
+        return tr("Começar série {n}", "Start set {n}", n=n)
+
     def _shown(self) -> int:
         """No descanso mostra-se o exercício que acabou de ser feito (é a série
         dele que os campos corrigem); fora dele, o que vem a seguir."""
@@ -562,37 +587,54 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         return s.sets[-1].item_idx if s.editing_last else s.item_idx
 
     def _exercise_rows(self) -> list[Item]:
-        """O treino em lista: um exercício por linha, com as séries feitas e o alvo."""
+        """O treino todo em lista, para só o seguir: cada exercício com as séries feitas e o
+        alvo, e a seguir o **descanso** (entre as séries e até ao exercício seguinte)."""
         s = self.session
         shown = self._shown()
+        resting = s.phase == st.REST and bool(s.sets)
+        rest_of = s.sets[-1].item_idx if resting else None
         rows = []
         for i, ex in enumerate(s.items):
             done, planned = s.done_sets(i), s.planned_sets(i)
             lab = (s.labels[i] + " · ") if getattr(s, "labels", None) else ""
             if i in s.skipped:
                 mark, value = "– ", tr("saltado", "skipped")
-            elif i == shown:
+            elif i == shown and not resting:
                 mark, value = "▶ ", f"{done}/{planned}"
             elif s.remaining(i) == 0:
                 mark, value = "✓ ", f"{done}/{planned}"
             else:
                 mark, value = "   ", f"{done}/{planned}"
             rows.append(Item(f"{mark}{lab}{ex.name}", value=value,
-                             detail=f"{ex.target_text()} · {t('str.rest')} {hms(ex.rest_s)}",
+                             detail=ex.target_text(),
                              action=lambda k=i: self._start_exercise(k), data=("ex", i)))
+            if not ex.rest_s or i in s.skipped:
+                continue
+            last = i == len(s.items) - 1
+            detail = (tr("entre as séries", "between sets") if last else
+                      tr("entre as séries e até ao exercício seguinte",
+                         "between sets and until the next exercise"))
+            if rest_of == i:
+                left = max(0.0, s.rest_until - s.t)
+                rows.append(Item("▶ " + tr("Descanso", "Rest"), value=hms(left), detail=detail,
+                                 action=self._action, data=("rest", i)))
+            else:
+                rows.append(Item("      " + tr("Descanso", "Rest"), value=hms(ex.rest_s),
+                                 detail=detail, enabled=False, data=("rest", i)))
         return rows
 
     def _buttons(self) -> list[Item]:
         """Em baixo, à direita, como nos outros desportos: a ação principal da série,
         mais uma série, saltar, Pausa e Terminar."""
         s = self.session
-        return [Item(self._action_label(), button=True, primary=True, action=self._action,
+        return [Item(self._short_action(), button=True, primary=True, action=self._action,
                      data="action"),
                 Item(tr("+ Série", "+ Set"), button=True, action=self._add_set),
                 Item(tr("Saltar", "Skip"), button=True, action=self._skip),
                 Item(tr("Retomar", "Resume") if s.paused else tr("Pausa", "Pause"),
                      button=True, action=self._flow_toggle_pause),
-                Item(tr("Terminar", "Finish"), button=True, action=self.ask_finish)]
+                Item(tr("Terminar", "Finish"), button=True, danger=True,
+                     action=self.ask_finish)]
 
     def enter(self) -> None:
         s = self.session
@@ -603,30 +645,30 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         reps_label = t("str.seconds") if measure == "time" else t("str.reps")
         suffix = f" ({t('str.fix_set', n=last.set_no)})" if editing else ""
         reps = s.field_value("reps")
-        items = self._exercise_rows() + [
+        # os campos da série (repetições, carga, RPE) em cima; por baixo, o treino todo
+        items = [
             Item(reps_label + suffix, value=_amount(reps or 0, measure), data="num:reps"),
             Item(t("str.load") + suffix, value=_kg(s.field_value("load_kg")),
                  data="num:load_kg"),
             Item("RPE" + suffix, value=_rpe(s.field_value("rpe")), data="num:rpe",
                  detail=t("str.rpe_hint") if not editing else ""),
-        ] + self._buttons()
-        shown = self._shown()
-        if editing:
-            head = t("str.set_done", n=last.set_no, total=s.planned_sets(shown))
-        else:
-            head = t("str.set_of", n=min(s.set_no, s.planned_sets(shown)),
-                     total=s.planned_sets(shown))
-        sub = f"{head} · {t('str.target')} {it.target_text()} · {t('str.rest')} {hms(it.rest_s)}"
-        title = ((s.labels[shown] + " · ") if getattr(s, "labels", None) else "") + it.name
-        # o relógio está ao centro, em cima: título e subtítulo param antes dele
-        room = self.app.window.width / 2 - 115 - 48 - 12
-        self.chrome.set(_fit_text(title, room, 18), _fit_text(sub, room, 13), self.footer())
+        ] + self._exercise_rows() + self._buttons()
+        # sem título em cima: o painel já diz o exercício, a série e o alvo
+        self.chrome.set("", "", self.footer())
         self.list.set_items(items, keep_index=True)
+        # a seleção acompanha o treino: o exercício (ou o descanso) em curso
+        here = ("rest", s.sets[-1].item_idx) if (s.phase == st.REST and s.sets) \
+            else ("ex", self._shown())
+        if here != getattr(self, "_here", None):
+            self._here = here
+            self.list.select_data(here)
+        self.place_session_buttons()
         self._sig = self._signature()
 
     def _signature(self):
         s = self.session
-        return (s.phase, s.item_idx, len(s.sets), s.paused, self.confirming,
+        rest_tick = int(max(0.0, s.rest_until - s.t)) if s.phase == st.REST else None
+        return (s.phase, s.item_idx, len(s.sets), s.paused, self.confirming, rest_tick,
                 s.field_value("reps"), s.field_value("load_kg"), s.field_value("rpe"))
 
     def footer(self) -> str:
@@ -808,7 +850,20 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         else:
             self.target_label.text = f"{lab}{it.name} · {t('str.target')} {it.target_text()}"
         self.target_label.text = _fit_text(self.target_label.text,
-                                           max(200, self.panel.width - 40), 14)
+                                           max(200, self.panel.width - 320), 14)
+        # o tempo da série (ou do descanso), logo a seguir ao alvo
+        if s.paused or s.phase not in (st.WORK, st.REST):
+            self.time_label.text = ""
+        elif s.phase == st.WORK:
+            self.time_label.text = tr("série {t}", "set {t}", t=hms(s.t - s.set_start_t))
+            self.time_label.color = GOOD
+        else:
+            left = s.rest_until - s.t
+            self.time_label.text = tr("descanso {t}", "rest {t}",
+                                      t=(f"+{hms(-left)}" if left < 0 else hms(left)))
+            self.time_label.color = BAD if left < 0 else ACCENT
+        self.time_label.x = self.target_label.x + text_px(self.target_label.text, 14) + 28
+        self.time_label.y = self.target_label.y + 2
         hr = s.hr_bpm
         zone = s.hr_zone
         if hr:

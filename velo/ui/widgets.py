@@ -121,6 +121,7 @@ class Item:
     data: object = None
     button: bool = False
     primary: bool = False         # o botão principal (Guardar) fica realçado
+    danger: bool = False          # o botão que termina (vermelho, como o Terminar do ciclismo)
     top: bool = False             # botão no topo, à direita (Adicionar, filtros)
     header: bool = False          # título de secção (sombreado, saltado pelas setas)
     head: bool = False            # numa faixa à parte, por cima (ver ListView.head_y)
@@ -480,14 +481,17 @@ class ListView:
             bg.x, bg.y, bg.width, bg.height = x, y, bw, bh
             outline.x, outline.y, outline.width = x - 1, y - 1, bw + 2
             outline.height = bh + 2
-            outline.color = ACCENT[:3] if (on or item.primary) else BORDER
-            bg.color = ACCENT[:3] if item.primary and item.enabled else (SELECT if on else PANEL)
+            hot = item.danger and item.enabled
+            outline.color = _theme.P.danger[:3] if hot else \
+                ACCENT[:3] if (on or item.primary) else BORDER
+            bg.color = _theme.P.danger[:3] if hot else \
+                ACCENT[:3] if item.primary and item.enabled else (SELECT if on else PANEL)
             outline.opacity = bg.opacity = 255
             from velo.gfx import icons
             text = icons.button_text(item.label)
             lab.text = text
             lab.font_size = 13 if bh >= BUTTON_H else 11
-            if item.primary and item.enabled:
+            if (item.primary or item.danger) and item.enabled:
                 lab.color = ACCENT_TEXT
             else:
                 lab.color = ACCENT if on else (TEXT if item.enabled else DIM)
@@ -507,7 +511,8 @@ class ListView:
             if lab._icon is not None:
                 lab._icon.x, lab._icon.y = start, y + (bh - size) / 2
                 lab._icon.opacity = 235 if item.enabled else 110
-                icons.set_tint(lab._icon, ACCENT_TEXT if item.primary and item.enabled
+                icons.set_tint(lab._icon, ACCENT_TEXT if (item.primary or item.danger)
+                               and item.enabled
                                else (ACCENT if on else (TEXT if item.enabled else DIM)))
             lab.x, lab.y = start + size + 8, y + bh / 2
             self._button_rects.append((idx, x, bw, y, bh))
@@ -515,7 +520,7 @@ class ListView:
     @property
     def buttons_left(self) -> float | None:
         """Onde começam os botões de ação (para o rodapé não lhes passar por cima)."""
-        low = [r for r in self._button_rects if r[4] >= BUTTON_H]
+        low = [r for r in self._button_rects if r[4] >= BUTTON_H and r[3] < 200]
         if not low:
             return None
         return min(r[1] for r in low)

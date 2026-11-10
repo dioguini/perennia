@@ -50,9 +50,26 @@ class FinishFlow:
                       Item("+", button=True, action=lambda: self._flow_adjust(1))]
         items += [Item(tr("Retomar", "Resume") if paused else tr("Pausa", "Pause"), button=True,
                        action=self._flow_toggle_pause),
-                  Item(tr("Terminar", "Finish"), button=True, primary=True,
+                  Item(tr("Terminar", "Finish"), button=True, danger=True,
                        action=self.ask_finish)]
         return items
+
+    def place_session_buttons(self) -> None:
+        """Os botões da sessão ficam **em cima, à direita**, ao lado do relógio (o Terminar a
+        vermelho, como no ciclismo). Se a janela for estreita demais para os pôr à direita do
+        relógio, descem para a barra de baixo."""
+        from velo.ui.widgets import BUTTON_Y, button_width
+        w, h = self.app.window.width, self.app.window.height
+        lst = self.list
+        labels = [i.label for i in lst.items if i.button]
+        total = sum(button_width(x) for x in labels) + 10 * max(0, len(labels) - 1)
+        right = w - 36
+        clock_right = w / 2 + 115 + 12
+        if labels and right - total >= clock_right:
+            lst.bar_right, lst.bar_y = right, h - 108
+        else:
+            lst.bar_right, lst.bar_y = w - 48, BUTTON_Y
+        lst._sync_buttons()
 
     def refresh_buttons(self, force: bool = False) -> None:
         """Põe os botões na lista (escondida); refaz-se só quando muda a pausa."""
@@ -62,6 +79,7 @@ class FinishFlow:
         self._btn_sig = sig
         self.list.set_items(self.session_buttons() if not self.confirming else [],
                             keep_index=False)
+        self.place_session_buttons()
 
     # ---------------------------------------------------------------- pausa
 
@@ -85,6 +103,7 @@ class FinishFlow:
         if self.finish_dialog is not None:
             w = self.app.window
             self.finish_dialog.layout(w.width, w.height)
+            self.place_session_buttons()
 
     @property
     def confirming(self) -> bool:

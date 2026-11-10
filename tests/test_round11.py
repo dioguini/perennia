@@ -417,6 +417,24 @@ class TestStrengthSessionScreen(tg.GuiCase):
         self.assertTrue(scr.session.paused)
         self.assertEqual([i.label for i in scr.list.items if i.button][-2], "Retomar")
 
+    def test_rests_are_in_the_list_and_finish_is_red(self):
+        scr = self.open_session()
+        kinds = [i.data[0] for i in scr.list.items if isinstance(i.data, tuple)]
+        self.assertIn("rest", kinds)
+        first = [i.data for i in scr.list.items if isinstance(i.data, tuple)][:2]
+        self.assertEqual([d[0] for d in first], ["ex", "rest"])      # exercício, depois o descanso
+        fin = [i for i in scr.list.items if i.button][-1]
+        self.assertEqual(fin.label, "Terminar")
+        self.assertTrue(fin.danger)
+        self.press(key.SPACE)
+        for _ in range(4):
+            self.app._tick(0.5)
+        self.press(key.SPACE)                                # terminou a série: descanso
+        cur = [i for i in scr.list.items if i.data and i.data[0] == "rest"
+               and i.label.startswith("▶")]
+        self.assertEqual(len(cur), 1)
+        self.assertEqual(scr.list.selected.data[0], "rest")
+
     def test_esc_pauses_and_f10_asks_with_the_same_dialog(self):
         scr = self.open_session()
         self.press(key.SPACE)                                # começa a série…
