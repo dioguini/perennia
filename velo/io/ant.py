@@ -538,6 +538,7 @@ class AntStick:
         self._channel_types: dict[int, int] = {}
         self._requested: set[int] = set()
         self._notes: dict[int, str] = {}
+        self._reopening: set[int] = set()
         self._on_event = on_event or (lambda kind, data: None)
 
     # ---------------------------------------------------------------- abrir
@@ -659,6 +660,12 @@ class AntStick:
         time.sleep(0.02)
         self.open_channel(channel, dtype, number, search_timeout=SEARCH_FOREVER)
 
+    def _reopen_once(self, channel: int) -> None:
+        try:
+            self.reopen(channel)
+        finally:
+            self._reopening.discard(channel)
+
     def close_unused(self) -> None:
         """No fim da procura: fecha os canais que não encontraram ninguém."""
         for channel in list(self._channel_types):
@@ -672,14 +679,41 @@ class AntStick:
 
     # ------------------------------------------------------------- receção
 
+    ERROR_SLEEP_S = 0.05             # pausa depois de uma leitura que falhou de vez
+    MAX_ERRORS = 200                 # leituras falhadas seguidas até desistir (≈ 10 s)
+    MAX_BUFFER = 8192                # o que se guarda à espera de uma mensagem completa
+
+    @staticmethod
+    def _is_timeout(e: Exception) -> bool:
+        """Esgotar o tempo de leitura é normal (a antena não tem nada a dizer)."""
+        return (type(e).__name__ == "USBTimeoutError" or getattr(e, "errno", None) in (110, 10060)
+                or "timed out" in str(e).lower())
+
     def _read_loop(self) -> None:
+        errors = 0
         while self._running:
             try:
                 raw = self._ep_in.read(64, timeout=1000)
-            except Exception:
-                continue                     # tempo esgotado é normal
+            except Exception as e:
+                if self._is_timeout(e):
+                    errors = 0
+                    continue
+                # a antena falhou de vez (desligada, a ser usada por outro programa…): antes
+                # isto voltava a tentar sem parar, a 100 % de um núcleo, e pesava no computador
+                errors += 1
+                if errors >= self.MAX_ERRORS:
+                    self._running = False
+                    self._on_event("ant_error", {
+                        "error": "a antena deixou de responder (ligada ao USB? a ser usada "
+                                 "por outro programa?)"})
+                    return
+                time.sleep(self.ERROR_SLEEP_S)
+                continue
+            errors = 0
             self._buffer += bytes(raw)
             messages, self._buffer = parse_messages(self._buffer)
+            if len(self._buffer) > self.MAX_BUFFER:      # lixo sem fim: não cresce sem limite
+                self._buffer = b""
             for msg_id, payload in messages:
                 self._dispatch(msg_id, payload)
 
@@ -699,9 +733,11 @@ class AntStick:
             self._on_event("ant_channel_event", {
                 "channel": channel, "message": payload[1], "code": code})
             if (code == EVENT_CHANNEL_CLOSED and self._running
-                    and channel in self._handlers):
-                # um sensor em uso perdeu-se: volta a procurá-lo, noutro fio
-                threading.Thread(target=self.reopen, args=(channel,),
+                    and channel in self._handlers and channel not in self._reopening):
+                # um sensor em uso perdeu-se: volta a procurá-lo, noutro fio (um de cada vez
+                # por canal: vários eventos seguidos não acumulam fios)
+                self._reopening.add(channel)
+                threading.Thread(target=self._reopen_once, args=(channel,),
                                  name=f"ant-reopen-{channel}", daemon=True).start()
         elif msg_id == MSG_CHANNEL_ID:
             parsed = parse_channel_id(payload)
