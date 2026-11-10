@@ -365,3 +365,114 @@ class StrengthAnalysisScreen(Screen):
         self.chrome.draw()
         if self.back_button is not None:
             self.back_button.draw()
+
+
+# ================================================ treino livre: acrescentar o que faltou
+
+
+class FreeSetsScreen(Screen):
+    """As séries de uma sessão de **treino livre** (e só dessas): Enter abre uma série para
+    acrescentar ou corrigir as repetições, a carga e o RPE que ficaram por marcar. Nos outros
+    treinos, o treino é que manda e as séries não se editam depois."""
+
+    def __init__(self, app, sid: str):
+        super().__init__(app)
+        self.sid = sid
+
+    def enter(self) -> None:
+        a = self.app
+        from velo.core import strength as st
+        rows = a.db.conn.execute(
+            "SELECT s.*, e.name AS ex_name, e.measure AS measure FROM strength_sets s"
+            " JOIN exercises e ON e.id = s.exercise_id WHERE s.session_id = ? ORDER BY s.id",
+            (self.sid,)).fetchall()
+        items = []
+        for n, r in enumerate(rows, 1):
+            secs = max(0, (r["end_t_s"] or 0) - (r["start_t_s"] or 0))
+            unit = " s" if r["measure"] == "time" else ""
+            reps = f"{r['reps']}{unit} " + tr("rep.", "reps") if r["reps"] else \
+                tr("sem repetições", "no reps")
+            items.append(Item(f"{n}. {r['ex_name']}",
+                              value=reps + (f" · {r['load_kg']:g} kg" if r["load_kg"] else ""),
+                              detail=tr("durou {t}", "took {t}", t=hms(secs))
+                              + (f" · RPE {r['rpe']:g}" if r["rpe"] else "")
+                              + " · " + tr("Enter edita", "Enter edits"),
+                              action=lambda sid=r["id"]: self._edit(sid), data=("set", r["id"])))
+        if not items:
+            items = [Item(tr("Esta sessão não tem séries", "This session has no sets"),
+                          enabled=False)]
+        free = st.is_free_session(a.db, self.sid)
+        self.chrome.set(tr("Séries do treino livre", "Free workout sets"),
+                        tr("Acrescenta o que ficou em falta: só nos treinos livres",
+                           "Add what was missing: free workouts only") if free else
+                        tr("Só os treinos livres se editam depois", "Only free workouts can "
+                           "be edited afterwards"), self.footer())
+        self.list.set_items(items, keep_index=True)
+
+    def _edit(self, set_id: int) -> None:
+        self.app.push(FreeSetEditor(self.app, set_id, self.enter))
+
+
+from velo.ui.sport_screens import EditPopup  # noqa: E402
+
+
+class FreeSetEditor(EditPopup):
+    """Repetições, carga e RPE de uma série de um treino livre."""
+
+    W = 640
+
+    def __init__(self, app, set_id: int, then=None):
+        super().__init__(app)
+        self.set_id = set_id
+        self.then = then
+        r = app.db.conn.execute(
+            "SELECT s.*, e.name AS ex_name FROM strength_sets s JOIN exercises e ON"
+            " e.id = s.exercise_id WHERE s.id = ?", (set_id,)).fetchone()
+        self.name = r["ex_name"]
+        self.reps = int(r["reps"] or 0)
+        self.load = r["load_kg"]
+        self.rpe = r["rpe"]
+
+    def title(self) -> str:
+        return tr("Editar série", "Edit set")
+
+    def subtitle(self) -> str:
+        return self.name
+
+    def state(self):
+        return (self.reps, self.load, self.rpe)
+
+    def rows(self) -> list[Item]:
+        return [Item(tr("Repetições", "Reps"), value=str(self.reps), data="num:reps",
+                     detail=tr("escreve o número · ←/→ ±1", "type the number · ←/→ ±1")),
+                Item(tr("Carga", "Load"), value=f"{self.load:g} kg" if self.load else "—",
+                     data="num:load"),
+                Item("RPE", value=f"{self.rpe:g}" if self.rpe else "—", data="num:rpe")]
+
+    def num_adjust(self, field: str, steps: int, big: bool) -> None:
+        if field == "reps":
+            self.reps = max(0, self.reps + steps * (5 if big else 1))
+        elif field == "load":
+            self.load = max(0.0, (self.load or 0.0) + steps * (5.0 if big else 2.5))
+        elif field == "rpe":
+            self.rpe = max(0.0, min(10.0, (self.rpe or 6.5) + steps * 0.5))
+
+    def num_set(self, field: str, value: float | None) -> None:
+        if field == "reps":
+            self.reps = max(0, int(value or 0))
+        elif field == "load":
+            self.load = value
+        elif field == "rpe":
+            self.rpe = value
+
+    def commit(self) -> bool:
+        from velo.core import strength as st
+        ok = st.edit_free_set(self.app.db, self.set_id, reps=self.reps, load_kg=self.load,
+                              rpe=self.rpe)
+        if not ok:
+            self.app.message(tr("Só se editam as séries de treinos livres.",
+                                "Only free workout sets can be edited."))
+            return False
+        if self.then:
+            self.then()
+        return True

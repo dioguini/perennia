@@ -22,6 +22,25 @@ from velo.gfx.hud import FinishDialog
 from velo.ui.widgets import Item
 
 
+def drive_cues(screen, key, kind: str, elapsed: float, remaining: float | None) -> int | None:
+    """Alimenta os avisos sonoros (Definições → Configurações sonoras) com o segmento em curso e
+    devolve os segundos que se veem (os últimos 5), ou None. O acompanhante nasce com o ecrã, por
+    isso as regras que mudares valem na sessão seguinte."""
+    tracker = getattr(screen, "_cue_tracker", None)
+    if tracker is None:
+        tracker = screen._cue_tracker = screen.app.new_cues()
+    return tracker.update(key, kind, elapsed, remaining)
+
+
+def workout_step_cues(screen, w) -> int | None:
+    """Corrida e remo: o passo do treino por blocos que está a decorrer (só os de tempo)."""
+    s = getattr(w, "step", None) if w is not None else None
+    if s is None or s.dur_type != "time":
+        return drive_cues(screen, None, "work", 0.0, None)
+    kind = "rest" if s.kind == "rest" else "work"
+    return drive_cues(screen, ("step", w.idx), kind, w.step_t, s.dur_value - w.step_t)
+
+
 class FinishFlow:
     finish_dialog: FinishDialog | None = None
     _resume_on_cancel = False
@@ -117,6 +136,12 @@ class FinishFlow:
         if self._resume_on_cancel:
             self._flow_set_paused(True)
         self.finish_dialog.show()
+
+    def plan_complete(self) -> None:
+        """O último bloco acabou: o tempo pára de imediato e abre-se, sozinho, o diálogo de
+        terminar (como se tivesses carregado em «Terminar»)."""
+        if not self.confirming:
+            self.ask_finish()
 
     def cancel_finish(self) -> None:
         """«Não»: volta à sessão (retoma, se foi o diálogo que a parou)."""

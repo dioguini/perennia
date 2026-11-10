@@ -369,6 +369,8 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         e.update(dt)
         for kind, data in e.drain_events():
             self._event(kind, data)
+        from velo.ui.session_flow import workout_step_cues
+        self.clock.alert(workout_step_cues(self, e.workout) if e.started else None)
         self.clock.set(e.t, tr("volta {t}", "lap {t}", t=hms(e.lap_elapsed_s)) + (
             f" · {tr('passo', 'step')} {e.workout.remaining_text()}"
             if e.workout is not None and e.workout.step is not None else ""))
@@ -543,6 +545,8 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             self.laps_panel.pulse(time.monotonic())
         if msg:
             self.toast, self._toast_until = msg, time.monotonic() + 3.0
+        if kind == "workout_done":
+            self.plan_complete()
 
     def on_device_lost(self, name: str) -> None:
         self.toast = tr("⚠ {n} desligou-se", "⚠ {n} disconnected", n=name)

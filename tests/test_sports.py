@@ -563,26 +563,33 @@ class TestSportsGui(tg.GuiCase):
         self.assertIsInstance(summ, es.EnduranceSummary)
         self.assertTrue(Path(summ.result["fit_path"]).exists())
 
-    def test_gym_free_workout_plan_first_and_keep(self):
+    def test_gym_free_workout_only_exercises_then_laps(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Kettlebell")
         self.pick("Treino livre")
         ed = self.screen()
-        self.assertIsInstance(ed, gs.GymPlanEditor)
+        self.assertIsInstance(ed, gs.FreeWorkoutEditor)
+        buttons = [i.label for i in ed.list.items if i.button]
+        self.assertEqual(buttons[-1], "Começar treino")           # em baixo, à direita
+        self.assertFalse([i for i in ed.list.items if not i.button and "Começar" in i.label])
         self.pick("Adicionar exercício")
         self.assertEqual(self.screen().modality(), "kettlebell")
         self.pick("Kettlebell swing")
+        self.assertEqual([i["name"] for i in ed.items], ["Kettlebell swing"])
         self.pick("Guardar como treino")
         self.assertIn(ed.name, [w["name"] for w in gym.workouts(self.app.db, "kettlebell")])
-        self.assertEqual(self.screen().title_text, "Treino guardado")
-        self.press(key.ENTER)                                   # OK
-        self.pick("Começar o treino")
+        self.pick("Começar treino")
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthSessionScreen)
-        self.app._tick(5.0)
-        self.assertEqual(scr.session.t, 0.0)                    # espera pela 1.ª série
+        self.assertTrue(scr.session.free)
+        self.assertTrue(scr.session.started)                    # começa sozinha (sem contagem)
+        self.assertEqual(scr.session.phase, "work")
+        # nada marcado de antemão: sem séries, repetições nem RPE
+        it = scr.session.items[0]
+        self.assertEqual((it.sets, it.rpe, it.rest_s), (1, None, 0))
+        self.assertEqual(scr.session.entry["reps"], 0)
 
     def test_surprise_inventory_and_exercise_editor(self):
         self.press(key.ESCAPE)
@@ -625,7 +632,7 @@ class TestSportsGui(tg.GuiCase):
         self.assertIn("com o teu material", sur.chrome.subtitle.text)
         first = [i.label for i in sur.list.items]
         self.pick("Outra surpresa")
-        self.pick("Começar")
+        self.pick("Começar treino")
         self.assertIsInstance(self.screen(), ss.StrengthSessionScreen)
         self.assertTrue(first)
 

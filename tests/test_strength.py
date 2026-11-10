@@ -564,16 +564,14 @@ class TestStrengthGui(tg.GuiCase):
         self.pick("Começar")
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthSessionScreen)
-        for _ in range(10):
-            self.app._tick(0.5)
-        self.assertEqual(scr.session.t, 0.0)          # o relógio espera pela 1.ª série
+        self.assertTrue(scr.session.started)              # começa sozinha (sem contagem: já)
+        self.assertEqual(scr.session.phase, "work")
         self.app._on_draw()
-        self.press(key.SPACE)                             # começar a série
         for _ in range(20):
             self.app._tick(0.5)
         self.assertEqual(scr.clock.value.text, "0:10")   # tempo total ao centro
         self.assertIn("série", scr.clock.sub.text)
-        self.press(key.SPACE)                             # terminar
+        self.press(key.SPACE)                             # Lap: termina a série
         self.assertEqual(len(scr.session.sets), 1)
         self.select("Segundos")                            # corrige: foram 280 s
         self.app._on_text("280")
@@ -581,7 +579,7 @@ class TestStrengthGui(tg.GuiCase):
         self.select("RPE")
         self.press(key.RIGHT, key.RIGHT)
         self.app._on_draw()
-        self.press(key.SPACE)                             # série seguinte
+        self.press(key.SPACE)                             # Lap: série seguinte
         self.assertEqual(scr.session.phase, "work")
         self.press(key.ESCAPE)                            # Esc pausa (como no ciclismo)
         self.assertTrue(scr.session.paused)
@@ -653,7 +651,10 @@ class TestStrengthGui(tg.GuiCase):
     def test_builder_creates_a_plan(self):
         from velo.ui import hub_screens as hs_
         self.go_strength()
-        self.pick("Treino livre")                         # o plano à mão (editor simples)
+        self.press(key.ESCAPE)
+        self.press(key.ESCAPE)
+        from velo.ui import gym_screens as gs_
+        self.app.push(gs_.GymPlanEditor(self.app, "strength", None))     # o editor simples
         ed = self.screen()
         self.assertIsInstance(ed, ss.StrengthWorkoutEditor)
         self.select("Nome")
@@ -682,7 +683,8 @@ class TestStrengthGui(tg.GuiCase):
         self.pick("Guardar e sair")
         self.pick("Nordic curl")
         self.assertEqual(ed.items[-1]["name"], "Nordic curl")
-        self.pick("Guardar como treino da modalidade")    # o treino livre guarda-se à parte
+        self.pick("Guardar e treinar")
+        self.assertIsInstance(self.screen(), ss.StrengthPreview)
         from velo.core import gym
         names = [w["name"] for w in gym.workouts(self.app.db, "strength")]
         self.assertIn("Pernas", names)

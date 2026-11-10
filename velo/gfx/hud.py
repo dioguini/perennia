@@ -947,7 +947,11 @@ class Hud:
 
         # o tempo da sessão e a distância já não vêm no topo do ecrã (são métricas
         # das caixas); só as voltas da rota, quando as há
-        self._clock.text = ""
+        # nos últimos segundos de um bloco, o número que falta aparece grande ao centro
+        n = getattr(self, "alert_n", None)
+        self._clock.text = str(n) if n else ""
+        if n:
+            self._clock.color = _theme.rgba(_theme.P.danger)
         self._clock_cap.text = ""
         self._dist.text = ""
         loops = getattr(state, "loops", 0) if state.route is not None else 0

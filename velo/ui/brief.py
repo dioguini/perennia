@@ -352,7 +352,8 @@ class BriefScreen(Screen):
         name = b.title if b else ""
         pick_date(self.app, tr("Planear para que dia?", "Plan for which day?"), date.today(),
                   lambda iso: plan_it(self.app, date.fromisoformat(iso), self.SPORT,
-                                      self.wid, name))
+                                      self.wid, name),
+                  min_day=date.today())          # só se planeia de hoje para a frente
 
     def export(self) -> None:
         """Exportar: um popup pede o nome do ficheiro e o formato."""

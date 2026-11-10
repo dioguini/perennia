@@ -27,6 +27,7 @@ from velo.core import longevity as lg  # noqa: E402
 from velo.core import strength as st  # noqa: E402
 from velo.core import tags as tag_core  # noqa: E402
 from velo.core.db import Database  # noqa: E402
+from velo.io import rower as rio  # noqa: E402
 from velo.gfx import icons  # noqa: E402
 from velo.ui import day_popups as dp  # noqa: E402
 from velo.ui import gym_screens as gs  # noqa: E402
@@ -262,10 +263,18 @@ class TestHomeCalendar(tg.GuiCase):
         self.pick(wid["name"])
         self.assertTrue(any(p.sport == "cycling" for p in cv.planned_for(self.app.db, day)))
 
-    def test_past_day_loads_what_happened(self):
+    def test_past_day_cannot_be_planned_only_loaded(self):
+        home = self.home()
         day = date.today() - timedelta(days=3)
-        self.app.push(dp.PlanSportPopup(self.app, day))
-        self.pick("Ciclismo")
+        home.open_day(day)
+        pop = self.screen()
+        self.assertIsInstance(pop, dp.DayPopup)
+        buttons = [i.label for i in pop.list.items if i.button]
+        self.assertEqual(buttons[0], "Nota do dia")
+        self.assertTrue(buttons[1].startswith("Diário de saúde"))
+        self.assertEqual(buttons[2], "Carregar treino")
+        self.assertNotIn("+ Planear treino", buttons)
+        self.pick("Carregar treino")
         labels = [i.label for i in self.screen().list.items]
         self.assertTrue(any(".fit" in x for x in labels))
         self.assertTrue(any("HRV" in x for x in labels))
@@ -274,6 +283,29 @@ class TestHomeCalendar(tg.GuiCase):
         scr = self.screen()
         self.assertEqual(scr.tab_labels(), ["Exportar", "Repor", "Sincronização"])
         self.assertEqual(scr.sync.source_labels()[scr.sync_tab], "Saúde")
+
+    def test_today_and_future_can_be_planned(self):
+        home = self.home()
+        for d in (date.today(), date.today() + timedelta(days=5)):
+            home.open_day(d)
+            buttons = [i.label for i in self.screen().list.items if i.button]
+            self.assertEqual(buttons[2], "+ Planear treino")
+            self.press(key.ESCAPE)
+
+    def test_plan_it_refuses_the_past(self):
+        day = date.today() - timedelta(days=1)
+        wid = self.app.db.workouts()[0]["id"]
+        dp.plan_it(self.app, day, "cycling", wid, "Antigo")
+        self.assertEqual(cv.planned_for(self.app.db, day), [])
+
+    def test_the_brief_date_picker_starts_today(self):
+        from velo.ui import brief
+        wid = self.app.db.workouts()[0]["id"]
+        scr = brief.CyclingBrief(self.app, wid)
+        self.app.push(scr)
+        self.pick("Planear")
+        pop = self.screen()
+        self.assertEqual(pop.min_day, date.today())
 
 
 # ============================================================= longevidade
@@ -388,48 +420,69 @@ class TestGymWithoutLongevity(tg.GuiCase):
 
 
 class TestStrengthSessionScreen(tg.GuiCase):
-    def open_session(self):
+    def open_session(self, free: bool = False):
         wid = gym.workouts(self.app.db, "strength")[0]["id"]
-        scr = ss.StrengthSessionScreen(self.app, wid)
+        scr = ss.StrengthSessionScreen(self.app, wid, free=free)
         self.app.push(scr)
         return scr
+
+    def test_it_starts_by_itself_and_the_button_is_lap(self):
+        scr = self.open_session()
+        self.assertTrue(scr.session.started)                  # sem contagem (0 s): já a decorrer
+        self.assertEqual(scr.session.phase, st.WORK)
+        buttons = [i.label for i in scr.list.items if i.button]
+        self.assertEqual(buttons, ["Lap", "+ Série", "Saltar", "Pausa", "Terminar"])
+        self.assertFalse([i for i in scr.list.items if "Começar série" in i.label])
+
+    def test_the_countdown_runs_first_then_the_set_starts(self):
+        self.app.db.set("session_countdown_s", 15)
+        scr = self.open_session()
+        self.assertTrue(scr.counting)
+        self.assertFalse(scr.session.started)
+        for _ in range(40):
+            self.app._tick(0.5)                               # 20 s
+        self.assertFalse(scr.counting)
+        self.assertTrue(scr.session.started)
+        self.assertEqual(scr.session.phase, st.WORK)
+
+    def test_reps_and_load_are_in_front_of_each_exercise(self):
+        scr = self.open_session()
+        head = scr.list.items[0]
+        self.assertTrue(head.header)
+        self.assertEqual(head.cols, ("Repetições", "Carga"))
+        rows = [i for i in scr.list.items if isinstance(i.data, tuple) and i.data[0] == "ex"]
+        self.assertEqual(len(rows), len(scr.session.items))
+        for r in rows:
+            self.assertEqual(len(r.cols), 2)
+        # o exercício em curso traz por baixo os campos da série
+        k = scr.list.items.index(rows[0])
+        self.assertEqual(scr.list.items[k + 1].data, "num:reps")
+        self.assertEqual(scr.list.items[k + 2].data, "num:load_kg")
 
     def test_the_workout_is_a_list_and_enter_starts_the_set(self):
         scr = self.open_session()
         rows = [i for i in scr.list.items if isinstance(i.data, tuple) and i.data[0] == "ex"]
-        self.assertEqual(len(rows), len(scr.session.items))
         self.assertTrue(rows[0].label.lstrip().startswith("▶"))
         scr.list.select_data(("ex", 1))
-        self.press(key.ENTER)                                # vai ao 2.º exercício e começa
-        self.assertEqual(scr.session.item_idx, 1)
-        self.assertEqual(scr.session.phase, st.WORK)
-        scr.list.select_data(("ex", 0))
         self.press(key.ENTER)                                # a meio de uma série: avisa
-        self.assertEqual(scr.session.item_idx, 1)
+        self.assertEqual(scr.session.item_idx, 0)
+        self.press(key.SPACE)                                # Lap: descanso
+        self.assertEqual(scr.session.phase, st.REST)
+        scr.list.select_data(("ex", 2))
+        self.press(key.ENTER)                                # vai a esse exercício e começa
+        self.assertEqual(scr.session.item_idx, 2)
         self.assertEqual(scr.session.phase, st.WORK)
-
-    def test_buttons_are_at_the_bottom_like_the_other_sports(self):
-        scr = self.open_session()
-        labels = [i.label for i in scr.list.items if i.button]
-        self.assertEqual(labels[1:], ["+ Série", "Saltar", "Pausa", "Terminar"])
-        self.assertTrue(scr.list.items[-1].button)
-        self.press(key.P)
-        self.assertTrue(scr.session.paused)
-        self.assertEqual([i.label for i in scr.list.items if i.button][-2], "Retomar")
 
     def test_rests_are_in_the_list_and_finish_is_red(self):
         scr = self.open_session()
         kinds = [i.data[0] for i in scr.list.items if isinstance(i.data, tuple)]
         self.assertIn("rest", kinds)
-        first = [i.data for i in scr.list.items if isinstance(i.data, tuple)][:2]
-        self.assertEqual([d[0] for d in first], ["ex", "rest"])      # exercício, depois o descanso
         fin = [i for i in scr.list.items if i.button][-1]
         self.assertEqual(fin.label, "Terminar")
         self.assertTrue(fin.danger)
-        self.press(key.SPACE)
         for _ in range(4):
             self.app._tick(0.5)
-        self.press(key.SPACE)                                # terminou a série: descanso
+        self.press(key.SPACE)                                # Lap: terminou a série, descanso
         cur = [i for i in scr.list.items if i.data and i.data[0] == "rest"
                and i.label.startswith("▶")]
         self.assertEqual(len(cur), 1)
@@ -437,11 +490,10 @@ class TestStrengthSessionScreen(tg.GuiCase):
 
     def test_esc_pauses_and_f10_asks_with_the_same_dialog(self):
         scr = self.open_session()
-        self.press(key.SPACE)                                # começa a série…
         for _ in range(6):
             self.app._tick(0.5)
-        self.press(key.SPACE)                                # …e termina-a
-        self.press(key.SPACE)
+        self.press(key.SPACE)                                # Lap: termina a série…
+        self.press(key.SPACE)                                # …e Lap começa a seguinte
         self.press(key.ESCAPE)
         self.assertTrue(scr.session.paused)
         self.assertFalse(scr.confirming)
@@ -455,6 +507,56 @@ class TestStrengthSessionScreen(tg.GuiCase):
         self.assertIsInstance(self.screen(), tp.SessionTagsPopup)
         self.press(key.ENTER)
         self.assertIsInstance(self.screen(), ss.StrengthSummaryScreen)
+
+    def test_finishing_the_last_set_stops_and_asks(self):
+        scr = self.open_session()
+        s = scr.session
+        n = sum(s.planned_sets(i) for i in range(len(s.items)))
+        for k in range(n):
+            for _ in range(2):
+                self.app._tick(0.5)
+            self.press(key.SPACE)                            # Lap: termina a série
+            if k < n - 1:
+                self.assertFalse(scr.confirming)
+                self.press(key.SPACE)                        # Lap: começa a seguinte
+        self.app._tick(0.5)
+        self.assertTrue(scr.confirming)                      # o treino acabou: abre sozinho
+        self.assertTrue(scr.finish_dialog.visible)
+        self.assertTrue(s.paused)                            # e o tempo pára
+
+    def test_free_workout_lap_opens_the_reps_popup_and_rest_goes_on(self):
+        scr = self.open_session(free=True)
+        s = scr.session
+        self.assertTrue(s.free)
+        for _ in range(8):
+            self.app._tick(0.5)
+        self.press(key.SPACE)                                # Lap: acabou o exercício
+        self.assertEqual(s.phase, st.REST)
+        pop = self.screen()
+        self.assertIsInstance(pop, ss.FreeSetPopup)          # as repetições abrem logo
+        self.app._on_text("12")
+        self.assertEqual(s.sets[-1].reps, 12)
+        t0 = s.t
+        self.app._tick(2.0)
+        self.assertGreater(s.t, t0)                          # o descanso continua por baixo
+        self.press(key.ENTER)                                # fecha
+        self.assertIs(self.screen(), scr)
+        self.assertEqual(s.phase, st.REST)
+        self.press(key.SPACE)                                # Lap: o exercício seguinte
+        self.assertEqual(s.phase, st.WORK)
+        self.assertEqual(s.item_idx, 1)
+        self.assertEqual(len(s.sets), 1)                     # só o tempo do exercício guardado
+        self.assertGreaterEqual(s.sets[0].end_t - s.sets[0].start_t, 3)
+
+    def test_free_workout_does_not_end_by_itself(self):
+        scr = self.open_session(free=True)
+        s = scr.session
+        for _ in range(len(s.items)):
+            self.press(key.SPACE)                            # Lap (termina o exercício)
+            self.press(key.ESCAPE)                           # fecha a janela das repetições
+            self.press(key.SPACE) if s.phase == st.REST and not s.all_done else None
+        self.app._tick(0.5)
+        self.assertFalse(scr.confirming)
 
 
 # ====================================================== «Planear» na ficha
@@ -526,6 +628,27 @@ class TestBackupRound11(tg.GuiCase):
         backup.restore(other, Path(tempfile.mkdtemp()), out, keys=["definicoes"], mode="substituir")
         self.assertIn(cid, [c["id"] for c in lg.formula(other)["custom"]])
 
+    def test_the_sound_settings_and_free_sessions_travel_in_the_backup(self):
+        from velo.core import backup
+        db = self.app.db
+        cues.save_rules(db, [{"id": "r1", "when": "first", "seconds": 10, "per_s": 0,
+                              "scope": "all"}])
+        db.set("sound_on", False)
+        wid = gym.workouts(db, "strength")[0]["id"]
+        ses = st.StrengthSession(db, db.athlete(), wid, out_dir=Path(self.tmp) / "str",
+                                 free=True)
+        ses.action()
+        ses.update(8.0)
+        ses.action()
+        ses.finish()
+        out = Path(self.tmp) / "full.zip"
+        backup.export(db, Path(self.tmp), out)
+        other = fresh_db()
+        backup.restore(other, Path(tempfile.mkdtemp()), out, mode="substituir")
+        self.assertEqual(cues.rules(other)[0]["when"], "first")
+        self.assertFalse(cues.enabled(other))
+        self.assertTrue(st.is_free_session(other, ses.session_id))        # continua «livre»
+
     def test_the_health_csv_is_a_cli_import(self):
         import subprocess
         main = Path(__file__).resolve().parents[1] / "main.py"
@@ -540,3 +663,254 @@ class TestBackupRound11(tg.GuiCase):
                               "--importar", "saude", str(files[0])],
                              capture_output=True, text=True, timeout=120)
         self.assertEqual(res.returncode, 0, res.stderr)
+
+
+# ========================================================== ronda 12: avisos sonoros
+
+from velo.core import cues  # noqa: E402
+from velo.io import sound  # noqa: E402
+
+
+class TestCues(tg.GuiCase):
+    def run_segment(self, items, total, kind="work", step=0.1, **kw):
+        out = []
+        tracker = cues.CueTracker(items, out.append, **kw)
+        n = int(total / step) + 6
+        for i in range(n):
+            el = i * step
+            tracker.update("k", kind, el, total - el)
+        return out
+
+    def test_default_rule_is_the_last_five_seconds_one_beep_each_plus_a_long_one(self):
+        self.assertEqual(cues.rules(self.app.db), cues.DEFAULT_RULES)
+        out = self.run_segment(cues.rules(self.app.db), 12)
+        self.assertEqual(out, ["short"] * 5 + ["long"])
+
+    def test_last_ten_seconds_one_per_second_and_last_five_two_per_second(self):
+        rules = [{"id": "a", "when": "last", "seconds": 10, "per_s": 1, "scope": "all"},
+                 {"id": "b", "when": "last", "seconds": 5, "per_s": 2, "scope": "all"}]
+        out = self.run_segment(rules, 20, long_at_end=False)
+        # 10 do primeiro + 10 do segundo, menos os 5 que calham no mesmo segundo (um só bip)
+        self.assertEqual(len(out), 15)
+
+    def test_first_ten_seconds_with_a_single_beep(self):
+        rules = [{"id": "a", "when": "first", "seconds": 10, "per_s": 0, "scope": "all"}]
+        out = self.run_segment(rules, 30, long_at_end=False)
+        self.assertEqual(out, ["short"])
+
+    def test_scope_rest_only(self):
+        rules = [{"id": "a", "when": "last", "seconds": 3, "per_s": 1, "scope": "rest"}]
+        self.assertEqual(self.run_segment(rules, 10, kind="work", long_at_end=False), [])
+        self.assertEqual(len(self.run_segment(rules, 10, kind="rest", long_at_end=False)), 3)
+
+    def test_a_segment_that_starts_late_does_not_play_the_past_beeps(self):
+        out = []
+        tr_ = cues.CueTracker(cues.rules(self.app.db), out.append, long_at_end=False)
+        for i in range(5):                       # um descanso de 3 s: a janela de 5 s já passou
+            tr_.update("k", "rest", i * 0.5, 3 - i * 0.5)
+        self.assertLessEqual(len(out), 3)
+
+    def test_off_is_silent_but_the_last_seconds_are_still_visible(self):
+        out = []
+        tr_ = cues.CueTracker(cues.rules(self.app.db), out.append, on=False)
+        seen = [tr_.update("k", "work", 10 - r, r) for r in (6.0, 4.6, 3.2, 1.1, 0.4)]
+        self.assertEqual(out, [])
+        self.assertEqual(seen, [None, 5, 4, 2, 1])
+
+    def test_the_beep_tones_are_valid_wav(self):
+        import io
+        import wave
+        for kind, (hz, secs) in sound.TONES.items():
+            w = wave.open(io.BytesIO(sound.tone_wav(hz, secs)))
+            self.assertEqual(w.getnchannels(), 1)
+            self.assertAlmostEqual(w.getnframes() / w.getframerate(), secs, delta=0.01)
+
+    def test_a_silent_beeper_just_counts(self):
+        b = sound.SilentBeeper()
+        b.beep("short")
+        b.beep("long")
+        self.assertEqual((b.count, b.log), (2, ["short", "long"]))
+        sound.Beeper().beep("short")             # nunca falha, mesmo sem som
+
+
+class TestSoundSettings(tg.GuiCase):
+    def open_tab(self):
+        self.pick_settings = None
+        self.press(key.ESCAPE)
+        self.pick("Definições")
+        scr = self.screen()
+        scr.tab_named("Configurações sonoras")
+        return scr
+
+    def test_the_tab_lists_the_rules_and_the_actions(self):
+        scr = self.open_tab()
+        labels = [i.label for i in scr.list.items]
+        self.assertIn("Bips", labels)
+        self.assertIn("Últimos 5 s · 1 bip por segundo · em tudo", labels)
+        buttons = [i.label for i in scr.list.items if i.button]
+        for b in ("+ Nova regra", "Testar os bips", "Repor as de origem", "Guardar"):
+            self.assertIn(b, buttons)
+
+    def test_add_edit_and_delete_rules_then_save(self):
+        scr = self.open_tab()
+        self.pick("Nova regra")
+        pop = self.screen()
+        from velo.ui import sound_screens as ssc
+        self.assertIsInstance(pop, ssc.SoundRulePopup)
+        self.select("Quando")
+        self.press(key.RIGHT)                    # Primeiros
+        self.select("Segundos")
+        self.app._on_text("10")
+        self.select("Bips por segundo")
+        self.app._on_text("0")
+        self.pick("Guardar e sair")
+        labels = [i.label for i in scr.list.items]
+        self.assertIn("Primeiros 10 s · um só bip · em tudo", labels)
+        self.assertTrue(scr.dirty)
+        scr.list.select_data("rule:r1")
+        self.press(key.DELETE)
+        self.assertNotIn("Últimos 5 s · 1 bip por segundo · em tudo",
+                         [i.label for i in scr.list.items])
+        scr.save()
+        saved = cues.rules(self.app.db)
+        self.assertEqual([(r["when"], r["seconds"], r["per_s"]) for r in saved],
+                         [("first", 10, 0)])
+
+    def test_toggle_and_restore_defaults(self):
+        scr = self.open_tab()
+        scr.list.select_data("sound_on")
+        self.press(key.RIGHT)
+        scr.save()
+        self.assertFalse(cues.enabled(self.app.db))
+        self.assertFalse(self.app.new_cues().on)
+        scr.list.select_data("sound_on")
+        self.press(key.RIGHT)
+        self.pick("Repor as de origem")
+        scr.save()
+        self.assertTrue(cues.enabled(self.app.db))
+        self.assertEqual(cues.rules(self.app.db), cues.DEFAULT_RULES)
+
+    def test_the_test_button_plays_through_the_beeper(self):
+        scr = self.open_tab()
+        self.app.beeper = sound.SilentBeeper()
+        self.pick("Testar os bips")
+        for _ in range(60):
+            self.app._tick(0.5)                  # 30 s
+        self.assertEqual(self.app.beeper.log.count("short"), 10)   # 5 no bloco + 5 no descanso
+        self.assertEqual(self.app.beeper.log.count("long"), 2)
+
+
+class TestGymSessionCues(tg.GuiCase):
+    def test_a_timed_rest_beeps_in_the_last_seconds_and_blinks_the_clock(self):
+        self.app.beeper = sound.SilentBeeper()
+        wid = gym.workouts(self.app.db, "strength")[0]["id"]
+        scr = ss.StrengthSessionScreen(self.app, wid)
+        self.app.push(scr)
+        for _ in range(4):
+            self.app._tick(0.5)
+        self.press(key.SPACE)                    # Lap: descanso (de 30 s no 1.º exercício)
+        s = scr.session
+        left = s.rest_until - s.t
+        self.app._tick(left - 3.2)               # faltam ~3 s
+        self.assertIn(scr.clock._alert, (3, 4))
+        for _ in range(8):
+            self.app._tick(0.5)
+        self.assertGreaterEqual(self.app.beeper.log.count("short"), 3)
+        self.assertIn("long", self.app.beeper.log)
+
+
+class TestPlanCompleteStopsAndAsks(tg.GuiCase):
+    def test_running_workout_done_opens_the_finish_dialog(self):
+        from velo.ui import endurance_screens as es_
+        scr = es_.EnduranceSession(self.app, "running")
+        self.app.push(scr)
+        scr.engine.start()
+        scr._event("workout_done", {})
+        self.assertTrue(scr.confirming)
+        self.assertTrue(scr._flow_paused())                  # o tempo parou
+
+    def test_rowing_workout_done_opens_the_finish_dialog(self):
+        from velo.ui import rowing_screens as rs_
+        self.app.set_rower(rio.SimulatedRower())
+        scr = rs_.RowingSessionScreen(self.app)
+        self.app.push(scr)
+        self.press(key.SPACE)                                # começa a remar
+        scr._event("workout_done", {})
+        self.assertTrue(scr.confirming)
+
+    def test_cycling_workout_done_opens_the_finish_dialog(self):
+        from velo.ui import app as am
+        wid = self.app.db.workouts()[0]["id"]
+        ride = am.RideScreen(self.app, route_id=None, workout_id=wid, kind="workout",
+                             ghosts=[], erg=True)
+        self.app.push(ride)
+        ride.preparing = False
+        ride.update(0.5)
+        ride.engine._emit("workout_done")
+        ride.update(0.5)
+        self.assertTrue(ride.hud.finish_dialog.visible)
+
+
+class TestFreeWorkoutEditAfterwards(tg.GuiCase):
+    def finished_free_session(self):
+        from velo.ui import sport_screens as ss_
+        wid = gym.workouts(self.app.db, "strength")[0]["id"]
+        scr = ss_.StrengthSessionScreen(self.app, wid, free=True)
+        self.app.push(scr)
+        for _ in range(6):
+            self.app._tick(0.5)
+        self.press(key.SPACE)                                # Lap
+        self.press(key.ESCAPE)                               # fecha a janela das repetições
+        self.press(key.SPACE)                                # Lap: o exercício seguinte
+        for _ in range(4):
+            self.app._tick(0.5)
+        res = scr.session.finish()
+        return res["session_id"]
+
+    def test_only_free_sessions_are_editable_afterwards(self):
+        db = self.app.db
+        sid = self.finished_free_session()
+        self.assertTrue(st.is_free_session(db, sid))
+        sets = db.conn.execute("SELECT id, reps FROM strength_sets WHERE session_id = ?",
+                               (sid,)).fetchall()
+        self.assertEqual(sets[0]["reps"], 0)
+        self.assertTrue(st.edit_free_set(db, sets[0]["id"], reps=15, load_kg=20, rpe=7))
+        row = db.conn.execute("SELECT reps, load_kg, rpe FROM strength_sets WHERE id = ?",
+                              (sets[0]["id"],)).fetchone()
+        self.assertEqual((row["reps"], row["load_kg"], row["rpe"]), (15, 20, 7))
+        tot = db.conn.execute("SELECT total_reps, volume_kg FROM strength_sessions WHERE id = ?",
+                              (sid,)).fetchone()
+        self.assertEqual((tot["total_reps"], tot["volume_kg"]), (15, 300.0))
+        # um treino planeado não se edita depois
+        plan = st.StrengthSession(db, db.athlete(), gym.workouts(db, "strength")[0]["id"],
+                                  out_dir=Path(self.tmp) / "str")
+        plan.action()
+        plan.update(10.0)
+        plan.action()
+        plan.finish()
+        pid = plan.session_id
+        self.assertFalse(st.is_free_session(db, pid))
+        psets = db.conn.execute("SELECT id FROM strength_sets WHERE session_id = ?",
+                                (pid,)).fetchall()
+        self.assertFalse(st.edit_free_set(db, psets[0]["id"], reps=99))
+
+    def test_the_analysis_has_an_edit_button_for_free_sessions(self):
+        from velo.ui import session_analysis as sa_ui
+        from velo.ui import strength_analysis_screens as sas
+        sid = self.finished_free_session()
+        an = sa_ui.SessionAnalysis(self.app, "strength", sid)
+        self.app.push(an)
+        an.tab_named("Análise do treino")
+        self.assertIn("Editar séries", [i.label for i in an.list.items if i.button])
+        self.pick("Editar séries")
+        scr = self.screen()
+        self.assertIsInstance(scr, sas.FreeSetsScreen)
+        self.press(key.ENTER)                                # a 1.ª série
+        pop = self.screen()
+        self.assertIsInstance(pop, sas.FreeSetEditor)
+        self.select("Repetições")
+        self.app._on_text("12")
+        self.pick("Guardar e sair")
+        reps = self.app.db.conn.execute("SELECT reps FROM strength_sets WHERE session_id = ?"
+                                        " ORDER BY id", (sid,)).fetchone()["reps"]
+        self.assertEqual(reps, 12)

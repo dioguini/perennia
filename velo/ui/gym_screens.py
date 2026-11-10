@@ -197,7 +197,7 @@ class ModalityScreen(Screen):
             items = [Item(tr("Treino livre", "Free workout"),
                           detail=tr("Monta o plano e depois começa (podes guardá-lo)",
                                     "Build the plan, then start (you can save it)"),
-                          action=lambda: a.push(GymPlanEditor(a, self.mod, None, draft=True))),
+                          action=lambda: a.push(FreeWorkoutEditor(a, self.mod))),
                      Item(tr("Treino surpresa", "Surprise workout"),
                           detail=tr("Exercícios à sorte, só com o material que tens",
                                     "Random exercises, only with the equipment you have"),
@@ -296,13 +296,10 @@ class GymPlanEditor(StrengthWorkoutEditor):
                 r.action = self._pick
         if self.draft:
             rows = [r for r in rows if r.label not in (t("str.save"), t("str.save_train"))]
-            rows += [Item(tr("▶ Começar o treino", "▶ Start the workout"),
-                          detail=tr("o relógio só arranca na 1.ª série",
-                                    "the clock starts with the 1st set"),
-                          action=self._start, enabled=bool(self.items)),
-                     Item(tr("Guardar como treino da modalidade", "Save as a modality workout"),
-                          action=self._keep, enabled=bool(self.items), button=True,
-                          primary=True)]
+            rows += [Item(tr("Guardar como treino da modalidade", "Save as a modality workout"),
+                          action=self._keep, enabled=bool(self.items), button=True),
+                     Item(tr("Começar treino", "Start workout"), action=self._start,
+                          enabled=bool(self.items), button=True, primary=True)]
         self.chrome.title.text = (tr("Treino livre", "Free workout") if self.draft else
                                   t("menu.builder")) + f" · {m.name}" + (" *" if self.dirty
                                                                          else "")
@@ -361,6 +358,89 @@ class GymPlanEditor(StrengthWorkoutEditor):
             self.app.replace(StrengthSessionScreen(self.app, wid))
 
 
+class FreeWorkoutEditor(Screen):
+    """O treino livre: «quero começar já com estes exercícios». Escolhem-se os exercícios e mais
+    nada — **sem séries, repetições, carga nem RPE**. Na sessão és tu que marcas as voltas: Lap
+    fecha o exercício (guarda-se o tempo que levou e abre-se a janela das repetições) e passa ao
+    descanso; outro Lap passa ao exercício seguinte."""
+
+    def __init__(self, app, mod: str):
+        super().__init__(app)
+        self.mod = mod
+        self.items: list[dict] = []
+        self.name = tr("Treino livre", "Free workout") + time.strftime(" · %d/%m")
+
+    def enter(self) -> None:
+        m = gym.modality(self.mod)
+        rows = [Item(f"{i + 1}. {it['name']}", detail=tr("Del tira · ←/→ muda a ordem",
+                                                        "Del removes · ←/→ reorders"),
+                     data=("fx", i)) for i, it in enumerate(self.items)]
+        if not rows:
+            rows = [Item(tr("Ainda sem exercícios", "No exercises yet"),
+                         detail=tr("junta os que vais fazer: o resto marcas tu na sessão",
+                                   "add the ones you will do: you mark the rest in the session"),
+                         enabled=False)]
+        rows += [Item(tr("+ Adicionar exercício", "+ Add exercise"), button=True,
+                      action=self._pick),
+                 Item(tr("Guardar como treino da modalidade", "Save as a modality workout"),
+                      button=True, enabled=bool(self.items), action=self._keep),
+                 Item(tr("Começar treino", "Start workout"), button=True, primary=True,
+                      enabled=bool(self.items), action=self._start)]
+        self.chrome.set(tr("Treino livre", "Free workout") + f" · {m.name}",
+                        tr("Só os exercícios: sem séries, repetições nem RPE. Na sessão, Lap "
+                           "fecha o exercício e abre as repetições.",
+                           "Just the exercises: no sets, reps or RPE. In the session, Lap closes "
+                           "the exercise and opens the reps."), self.footer())
+        self.list.set_items(rows, keep_index=True)
+
+    def _pick(self) -> None:
+        from velo.ui.hub_screens import ExerciseInventory
+        self.app.push(ExerciseInventory(self.app, self.mod, pick=self._add))
+
+    def _add(self, ex: dict) -> None:
+        self.items.append({"exercise_id": ex["id"], "name": ex["name"],
+                           "measure": ex.get("measure") or "reps"})
+        self.enter()
+        self.list.select_data(("fx", len(self.items) - 1))
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        d = item.data if item is not None else None
+        if isinstance(d, tuple) and d[0] == "fx":
+            i = d[1]
+            if symbol in (key.DELETE, key.BACKSPACE):
+                self.items.pop(i)
+                self.enter()
+                return True
+            if symbol in (key.LEFT, key.RIGHT):
+                j = i + (1 if symbol == key.RIGHT else -1)
+                if 0 <= j < len(self.items):
+                    self.items[i], self.items[j] = self.items[j], self.items[i]
+                    self.enter()
+                    self.list.select_data(("fx", j))
+                return True
+        return super().on_key(symbol, modifiers)
+
+    def _plan(self, free: bool) -> list[dict]:
+        # livre: nada marcado de antemão (1 volta, 0 repetições, sem descanso); guardado como
+        # treino da modalidade fica com o habitual (3 × 10, 90 s) para se poder repetir
+        return [{"exercise_id": it["exercise_id"], "sets": 1 if free else 3,
+                 "reps": 0 if free else (30 if it["measure"] == "time" else 10),
+                 "load_kg": None, "rpe": None, "rest_s": 0 if free else 90, "notes": None}
+                for it in self.items]
+
+    def _keep(self) -> None:
+        wid = gym.save_plan(self.app.db, None, self.name, None, self._plan(False), self.mod)
+        self.app.message(tr("Guardado em {m}: {n}", "Saved in {m}: {n}",
+                            m=gym.modality(self.mod).name, n=self.name))
+        return wid
+
+    def _start(self) -> None:
+        wid = gym.save_plan(self.app.db, None, self.name, None, self._plan(True), self.mod,
+                            hidden=True)
+        self.app.replace(StrengthSessionScreen(self.app, wid, free=True))
+
+
 class SurpriseScreen(Screen):
     """O treino surpresa da modalidade: vês, trocas por outro, começas ou guardas."""
 
@@ -373,8 +453,7 @@ class SurpriseScreen(Screen):
     def enter(self) -> None:
         a = self.app
         m = gym.modality(self.mod)
-        rows = [Item(tr("▶ Começar", "▶ Start"), action=self._start),
-                Item(tr("↻ Outra surpresa", "↻ Another surprise"), action=self._again),
+        rows = [Item(tr("↻ Outra surpresa", "↻ Another surprise"), action=self._again),
                 Item(tr("Ajustar antes de começar", "Adjust before starting"),
                      action=lambda: a.replace(GymPlanEditor(a, self.mod, None, draft=True,
                                                             items=self.items)))]
@@ -392,6 +471,8 @@ class SurpriseScreen(Screen):
         have = inventory.items(a.db)
         note = tr("com o teu material", "with your equipment") if have else \
             tr("inventário vazio: conta com tudo", "empty inventory: assumes everything")
+        rows.append(Item(tr("Começar treino", "Start workout"), button=True, primary=True,
+                         action=self._start, enabled=bool(self.items)))
         self.chrome.set(tr("Treino surpresa", "Surprise workout") + f" · {m.name}",
                         f"≈ {hms(st.plan_seconds(plan))} · {note}", self.footer())
         self.list.set_items(rows, keep_index=True)
@@ -479,13 +560,12 @@ class LapPlanEditor(EditScreen):
         for k in self.KINDS:
             rows.append(Item(tr("+ Volta: {k}", "+ Lap: {k}", k=_kind(k)),
                              action=lambda kk=k: self._add(kk)))
-        rows += [Item(tr("▶ Começar", "▶ Start"), action=self._start,
-                      enabled=bool(self.items),
-                      detail=tr("o relógio só arranca agora", "the clock starts now")),
-                 Item(tr("Guardar o plano", "Save the plan"), action=self._save,
+        rows += [Item(tr("Guardar o plano", "Save the plan"), action=self._save,
+                      enabled=bool(self.items), button=True),
+                 Item(tr("Começar treino", "Start workout"), action=self._start,
                       enabled=bool(self.items), button=True, primary=True)]
         if self.pid:
-            rows.insert(-1, Item(tr("Apagar o plano", "Delete the plan"), action=self._delete,
+            rows.insert(-2, Item(tr("Apagar o plano", "Delete the plan"), action=self._delete,
                                  button=True))
         total = ls.plan_seconds(self.items)
         self.chrome.set(tr("Plano de voltas", "Lap plan") + " · Conditioning",

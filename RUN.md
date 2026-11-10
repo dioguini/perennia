@@ -265,9 +265,9 @@ ecrãs:
   Duram uns segundos; as compridas passam a duas ou três linhas.
 
 **As Definições estão em separadores**: Atleta, **Geral**, **Desportos**,
-Ecrã e idioma, Ligações Externas e **Atalhos de
-teclado** (a Sincronização mudou-se para o menu **Backups e Sincronização**). Tab e Shift+Tab
-mudam de separador; também podes clicar.
+Ecrã e idioma, Ligações Externas, **Atalhos de
+teclado** e **Configurações sonoras** (a Sincronização mudou-se para o menu **Backups e
+Sincronização**). Tab e Shift+Tab mudam de separador; também podes clicar.
 
 - **Atleta**: os limiares de todos os desportos — a FTP do ciclismo, a
   LTHR, a **FTP do remo**, o **ritmo de limiar da corrida** (min/km) e a
@@ -595,16 +595,21 @@ planeado. Em baixo, a **nota do dia** (o texto aparece na própria janela) e os 
 
 - **Nota do dia** (ou **N**): um texto livre (como te sentiste, o tempo, a viagem…);
 - **Diário de saúde**: vai para a Saúde, nesse dia (sono, HRV, peso…);
-- **+ Planear treino**: 1.º o **desporto**, 2.º **de onde vem o treino**. Num dia **de hoje
-  para a frente**: *importar um treino da lista* (com pesquisa), *importar um treino do
-  computador* (.zwo, .fit, .mrc, .erg… — pergunta se fica na lista) ou *criar um treino no
-  construtor* (fica na lista e já planeado nesse dia). Num dia **que já passou**: *carregar uma
-  atividade (.fit)* (Upload manual), *sincronizar a HRV* (HRV4Training), *sincronizar dados de
-  saúde (.csv)* ou *sincronizar o GarminDB* — abrem o menu Backups e Sincronização no
-  separador certo.
+- O terceiro botão **depende do dia**:
+  - **Hoje ou um dia futuro → «+ Planear treino»**: 1.º o **desporto**, 2.º **de onde vem o
+    treino**: *importar um treino da lista* (com pesquisa), *importar um treino do computador*
+    (.zwo, .fit, .mrc, .erg… — pergunta se fica na lista) ou *criar um treino no construtor*
+    (fica na lista e já planeado nesse dia).
+  - **Um dia que já passou → «Carregar treino»**: **não se planeia** um dia passado (nem o
+    seletor de datas do botão Planear deixa escolhê-lo); vês as sessões feitas, o diário e, se
+    o treino foi feito **noutro sítio**, carregas o ficheiro: *carregar um ficheiro de treino
+    (.fit, .tcx)* (o Upload manual), *sincronizar a HRV* (HRV4Training), *sincronizar dados de
+    saúde (.csv)* ou *sincronizar o GarminDB* — abrem o menu Backups e Sincronização no
+    separador certo.
 
 A ficha de qualquer treino (ciclismo, remo, corrida, natação e ginásio) tem também o botão
-**Planear**: escolhes o dia no seletor de datas e o treino entra no calendário (sem duplicar).
+**Planear**: escolhes o dia no seletor de datas (só de hoje para a frente) e o treino entra no
+calendário (sem duplicar).
 
 Enter num treino planeado abre o resumo, para começares; **Del** tira-o do
 plano. Um treino planeado fica **✓ feito** quando nesse dia há uma sessão
@@ -864,19 +869,42 @@ força criado no TrainingPeaks) e pergunta se fica na lista; a **Lista de treino
 **aparelhos** (a banda de FC) e o **auto lap**, que aparece **bloqueado** porque o ginásio faz
 auto lap a cada bloco do treino.
 
-**A sessão de força** tem os mesmos botões das outras, **em cima, à direita, ao lado do relógio**
-(a ação da série, **+ Série**, **Saltar**, **Pausa** e o **Terminar a vermelho**, como no ciclismo;
-em janelas estreitas descem para a barra de baixo). O ecrã tem, de cima para baixo, o painel da
-série (fase, alvo e **o tempo da série ou do descanso** ao lado do alvo, quadrados e zonas de FC), as
-séries do exercício e o que vem a seguir, e o treino em lista. Na corrida e no remo os botões
-ficam também em cima e o Terminar a vermelho e o mesmo diálogo de terminar (Esc pausa, F10
-pergunta; Sim · Não · Terminar sem guardar) seguido das etiquetas do `.fit`. O treino está **numa
-lista, num só ecrã**: cada exercício com as séries feitas (`2/4`) e o alvo, **seguido do seu
-descanso** (assim o treino está todo descrito e é só segui-lo) — ▶ é o exercício (ou o descanso, com a
-contagem) em curso, ✓ os que estão feitos. **Enter num exercício** vai para ele e começa a
-série (ou termina-a, se for a que está a correr); por baixo ficam os campos da série (repetições,
-carga, RPE) e, à direita, o painel com a FC e as séries do exercício. *Esta lista é uma proposta
-para avaliares: diz-me o que mudarias.*
+**A sessão de força** tem os mesmos botões das outras, **em cima, à direita, ao lado do relógio**:
+**Lap**, **+ Série**, **Saltar**, **Pausa** e o **Terminar a vermelho** (como no ciclismo; em janelas
+estreitas descem para a barra de baixo), o mesmo diálogo de terminar (Esc pausa, F10 pergunta; Sim ·
+Não · Terminar sem guardar) e as etiquetas do `.fit`.
+
+- **Começa sozinha**, como as outras sessões: passada a contagem de **15 s** (Definições) arranca
+  logo o 1.º exercício — **já não há «Começar série 1»**. O botão é só o **Lap** (também Espaço e
+  Enter): fecha a série (ou o exercício) e passa ao descanso; do descanso, passa à série seguinte.
+- **O treino está numa lista, num só ecrã**: uma linha por exercício com o **alvo**, as
+  **repetições e a carga à frente** (colunas «Repetições» e «Carga»: o que o plano pede, ou o que
+  fizeste) e as séries feitas (`2/4`); **seguido do seu descanso** (assim o treino está todo
+  descrito e é só segui-lo). ▶ é o exercício (ou o descanso, com a contagem) em curso, ✓ os feitos.
+  **Mesmo por baixo do exercício em curso** ficam os campos da série (repetições/segundos, carga,
+  RPE): ←/→ ajustam, escrever números substitui. **Enter num exercício** vai para ele e começa a
+  série (a meio de uma série avisa).
+- **Treino concluído**: quando a **última série acaba**, o tempo **pára de imediato** e abre-se
+  sozinho o diálogo de terminar (como se tivesses carregado em «Terminar»). O mesmo nos treinos
+  **por blocos** de ciclismo, corrida e remo: ao acabar o último bloco, o tempo pára e abre-se a
+  janela de guardar ou não, com as possibilidades de sempre (Sim · Não · Terminar sem guardar).
+  Se escolheres «Não», continuas a pedalar/correr/remar ou a fazer séries à vontade.
+- **O botão «Começar treino»** (nos editores de treino livre, de treino surpresa «Ajustar antes de
+  começar» e de plano de voltas do Conditioning) está **em baixo, à direita**; já não é uma linha do
+  menu.
+
+**Treino livre (Ginásio)** — «quero começar já com estes exercícios». Em **Sessão de treino →
+modalidade → Treino livre** só **escolhes os exercícios** (**+ Adicionar exercício**; Del tira;
+←/→ muda a ordem): **não há séries, repetições, carga nem RPE** marcados de antemão. Depois
+**Começar treino** (também **Guardar como treino da modalidade**, que aí já leva o habitual 3 × 10).
+Na sessão és tu que marcas as voltas: fazes o exercício, carregas **Lap** (Espaço ou outro botão):
+o exercício acaba (**guarda-se só o tempo que levou**), começa o **descanso** (a contar para cima) e
+**abre logo uma janela** — «Quantas repetições?» (e a carga, se quiseres). Escreves o número, **Enter**
+fecha a janela e o descanso continua; outro **Lap** passa ao exercício seguinte. Os botões Pausa,
+**+ Série** (repetir o exercício), Saltar e Terminar mantêm-se; o treino livre **não termina sozinho**.
+**Mais tarde** — na análise da sessão (separador *Análise do treino* → **Editar séries**) — podes
+acrescentar ou corrigir as repetições, a carga e o RPE que ficaram em falta: **só nas sessões de
+treino livre**; as séries dos treinos planeados não se editam depois.
 
 No **Conditioning**, o treino livre também começa pelo plano: escolhes as
 voltas (força, passadeira, remo, cardio, descanso), por tempo ou à vontade, e só
@@ -1353,6 +1381,32 @@ janela. **+ Novo
 teste** cria os teus (nome, unidade, se é melhor mais alto ou mais baixo,
 duração e instruções); os que vêm com a aplicação também se editam ou
 desativam.
+
+### Configurações sonoras (bips)
+
+Em **Definições → Configurações sonoras** escolhes os **bips** que avisam do fim (ou do princípio)
+de um **bloco**, de uma **série** ou de um **descanso** — para perceberes que o tempo está a
+acabar sem olhar para o ecrã. O bip é um tom gerado pela própria Perennia (sem ficheiros nem
+dependências); se o computador não tiver som, toca o «beep» do terminal (o sino, que em muitos PC
+é o altifalante da motherboard).
+
+- **Bips** liga e desliga todos os avisos; **Bip longo no fim** é um bip mais comprido quando o
+  tempo chega a zero.
+- **Regras** — cada uma diz **quando**: os *primeiros* ou os *últimos* **N segundos**; **quantos
+  bips por segundo** (0 = um só bip, no início da janela; 1 a 4 em cada segundo); e **onde**: em
+  tudo, só nos blocos e nas séries, ou só nos descansos. Exemplos: *primeiros 10 s, um só bip*;
+  *últimos 10 s, 1 bip por segundo*; *últimos 5 s, 2 bips por segundo*. Várias regras somam-se (se
+  duas calharem no mesmo instante, toca um bip só). **+ Nova regra**, Enter edita, Del apaga,
+  **Repor as de origem**, **Testar os bips** (toca um bloco de 15 s e um descanso de 12 s com as
+  regras que estão no ecrã). As alterações gravam-se com **Guardar**.
+- **De origem**: os **últimos 5 segundos, um bip por segundo**, mais o bip longo no fim.
+- **Visível**: os últimos 5 segundos **vêem-se sempre**, mesmo com o som desligado: a caixa do tempo
+  (em cima, ao centro) **pisca a vermelho** e mostra **5 · 4 · 3 · 2 · 1** (no ciclismo, o número
+  aparece grande ao centro, no topo).
+- Onde conta: nos **descansos** e nas **séries com tempo** do ginásio, e nos **blocos de tempo** dos
+  treinos de ciclismo, corrida e remo (blocos por distância não têm contagem). A regra «só nos
+  descansos» não se aplica ao ciclismo (os blocos de ciclismo não têm descanso à parte). As
+  regras que mudares valem a partir da sessão seguinte.
 
 ### Terminar uma sessão (ciclismo, corrida e remo)
 
@@ -2356,6 +2410,18 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 12 NÃO cria tabelas — e continua a ser tudo automático** (**não tens de fazer nada** para
+que fique guardado na base local; antes de abrires a versão nova podes fazer um backup:
+*Backups e Sincronização → Exportar → Tudo*, ou `python main.py --backup`). O que muda:
+
+| Onde | O quê |
+|---|---|
+| definições `sound_rules`, `sound_on`, `sound_end` (tabela `settings`) | as **configurações sonoras**: a lista de regras de bips, os bips ligados/desligados e o bip longo no fim. Sem nada guardado valem as de origem (últimos 5 s, 1 bip/s). Vão no backup, componente «Definições» |
+| `strength_sessions.mode` | passa a ter o valor **`freeplan`** nas sessões de **treino livre** do ginásio (a coluna já existia; se faltar, a Perennia acrescenta-a sozinha). É o que marca as sessões que se podem editar depois. As sessões antigas ficam como estavam (`plan`, `free`, `conditioning`) |
+| `strength_workouts` / `strength_workout_items` | um treino livre cria um treino **escondido** com os exercícios (1 volta, 0 repetições, sem RPE nem descanso); se escolheres «Guardar como treino da modalidade» fica visível com 3 × 10 e 90 s. Os rascunhos que nunca foram usados limpam-se sozinhos |
+| `strength_sets.reps` | nos treinos livres começa em **0** («por marcar») e o que escreves na janela das repetições (ou depois, em *Editar séries*) fica aqui; os totais da sessão (`total_reps`, `volume_kg`) acertam-se quando corriges |
+| `training_plan` | já não aceita dias passados (só hoje e dias futuros) |
+
 **A ronda 11 NÃO cria tabelas nem colunas — e continua a ser tudo automático**: **não tens de
 fazer nada** (nem correr scripts) para que as alterações fiquem guardadas na base local; ao
 abrir a versão nova a Perennia faz sozinha o que precisa. O que muda no que já lá está:
@@ -2484,7 +2550,19 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (812 testes a passar).
+**Verificado com testes automáticos nesta versão** (840 testes a passar).
+
+*Novidades da ronda 12 (testes novos em `tests/test_round11.py`, e os antigos atualizados):* o
+calendário (um dia passado só carrega treino, hoje e o futuro planeiam; o seletor de datas do
+Planear só de hoje para a frente; `plan_it` recusa o passado); o fim do treino por blocos (o diálogo
+de terminar abre-se sozinho e o tempo pára, em ciclismo, corrida, remo e ginásio); os avisos
+sonoros (as regras primeiros/últimos N segundos, bips por segundo, o âmbito, o bip longo, os que já
+passaram não tocam, o som desligado mas os últimos segundos à vista, o tom WAV, o separador das
+Definições: adicionar, editar, apagar, repor, testar, guardar); a sessão de ginásio (começa sozinha
+depois dos 15 s, o botão Lap, as colunas de repetições e carga, os descansos na lista, o fim
+automático); o treino livre (só exercícios, Lap abre as repetições, o descanso continua, não
+termina sozinho, editar séries depois — só nas sessões livres); o botão «Começar treino»; e o
+backup a levar as configurações sonoras e a marca de sessão livre.
 
 *Novidades da ronda 11 (35 testes novos em `tests/test_round11.py`, e os antigos atualizados):*
 o .csv da Saúde (modelo, exportação, ida e volta por data, colunas desconhecidas e valores

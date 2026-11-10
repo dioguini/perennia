@@ -633,16 +633,15 @@ class TestLapSessionGui(tg.GuiCase):
         self.pick("Começar")
         scr = self.screen()
         self.assertIsInstance(scr, ss.LapSessionScreen)
-        for _ in range(20):
-            self.app._tick(0.5)
-        self.assertEqual(scr.session.t, 0.0)                    # nada conta antes de começar
-        self.pick("Volta do plano")
+        # sem contagem (0 s) a sessão começa sozinha, com a 1.ª volta do plano
+        self.assertTrue(scr.session.started)
         self.assertEqual(scr.session.current.kind, "treadmill")
+        t0 = scr.session.t
         self.select("Velocidade")
         self.app._on_text("11,5")
         for _ in range(60):
             self.app._tick(0.5)
-        self.assertAlmostEqual(scr.session.t, 30.0, delta=1)
+        self.assertAlmostEqual(scr.session.t - t0, 30.0, delta=1)
         self.select("Total no visor")
         self.app._on_text("0,48")
         self.assertAlmostEqual(scr.session.current.distance_km, 0.48)

@@ -34,7 +34,12 @@ SPORTS = ("cycling", "rowing", "running", "swimming", "gym")
 
 
 def plan_it(app, day: date, sport: str, wid: str, name: str) -> None:
-    """Põe o treino no plano do dia (sem duplicar) e avisa."""
+    """Põe o treino no plano do dia (sem duplicar) e avisa. Dias que já passaram não se
+    planeiam."""
+    if day < date.today():
+        app.message(tr("Um dia que já passou não se planeia: carrega o treino que fizeste.",
+                       "A day in the past can't be planned: upload the workout you did."))
+        return
     have = [p for p in cv.planned_for(app.db, day) if p.workout_id == wid and p.sport == sport]
     if not have:
         cv.plan_add(app.db, day, sport, wid, name)
@@ -63,6 +68,10 @@ class DayPopup(PopupMixin, Screen):
         self.note_text = make_label("", font_size=13, color=TEXT, anchor_y="top",
                                     batch=self.note_batch, multiline=True, width=400)
         self._init_popup()
+
+    @property
+    def past(self) -> bool:
+        return self.day < date.today()
 
     def _place(self) -> None:
         super()._place()
@@ -105,9 +114,15 @@ class DayPopup(PopupMixin, Screen):
         done_h, total_h = health.completeness(a.db, self.day)
         items += [Item(tr("Nota do dia", "Day note"), button=True, action=self._edit_note),
                   Item(tr("Diário de saúde", "Health log") + f" {done_h}/{total_h}", button=True,
-                       action=self._open_log),
-                  Item(tr("+ Planear treino", "+ Plan a workout"), button=True, primary=True,
-                       action=lambda: a.push(PlanSportPopup(a, self.day)))]
+                       action=self._open_log)]
+        if self.past:
+            # um dia que já passou não se planeia: ver o que se fez e, se o treino foi feito
+            # noutro sítio, carregar o ficheiro
+            items.append(Item(tr("Carregar treino", "Upload a workout"), button=True,
+                               primary=True, action=lambda: a.push(LoadDayPopup(a, self.day))))
+        else:
+            items.append(Item(tr("+ Planear treino", "+ Plan a workout"), button=True,
+                              primary=True, action=lambda: a.push(PlanSportPopup(a, self.day))))
         wd = cv.weekday_name(self.day.weekday())
         self.chrome.set(f"{wd}, {self.day.day} {cv.month_name(self.day.month)} {self.day.year}",
                         tr("Feitas: {a} · planeadas: {b} · Enter abre · Del tira do plano · "
@@ -213,7 +228,7 @@ class PlanSportPopup(PopupMixin, Screen):
 
 
 class PlanSourcePopup(PopupMixin, Screen):
-    """2.º passo: de onde vem o treino (ou, num dia que já passou, o que se carrega)."""
+    """2.º passo: de onde vem o treino (só para hoje e dias futuros)."""
     W, H = 760, 520
     SEARCH = False
     AGENT = False
@@ -225,43 +240,21 @@ class PlanSourcePopup(PopupMixin, Screen):
         self.back_button = None
         self._init_popup()
 
-    @property
-    def past(self) -> bool:
-        return self.day < date.today()
-
     def enter(self) -> None:
         a = self.app
-        if self.past:
-            items = [
-                Item(tr("Carregar uma atividade (.fit)", "Load an activity (.fit)"),
-                     detail=tr("o treino que fizeste nesse dia: Upload manual",
-                               "the workout you did that day: manual upload"),
-                     action=lambda: self._sync("Upload manual")),
-                Item(tr("Sincronizar a HRV (HRV4Training)", "Sync HRV (HRV4Training)"),
-                     detail=tr("importa o .csv do HRV4Training", "imports the HRV4Training .csv"),
-                     action=lambda: self._sync("HRV4Training")),
-                Item(tr("Sincronizar dados de saúde (.csv)", "Sync health data (.csv)"),
-                     detail=tr("o .csv do diário de saúde, por data", "the health-log .csv, "
-                               "by date"), action=lambda: self._sync("Saúde")),
-                Item(tr("Sincronizar o GarminDB", "Sync GarminDB"),
-                     detail=tr("atividades, sono, HRV, passos…", "activities, sleep, HRV, "
-                               "steps…"), action=lambda: self._sync("GarminDB"))]
-            sub = tr("{d} já passou · carrega o que aconteceu", "{d} is in the past · load "
-                     "what happened", d=self.day.strftime("%d/%m/%Y"))
-        else:
-            items = [
-                Item(tr("Importar um treino da lista", "Import a workout from the list"),
-                     detail=tr("os treinos já guardados de {s}", "the saved {s} workouts",
-                               s=cs.sport_label(self.sport)), action=self._from_list),
-                Item(tr("Importar um treino do computador", "Import a workout from the computer"),
-                     detail=tr(".zwo, .fit, .mrc, .erg… (pergunta se fica na lista)",
-                               ".zwo, .fit, .mrc, .erg… (asks whether to keep it in the list)"),
-                     action=self._from_computer),
-                Item(tr("Criar um treino no construtor", "Create a workout in the builder"),
-                     detail=tr("fica na lista e já planeado neste dia", "kept in the list and "
-                               "already planned on this day"), action=self._create)]
-            sub = tr("{d} · de onde vem o treino de {s}?", "{d} · where does the {s} workout "
-                     "come from?", d=self.day.strftime("%d/%m/%Y"), s=cs.sport_label(self.sport))
+        items = [
+            Item(tr("Importar um treino da lista", "Import a workout from the list"),
+                 detail=tr("os treinos já guardados de {s}", "the saved {s} workouts",
+                           s=cs.sport_label(self.sport)), action=self._from_list),
+            Item(tr("Importar um treino do computador", "Import a workout from the computer"),
+                 detail=tr(".zwo, .fit, .mrc, .erg… (pergunta se fica na lista)",
+                           ".zwo, .fit, .mrc, .erg… (asks whether to keep it in the list)"),
+                 action=self._from_computer),
+            Item(tr("Criar um treino no construtor", "Create a workout in the builder"),
+                 detail=tr("fica na lista e já planeado neste dia", "kept in the list and "
+                           "already planned on this day"), action=self._create)]
+        sub = tr("{d} · de onde vem o treino de {s}?", "{d} · where does the {s} workout "
+                 "come from?", d=self.day.strftime("%d/%m/%Y"), s=cs.sport_label(self.sport))
         items.append(Item(tr("Cancelar", "Cancel"), button=True, action=a.pop))
         self.chrome.set(tr("Planear · {s}", "Plan · {s}", s=cs.sport_label(self.sport)), sub, "")
         self.list.set_items(items, keep_index=True)
@@ -300,6 +293,41 @@ class PlanSourcePopup(PopupMixin, Screen):
         from velo.core import workout_meta as wm
         ctl = wm.default_control(self.sport)
         a.push(bs.BlockBuilder(a, self.sport, None, control=ctl, plan_day=self.day))
+
+class LoadDayPopup(PopupMixin, Screen):
+    """Um dia que já passou não se planeia: aqui carrega-se o que se fez noutro sítio."""
+    W, H = 760, 480
+    SEARCH = False
+    AGENT = False
+
+    def __init__(self, app, day: date):
+        super().__init__(app)
+        self.day = day
+        self.back_button = None
+        self._init_popup()
+
+    def enter(self) -> None:
+        items = [
+            Item(tr("Carregar um ficheiro de treino (.fit, .tcx)", "Upload a workout file "
+                    "(.fit, .tcx)"),
+                 detail=tr("o treino que fizeste nesse dia noutro sítio: Upload manual",
+                           "the workout you did that day elsewhere: manual upload"),
+                 action=lambda: self._sync("Upload manual"), data="upload"),
+            Item(tr("Sincronizar a HRV (HRV4Training)", "Sync HRV (HRV4Training)"),
+                 detail=tr("importa o .csv do HRV4Training", "imports the HRV4Training .csv"),
+                 action=lambda: self._sync("HRV4Training")),
+            Item(tr("Sincronizar dados de saúde (.csv)", "Sync health data (.csv)"),
+                 detail=tr("o .csv do diário de saúde, por data", "the health-log .csv, by date"),
+                 action=lambda: self._sync("Saúde")),
+            Item(tr("Sincronizar o GarminDB", "Sync GarminDB"),
+                 detail=tr("atividades, sono, HRV, passos…", "activities, sleep, HRV, steps…"),
+                 action=lambda: self._sync("GarminDB")),
+            Item(tr("Cancelar", "Cancel"), button=True, action=self.app.pop)]
+        self.chrome.set(tr("Carregar treino", "Upload a workout"),
+                        tr("{d} já passou: não se planeia, carrega-se o que aconteceu",
+                           "{d} is in the past: nothing to plan, load what happened",
+                           d=self.day.strftime("%d/%m/%Y")), "")
+        self.list.set_items(items, keep_index=True)
 
     def _sync(self, source: str) -> None:
         a = self.app
