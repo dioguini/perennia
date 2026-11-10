@@ -14,7 +14,7 @@ import pyglet.shapes
 from velo.gfx.compat import label as make_label
 from velo.ui.widgets import ACCENT, DIM, GRID, TEXT, _line
 
-MAX_AXES = 12
+MAX_AXES = 16
 RINGS = (25, 50, 75, 100)
 
 

@@ -69,7 +69,7 @@ MODALITY_AXIS = {"strength": "strength", "calisthenics": "strength", "rings": "s
                  "bands": "strength", "kettlebell": "strength", "sandbag": "strength",
                  "plyometrics": "power", "hiit": "power", "cardio": "aerobic",
                  "conditioning": "aerobic", "animal_flow": "mobility", "yoga": "mobility",
-                 "longevity": "stability", "mobility": "mobility", "tendons": "stability",
+                 "mobility": "mobility", "tendons": "stability",
                  "isometric": "stability"}
 # os testes por palavra do nome (sem acentos) → eixo
 TEST_WORDS = (("ftp", "threshold"), ("20 min", "threshold"), ("rampa", "threshold"),
@@ -311,7 +311,8 @@ def test_scores(db, start: date, end: date) -> dict:
     return out
 
 
-def habit_minutes(db, start: date, end: date) -> float:
+def habit_minutes(db, start: date, end: date, sleep_min: float = 30.0,
+                  hrv_min: float = 15.0) -> float:
     """Recuperação dos hábitos: 30 min por dia com 7 h ou mais de sono, 15 por dia com
     HRV registada (a consistência conta)."""
     total = 0.0
@@ -325,10 +326,149 @@ def habit_minutes(db, start: date, end: date) -> float:
                 sleep_days.add(r["day"])
             elif r["k"] in ("hrv_rmssd", "hrv_score") and r["num"] is not None:
                 hrv_days.add(r["day"])
-        total = 30.0 * len(sleep_days) + 15.0 * len(hrv_days)
+        total = sleep_min * len(sleep_days) + hrv_min * len(hrv_days)
     except Exception:
         pass
     return total
+
+
+# ------------------------------------------------------------ a fórmula (editável)
+#
+# Os pesos, as doses de referência, a mistura dos testes, os hábitos e os **parâmetros
+# próprios** guardam-se na definição `longevity_formula` e o índice recalcula-se logo:
+#
+#   axes    {eixo: {"weight", "target"}}          pesos e doses de referência (min/semana)
+#   blend   0–1, a parte da nota que vem dos testes (0,25 de origem)
+#   sleep_min / hrv_min   minutos de recuperação por dia com 7 h+ de sono / HRV registada
+#   custom  [{"id", "name", "kind", "source", "target", "weight", "better"}]
+#           kind "metric": a média de uma métrica do diário (source = a chave da métrica);
+#           kind "sport": os minutos por semana de um desporto (source = o desporto).
+
+import copy as _copy
+
+DEFAULT_FORMULA = {
+    "axes": {a: {"weight": WEIGHTS[a], "target": TARGETS[a]} for a in AXES},
+    "blend": 0.25, "sleep_min": 30.0, "hrv_min": 15.0, "custom": [],
+}
+CUSTOM_KINDS = ("metric", "sport")
+
+
+def formula(db) -> dict:
+    """A fórmula em vigor: a de origem com o que alteraste por cima."""
+    f = _copy.deepcopy(DEFAULT_FORMULA)
+    try:
+        saved = db.get("longevity_formula", None) or {}
+    except Exception:
+        saved = {}
+    for a, v in (saved.get("axes") or {}).items():
+        if a in f["axes"] and isinstance(v, dict):
+            f["axes"][a].update({k: float(x) for k, x in v.items()
+                                 if k in ("weight", "target") and x is not None})
+    for k in ("blend", "sleep_min", "hrv_min"):
+        if saved.get(k) is not None:
+            f[k] = float(saved[k])
+    f["blend"] = max(0.0, min(1.0, f["blend"]))
+    f["custom"] = [c for c in (saved.get("custom") or []) if isinstance(c, dict) and c.get("id")]
+    return f
+
+
+def save_formula(db, f: dict) -> None:
+    db.set("longevity_formula", {"axes": f["axes"], "blend": f["blend"],
+                                 "sleep_min": f["sleep_min"], "hrv_min": f["hrv_min"],
+                                 "custom": f["custom"]})
+
+
+def reset_formula(db) -> None:
+    db.set("longevity_formula", {})
+
+
+def add_custom(db, *, name: str, kind: str, source: str, target: float, weight: float = 1.0,
+               better: str = "higher", cid: str | None = None) -> str:
+    """Um parâmetro novo (ou, com `cid`, a edição de um existente)."""
+    f = formula(db)
+    if cid is None:
+        n = 1
+        used = {c["id"] for c in f["custom"]}
+        while f"c{n}" in used:
+            n += 1
+        cid = f"c{n}"
+    item = {"id": cid, "name": name.strip() or cid, "kind": kind, "source": source,
+            "target": float(target), "weight": float(weight), "better": better}
+    f["custom"] = [c for c in f["custom"] if c["id"] != cid] + [item]
+    f["custom"].sort(key=lambda c: c["id"])
+    save_formula(db, f)
+    return cid
+
+
+def remove_custom(db, cid: str) -> None:
+    f = formula(db)
+    f["custom"] = [c for c in f["custom"] if c["id"] != cid]
+    save_formula(db, f)
+
+
+def all_axes(db) -> list[str]:
+    """Os eixos do radar: os nove e os parâmetros próprios."""
+    return list(AXES) + [c["id"] for c in formula(db)["custom"]]
+
+
+def label_of(db, axis: str) -> str:
+    if axis in LABELS:
+        return axis_label(axis)
+    for c in formula(db)["custom"]:
+        if c["id"] == axis:
+            return c["name"]
+    return axis
+
+
+def _custom_score(db, c: dict, start: date, end: date, weeks: float, doses: list) -> float | None:
+    """A nota (0–100) de um parâmetro próprio no período, ou None se não há dados."""
+    target = max(1e-9, float(c.get("target") or 1.0))
+    if c["kind"] == "sport":
+        mins = sum(sum(d.mins.values()) for d in doses
+                   if d.sport == c["source"] and start <= d.day <= end)
+        return 100.0 * (1.0 - math.exp(-(mins / weeks) / target))
+    try:
+        rows = db.conn.execute(
+            "SELECT d.num AS v FROM daily_values d JOIN metric_defs m ON m.id = d.metric_id"
+            " WHERE m.key = ? AND d.day >= ? AND d.day <= ? AND d.num IS NOT NULL",
+            (c["source"], start.isoformat(), end.isoformat())).fetchall()
+    except Exception:
+        return None
+    vals = [float(r["v"]) for r in rows]
+    if not vals:
+        return None
+    avg = sum(vals) / len(vals)
+    if c.get("better") == "lower":
+        return 100.0 * min(1.0, target / avg) if avg > 0 else 100.0
+    return 100.0 * min(1.0, avg / target)
+
+
+def formula_lines(db) -> list[tuple[str, str]]:
+    """A fórmula escrita, com os números em vigor: [(título, texto)]."""
+    f = formula(db)
+    wsum = sum(v["weight"] for v in f["axes"].values()) + sum(c["weight"] for c in f["custom"])
+    return [
+        (tr("Dose semanal do eixo", "Weekly dose of the axis"),
+         tr("R = minutos do eixo no período ÷ (dias ÷ 7)", "R = axis minutes in the period ÷ "
+            "(days ÷ 7)")),
+        (tr("Nota do eixo (satura)", "Axis score (saturating)"),
+         "S = 100 · (1 − e^(−R / T))   ·   " + tr("T = dose de referência do eixo (63 % da nota)",
+                                                   "T = the axis' reference dose (63 % of the score)")),
+        (tr("Com testes", "With tests"),
+         f"S' = {1 - f['blend']:.2f} · S + {f['blend']:.2f} · "
+         + tr("nota do teste do eixo (se houver no período)",
+              "the axis' test score (if any in the period)")),
+        (tr("Índice", "Index"),
+         "índice = Σ (peso · S') ÷ Σ peso   ·   " + tr("Σ peso agora = {w:.1f}",
+                                                       "Σ weight now = {w:.1f}", w=wsum)),
+        (tr("Hábitos", "Habits"),
+         tr("recuperação += {s:g} min por dia com 7 h+ de sono, {h:g} por dia com HRV",
+            "recovery += {s:g} min per day with 7 h+ of sleep, {h:g} per day with HRV",
+            s=f["sleep_min"], h=f["hrv_min"])),
+        (tr("Parâmetros próprios", "Custom parameters"),
+         tr("{n} — entram no índice e no radar com o seu peso", "{n} — they enter the index and "
+            "the radar with their weight", n=len(f["custom"]))),
+    ]
 
 
 # ------------------------------------------------------------------ índice
@@ -336,9 +476,10 @@ def habit_minutes(db, start: date, end: date) -> float:
 
 def compute(db, as_of: date | None = None, *, doses: list[Dose] | None = None,
             exclude: tuple | None = None, extra: list[Dose] | None = None) -> dict:
-    """{período: {"days", "index", "axes": {eixo: nota}}} para todos os períodos.
-    `exclude=(desporto, id)` tira uma sessão (para ver o que ela acrescentou) e `extra`
-    junta sessões que ainda não aconteceram (o construtor)."""
+    """{período: {"days", "index", "axes": {eixo: nota}}} para todos os períodos, pela fórmula
+    em vigor (`formula(db)`). `exclude=(desporto, id)` tira uma sessão (para ver o que ela
+    acrescentou) e `extra` junta sessões que ainda não aconteceram (o construtor)."""
+    f = formula(db)
     as_of = as_of or date.today()
     base = all_doses(db) if doses is None else list(doses)
     if exclude:
@@ -354,17 +495,27 @@ def compute(db, as_of: date | None = None, *, doses: list[Dose] | None = None,
         for d in base:
             if start <= d.day <= as_of:
                 for a, m in d.mins.items():
-                    acc[a] += m
-        acc["recovery"] += habit_minutes(db, start, as_of)
+                    if a in acc:
+                        acc[a] += m
+        acc["recovery"] += habit_minutes(db, start, as_of, f["sleep_min"], f["hrv_min"])
         weeks = max(7, min(days, span)) / 7.0
         tests = test_scores(db, start, as_of)
-        axes = {}
+        axes: dict = {}
+        weights: dict = {}
         for a in AXES:
-            s = 100.0 * (1.0 - math.exp(-(acc[a] / weeks) / TARGETS[a]))
+            cfg = f["axes"][a]
+            s_ = 100.0 * (1.0 - math.exp(-(acc[a] / weeks) / max(1e-9, cfg["target"])))
             if a in tests:
-                s = 0.75 * s + 0.25 * tests[a]
-            axes[a] = s
-        index = sum(WEIGHTS[a] * axes[a] for a in AXES) / sum(WEIGHTS.values())
+                s_ = (1.0 - f["blend"]) * s_ + f["blend"] * tests[a]
+            axes[a] = s_
+            weights[a] = cfg["weight"]
+        for c in f["custom"]:
+            sc = _custom_score(db, c, start, as_of, weeks, base)
+            axes[c["id"]] = 0.0 if sc is None else sc
+            if sc is not None:                      # sem dados, o parâmetro não pesa no período
+                weights[c["id"]] = c["weight"]
+        wsum = sum(weights.values())
+        index = sum(weights[a] * axes[a] for a in weights) / wsum if wsum > 0 else 0.0
         out[key] = {"days": days, "index": index, "axes": axes}
     return out
 
@@ -396,7 +547,7 @@ def impact_of(db, mins: dict, *, sport: str = "cycling", sid: str = "new",
         without = compute(db, as_of, doses=doses)
         with_ = compute(db, as_of, doses=doses, extra=[Dose(as_of, sport, str(sid), dict(mins))])
     deltas = {p: with_[p]["index"] - without[p]["index"] for p in periods}
-    axes = {a: with_["1m"]["axes"][a] - without["1m"]["axes"][a] for a in AXES}
+    axes = {a: with_["1m"]["axes"][a] - without["1m"]["axes"].get(a, 0.0) for a in AXES}
     top = sorted(((a, v) for a, v in axes.items() if v > 0.05), key=lambda kv: -kv[1])
     return {"deltas": deltas, "axes": axes, "top": top[:3]}
 

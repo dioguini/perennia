@@ -150,6 +150,70 @@ def balance_history(db: Database, limit: int = 40) -> list[tuple[str, float]]:
     return [(r["started_at"][:10], r["avg_balance_left"]) for r in reversed(rows)]
 
 
+def decoupling_of(power: list, hr: list) -> dict | None:
+    """O desacoplamento potência:FC (Pa:HR) de uma sessão: a eficiência (potência ÷ FC) da
+    1.ª metade face à da 2.ª, em %. Positivo = a FC subiu para a mesma potência (deriva
+    cardíaca). Precisa de FC e de pelo menos 20 min."""
+    n = min(len(power), len(hr))
+    if n < 1200:
+        return None
+    half = n // 2
+
+    def ratio(a: int, b: int):
+        pp = [x for x in power[a:b] if x is not None]
+        hh = [x for x in hr[a:b] if x]
+        if not pp or not hh:
+            return None
+        return (sum(pp) / len(pp)) / (sum(hh) / len(hh))
+    r1, r2 = ratio(0, half), ratio(half, n)
+    if not r1 or not r2:
+        return None
+    pw = [x for x in power[:n] if x is not None]
+    avg = sum(pw) / len(pw) if pw else 0.0
+    return {"decoupling": (r1 - r2) / r1 * 100.0, "ef1": r1, "ef2": r2, "avg_power": avg,
+            "seconds": n}
+
+
+def decoupling_history(db: Database, days: int | None = None, min_s: int = 2400,
+                       limit: int = 80) -> list[dict]:
+    """Sessões de ciclismo com FC e pelo menos `min_s` segundos (por omissão 40 min, onde a
+    deriva cardíaca já se vê): [{day, ride_id, name, decoupling, ef1, ef2, seconds, vi}],
+    da mais antiga para a mais recente."""
+    sql = ("SELECT id, name, started_at, moving_s, elapsed_s FROM rides WHERE status='completed'"
+           " AND COALESCE(moving_s, elapsed_s, 0) >= ?")
+    args: list = [min_s]
+    if days:
+        sql += " AND started_at >= ?"
+        args.append(_days_ago(days))
+    sql += " ORDER BY started_at DESC LIMIT ?"
+    args.append(limit)
+    out = []
+    for r in db.conn.execute(sql, args).fetchall():
+        rows = db.conn.execute("SELECT power_w, hr_bpm FROM ride_samples WHERE ride_id = ?"
+                               " ORDER BY t_s", (r["id"],)).fetchall()
+        d = decoupling_of([x["power_w"] for x in rows], [x["hr_bpm"] for x in rows])
+        if d is None:
+            continue
+        pw = [x["power_w"] for x in rows if x["power_w"] is not None]
+        from . import physics
+        np_ = physics.normalized_power(pw)
+        d.update(day=r["started_at"][:10], ride_id=r["id"], name=r["name"] or "",
+                 vi=(np_ / d["avg_power"]) if np_ and d["avg_power"] else None)
+        out.append(d)
+    return list(reversed(out))
+
+
+def decoupling_label(v: float) -> str:
+    """Como se lê: menos de 5 % é uma base aeróbia forte; 5–10 % ainda a construir; acima
+    de 10 % há deriva cardíaca a mais (fadiga, calor, desidratação ou base fraca)."""
+    from .i18n import tr
+    if v < 5.0:
+        return tr("base aeróbia forte (< 5 %)", "strong aerobic base (< 5 %)")
+    if v <= 10.0:
+        return tr("a construir (5–10 %)", "building (5–10 %)")
+    return tr("deriva cardíaca alta (> 10 %)", "high cardiac drift (> 10 %)")
+
+
 def avg_balance(db: Database) -> float | None:
     """Média ponderada pelo tempo em movimento, em todas as sessões."""
     row = db.conn.execute(

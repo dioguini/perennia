@@ -441,13 +441,115 @@ def power_button():
     save(img, "power_button")
 
 
+# ------------------------------------------------------------------ botões
+# Um ícone por ação, sempre o mesmo (menus e janelas): ver velo.gfx.icons.button_icon.
+
+def ui_save():
+    """Guardar: a disquete."""
+    img, d = canvas()
+    d.rounded_rectangle((34, 34, 222, 222), 20, outline=INK, width=20)
+    d.rectangle((78, 34, 176, 96), fill=INK)
+    d.rounded_rectangle((70, 140, 186, 222), 8, outline=INK, width=18)
+    save(img, "ui_save")
+
+
+def ui_close():
+    """Cancelar, fechar, não: uma cruz."""
+    img, d = canvas()
+    line(d, [(60, 60), (196, 196)], 30)
+    line(d, [(196, 60), (60, 196)], 30)
+    save(img, "ui_close")
+
+
+def ui_plus():
+    """Adicionar."""
+    img, d = canvas()
+    line(d, [(128, 48), (128, 208)], 30)
+    line(d, [(48, 128), (208, 128)], 30)
+    save(img, "ui_plus")
+
+
+def ui_minus():
+    img, d = canvas()
+    line(d, [(48, 128), (208, 128)], 30)
+    save(img, "ui_minus")
+
+
+def ui_trash():
+    """Apagar: o balde."""
+    img, d = canvas()
+    d.rectangle((40, 62, 216, 84), fill=INK)
+    d.rectangle((98, 36, 158, 66), fill=INK)
+    d.polygon([(58, 96), (198, 96), (184, 226), (72, 226)], outline=INK, width=18)
+    save(img, "ui_trash")
+
+
+def ui_edit():
+    """Editar: o lápis."""
+    img, d = canvas()
+    line(d, [(70, 186), (176, 80)], 44)
+    d.polygon([(40, 218), (60, 160), (96, 196)], fill=INK)
+    line(d, [(190, 66), (212, 88)], 30)
+    save(img, "ui_edit")
+
+
+def ui_import():
+    """Importar, carregar: seta a entrar numa caixa."""
+    img, d = canvas()
+    d.rounded_rectangle((36, 100, 220, 232), 16, outline=INK, width=18)
+    line(d, [(128, 30), (128, 150)], 22)
+    arrow_head(d, 128, 160, 90, 56)
+    save(img, "ui_import")
+
+
+def ui_play():
+    """Começar, retomar: o triângulo."""
+    img, d = canvas()
+    d.polygon([(78, 40), (78, 216), (220, 128)], fill=INK)
+    save(img, "ui_play")
+
+
+def ui_pause():
+    img, d = canvas()
+    d.rounded_rectangle((60, 44, 108, 212), 8, fill=INK)
+    d.rounded_rectangle((148, 44, 196, 212), 8, fill=INK)
+    save(img, "ui_pause")
+
+
+def ui_stop():
+    """Terminar: o quadrado."""
+    img, d = canvas()
+    d.rounded_rectangle((52, 52, 204, 204), 14, fill=INK)
+    save(img, "ui_stop")
+
+
+def ui_check():
+    """OK, sim, aplicar: o visto."""
+    img, d = canvas()
+    line(d, [(48, 136), (106, 194), (212, 70)], 30)
+    save(img, "ui_check")
+
+
+def ui_next():
+    """Qualquer outra ação: a seta."""
+    img, d = canvas()
+    line(d, [(46, 128), (196, 128)], 26)
+    line(d, [(134, 58), (204, 128), (134, 198)], 26)
+    save(img, "ui_next")
+
+
+UI = [ui_save, ui_close, ui_plus, ui_minus, ui_trash, ui_edit, ui_import, ui_play, ui_pause,
+      ui_stop, ui_check, ui_next]
+
+
 ALL = [power, heart, cadence, speed, distance, mountain, grade, clock, flag, balance,
        wrench, zones, flame, battery, loops, target, weight, wave, gear, bike, runner,
        rower, stats, devices, trophy, stopwatch, chevrons, road, back, quit_icon,
        calendar, dumbbell, pulse, export_icon, recover, swimmer, box, checklist,
-       kettlebell, power_button]
+       kettlebell, power_button] + UI
 
 if __name__ == "__main__":
-    for fn in ALL:
+    import sys
+    for fn in (UI if "--ui" in sys.argv else ALL):
         fn()
     print(f"{len(ALL)} ícones em {DEST}")

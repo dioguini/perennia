@@ -370,7 +370,7 @@ class TestLongevityScreens(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Longevidade")
         menu = self.screen()
-        self.assertEqual(menu.tab_labels(), ["Índice", "Testes de longevidade"])
+        self.assertEqual(menu.tab_labels(), ["Índice", "Fórmula", "Testes de longevidade"])
         labels = [i.label for i in menu.list.items]
         self.assertEqual(labels, ["1 dia", "1 semana", "1 mês", "3 meses", "6 meses",
                                   "9 meses", "1 ano", "2 anos", "3 anos", "5 anos", "10 anos",
@@ -656,11 +656,7 @@ class TestCsv(tg.GuiCase):
         out = tempfile.mkdtemp()
         os_env["PERENNIA_DOWNLOADS"] = out
         try:
-            self.press(key.ESCAPE)
-            self.pick("Definições")
-            scr = self.screen()
-            scr.tab_named("Sincronização")
-            scr.sync_tabs.select_label("CSV") if hasattr(scr.sync_tabs, "select_label") else None
+            scr = self.open_sync("CSV")
             items = scr.sync.items_csv()
             labels = [i.label for i in items]
             self.assertIn("Exercícios", labels)
@@ -711,7 +707,7 @@ class TestSmallThings(tg.GuiCase):
         self.assertIn("+ Novo treino", [i.label for i in hub.list.items])
         self.pick("Tempo 3×15")
         self.assertEqual([i.label for i in self.screen().list.items],
-                         ["Editar", "Exportar", "Configurar sessão de treino"])
+                         ["Editar", "Planear", "Exportar", "Configurar sessão de treino"])
 
 
 if __name__ == "__main__":

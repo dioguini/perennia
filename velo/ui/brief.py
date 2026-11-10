@@ -326,7 +326,8 @@ class BriefScreen(Screen):
         self.panel.set(b)
         # as ações do treino: Editar (abre o construtor), Exportar e Configurar sessão;
         # os objetivos vêm do próprio treino (escrevem-se no construtor)
-        items = [Item(tr("Editar", "Edit"), button=True, action=self.edit)]
+        items = [Item(tr("Editar", "Edit"), button=True, action=self.edit),
+                 Item(tr("Planear", "Plan"), button=True, action=self.plan, data="plan")]
         items.append(Item(tr("Exportar", "Export"), button=True, action=self.export,
                           primary=not self.CAN_START))
         if self.CAN_START:
@@ -341,6 +342,17 @@ class BriefScreen(Screen):
         self.list.set_items(items, keep_index=True)
         self.list.index = len(items) - 1
         self.list._sync()
+
+    def plan(self) -> None:
+        """«Planear»: escolhe-se o dia e o treino entra no calendário (como no ginásio)."""
+        from datetime import date
+        from velo.ui.day_popups import plan_it
+        from velo.ui.pickers import pick_date
+        b = self.brief_data
+        name = b.title if b else ""
+        pick_date(self.app, tr("Planear para que dia?", "Plan for which day?"), date.today(),
+                  lambda iso: plan_it(self.app, date.fromisoformat(iso), self.SPORT,
+                                      self.wid, name))
 
     def export(self) -> None:
         """Exportar: um popup pede o nome do ficheiro e o formato."""
@@ -375,7 +387,6 @@ class CyclingBrief(BriefScreen):
 
 class GymBrief(BriefScreen):
     SPORT = "gym"
-    START_LABEL = ("Começar", "Start")
 
     def make_brief(self):
         from velo.core import strength as st

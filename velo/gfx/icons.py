@@ -51,6 +51,58 @@ def image(name: str):
     return img
 
 
+# ------------------------------------------------------------------ botões
+#
+# Todo o botão leva um ícone ao lado da etiqueta, e **o mesmo ícone para a mesma ação**,
+# seja num menu ou numa janela. O ícone vem do texto do botão (sem acentos nem maiúsculas).
+
+import re as _re
+import unicodedata as _ud
+
+_BUTTON_RULES = (
+    (r"^\+?\s*planear|^\+?\s*plan\b", "calendar"),      # «Planear» e «+ Planear treino»: o mesmo
+    (r"^\+", "ui_plus"), (r"^[−-]$", "ui_minus"),
+    (r"sem guardar|^apagar|^remover|^eliminar|^delete|^remove", "ui_trash"),
+    (r"^guardar|^save", "ui_save"),
+    (r"^cancelar|^fechar|^cancel|^close|^nao\b|^no\b", "ui_close"),
+    (r"^editar|^edit", "ui_edit"),
+    (r"^exportar|^export|^descarregar|^download", "export"),
+    (r"^importar|^import|^carregar|^trazer|upload", "ui_import"),
+    (r"^planear|^plan", "calendar"),
+    (r"^configurar|^definicoes|^settings", "gear"),
+    (r"sincronizar|^so importar", "recover"),
+    (r"^pausa|^pause", "ui_pause"),
+    (r"^terminar|^parar|^finish|^stop", "ui_stop"),
+    (r"^comecar|^iniciar|^retomar|^continuar|^start|^resume", "ui_play"),
+    (r"^voltar|^back|^colheitas", "back"),
+    (r"^ok$|^sim\b|^yes\b|^aplicar|^converter|^escolher|^aceitar|^confirmar|^repor|"
+     r"^substituir|^juntar|^fazer upload", "ui_check"),
+)
+
+
+def _fold(text: str) -> str:
+    s = _ud.normalize("NFKD", text or "")
+    return "".join(c for c in s if not _ud.combining(c)).lower().strip()
+
+
+def button_icon(label: str) -> str:
+    """O ícone de um botão pelo seu texto: `+ Novo treino` → mais, `Guardar` → disquete…
+    Sem regra própria, a seta."""
+    low = _fold(label)
+    for pattern, name in _BUTTON_RULES:
+        if _re.search(pattern, low):
+            return name
+    return "ui_next"
+
+
+def button_text(label: str) -> str:
+    """A etiqueta tal como se desenha: o ícone já diz «+», por isso sai o `+ ` do início, e
+    o − e o + sozinhos ficam só com o ícone."""
+    if label.strip() in ("−", "-", "+"):
+        return ""
+    return label[2:] if label.startswith("+ ") else label
+
+
 def sprite(name: str, x: float, y: float, size: float, batch=None, opacity: int = 230,
            tint=None):
     """Sprite do ícone com `size` px de lado, ou None se faltar a imagem.

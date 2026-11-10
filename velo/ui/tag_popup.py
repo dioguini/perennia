@@ -156,14 +156,23 @@ class AddTagPopup(PopupMixin, Screen):
         found = [t for t in found if tg._fold(t) not in self.taken]
         items: list[Item] = []
         exact = any(tg._fold(t) == tg._fold(typed) for t in found)
-        if typed and not exact and tg._fold(typed) not in self.taken:
+        can_create = bool(typed) and not exact and tg._fold(typed) not in self.taken
+        if can_create:
             items.append(Item(tr("Criar «{t}»", "Create “{t}”", t=typed[:32]),
                               detail=tr("etiqueta nova", "new tag"),
                               action=lambda: self._pick(typed)))
+        elif not typed:
+            items.append(Item(tr("Escreve o nome para criar uma etiqueta nova",
+                                 "Type a name to create a new tag"),
+                              detail=tr("ou escolhe uma das que já existem", "or pick one that "
+                                        "already exists"), enabled=False))
         for t in found:
             items.append(Item(t, detail=tr("já existe", "already exists"),
                               action=lambda t=t: self._pick(t)))
         items.append(Item(tr("Cancelar", "Cancel"), button=True, action=self.app.pop))
+        items.append(Item(tr("+ Criar etiqueta nova", "+ Create a new tag"), button=True,
+                          primary=True, enabled=can_create,
+                          action=lambda: self._pick(typed)))
         self.chrome.set(tr("Adicionar etiqueta", "Add a tag"),
                         tr("Escreve · as existentes aparecem · Enter escolhe · Esc fecha",
                            "Type · existing ones show up · Enter picks · Esc closes"), "")

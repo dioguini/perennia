@@ -531,6 +531,7 @@ class TestFitnessAndFtp(unittest.TestCase):
 
 from tests import test_gui as tg  # noqa: E402
 from velo.ui import app as app_mod  # noqa: E402
+from velo.ui import session_setup as sessetup  # noqa: E402
 from velo.ui import sport_screens as ss  # noqa: E402
 
 
@@ -541,15 +542,25 @@ class TestStrengthGui(tg.GuiCase):
         self.pick("Ginásio")
         self.assertIsInstance(self.screen(), gs.GymHub)
         self.pick("Sessão de treino")
-        self.pick("Força")
-        self.assertIsInstance(self.screen(), gs.ModalityScreen)
+        self.pick("Força")                                # a modalidade, na mesma janela
+        self.assertIsInstance(self.screen(), sessetup.SessionModePopup)
+        self.assertEqual(self.screen().level, "mod:strength")
 
     def test_train_a_plan_and_finish(self):
         from velo.ui import gym_screens as gs
         self.go_strength()
+        self.press(key.ESCAPE)                            # volta às modalidades
+        self.press(key.ESCAPE)                            # fecha a janela da sessão
+        self.pick("Lista de treinos")
         self.pick("Força A")
         self.assertIsInstance(self.screen(), ss.StrengthPreview)
         self.assertTrue(any("Agachamento" in b.name for b in self.screen().brief_data.blocks))
+        self.pick("Configurar sessão de treino")          # a janela: aparelhos + auto lap bloqueado
+        setup = self.screen()
+        self.assertIsInstance(setup, gs.GymSessionSetup)
+        lap = next(i for i in setup.list.items if i.label == "Auto lap")
+        self.assertFalse(lap.enabled)
+        self.assertIn("a cada bloco", lap.value)
         self.pick("Começar")
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthSessionScreen)
@@ -572,10 +583,16 @@ class TestStrengthGui(tg.GuiCase):
         self.app._on_draw()
         self.press(key.SPACE)                             # série seguinte
         self.assertEqual(scr.session.phase, "work")
-        self.press(key.ESCAPE)                            # pergunta
+        self.press(key.ESCAPE)                            # Esc pausa (como no ciclismo)
+        self.assertTrue(scr.session.paused)
+        self.assertFalse(scr.confirming)
+        self.press(key.F10)                               # F10 pergunta
         self.assertTrue(scr.confirming)
-        self.assertTrue(any("sem guardar" in i.label for i in scr.list.items))
-        self.pick("Sim, terminar")
+        self.assertTrue(scr.finish_dialog.visible)
+        self.press(key.ENTER)                             # «Sim, terminar»
+        from velo.ui import tag_popup as tp_
+        self.assertIsInstance(self.screen(), tp_.SessionTagsPopup)
+        self.press(key.ENTER)                             # «Guardar e terminar» (etiquetas)
         summ = self.screen()
         self.assertIsInstance(summ, ss.StrengthSummaryScreen)
         self.assertEqual(summ.result["total_sets"], 2)
@@ -604,14 +621,16 @@ class TestStrengthGui(tg.GuiCase):
 
     def test_discard_session(self):
         self.go_strength()
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         scr = self.screen()
         sid = scr.session.session_id
         self.press(key.SPACE)
         self.app._tick(1.0)
-        self.press(key.ESCAPE)
-        self.pick("sem guardar")
+        self.press(key.F10)                               # pergunta; D termina sem guardar
+        self.assertTrue(scr.confirming)
+        self.press(key.D)
         self.assertIsNone(self.app.db.conn.execute(
             "SELECT 1 FROM strength_sessions WHERE id = ?", (sid,)).fetchone())
 
@@ -619,21 +638,22 @@ class TestStrengthGui(tg.GuiCase):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.pick("Sessão de treino")
-        self.pick("Longevidade")
-        self.pick("Longevidade ·")
+        self.pick("Força")
+        self.pick("Carregar treino")
+        self.pick("Força e equilíbrio")
         self.pick("Começar")
         scr = self.screen()
         b = scr.back_button.bg
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         self.assertIs(self.screen(), scr)
         self.assertTrue(scr.confirming)
-        self.pick("Não")
+        self.press(key.ESCAPE)                            # «Não»: volta à sessão
         self.assertFalse(scr.confirming)
 
     def test_builder_creates_a_plan(self):
         from velo.ui import hub_screens as hs_
         self.go_strength()
-        self.pick("editor simples")
+        self.pick("Treino livre")                         # o plano à mão (editor simples)
         ed = self.screen()
         self.assertIsInstance(ed, ss.StrengthWorkoutEditor)
         self.select("Nome")
@@ -662,14 +682,14 @@ class TestStrengthGui(tg.GuiCase):
         self.pick("Guardar e sair")
         self.pick("Nordic curl")
         self.assertEqual(ed.items[-1]["name"], "Nordic curl")
-        self.pick("Guardar e treinar")
-        self.assertIsInstance(self.screen(), ss.StrengthPreview)
+        self.pick("Guardar como treino da modalidade")    # o treino livre guarda-se à parte
         from velo.core import gym
         names = [w["name"] for w in gym.workouts(self.app.db, "strength")]
         self.assertIn("Pernas", names)
 
     def test_strength_and_general_stats_views(self):
         self.go_strength()
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         for _ in range(2):
@@ -677,8 +697,9 @@ class TestStrengthGui(tg.GuiCase):
             for _ in range(10):
                 self.app._tick(0.5)
             self.press(key.SPACE)
-        self.press(key.ESCAPE)
-        self.pick("Sim")
+        self.press(key.F10)
+        self.press(key.ENTER)                    # «Sim, terminar»
+        self.press(key.ENTER)                    # «Guardar e terminar» (etiquetas)
         self.press(key.ESCAPE)                   # «Voltar» do resumo (sem «Fechar»)
         self.pick("Estatísticas")
         scr = self.screen()
@@ -796,6 +817,7 @@ class TestRecoveryGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Força")
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         scr = self.screen()
@@ -824,6 +846,7 @@ class TestRecoveryGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Força")
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         self.app.shutdown(crashed=True)
@@ -842,6 +865,7 @@ class TestRecoveryGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Força")
+        self.pick("Carregar treino")
         self.pick("Força A")
         self.pick("Começar")
         self.press(key.SPACE)

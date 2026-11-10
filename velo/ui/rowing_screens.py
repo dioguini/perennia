@@ -143,17 +143,6 @@ class RowingMenu(SportHub):
 
     SPORT = "rowing"
 
-    def subtitle(self) -> str:
-        a = self.app
-        b = rw.bests(a.db)
-        machine = getattr(a, "rower", None)
-        status = machine.name if machine is not None else tr("nenhuma máquina ligada",
-                                                             "no machine connected")
-        return tr("Melhor ritmo {p} · {n} sessões · {d} no total · {m}",
-                  "Best pace {p} · {n} sessions · {d} total · {m}",
-                  p=pace_text(b.get("pace")), n=b.get("n") or 0, d=_m(b.get("total") or 0),
-                  m=status)
-
     def enter(self) -> None:
         rw.link_tests(self.app.db)
         super().enter()
@@ -266,7 +255,7 @@ def start_session(app, replace: bool = False, **kw) -> None:
     if getattr(app, "rower", None) is None:
         app.message(tr("Liga primeiro a máquina de remo (ou usa a simulada).",
                        "Connect the rowing machine first (or use the simulated one)."))
-        app.push(RowerDeviceScreen(app, then=kw))
+        app.open_devices()                      # a janela dos aparelhos, por cima da preparação
         return
     if kw.get("resume") is not None:
         scr = RowingSessionScreen(app, **kw)
@@ -465,7 +454,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
     def enter(self) -> None:
         e = self.engine
         self.list.y = -1000
-        self.list.set_items([])
+        self.refresh_buttons(force=True)                  # − + Pausa Terminar, em baixo
         self.chrome.set(e.title, f"FTP {e.ftp} W · {getattr(e.rower, 'name', '')}",
                         self.footer())
 
@@ -474,6 +463,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         a.hub.tick(dt)
         e = self.engine
         e.update(dt)
+        self.refresh_buttons()
         for kind, data in e.drain_events():
             self._event(kind, data)
         lap = e.lap_elapsed_s if e._lap is not None else 0.0
@@ -645,6 +635,12 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
                  "avg_power_w": s.get("avg_power_w"), "load": s.get("load"),
                  "moving_s": s.get("moving_s"), "elapsed_s": s.get("elapsed_s")})
 
+    def _flow_adjust(self, step: int, mult: int = 1) -> None:
+        self.engine.adjust_resistance(step)
+
+    def _flow_toggle_pause(self) -> None:
+        self.engine.toggle_pause()
+
     def _flow_paused(self) -> bool:
         return bool(self.engine.manual_pause)
 
@@ -686,6 +682,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         self.arr_draw()
         if self.back_button is not None:
             self.back_button.draw()
+        self.list.draw()                                  # os botões em baixo, à direita
         self.draw_finish()
 
 
@@ -1166,116 +1163,6 @@ def RowSessionDetail(app, sid: str):                      # noqa: N802 — compa
 def RowStatsScreen(app):                     # noqa: N802 — compatibilidade
     from velo.ui.stats_screens import SportStatsScreen
     return SportStatsScreen(app, "rowing")
-
-
-# ============================================================= máquina
-
-
-class RowerDeviceScreen(Screen):
-    def __init__(self, app, then: dict | None = None):
-        super().__init__(app)
-        self.then = then
-        self.found: list[tuple[str, str, str]] = []
-        self.scanning = False
-        self._result: list | None = None
-        self._connecting: threading.Thread | None = None
-        self._conn_result: tuple | None = None
-        self.note = ""
-
-    def enter(self) -> None:
-        a = self.app
-        cur = getattr(a, "rower", None)
-        items = []
-        if cur is not None:
-            d = cur.data() if hasattr(cur, "data") else None
-            live = ""
-            if d is not None:
-                live = " · ".join(x for x in (
-                    f"{d.spm:.0f} spm" if d.spm else "", pace_text(d.pace_s) if d.pace_s else "",
-                    tr("nível {n}", "level {n}", n=d.resistance) if d.resistance else "") if x)
-            items.append(Item(f"✓ {cur.name}", value=cur.protocol.upper(),
-                              detail=live or tr("ligada", "connected")))
-            items.append(Item(tr("Desligar", "Disconnect"), action=self._disconnect))
-            if self.then is not None:
-                items.insert(0, Item(tr("▶ Continuar para a sessão", "▶ Go to the session"),
-                                     action=self._go))
-        items.append(Item(tr("Procurar máquina de remo (Bluetooth)",
-                             "Search for a rowing machine (Bluetooth)") if not self.scanning
-                          else tr("A procurar…", "Searching…"), action=self._scan,
-                          enabled=not self.scanning,
-                          detail=tr("Domyos (ex.: Rowing 500B) ou FTMS (ex.: Concept2 PM5)",
-                                    "Domyos (e.g. Rowing 500B) or FTMS (e.g. Concept2 PM5)")))
-        for addr, name, proto in self.found:
-            items.append(Item(name, value=proto.upper(), detail=addr,
-                              action=lambda ad=addr, n=name, p=proto: self._connect(ad, n, p)))
-        if cur is None or cur.protocol != "sim":
-            items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
-                              action=self._sim))
-        items.append(Item(tr("A FC", "Heart rate"), enabled=False,
-                          detail=tr("Vem da banda ou do relógio (Dispositivos); senão, da "
-                                    "máquina.", "From the strap or the watch (Devices); "
-                                    "otherwise from the machine.")))
-        self.chrome.set(tr("Máquina de remo", "Rowing machine"), self.note, self.footer())
-        self.list.set_items(items, keep_index=True)
-
-    def update(self, dt: float) -> None:
-        if self.scanning and self._result is not None:
-            self.found, self._result, self.scanning = self._result, None, False
-            self.note = tr("{n} encontradas", "{n} found", n=len(self.found)) if self.found \
-                else tr("Nenhuma encontrada", "None found")
-            self.enter()
-        if self._conn_result is not None:
-            ok, sensor = self._conn_result
-            self._conn_result = None
-            if ok:
-                self.app.set_rower(sensor)
-                self.note = tr("Ligada: {n}", "Connected: {n}", n=sensor.name)
-            else:
-                self.note = tr("Não foi possível ligar", "Could not connect")
-            self.enter()
-
-    def _scan(self) -> None:
-        from velo.io import ble
-        if not ble.bleak_available():
-            self.note = tr("Falta a biblioteca bleak (pip install bleak).",
-                           "The bleak library is missing (pip install bleak).")
-            self.enter()
-            return
-        self.scanning = True
-        self.enter()
-
-        def work():
-            try:
-                self._result = rower_io.scan_rowers()
-            except Exception:
-                self._result = []
-        threading.Thread(target=work, daemon=True).start()
-
-    def _connect(self, address: str, name: str, proto: str) -> None:
-        sensor = rower_io.RowerSensor(address, name, proto)
-
-        def work():
-            try:
-                self._conn_result = (sensor.connect(), sensor)
-            except Exception:
-                self._conn_result = (False, sensor)
-        threading.Thread(target=work, daemon=True).start()
-        self.note = tr("A ligar…", "Connecting…")
-        self.enter()
-
-    def _sim(self) -> None:
-        self.app.set_rower(rower_io.SimulatedRower())
-        self.note = tr("SEM HARDWARE - Remo ligado", "NO HARDWARE - Rower connected")
-        self.enter()
-
-    def _disconnect(self) -> None:
-        self.app.set_rower(None)
-        self.enter()
-
-    def _go(self) -> None:
-        kw = self.then or {}
-        self.then = None
-        start_session(self.app, replace=True, **kw)
 
 
 def _pretty(name) -> str:

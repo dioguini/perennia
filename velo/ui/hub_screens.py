@@ -295,7 +295,7 @@ class ExerciseInventory(Screen):
     def tab_keys(self) -> list[str]:
         """Uma tab por modalidade (a Longevidade já é um menu à parte) e, no fim, os grupos
         musculares. Quem escolhe exercícios para um treino não vê os grupos."""
-        keys = [m.key for m in gym.modalities() if m.key != "longevity" or self.fixed == m.key]
+        keys = [m.key for m in gym.modalities()]
         if not self.pick:
             keys.append(self.GROUPS_TAB)
         return keys
@@ -375,7 +375,7 @@ class ExerciseInventory(Screen):
             unit = tr("tempo", "time") if e["measure"] == "time" else tr("reps", "reps")
             other = [gym.modality(x).name for x in e["modalities"] if x != mod]
             detail = kit + f" · {unit}"
-            if other and not m.multi:
+            if other:
                 detail += " · " + ", ".join(other[:2])
             if missing:
                 detail += " · " + tr("falta: {k}", "missing: {k}",

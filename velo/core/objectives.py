@@ -174,9 +174,12 @@ LIBRARY_GOALS: dict[str, tuple[str, str]] = {
     "Força B · corpo inteiro": (
         "Força geral (variante B): equilibrar empurrar e puxar, pernas e tronco.",
         "General strength (B): balance push and pull, legs and trunk."),
-    "Longevidade · força e equilíbrio": (
-        "Longevidade: manter força funcional, equilíbrio e mobilidade para o dia a dia.",
-        "Longevity: keep functional strength, balance and mobility for daily life."),
+    "Força e equilíbrio": (
+        "Manter força funcional, equilíbrio e mobilidade para o dia a dia.",
+        "Keep functional strength, balance and mobility for daily life."),
+    "Longevidade · força e equilíbrio": (       # o nome antigo (já renomeado na base)
+        "Manter força funcional, equilíbrio e mobilidade para o dia a dia.",
+        "Keep functional strength, balance and mobility for daily life."),
 }
 
 # --------------------------------------------------------------- textos auto

@@ -193,9 +193,9 @@ class TestBuilderGui(tg.GuiCase):
     def go(self):
         self.press(key.ESCAPE)
         self.pick("Ginásio")
-        self.pick("Sessão de treino")
+        self.pick("Lista de treinos")
+        self.pick("+ Novo treino")                       # a modalidade e o construtor por blocos
         self.pick("Força")
-        self.pick("construtor por blocos")
         b = self.screen()
         self.assertIsInstance(b, sbs.StrengthBuilder)
         return b

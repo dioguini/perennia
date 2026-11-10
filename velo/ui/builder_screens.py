@@ -154,9 +154,11 @@ class BlockBuilder(EditScreen):
     HEAD_ROW_H = 30           # a segunda linha do cabeçalho (o objetivo do treino)
     HEAD_VALUE_X = 230        # onde começam o nome e o objetivo (os dois no mesmo sítio)
 
-    def __init__(self, app, sport: str, wid: str | None, control: str | None = None):
+    def __init__(self, app, sport: str, wid: str | None, control: str | None = None,
+                 plan_day=None):
         self.sport = sport
         self.wid = wid
+        self.plan_day = plan_day          # vindo do calendário: ao guardar, fica planeado
         self.name, self.desc, mode, self.blocks = load_blocks(app.db, sport, wid)
         meta = wm.get(app.db, sport, wid)
         self.control = control or meta["control"]
@@ -1118,6 +1120,9 @@ class BlockBuilder(EditScreen):
         from velo.core import tags as tags_mod
         tags_mod.set_workout_type(self.app.db, self.sport, self.wid, self.wtype)
         self.dirty = False
+        if self.plan_day is not None:
+            from velo.ui.day_popups import plan_it
+            plan_it(self.app, self.plan_day, self.sport, self.wid, self.name.strip())
         self.enter()
         self.app.workout_saved(self.name.strip(), self)
 

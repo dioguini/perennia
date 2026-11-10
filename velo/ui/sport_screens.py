@@ -23,6 +23,7 @@ from velo.ui.app import (DeviceScreen, RideScreen, Screen, StatsScreen, SummaryS
                          WorkoutRouteChoice)
 from velo.gfx import theme as _theme
 from velo.ui.brief import GymBrief
+from velo.ui.session_flow import FinishFlow
 from velo.ui.widgets import ACCENT, BAD, DIM, GOOD, PANEL, TEXT, Item
 
 NUM_CHARS = "0123456789.,"
@@ -423,11 +424,9 @@ class StrengthPreview(GymBrief):
     (cartão em velo.ui.brief)."""
 
     def start(self) -> None:
-        a = self.app
-        try:
-            a.replace(StrengthSessionScreen(a, self.wid))
-        except ValueError as e:
-            a.message(f"{t('common.error')}: {e}")
+        """«Configurar sessão de treino»: a janela com os aparelhos (e o auto lap bloqueado)."""
+        from velo.ui.gym_screens import GymSessionSetup
+        self.app.push(GymSessionSetup(self.app, self.wid))
 
     def edit(self) -> None:
         """«Editar»: abre o treino no construtor por blocos do ginásio."""
@@ -439,9 +438,14 @@ class StrengthPreview(GymBrief):
         return self.wid
 
 
-class StrengthSessionScreen(EditScreen):
-    """A sessão de força: lista de ações à esquerda, painel à direita com a
-    série, o descanso, a FC e as séries já feitas deste exercício."""
+class StrengthSessionScreen(FinishFlow, EditScreen):
+    """A sessão de força, como as dos outros desportos (os mesmos botões em baixo, à
+    direita, o mesmo diálogo de terminar e a mesma janela de etiquetas).
+
+    À esquerda, o treino numa lista só: cada exercício com as séries feitas, e Enter
+    começa (ou termina) a série desse exercício; por baixo, os campos da série
+    (repetições, carga, RPE). À direita, o painel com a série, o descanso, a FC e as
+    séries já feitas do exercício."""
     KEY_SCOPE = "gym"
 
     AGENT = False
@@ -457,7 +461,7 @@ class StrengthSessionScreen(EditScreen):
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
                                           out_dir=a.data_dir / "strength", resume=resume)
         self.start_countdown(resume)
-        self.confirming = False
+        self.init_finish()                    # o diálogo de terminar, como no ciclismo
         self._sig = None
         self.batch = pyglet.graphics.Batch()
         b = self.batch
@@ -531,6 +535,7 @@ class StrengthSessionScreen(EditScreen):
         self.next_label.y = max(140, top - 228 - dy - self.SET_LINES * 22 - 10)
         self.next_label.width = max(200, pw - 40)
         self.clock.layout()
+        self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -556,38 +561,55 @@ class StrengthSessionScreen(EditScreen):
         s = self.session
         return s.sets[-1].item_idx if s.editing_last else s.item_idx
 
+    def _exercise_rows(self) -> list[Item]:
+        """O treino em lista: um exercício por linha, com as séries feitas e o alvo."""
+        s = self.session
+        shown = self._shown()
+        rows = []
+        for i, ex in enumerate(s.items):
+            done, planned = s.done_sets(i), s.planned_sets(i)
+            lab = (s.labels[i] + " · ") if getattr(s, "labels", None) else ""
+            if i in s.skipped:
+                mark, value = "– ", tr("saltado", "skipped")
+            elif i == shown:
+                mark, value = "▶ ", f"{done}/{planned}"
+            elif s.remaining(i) == 0:
+                mark, value = "✓ ", f"{done}/{planned}"
+            else:
+                mark, value = "   ", f"{done}/{planned}"
+            rows.append(Item(f"{mark}{lab}{ex.name}", value=value,
+                             detail=f"{ex.target_text()} · {t('str.rest')} {hms(ex.rest_s)}",
+                             action=lambda k=i: self._start_exercise(k), data=("ex", i)))
+        return rows
+
+    def _buttons(self) -> list[Item]:
+        """Em baixo, à direita, como nos outros desportos: a ação principal da série,
+        mais uma série, saltar, Pausa e Terminar."""
+        s = self.session
+        return [Item(self._action_label(), button=True, primary=True, action=self._action,
+                     data="action"),
+                Item(tr("+ Série", "+ Set"), button=True, action=self._add_set),
+                Item(tr("Saltar", "Skip"), button=True, action=self._skip),
+                Item(tr("Retomar", "Resume") if s.paused else tr("Pausa", "Pause"),
+                     button=True, action=self._flow_toggle_pause),
+                Item(tr("Terminar", "Finish"), button=True, action=self.ask_finish)]
+
     def enter(self) -> None:
         s = self.session
         it = s.items[self._shown()]
-        if self.confirming:
-            items = [Item(t("str.confirm_no"), action=self._cancel_confirm),
-                     Item(t("str.confirm_yes"), action=self._finish),
-                     Item(tr("Terminar sem guardar", "Finish without saving"),
-                          action=self._discard)]
-            self.chrome.set(t("str.confirm_title"), t("str.confirm_sub",
-                                                      n=len(s.sets)), self.footer())
-            self.list.set_items(items)
-            return
         editing = s.editing_last
         last = s.sets[-1] if editing else None
         measure = it.measure if not editing else s.items[last.item_idx].measure
         reps_label = t("str.seconds") if measure == "time" else t("str.reps")
         suffix = f" ({t('str.fix_set', n=last.set_no)})" if editing else ""
         reps = s.field_value("reps")
-        items = [
-            Item(self._action_label(), action=self._action, data="action"),
+        items = self._exercise_rows() + [
             Item(reps_label + suffix, value=_amount(reps or 0, measure), data="num:reps"),
             Item(t("str.load") + suffix, value=_kg(s.field_value("load_kg")),
                  data="num:load_kg"),
             Item("RPE" + suffix, value=_rpe(s.field_value("rpe")), data="num:rpe",
                  detail=t("str.rpe_hint") if not editing else ""),
-            Item(t("str.exercise_next") if editing else t("str.exercise"),
-                 value=f"{s.item_idx + 1}/{len(s.items)} · {s.item.name}", data="cyc:item"),
-            Item(t("str.add_set"), action=self._add_set),
-            Item(t("str.skip"), action=self._skip),
-            Item(t("str.resume") if s.paused else t("str.pause"), action=self._pause),
-            Item(t("str.finish"), action=self._ask_finish),
-        ]
+        ] + self._buttons()
         shown = self._shown()
         if editing:
             head = t("str.set_done", n=last.set_no, total=s.planned_sets(shown))
@@ -625,17 +647,52 @@ class StrengthSessionScreen(EditScreen):
         self.session.skip_item()
         self.enter()
 
-    def _pause(self) -> None:
+    def _start_exercise(self, idx: int) -> None:
+        """Enter numa linha do treino: vai para esse exercício e começa a série (ou, se
+        for o da série a correr, termina-a)."""
+        s = self.session
+        if s.phase == st.WORK:
+            if idx == s.item_idx:
+                self._action()
+            else:
+                self._flow_toast(tr("Termina primeiro a série em curso.",
+                                    "Finish the set in progress first."))
+            return
+        if idx != s.item_idx:
+            s.goto_item(idx - s.item_idx)
+        self._action()
+
+    # --- o fluxo de terminar é o dos outros desportos (session_flow.FinishFlow)
+
+    def _flow_toggle_pause(self) -> None:
         self.session.toggle_pause()
         self.enter()
 
-    def _ask_finish(self) -> None:
-        self.confirming = True
-        self.list.index = 0
+    def _flow_paused(self) -> bool:
+        return bool(self.session.paused)
+
+    def _flow_set_paused(self, paused: bool) -> None:
+        if bool(self.session.paused) != paused:
+            self.session.toggle_pause()
         self.enter()
 
-    def _cancel_confirm(self) -> None:
-        self.confirming = False
+    def _flow_toast(self, text: str) -> None:
+        self.app.message(text)
+
+    def _tag_context(self):
+        s = self.session
+        if not s.sets:
+            return None
+        summ = s.summary()
+        return ("strength", getattr(s, "workout_id", None), False,
+                {"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
+
+    def _tags_done(self, info: dict) -> None:
+        self.session.tags_chosen = info
+        self._finish()
+
+    def cancel_finish(self) -> None:
+        super().cancel_finish()
         self.enter()
 
     def _finish(self) -> None:
@@ -654,20 +711,16 @@ class StrengthSessionScreen(EditScreen):
             self.session.goto_item(step)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.confirming:
-            if symbol == key.ESCAPE:
-                self._cancel_confirm()
-                return True
-            return super().on_key(symbol, modifiers)
+        if self.confirming:                   # o diálogo de terminar tem as teclas todas
+            return self.finish_key(symbol)
         if symbol == key.SPACE:
             self._action()
             return True
         if symbol == key.P:
-            self._pause()
+            self._flow_toggle_pause()
             return True
-        if symbol in (key.ESCAPE, key.F10):
-            self._ask_finish()
-            return True
+        if symbol in (key.ESCAPE, key.F10):   # Esc pausa · F10 pergunta (como no ciclismo)
+            return self.finish_key(symbol)
         return super().on_key(symbol, modifiers)
 
     def on_text(self, text: str) -> bool:
@@ -676,10 +729,8 @@ class StrengthSessionScreen(EditScreen):
         return super().on_text(text) or True
 
     def on_mouse(self, x: int, y: int) -> bool:
-        if self.back_button is not None and self.back_button.hit(x, y):
-            self._ask_finish()               # «voltar» a meio pergunta primeiro
-            return True
-        return self.list.on_mouse_press(x, y)
+        handled = self.finish_mouse(x, y)    # o diálogo e o «voltar» (que pergunta primeiro)
+        return handled if handled is not None else self.list.on_mouse_press(x, y)
 
     def leave(self) -> None:
         if not self.session.finished:
@@ -875,6 +926,7 @@ class StrengthSessionScreen(EditScreen):
     def draw(self) -> None:
         super().draw()
         self.batch.draw()
+        self.draw_finish()
 
 
 class StrengthSummaryScreen(Screen):
@@ -2283,7 +2335,7 @@ from velo.ui.session_setup import GameSetup  # noqa: E402,F401
 # ======================================================= treino livre / conditioning
 
 
-class LapSessionScreen(EditScreen):
+class LapSessionScreen(FinishFlow, EditScreen):
     """Sessão por voltas. À esquerda: abrir voltas e os campos da volta atual;
     à direita: a volta a contar, a FC e as voltas já feitas."""
     KEY_SCOPE = "gym"
@@ -2303,7 +2355,7 @@ class LapSessionScreen(EditScreen):
                                      autolap=autolap)
         self.start_countdown(resume)
         self.chrome.title.font_size = 18
-        self.confirming = False
+        self.init_finish()                    # o diálogo de terminar, como no ciclismo
         self._sig = None
         b = self.batch = pyglet.graphics.Batch()
         self.panel = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
@@ -2336,6 +2388,7 @@ class LapSessionScreen(EditScreen):
         for i, lab in enumerate(self.lap_lines):
             lab.x, lab.y = x + 20, top - 144 - i * 22
         self.clock.layout()
+        self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
         super().on_resize(w, h)
@@ -2344,8 +2397,8 @@ class LapSessionScreen(EditScreen):
     def footer(self) -> str:
         from velo.core.i18n import tr
         return tr("Espaço trabalho ↔ descanso · ←/→ ajustar · escreve números · P pausa · "
-                  "Esc terminar", "Space work ↔ rest · ←/→ adjust · type numbers · P pause · "
-                  "Esc finish")
+                  "F10 terminar", "Space work ↔ rest · ←/→ adjust · type numbers · P pause · "
+                  "F10 finish")
 
     def kind_name(self, k: str) -> str:
         return t(f"laps.kind.{k}")
@@ -2353,15 +2406,6 @@ class LapSessionScreen(EditScreen):
     def enter(self) -> None:
         from velo.core.i18n import tr
         s = self.session
-        if self.confirming:
-            self.chrome.set(t("str.confirm_title"), tr("{n} voltas registadas.",
-                                                       "{n} laps logged.", n=len(s.laps)),
-                            self.footer())
-            self.list.set_items([Item(t("str.confirm_no"), action=self._cancel_confirm),
-                                 Item(t("str.confirm_yes"), action=self._finish),
-                                 Item(tr("Terminar sem guardar", "Finish without saving"),
-                                      action=self._discard)])
-            return
         order = ("treadmill", "rowing", "strength", "rest", "cardio") \
             if s.mode == "conditioning" else ("strength", "rest", "treadmill", "rowing", "cardio")
         rows = []
@@ -2427,8 +2471,10 @@ class LapSessionScreen(EditScreen):
                 rows.append(Item(tr("Fechar a volta", "Close the lap"), action=self._close))
             rows.append(Item(tr("Apagar a última volta", "Delete the last lap"),
                              action=self._delete_last))
-        rows += [Item(t("str.resume") if s.paused else t("str.pause"), action=self._pause),
-                 Item(t("str.finish"), action=self._ask_finish)]
+        rows += [Item(tr("Retomar", "Resume") if s.paused else tr("Pausa", "Pause"),
+                      button=True, action=self._flow_toggle_pause),
+                 Item(tr("Terminar", "Finish"), button=True, primary=True,
+                      action=self.ask_finish)]
         self.chrome.set(s.title, tr("{n} voltas · {t}", "{n} laps · {t}", n=len(s.laps),
                                     t=hms(s.t)), self.footer())
         self.list.set_items(rows, keep_index=True)
@@ -2503,17 +2549,37 @@ class LapSessionScreen(EditScreen):
         self.session.delete_last()
         self.enter()
 
-    def _pause(self) -> None:
+    # --- o fluxo de terminar é o dos outros desportos (session_flow.FinishFlow)
+
+    def _flow_toggle_pause(self) -> None:
         self.session.toggle_pause()
         self.enter()
 
-    def _ask_finish(self) -> None:
-        self.confirming = True
-        self.list.index = 0
+    def _flow_paused(self) -> bool:
+        return bool(self.session.paused)
+
+    def _flow_set_paused(self, paused: bool) -> None:
+        if bool(self.session.paused) != paused:
+            self.session.toggle_pause()
         self.enter()
 
-    def _cancel_confirm(self) -> None:
-        self.confirming = False
+    def _flow_toast(self, text: str) -> None:
+        self.app.message(text)
+
+    def _tag_context(self):
+        s = self.session
+        if not s.laps:
+            return None
+        summ = s.summary()
+        return ("strength", None, False,
+                {"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
+
+    def _tags_done(self, info: dict) -> None:
+        self.session.tags_chosen = info
+        self._finish()
+
+    def cancel_finish(self) -> None:
+        super().cancel_finish()
         self.enter()
 
     def _finish(self) -> None:
@@ -2539,11 +2605,8 @@ class LapSessionScreen(EditScreen):
         self.enter()
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.confirming:
-            if symbol == key.ESCAPE:
-                self._cancel_confirm()
-                return True
-            return super().on_key(symbol, modifiers)
+        if self.confirming:                   # o diálogo de terminar tem as teclas todas
+            return self.finish_key(symbol)
         if self._field("text:") is None:
             if symbol == key.SPACE:
                 lap = self.session.toggle()
@@ -2553,11 +2616,10 @@ class LapSessionScreen(EditScreen):
                 self.enter()
                 return True
             if symbol == key.P:
-                self._pause()
+                self._flow_toggle_pause()
                 return True
-        if symbol in (key.ESCAPE, key.F10):
-            self._ask_finish()
-            return True
+        if symbol in (key.ESCAPE, key.F10):   # Esc pausa · F10 pergunta (como no ciclismo)
+            return self.finish_key(symbol)
         return super().on_key(symbol, modifiers)
 
     def on_text(self, text: str) -> bool:
@@ -2566,10 +2628,8 @@ class LapSessionScreen(EditScreen):
         return super().on_text(text) or True
 
     def on_mouse(self, x: int, y: int) -> bool:
-        if self.back_button is not None and self.back_button.hit(x, y):
-            self._ask_finish()
-            return True
-        return self.list.on_mouse_press(x, y)
+        handled = self.finish_mouse(x, y)
+        return handled if handled is not None else self.list.on_mouse_press(x, y)
 
     def leave(self) -> None:
         if not self.session.finished:
@@ -2639,6 +2699,7 @@ class LapSessionScreen(EditScreen):
     def draw(self) -> None:
         super().draw()
         self.batch.draw()
+        self.draw_finish()
 
 
 def lap_text(lap) -> str:

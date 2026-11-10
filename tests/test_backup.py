@@ -247,7 +247,7 @@ class TestBackupMenu(tg.GuiCase):
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         scr = self.screen()
         self.assertIsInstance(scr, bs.BackupScreen)
-        self.assertEqual(scr.tab_labels(), ["Exportar", "Repor"])
+        self.assertEqual(scr.tab_labels(), ["Exportar", "Repor", "Sincronização"])
         self.pick("Tudo — exportação completa")          # desmarca tudo
         export = next(i for i in scr.list.items if i.label == "Exportar")
         self.assertFalse(export.enabled)

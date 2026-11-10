@@ -80,6 +80,8 @@ class SessionModePopup(PopupMixin, Screen):
         """O título e as linhas de uma lista (treinos, Challenge ou testes), lidas
         dos menus que já existem."""
         a = self.app
+        if name.startswith(("mod:", "gymwk:")):
+            return self._gym_sub(name)
         if name == "workouts":
             rows = self.hub.items_for("library") if self.hub is not None else []
             title = tr("Carregar treino", "Load a workout")
@@ -126,12 +128,11 @@ class SessionModePopup(PopupMixin, Screen):
                 n = len(gym.workouts(a.db, m.key)) if not m.laps else len(ls.plans(a.db, m.key))
                 rows.append(Item(m.name, value=tr("{n} treinos", "{n} workouts", n=n) if n
                                  else "", detail=m.desc, data=("modality", m.key),
-                                 action=self._after(lambda k=m.key: a.push(
-                                     gs.ModalityScreen(a, k)))))
+                                 action=lambda k=m.key: self.open_level(f"mod:{k}")))
             rows += [Item("Challenge", detail=_challenge_help(sport),
                           action=lambda: self.open_level("challenge"), data="challenge"),
-                     Item(tr("Testes", "Tests"), detail=tr("os testes de longevidade",
-                                                          "the longevity tests"),
+                     Item(tr("Testes", "Tests"), detail=tr("força, equilíbrio e mobilidade",
+                                                          "strength, balance and mobility"),
                           action=lambda: self.open_level("tests"), data="tests")]
             return rows
         free_help = {"cycling": tr("escolhes os aparelhos e a rota (.gpx) e pedalas",
@@ -156,10 +157,106 @@ class SessionModePopup(PopupMixin, Screen):
                            "fitness tests: the result comes from the session itself"),
                  action=lambda: self.open_level("tests"), data="tests")]
 
+    @staticmethod
+    def parent_of(level: str | None) -> str | None:
+        """O passo anterior: lista de treinos → opções da modalidade → modalidades."""
+        if level and level.startswith("gymwk:"):
+            return "mod:" + level.split(":", 1)[1]
+        return None
+
     def open_level(self, name: str | None) -> None:
         self.level = name
         self.list.index = 0
         self.enter()
+
+    # --------------------------------------------- ginásio: a modalidade escolhida
+
+    def _gym_sub(self, name: str) -> tuple[str, list[Item]]:
+        """As opções de uma modalidade, na mesma janela: treino livre, surpresa, carregar
+        treino (a lista da modalidade), livre por blocos, do computador, Challenge e Testes."""
+        from velo.core import gym
+        from velo.core import laps_session as ls
+        from velo.ui import gym_screens as gs
+        a = self.app
+        kind, mod = name.split(":", 1)
+        m = gym.modality(mod)
+        if kind == "gymwk":
+            return self._gym_workouts(mod)
+        if m.laps:                                         # Conditioning: planos de voltas
+            rows = [
+                Item(tr("Treino livre", "Free workout"),
+                     detail=tr("Monta o plano de voltas e depois começa",
+                               "Build the lap plan, then start"),
+                     action=self._after(lambda: a.push(gs.LapPlanEditor(a, None, draft=True)))),
+                Item(tr("Treino surpresa", "Surprise workout"),
+                     detail=tr("Voltas de máquina e de força à sorte",
+                               "Random machine and strength laps"),
+                     action=self._after(lambda: a.push(gs.LapPlanEditor(
+                         a, None, draft=True, items=ls.surprise_plan(
+                             a.db, int(time.time()) % 100000)))))]
+            for p in ls.plans(a.db, "conditioning"):
+                rows.append(Item(p["name"], value=f"≈ {hms(ls.plan_seconds(p['items']))}",
+                                 detail=tr("{n} voltas", "{n} laps", n=len(p["items"])),
+                                 action=self._after(lambda pid=p["id"]: gs.start_laps(
+                                     a, "conditioning", ls.plan(a.db, pid)["items"]))))
+            rows += self._gym_common_rows()
+            return m.name, rows
+        n = len(gym.workouts(a.db, mod))
+        rows = [
+            Item(tr("Treino livre", "Free workout"),
+                 detail=tr("Monta o plano e depois começa (podes guardá-lo)",
+                           "Build the plan, then start (you can save it)"),
+                 action=self._after(lambda: a.push(gs.GymPlanEditor(a, mod, None, draft=True)))),
+            Item(tr("Treino surpresa", "Surprise workout"),
+                 detail=tr("Exercícios à sorte, só com o material que tens",
+                           "Random exercises, only with the equipment you have"),
+                 action=self._after(lambda: a.push(gs.SurpriseScreen(a, mod)))),
+            Item(tr("Carregar treino", "Load workout"),
+                 value=tr("{n} treinos", "{n} workouts", n=n) if n else "",
+                 detail=tr("a lista de treinos de {m}", "the {m} workout list", m=m.name),
+                 action=lambda: self.open_level(f"gymwk:{mod}")),
+            Item(tr("Treino livre por blocos", "Free workout in the block builder"),
+                 detail=tr("Monta no construtor por blocos e começa; guardar é opcional",
+                           "Build it in the block builder and start; saving is optional"),
+                 action=self._after(lambda: a.push(gs._builder(a, mod, draft=True)))),
+            Item(tr("Do computador", "From the computer"),
+                 detail=tr(".csv, .json, .txt ou .fit (de um treino criado, por exemplo, no "
+                           "TrainingPeaks)", ".csv, .json, .txt or .fit (of a workout made, for "
+                           "example, in TrainingPeaks)"),
+                 action=self._after(lambda: self._gym_from_computer(mod)))]
+        rows += self._gym_common_rows()
+        return m.name, rows
+
+    def _gym_common_rows(self) -> list[Item]:
+        return [Item("Challenge", detail=_challenge_help("gym"),
+                     action=lambda: self.open_level("challenge"), data="challenge"),
+                Item(tr("Testes", "Tests"),
+                     detail=tr("força, equilíbrio e mobilidade", "strength, balance and mobility"),
+                     action=lambda: self.open_level("tests"), data="tests")]
+
+    def _gym_workouts(self, mod: str) -> tuple[str, list[Item]]:
+        from velo.core import gym
+        from velo.core import strength as st
+        from velo.ui.gym_screens import GymSessionSetup
+        a = self.app
+        rows = []
+        for w in gym.workouts(a.db, mod):
+            plan = st.workout_items(a.db, w["id"])
+            rows.append(Item(w["name"], value=f"≈ {hms(st.plan_seconds(plan))}",
+                             detail=tr("{n} exercícios", "{n} exercises", n=len(plan)),
+                             action=self._after(lambda wid=w["id"]: a.push(
+                                 GymSessionSetup(a, wid)))))
+        if not rows:
+            rows = [Item(tr("Ainda não há treinos de {m}", "No {m} workouts yet",
+                            m=gym.modality(mod).name),
+                         detail=tr("cria um em «+ Novo treino» na Lista de treinos",
+                                   "make one with “+ New workout” in the workout list"),
+                         enabled=False)]
+        return tr("Carregar treino", "Load a workout") + " · " + gym.modality(mod).name, rows
+
+    def _gym_from_computer(self, mod: str) -> None:
+        from velo.ui.workout_import import WorkoutFilePopup
+        self.app.push(WorkoutFilePopup(self.app, "gym", mode="session", modality=mod))
 
     def enter(self) -> None:
         sport = sp.name(self.sport)
@@ -181,12 +278,12 @@ class SessionModePopup(PopupMixin, Screen):
                             tr("↑↓ escolher · Enter abre · Esc volta", "↑↓ pick · Enter opens · "
                                "Esc goes back"))
             items.append(Item(tr("Voltar", "Back"), button=True,
-                              action=lambda: self.open_level(None)))
+                              action=lambda: self.open_level(self.parent_of(self.level))))
         self.list.set_items(items, keep_index=True)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if symbol == key.ESCAPE and self.level is not None:
-            self.open_level(None)
+            self.open_level(self.parent_of(self.level))
             return True
         return super().on_key(symbol, modifiers)
 
@@ -600,12 +697,7 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
     # ---------------------------------------------------------------- ações
 
     def _devices(self) -> None:
-        a = self.app
-        if self.sport == "rowing":
-            from velo.ui.rowing_screens import RowerDeviceScreen
-            a.push(RowerDeviceScreen(a))
-        else:
-            a.open_devices()
+        self.app.open_devices()         # o mesmo popup nos três desportos (a máquina de remo também)
 
     def _new_gpx(self) -> None:
         self.app.push(GpxPickerPopup(self.app, self._picked))

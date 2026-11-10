@@ -122,6 +122,26 @@ class FinishDialog:
                                     anchor_x="center", anchor_y="center", batch=tb)
         self.no_label = make_label("", font_size=14, bold=True, color=TEXT,
                                    anchor_x="center", anchor_y="center", batch=tb)
+        # os ícones dos três botões (os mesmos de todos os botões da aplicação)
+        self.icons = {}
+        for k, name in (("yes", "ui_check"), ("no", "ui_close"), ("discard", "ui_trash")):
+            self.icons[k] = icons.sprite(name, 0, 0, 18, batch=tb, opacity=0)
+
+    def _place_icons(self) -> None:
+        """O ícone à esquerda da etiqueta de cada botão, o conjunto centrado no botão."""
+        from velo.ui.widgets import text_px
+        for k, rect, lab, size in (("yes", self.yes, self.yes_label, 14),
+                                   ("no", self.no, self.no_label, 14),
+                                   ("discard", self.discard, self.discard_label, 12)):
+            ic = self.icons.get(k)
+            if ic is None:
+                continue
+            text_w = text_px(lab.text, size, True) if lab.text else 0
+            cx = rect.x + rect.width / 2
+            ic.x = cx - (text_w + 26) / 2
+            ic.y = rect.y + (rect.height - 18) / 2
+            ic.opacity = 235 if self.visible else 0
+            lab.x = ic.x + 26 + text_w / 2
 
     def layout(self, w: int, h: int) -> None:
         self.shade.x, self.shade.y = 0, 0
@@ -140,6 +160,7 @@ class FinishDialog:
         d = self.discard
         d.x, d.y, d.width, d.height = bx + 30, by + 20, bw - 60, 40
         self.discard_label.x, self.discard_label.y = w // 2, by + 40
+        self._place_icons()
 
     def show(self, title: str | None = None, sub: str | None = None) -> None:
         self.visible = True
@@ -152,9 +173,13 @@ class FinishDialog:
         self.sub.text = sub or t("confirm.sub")
         self.yes_label.text = t("confirm.yes")
         self.no_label.text = t("confirm.no")
+        self._place_icons()
 
     def hide(self) -> None:
         self.visible = False
+        for ic in self.icons.values():
+            if ic is not None:
+                ic.opacity = 0
         for r in (self.shade, self.box, self.yes, self.no, self.discard):
             r.opacity = 0
         for lab in (self.title, self.sub, self.yes_label, self.no_label,

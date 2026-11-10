@@ -17,13 +17,51 @@ import time
 
 from pyglet.window import key
 
-from velo.core.i18n import t
+from velo.core.i18n import t, tr
 from velo.gfx.hud import FinishDialog
+from velo.ui.widgets import Item
 
 
 class FinishFlow:
     finish_dialog: FinishDialog | None = None
     _resume_on_cancel = False
+
+    # ------------------------------------------------- botões (como no ciclismo)
+    #
+    # Em baixo, à direita: [−] [+] (a velocidade, as piscinas ou a resistência), Pausa/Retomar
+    # e Terminar — os mesmos botões do HUD do ciclismo. Cada ecrã diz o que − e + fazem.
+
+    _btn_sig = None
+
+    def _flow_adjust(self, step: int) -> None:
+        """− / +: a velocidade, as piscinas ou a resistência (do ecrã)."""
+
+    def _flow_has_adjust(self) -> bool:
+        return True
+
+    def _flow_toggle_pause(self) -> None:
+        self._flow_set_paused(not self._flow_paused())
+
+    def session_buttons(self) -> list[Item]:
+        paused = self._flow_paused()
+        items: list[Item] = []
+        if self._flow_has_adjust():
+            items += [Item("−", button=True, action=lambda: self._flow_adjust(-1)),
+                      Item("+", button=True, action=lambda: self._flow_adjust(1))]
+        items += [Item(tr("Retomar", "Resume") if paused else tr("Pausa", "Pause"), button=True,
+                       action=self._flow_toggle_pause),
+                  Item(tr("Terminar", "Finish"), button=True, primary=True,
+                       action=self.ask_finish)]
+        return items
+
+    def refresh_buttons(self, force: bool = False) -> None:
+        """Põe os botões na lista (escondida); refaz-se só quando muda a pausa."""
+        sig = (self._flow_paused(), self.confirming, self._flow_has_adjust())
+        if sig == self._btn_sig and not force:
+            return
+        self._btn_sig = sig
+        self.list.set_items(self.session_buttons() if not self.confirming else [],
+                            keep_index=False)
 
     # ---------------------------------------------------------------- pausa
 

@@ -111,7 +111,7 @@ TEMPLATES = (
       ("Press militar", 3, 8, 30.0, 7.5, 120),
       ("Agachamento búlgaro", 3, 8, 12.0, 7.5, 90),
       ("Farmer's carry", 3, 40, 24.0, 7.5, 90)]),
-    ("Longevidade · força e equilíbrio",
+    ("Força e equilíbrio",
      "Exercícios de base com carga moderada, equilíbrio e estabilidade. 35–45 min.",
      [("Mobilidade / aquecimento", 1, 300, None, None, 30),
       ("Agachamento goblet", 3, 10, 16.0, 7.0, 90),
@@ -901,6 +901,11 @@ class StrengthSession:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         path, name = naming.unique_path(self.out_dir, base)
         fit_path: str | None = None
+        from . import tags as tags_mod
+        tag_info = tags_mod.resolve(
+            self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
+            workout_id=self.workout_id,
+            summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit
             hr_rows = self.db.conn.execute(
@@ -908,7 +913,7 @@ class StrengthSession:
                 (self.session_id,)).fetchall()
             fit.write_strength(path, self.athlete, [(r["t_s"], r["hr_bpm"]) for r in hr_rows],
                                self.sets, self.items, summ, start_unix=self.start_unix,
-                               name=name)
+                               name=name, tags=tags_mod.fit_text(tag_info))
             fit_path = str(path)
         except Exception as e:
             self._emit("fit_error", message=str(e))
@@ -923,7 +928,8 @@ class StrengthSession:
         self.db.conn.commit()
         self.db.delete_checkpoint(self.session_id)
         summ.update({"session_id": self.session_id, "name": name, "fit_path": fit_path,
-                     "workout_id": self.workout_id, "workout_name": self.workout_name})
+                     "workout_id": self.workout_id, "workout_name": self.workout_name,
+                     "tags": tag_info})
         return summ
 
     def abort(self) -> None:

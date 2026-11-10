@@ -543,7 +543,7 @@ SET = (MSG_SET, [
 
 def write_strength(path: str | Path, athlete: Athlete, hr: Sequence[tuple[int, int | None]],
                    sets: Sequence[Any], items: Sequence[Any], summary: dict,
-                   start_unix: float, name: str = "") -> Path:
+                   start_unix: float, name: str = "", tags: str = "") -> Path:
     """Sessão de força: registos de FC a 1 Hz e uma mensagem «set» por série
     (e pelo descanso entre séries), como os relógios Garmin gravam. O Garmin
     Connect mostra as séries com repetições, carga e a família do exercício."""
@@ -560,7 +560,7 @@ def write_strength(path: str | Path, athlete: Athlete, hr: Sequence[tuple[int, i
     w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
             functional_threshold_power=athlete.ftp_w)
     w.write(SPORT, sport=SPORT_TRAINING, sub_sport=SUB_SPORT_STRENGTH,
-            name=name or "Perennia")
+            name=tags or name or "Perennia")           # as etiquetas: ver velo.core.tags
     w.write(EVENT, timestamp=t0, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
     for t, h in hr:
         w.write(HR_RECORD, timestamp=t0 + int(t), heart_rate=h)
@@ -602,7 +602,8 @@ def write_strength(path: str | Path, athlete: Athlete, hr: Sequence[tuple[int, i
 
 def write_lap_session(path: str | Path, athlete: Athlete,
                       hr: Sequence[tuple[int, int | None]], laps: Sequence[Any],
-                      summary: dict, start_unix: float, name: str = "") -> Path:
+                      summary: dict, start_unix: float, name: str = "",
+                      tags: str = "") -> Path:
     """Treino livre / Conditioning: uma volta FIT por volta da sessão (com a
     distância nas da passadeira), séries nas voltas de força e a FC."""
     path = Path(path)
@@ -618,7 +619,7 @@ def write_lap_session(path: str | Path, athlete: Athlete,
     w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
             functional_threshold_power=athlete.ftp_w)
     w.write(SPORT, sport=SPORT_TRAINING, sub_sport=SUB_SPORT_STRENGTH,
-            name=name or "Perennia")
+            name=tags or name or "Perennia")           # as etiquetas: ver velo.core.tags
     w.write(EVENT, timestamp=t0, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
     for t, h in hr:
         w.write(HR_RECORD, timestamp=t0 + int(t), heart_rate=h)

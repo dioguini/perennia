@@ -209,55 +209,88 @@ class HealthMenu(Screen):
     # -------------------------------------------------------- análises
 
     def _labs(self) -> None:
+        """Análises: a lista das colheitas; Enter numa colheita abre o relatório dela,
+        com os botões em baixo (Comentário geral do médico, Editar…)."""
         a = self.app
         labs.ensure(a.db)
         reps = health.lab_reports(a.db)
-        ids = [r["id"] for r in reps]
-        if self.report_id not in ids:
-            self.report_id = ids[0] if ids else None
+        if self.report_id not in [r["id"] for r in reps]:
+            self.report_id = None
+        if self.report_id is None:
+            self._labs_list(reps)
+            return
+        r = health.lab_report(a.db, self.report_id)
         rows: list[Item] = []
-        r = health.lab_report(a.db, self.report_id) if self.report_id else None
-        if r is None:
+        n_out = next((x["out_of_range"] for x in reps if x["id"] == r["id"]), 0)
+        if n_out:
+            rows.append(Item(tr("Fora do intervalo", "Out of range"), value=str(n_out),
+                             detail=tr("marcados com ▲ (alto) ou ▼ (baixo)",
+                                       "marked ▲ (high) or ▼ (low)"), enabled=False))
+        if r.get("doctor_feedback"):
+            rows.append(Item(tr("Comentário do médico", "Doctor's comment"),
+                             detail=_excerpt(r.get("doctor_feedback"), 160), enabled=False))
+        for area, panel, results in labs.grouped_results(a.db, r["id"]):
+            head = area if area and area != "—" else tr("Resultados", "Results")
+            rows.append(Item(head + (f" · {panel}" if panel else ""), header=True))
+            for x in results:
+                rows.append(self._result_row(r, x))
+        rows += [Item(tr("Colheitas", "Collections"), button=True, action=self._labs_back),
+                 Item(tr("Catálogo", "Catalog"), button=True,
+                      action=lambda: a.push(ParameterCatalog(a))),
+                 Item(tr("Comentário geral do médico", "Doctor's general comment"), button=True,
+                      action=self._edit_general),
+                 Item(tr("Editar esta colheita", "Edit this collection"), button=True,
+                      primary=True, action=lambda: a.push(LabReportEditor(a, self.report_id)))]
+        self.chrome.set(self.TITLE(),
+                        f"{r['done_on']}" + (f" · {r['lab']}" if r.get("lab") else "") + " · "
+                        + tr("valor atual e os 3 anteriores · Enter num resultado escreve o "
+                             "comentário do médico", "current value and the 3 before · Enter "
+                             "on a result writes the doctor's comment"), self.footer())
+        self.list.set_items(rows, keep_index=True)
+
+    def _labs_list(self, reps: list[dict]) -> None:
+        a = self.app
+        rows: list[Item] = []
+        for r in reps:
+            bits = [r["lab"]] if r.get("lab") else []
+            if r["out_of_range"]:
+                bits.append(tr("{n} fora do intervalo", "{n} out of range", n=r["out_of_range"]))
+            if r.get("doctor_feedback"):
+                bits.append("🩺 " + _excerpt(r["doctor_feedback"], 50))
+            rows.append(Item(r["done_on"], value=tr("{n} resultados", "{n} results", n=r["n"]),
+                             detail=" · ".join(bits),
+                             action=lambda rid=r["id"]: self._open_report(rid),
+                             data=("report", r["id"])))
+        if not reps:
             rows.append(Item(tr("Ainda não há análises", "No lab results yet"),
                              detail=tr("cria uma (botão em baixo) ou importa do Excel/CSV",
                                        "create one (button below) or import from Excel/CSV"),
                              enabled=False))
-        else:
-            n_out = next((x["out_of_range"] for x in reps if x["id"] == r["id"]), 0)
-            rows += [Item(tr("Colheita", "Collection"),
-                          value=f"{r['done_on']}" + (f" · {r['lab']}" if r.get("lab") else ""),
-                          detail=tr("Enter escolhe outra data (lista com pesquisa) · {n} "
-                                    "colheitas", "Enter picks another date (searchable list) · "
-                                    "{n} collections", n=len(reps)),
-                          action=self._pick_report),
-                     Item(tr("Comentário geral do médico", "Doctor's general comment"),
-                          value="" if r.get("doctor_feedback") else tr("escrever", "write"),
-                          detail=_excerpt(r.get("doctor_feedback"), 140) or
-                          tr("Enter escreve o comentário geral desta colheita",
-                             "Enter writes this collection's general comment"),
-                          action=self._edit_general)]
-            for area, panel, results in labs.grouped_results(a.db, r["id"]):
-                head = area if area and area != "—" else tr("Resultados", "Results")
-                rows.append(Item(head + (f" · {panel}" if panel else ""), header=True))
-                for x in results:
-                    rows.append(self._result_row(r, x))
-            if n_out:
-                rows.insert(2, Item(tr("Fora do intervalo", "Out of range"), value=str(n_out),
-                                    detail=tr("marcados com ▲ (alto) ou ▼ (baixo)",
-                                              "marked ▲ (high) or ▼ (low)"), enabled=False))
-        rows += [Item(tr("+ Nova análise", "+ New lab report"), button=True,
-                      action=lambda: a.push(LabReportEditor(a, None))),
-                 Item(tr("Catálogo", "Catalog"), button=True,
+        rows += [Item(tr("Catálogo", "Catalog"), button=True,
                       action=lambda: a.push(ParameterCatalog(a))),
-                 Item(tr("Editar esta colheita", "Edit this collection"), button=True,
-                      primary=True, enabled=r is not None,
-                      action=lambda: a.push(LabReportEditor(a, self.report_id)))]
-        self.chrome.set(self.TITLE(),
-                        tr("Análises clínicas · valor atual e os 3 anteriores · Enter num "
-                           "resultado escreve o comentário do médico",
-                           "Lab results · current value and the 3 before · Enter on a result "
-                           "writes the doctor's comment"), self.footer())
+                 Item(tr("+ Nova análise", "+ New lab report"), button=True, primary=True,
+                      action=lambda: a.push(LabReportEditor(a, None)))]
+        self.chrome.set(self.TITLE(), tr("As colheitas · Enter abre o relatório de uma",
+                                         "The collections · Enter opens one's report"),
+                        self.footer())
         self.list.set_items(rows, keep_index=True)
+
+    def _open_report(self, report_id: int) -> None:
+        self.report_id = report_id
+        self.list.index = 0
+        self.enter()
+
+    def _labs_back(self) -> None:
+        self.report_id = None
+        self.list.index = 0
+        self.enter()
+
+    def go_back(self) -> None:
+        """Esc ou «Voltar»: dentro de uma colheita volta à lista das colheitas."""
+        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "labs" and self.report_id is not None:
+            self._labs_back()
+            return
+        super().go_back()
 
     def _result_row(self, r: dict, x: dict) -> Item:
         flag = health.flag(x)
@@ -279,19 +312,6 @@ class HealthMenu(Screen):
         return Item(f"{name}{mark}", value=f"{labs.value_text(x)} {x['unit'] or ''}{trend}",
                     detail=detail, action=lambda rid=x["id"], nm=name: self._edit_comment(
                         rid, nm), data=("result", x["id"]))
-
-    def _pick_report(self) -> None:
-        from velo.ui.pickers import ChoicePopup
-        reps = health.lab_reports(self.app.db)
-        names = [f"{x['done_on']}" + (f" · {x['lab']}" if x.get("lab") else "")
-                 + f" · {x['n']} " + tr("análises", "results") for x in reps]
-        cur = next((i for i, x in enumerate(reps) if x["id"] == self.report_id), 0)
-
-        def pick(k: int) -> None:
-            self.report_id = reps[k]["id"]
-            self.list.index = 0
-            self.enter()
-        self.app.push(ChoicePopup(self.app, tr("Colheita", "Collection"), names, cur, pick))
 
     def _edit_general(self) -> None:
         r = health.lab_report(self.app.db, self.report_id)
@@ -482,15 +502,17 @@ class MetricsManager(Screen):
 
     def enter(self) -> None:
         a = self.app
-        rows = [Item(tr("+ Nova métrica", "+ New metric"),
-                     action=lambda: a.push(MetricEditor(a, None)))]
+        rows = []
         for m in health.metrics(a.db, include_inactive=True):
             rows.append(Item(("✓ " if m["active"] else "✗ ") + m["name"],
                              value=kind_name(m["kind"]) + (f" · {m['unit']}" if m["unit"] else ""),
                              detail=group_name(m["grp"]),
                              action=lambda mid=m["id"]: a.push(MetricEditor(a, mid)),
                              data=("metric", m["id"], m["active"])))
-        self.chrome.set(tr("Métricas do diário", "Log metrics"), f"{len(rows) - 1}",
+        n = len(rows)
+        rows.append(Item(tr("+ Nova métrica", "+ New metric"), button=True, primary=True,
+                         action=lambda: a.push(MetricEditor(a, None))))
+        self.chrome.set(tr("Métricas do diário", "Log metrics"), f"{n}",
                         tr("Enter editar · A ligar/desligar · ←/→ ordem · Esc voltar",
                            "Enter edit · A on/off · ←/→ order · Esc back"))
         self.list.set_items(rows, keep_index=True)

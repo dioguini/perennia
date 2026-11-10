@@ -289,8 +289,7 @@ class TestSettingsTabs(tg.GuiCase):
         self.pick("Definições")
         scr = self.screen()
         self.assertEqual(scr.tab_labels(), ["Atleta", "Geral", "Desportos", "Ecrã e idioma",
-                                            "Ligações Externas", "Sincronização",
-                                            "Atalhos de teclado"])
+                                            "Ligações Externas", "Atalhos de teclado"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
         ftp = next(i for i in scr.list.items if i.label.startswith("FTP"))
         self.assertIn("limiar", ftp.detail)                   # cada métrica explicada
@@ -464,21 +463,18 @@ class TestSyncTabGui(tg.GuiCase):
         make_garmindb(folder)
         make_activities(folder, metric=False)
         self.app.db.set("garmindb_dir", str(folder))
-        self.pick("Definições")
-        self.pick("Sincronização")
-        scr = self.screen()
+        scr = self.open_sync()
         self.select("Período")
         self.press(key.RIGHT, key.RIGHT)                      # mais recente → tudo → intervalo
         self.assertEqual(scr.sync.opts.period, "range")
-        self.assertEqual(gsync.load_options(self.app.db).period, "latest")   # por guardar
+        self.assertEqual(gsync.load_options(self.app.db).period, "range")    # grava logo
         self.assertIn("Desde", [i.label for i in scr.list.items])
         self.select("Desde")
         self.press(key.LEFT)
         self.select("HRV")
         self.press(key.RIGHT)                                 # tira a HRV (setas, não Enter)
         imp = next(i for i in scr.list.items if i.label == "Só importar")
-        self.assertFalse(imp.enabled)                         # guarda primeiro
-        self.save()
+        self.assertTrue(imp.enabled)                          # já está tudo gravado
         o = gsync.load_options(self.app.db)
         self.assertEqual(o.start, (date.today() - timedelta(days=91)).isoformat())
         self.assertNotIn("hrv", o.stats)
@@ -487,7 +483,6 @@ class TestSyncTabGui(tg.GuiCase):
         self.assertNotIn("--hrv", cmd)
         self.select("Período")
         self.press(key.RIGHT)                                 # volta a «só o mais recente»
-        self.save()
         self.pick("Só importar")
         self.assertEqual(scr.sync.last_report["activities"], 3)
         self.press(key.ESCAPE)

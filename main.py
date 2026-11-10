@@ -87,7 +87,7 @@ def main() -> int:
                              "(.csv/.xlsx), trainingpeaks (.csv de atividades) ou atividade "
                              "(um .fit ou .tcx, guardado no desporto respetivo) ou csv (artigos, "
                              "exercícios, grupos musculares… — descobre o conjunto pelo "
-                             "cabeçalho)")
+                             "cabeçalho) ou saude (o .csv do diário de saúde por data)")
     parser.add_argument("--csv-modelo", default=None, metavar="CONJUNTO",
                         help="grava o modelo .csv de um conjunto (artigos, exercicios, grupos, "
                              "disciplinas, testes, material) e sai")
@@ -142,9 +142,18 @@ def csv_cli(args) -> int:
     from velo.core.workout_download import downloads_dir
     from velo.datadir import data_dir_for, database_path
     key = args.csv_modelo or args.csv_exportar
+    if key == "saude":                       # os campos do diário de saúde, por data
+        from velo.core import health_csv
+        db = Database(database_path(data_dir_for(args.data_dir)))
+        try:
+            print(health_csv.write(db, args.destino or downloads_dir(),
+                                   what="template" if args.csv_modelo else "export"))
+        finally:
+            db.close()
+        return 0
     if key not in csv_sync.DATASETS:
-        print("Conjunto desconhecido: " + key + "\nExistem: " + ", ".join(csv_sync.DATASETS),
-              file=sys.stderr)
+        print("Conjunto desconhecido: " + key + "\nExistem: " + ", ".join(csv_sync.DATASETS)
+              + ", saude", file=sys.stderr)
         return 2
     db = Database(database_path(data_dir_for(args.data_dir)))
     try:
@@ -163,7 +172,7 @@ def import_cli(args) -> int:
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
-              "trainingpeaks, atividade, csv", file=sys.stderr)
+              "trainingpeaks, atividade, csv, saude", file=sys.stderr)
         return 2
     if not Path(path).is_file():
         print(f"Erro: não encontro {path}", file=sys.stderr)

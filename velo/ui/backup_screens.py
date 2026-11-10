@@ -1,4 +1,6 @@
-"""O menu **Backups e reposição** do ecrã inicial.
+"""O menu **Backups e Sincronização** (botão da barra do topo), com três separadores:
+**Exportar**, **Repor** e **Sincronização** (GarminDB, HRV4Training, Análises,
+TrainingPeaks, Upload manual, CSV, Saúde — as opções gravam-se logo, sem «Guardar»).
 
 * **Exportar** — tudo (exportação completa) ou só as componentes que
   escolheres; o .zip fica na pasta `backups` dos teus dados, segmentado por
@@ -22,7 +24,7 @@ from velo.core import backup as bk
 from velo.core.i18n import tr
 from velo.ui.app import Screen
 from velo.ui.sport_screens import EditPopup
-from velo.ui.widgets import Item
+from velo.ui.widgets import Item, TabBar
 
 SEARCH = ("~/Downloads", "~/Transferências", "~/Documents", "~/Documentos", "~/Desktop",
           "~/Área de Trabalho")
@@ -77,28 +79,112 @@ def describe(m: dict) -> str:
 
 class BackupScreen(Screen):
     TABBED = True
-    TAB_KEYS = ("export", "restore")
+    TAB_KEYS = ("export", "restore", "sync")
 
     def __init__(self, app, tab: int = 0):
         super().__init__(app)
+        from velo.ui.sync_screens import SyncPanel, SyncStore
         self.chosen = set(bk.DEFAULT_KEYS)
         self.found: list[dict] = []
+        self.sync = SyncPanel(self, store=SyncStore(app.db))
+        self.sync_tab = 0
+        w, h = app.window.width, app.window.height
+        self.sync_tabs = TabBar(self.sync.source_labels(), 48, self.content_top(h) + 6, w - 96)
         if tab:
             self.tab = tab
             if self.tabs is not None:
                 self.tabs.select(tab)
 
     def tab_labels(self) -> list[str]:
-        return [tr("Exportar", "Export"), tr("Repor", "Restore")]
+        return [tr("Exportar", "Export"), tr("Repor", "Restore"),
+                tr("Sincronização", "Synchronisation")]
 
     def on_tab(self) -> None:
         pass
 
+    @property
+    def view(self) -> str:
+        return self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
+
     def enter(self) -> None:
-        if self.TAB_KEYS[self.tab % 2] == "export":
+        h = self.app.window.height
+        self.list.y = self.content_top(h)
+        if self.view == "export":
             self._export_items()
-        else:
+        elif self.view == "restore":
             self._restore_items()
+        else:
+            self._sync_items()
+
+    # --------------------------------------------------------- sincronização
+
+    def _sync_items(self) -> None:
+        h = self.app.window.height
+        src = self.sync.SOURCES[self.sync_tab % len(self.sync.SOURCES)][0]
+        self.sync_tabs.set_labels(self.sync.source_labels())
+        self.sync_tabs.select(self.sync_tab)
+        self.list.y = self.content_top(h) - 52              # por baixo dos separadores
+        self.chrome.set(tr("Backups e Sincronização", "Backups and Synchronisation"),
+                        tr("Traz dados de fora para a Perennia · as opções gravam-se logo",
+                           "Bring outside data into Perennia · options are saved at once"),
+                        tr("←/→ mudar · Enter abrir · Tab separador · Esc voltar",
+                           "←/→ change · Enter open · Tab tab · Esc back"))
+        self.list.set_items(self.sync.items(src), keep_index=True)
+
+    def update(self, dt: float) -> None:
+        self.sync.update()
+
+    def draw(self) -> None:
+        super().draw()
+        if self.view == "sync":
+            self.sync_tabs.draw()
+
+    def on_mouse(self, x: int, y: int) -> bool:
+        if self.view == "sync":
+            i = self.sync_tabs.hit(x, y)
+            if i is not None:
+                self.sync_tab = i
+                self.list.index = 0
+                self.enter()
+                return True
+        return super().on_mouse(x, y)
+
+    def on_resize(self, w: int, h: int) -> None:
+        super().on_resize(w, h)
+        self.sync_tabs.layout(48, self.content_top(h) + 6, w - 96)
+        self.enter()
+
+    def text_input(self, field: str, text: str) -> None:
+        self.sync.text(field, text)
+
+    def text_backspace(self, field: str) -> None:
+        self.sync.text(field, None)
+
+    def _sync_enter_row(self, item) -> bool:
+        d = item.data
+        from datetime import date
+        if d in ("sync:start", "sync:end"):
+            from velo.ui.pickers import pick_date
+            field = d[5:]
+            o = self.sync.opts
+            o.clean()
+
+            def put(iso: str, f=field) -> None:
+                setattr(o, f, iso)
+                if o.start and o.end and o.start > o.end:
+                    if f == "start":
+                        o.end = o.start
+                    else:
+                        o.start = o.end
+                self.sync.save(o)
+                self.enter()
+            pick_date(self.app, item.label, getattr(o, field) or date.today().isoformat(), put,
+                      max_day=date.today())
+            return True
+        if d == "sync:period" or str(d).startswith(("sync:opt:", "sync:stat:")):
+            from velo.ui.pickers import open_choices
+            return open_choices(self, item, lambda s=1, f=d[5:]: self.sync.adjust(f, s, False))
+        return False
 
     # ------------------------------------------------------------ exportar
 
@@ -204,6 +290,15 @@ class BackupScreen(Screen):
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
+        if self.view == "sync" and item is not None and isinstance(item.data, str) and \
+                item.data.startswith("sync:"):
+            if symbol in (key.LEFT, key.RIGHT):
+                self.sync.adjust(item.data[5:], 1 if symbol == key.RIGHT else -1,
+                                 bool(modifiers & key.MOD_SHIFT))
+                return True
+            if symbol in (key.ENTER, key.RETURN) and item.action is None and \
+                    self._sync_enter_row(item):
+                return True
         data = item.data if item is not None and isinstance(item.data, tuple) else ()
         if symbol in (key.LEFT, key.RIGHT) and data and data[0] in ("all", "comp"):
             item.action()
