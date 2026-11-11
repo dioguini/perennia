@@ -16,8 +16,8 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
 
 SPORTS = ("cycling", "rowing", "running", "swimming")
 

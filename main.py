@@ -14,17 +14,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from velo import paths  # noqa: E402
+from perennia import paths  # noqa: E402
 
 
 def self_test() -> int:
     """Confirma que o núcleo funciona nesta máquina, sem abrir janela."""
     import tempfile, time
-    from velo.core import climbs, fit, gpx, physics
-    from velo.core.db import Athlete, Database
-    from velo.core.ride import RideEngine
-    from velo.io.hub import SensorHub
-    from velo.io.sim import SimulatedTrainer
+    from perennia.core import climbs, fit, gpx, physics
+    from perennia.core.db import Athlete, Database
+    from perennia.core.ride import RideEngine
+    from perennia.io.hub import SensorHub
+    from perennia.io.sim import SimulatedTrainer
 
     sample_gpx = paths.resource("tests", "teste.gpx")
     if not sample_gpx.exists():
@@ -93,6 +93,18 @@ def main() -> int:
                              "disciplinas, testes, material) e sai")
     parser.add_argument("--csv-exportar", default=None, metavar="CONJUNTO",
                         help="exporta um conjunto para .csv e sai")
+    parser.add_argument("--adhoc-exportar", default=None, metavar="FONTE",
+                        help="exporta para .csv uma fonte da Análise AdHoc e sai (sessions, "
+                             "sets, daily, labs ou tests); com --vista usa os campos e filtros "
+                             "dessa vista guardada")
+    parser.add_argument("--vista", default=None,
+                        help="com --adhoc-exportar: o nome de uma vista guardada")
+    parser.add_argument("--nome", default=None,
+                        help="com --adhoc-exportar: o nome do ficheiro (sem pastas)")
+    parser.add_argument("--separador", default=None,
+                        help="com --adhoc-exportar: ; , | ou tab (por omissão, o das Definições)")
+    parser.add_argument("--decimal", default=None,
+                        help="com --adhoc-exportar: . ou , (por omissão, o das Definições)")
     parser.add_argument("--testar-hr-ant", nargs="?", const=30.0, default=None, type=float,
                         metavar="SEGUNDOS",
                         help="testa só a FC por ANT+ (cinta ou relógio a transmitir) e sai: abre "
@@ -106,13 +118,15 @@ def main() -> int:
     if args.backup is not None or args.restore:
         return backup_cli(args)
     if args.testar_hr_ant is not None:
-        from velo.io import ant
+        from perennia.io import ant
         res = ant.hr_test(args.testar_hr_ant)
         return 0 if res["valid"] else 1
     if args.importar:
         return import_cli(args)
     if args.csv_modelo or args.csv_exportar:
         return csv_cli(args)
+    if args.adhoc_exportar:
+        return adhoc_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -124,7 +138,7 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    from velo.ui.app import App, _default_data_dir
+    from perennia.ui.app import App, _default_data_dir
     try:
         fullscreen = False if args.window else args.fullscreen
         app = App(data_dir=args.data_dir, width=args.width, height=args.height,
@@ -145,13 +159,13 @@ def main() -> int:
 
 def csv_cli(args) -> int:
     """O modelo ou a exportação de um conjunto em .csv, sem abrir a janela."""
-    from velo.core import csv_sync
-    from velo.core.db import Database
-    from velo.core.workout_download import downloads_dir
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import csv_sync
+    from perennia.core.db import Database
+    from perennia.core.workout_download import downloads_dir
+    from perennia.datadir import data_dir_for, database_path
     key = args.csv_modelo or args.csv_exportar
     if key == "saude":                       # os campos do diário de saúde, por data
-        from velo.core import health_csv
+        from perennia.core import health_csv
         db = Database(database_path(data_dir_for(args.data_dir)))
         try:
             print(health_csv.write(db, args.destino or downloads_dir(),
@@ -172,11 +186,31 @@ def csv_cli(args) -> int:
     return 0
 
 
+def adhoc_cli(args) -> int:
+    """O .csv da Análise AdHoc pela linha de comandos, sem abrir a janela."""
+    from perennia.core import adhoc
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    sep = "\t" if (args.separador or "").lower() in ("tab", "\\t") else args.separador
+    db = Database(database_path(data_dir))
+    try:
+        path, n = adhoc.cli_export(db, data_dir, args.adhoc_exportar, args.destino, args.vista,
+                                   args.nome, sep, args.decimal)
+    except (ValueError, OSError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 2
+    finally:
+        db.close()
+    print(f"{path}  ({n} linhas)")
+    return 0
+
+
 def import_cli(args) -> int:
     """Importações pela linha de comandos, sem abrir a janela."""
-    from velo.core import file_import
-    from velo.core.db import Database
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import file_import
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
@@ -199,9 +233,9 @@ def import_cli(args) -> int:
 
 def backup_cli(args) -> int:
     """Backups pela linha de comandos, sem abrir a janela."""
-    from velo.core import backup
-    from velo.core.db import Database
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import backup
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
     data_dir = data_dir_for(args.data_dir)
     keys = [k.strip() for k in args.componentes.split(",")] if args.componentes else None
     unknown = [k for k in keys or [] if k not in backup.BY_KEY]

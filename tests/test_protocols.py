@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from velo.io import ant, ble
+from perennia.io import ant, ble
 
 
 class TestBleUuids(unittest.TestCase):
@@ -480,7 +480,7 @@ class TestPedalsBeatTheTrainer(unittest.TestCase):
     """Rolo e Assioma em simultâneo: potência e balanço vêm sempre dos pedais."""
 
     def test_priority_is_applied_to_push_sensors(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         hub = SensorHub()
         stick = ant.AntStick()
         trainer = ant.AntSensor(stick, 0, ant.AntDiscovered(555, ant.DEVICE_FEC, "rolo"), hub)
@@ -519,7 +519,7 @@ class TestTorqueEffectivenessAndSmoothness(unittest.TestCase):
         self.assertEqual(d, {"event_count": 7, "ps_combined": 25.0})
 
     def test_pedals_push_them_to_the_hub(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         hub = SensorHub()
         pedals = ant.AntSensor(ant.AntStick(), 3,
                                ant.AntDiscovered(4321, ant.DEVICE_POWER, "assioma"), hub)
@@ -558,7 +558,7 @@ class TestAutoConnect(unittest.TestCase):
     """ANT+ primeiro; o que falhar vai por Bluetooth; o rolo só por um caminho."""
 
     def setUp(self):
-        from velo.io import autoconnect
+        from perennia.io import autoconnect
         self.ac = autoconnect
         self.ant_pedals = ant.AntDiscovered(4321, ant.DEVICE_POWER, "ANT+ Potência #4321")
         self.ant_fec = ant.AntDiscovered(555, ant.DEVICE_FEC, "ANT+ Rolo FE-C #555")
@@ -628,7 +628,7 @@ class TestTransportFailover(unittest.TestCase):
     """A mesma Assioma por ANT+ e por Bluetooth: ANT+ manda, Bluetooth cobre."""
 
     def test_ant_wins_and_bluetooth_takes_over_when_it_drops(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         now = [0.0]
         hub = SensorHub(clock=lambda: now[0])
         hub.preferred_transport = "ant"
@@ -653,7 +653,7 @@ class TestTransportFailover(unittest.TestCase):
         self.assertEqual(hub.reading().power_w, 250)
 
     def test_bonus_never_beats_a_stronger_role(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         hub = SensorHub()
         trainer = _FakeSensor("ant", "ant:555:17")
         pedals = _FakeSensor("ble", "ble:AA:01")
@@ -667,7 +667,7 @@ class TestStoppedPedalsAreZeroed(unittest.TestCase):
     """Pedais parados repetem a última página; ao fim de 3 s conta como zero."""
 
     def setUp(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         self.now = [0.0]
         self.hub = SensorHub(clock=lambda: self.now[0])
         self.pedals = ant.AntSensor(ant.AntStick(), 3,
@@ -736,7 +736,7 @@ class TestStoppedPedalsAreZeroed(unittest.TestCase):
         self.assertEqual(timeout, bytes((3, ant.SEARCH_FOREVER)))
 
     def test_ble_cranks_that_stop_turning_give_zero(self):
-        from velo.io.hub import SensorHub
+        from perennia.io.hub import SensorHub
         hub = SensorHub(clock=lambda: self.now[0])
         info = ble.Discovered("AA:01", "ASSIOMA", ["cps"], "power_meter")
         sensor = ble.BleSensor(info, hub)

@@ -23,8 +23,8 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 from tests import test_gui as tg  # noqa: E402
-from velo.core.i18n import PT, set_language  # noqa: E402
-from velo.ui import app as app_mod  # noqa: E402
+from perennia.core.i18n import PT, set_language  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
 
 # Linhas que não se ativam: sair, apagar, rede, aparelhos reais, abrir o browser…
 SKIP = ("sair", "desligar", "quit", "power off", "apagar", "delete", "eliminar", "remover",
@@ -180,11 +180,11 @@ class TestSessionFuzz(tg.GuiCase):
                 return                                  # a sessão acabou (terminar/guardar)
 
     def test_every_session_survives_random_keys(self):
-        from velo.core import gym
-        from velo.io import rower as rio
-        from velo.ui import endurance_screens as es
-        from velo.ui import rowing_screens as rs
-        from velo.ui import sport_screens as ss
+        from perennia.core import gym
+        from perennia.io import rower as rio
+        from perennia.ui import endurance_screens as es
+        from perennia.ui import rowing_screens as rs
+        from perennia.ui import sport_screens as ss
 
         def cycling():
             wid = self.app.db.workouts()[0]["id"]

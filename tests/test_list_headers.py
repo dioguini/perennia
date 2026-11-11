@@ -15,7 +15,7 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import widgets as wd  # noqa: E402
+from perennia.ui import widgets as wd  # noqa: E402
 
 
 class TestHeaderItems(tg.GuiCase):

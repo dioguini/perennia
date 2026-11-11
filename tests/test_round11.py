@@ -19,22 +19,22 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo import paths  # noqa: E402
-from velo.core import calendar_view as cv  # noqa: E402
-from velo.core import gym, health, stats, strength_import  # noqa: E402
-from velo.core import health_csv as hcsv  # noqa: E402
-from velo.core import longevity as lg  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.core import tags as tag_core  # noqa: E402
-from velo.core.db import Database  # noqa: E402
-from velo.core.units import hms  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
-from velo.gfx import icons  # noqa: E402
-from velo.ui import day_popups as dp  # noqa: E402
-from velo.ui import gym_screens as gs  # noqa: E402
-from velo.ui import pickers  # noqa: E402
-from velo.ui import session_setup as sessetup  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
+from perennia import paths  # noqa: E402
+from perennia.core import calendar_view as cv  # noqa: E402
+from perennia.core import gym, health, stats, strength_import  # noqa: E402
+from perennia.core import health_csv as hcsv  # noqa: E402
+from perennia.core import longevity as lg  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.core import tags as tag_core  # noqa: E402
+from perennia.core.db import Database  # noqa: E402
+from perennia.core.units import hms  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
+from perennia.gfx import icons  # noqa: E402
+from perennia.ui import day_popups as dp  # noqa: E402
+from perennia.ui import gym_screens as gs  # noqa: E402
+from perennia.ui import pickers  # noqa: E402
+from perennia.ui import session_setup as sessetup  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
 
 
 def fresh_db() -> Database:
@@ -155,7 +155,7 @@ class TestButtonIcons(tg.GuiCase):
         self.assertEqual(icons.button_text("+"), "")
 
     def test_every_icon_exists_and_every_button_in_a_popup_gets_one(self):
-        folder = paths.resource("velo", "assets", "icons")
+        folder = paths.resource("perennia", "assets", "icons")
         names = {icons.button_icon(x) for x in ("Guardar", "Apagar", "Cancelar", "Voltar",
                                                 "+ Novo treino", "Editar", "Exportar", "Importar",
                                                 "Pausa", "Terminar", "Começar", "OK", "Sim")}
@@ -183,7 +183,7 @@ class TestFitTags(tg.GuiCase):
         self.assertIn("Perennia", tag_core.fit_text(info))
 
     def test_a_new_tag_can_be_created_in_the_add_popup(self):
-        from velo.ui import tag_popup as tp
+        from perennia.ui import tag_popup as tp
         got = []
         pop = tp.AddTagPopup(self.app, [], got.append)
         self.app.push(pop)
@@ -243,7 +243,7 @@ class TestHomeCalendar(tg.GuiCase):
         self.assertTrue(buttons[1].startswith("Diário de saúde"))
         self.assertEqual(buttons[2], "+ Planear treino")
         self.pick("Diário de saúde")
-        from velo.ui.health_screens import DailyLogScreen
+        from perennia.ui.health_screens import DailyLogScreen
         self.assertIsInstance(self.screen(), DailyLogScreen)
 
     def test_future_day_plans_from_list_computer_or_builder(self):
@@ -300,7 +300,7 @@ class TestHomeCalendar(tg.GuiCase):
         self.assertEqual(cv.planned_for(self.app.db, day), [])
 
     def test_the_brief_date_picker_starts_today(self):
-        from velo.ui import brief
+        from perennia.ui import brief
         wid = self.app.db.workouts()[0]["id"]
         scr = brief.CyclingBrief(self.app, wid)
         self.app.push(scr)
@@ -525,7 +525,7 @@ class TestStrengthSessionScreen(tg.GuiCase):
         self.assertFalse(scr.confirming)
         self.press(key.F10)
         self.press(key.ENTER)                                # «Sim»: as etiquetas
-        from velo.ui import tag_popup as tp
+        from perennia.ui import tag_popup as tp
         self.assertIsInstance(self.screen(), tp.SessionTagsPopup)
         self.press(key.ENTER)
         self.assertIsInstance(self.screen(), ss.StrengthSummaryScreen)
@@ -586,7 +586,7 @@ class TestStrengthSessionScreen(tg.GuiCase):
 
 class TestPlanFromTheBrief(tg.GuiCase):
     def test_every_sport_brief_has_a_plan_button(self):
-        from velo.ui import brief
+        from perennia.ui import brief
         wid = self.app.db.workouts()[0]["id"]
         scr = brief.CyclingBrief(self.app, wid)
         self.app.push(scr)
@@ -595,7 +595,7 @@ class TestPlanFromTheBrief(tg.GuiCase):
         self.assertEqual(labels, ["Editar", "Planear", "Exportar", "Configurar sessão de treino"])
 
     def test_plan_puts_the_workout_in_the_calendar(self):
-        from velo.ui import brief
+        from perennia.ui import brief
         wid = self.app.db.workouts()[0]["id"]
         scr = brief.CyclingBrief(self.app, wid)
         self.app.push(scr)
@@ -639,7 +639,7 @@ class TestSportSubtitles(tg.GuiCase):
 
 class TestBackupRound11(tg.GuiCase):
     def test_the_longevity_formula_travels_with_the_settings(self):
-        from velo.core import backup
+        from perennia.core import backup
         db = self.app.db
         self.assertEqual(backup.unknown_tables(db), [])           # nenhuma tabela nova por tratar
         health.seed(db)
@@ -651,7 +651,7 @@ class TestBackupRound11(tg.GuiCase):
         self.assertIn(cid, [c["id"] for c in lg.formula(other)["custom"]])
 
     def test_the_sound_settings_and_free_sessions_travel_in_the_backup(self):
-        from velo.core import backup
+        from perennia.core import backup
         db = self.app.db
         cues.save_rules(db, [{"id": "r1", "when": "first", "seconds": 10, "per_s": 0,
                               "scope": "all"}])
@@ -689,8 +689,8 @@ class TestBackupRound11(tg.GuiCase):
 
 # ========================================================== ronda 12: avisos sonoros
 
-from velo.core import cues  # noqa: E402
-from velo.io import sound  # noqa: E402
+from perennia.core import cues  # noqa: E402
+from perennia.io import sound  # noqa: E402
 
 
 class TestCues(tg.GuiCase):
@@ -777,7 +777,7 @@ class TestSoundSettings(tg.GuiCase):
         scr = self.open_tab()
         self.pick("Nova regra")
         pop = self.screen()
-        from velo.ui import sound_screens as ssc
+        from perennia.ui import sound_screens as ssc
         self.assertIsInstance(pop, ssc.SoundRulePopup)
         self.select("Quando")
         self.press(key.RIGHT)                    # Primeiros
@@ -824,7 +824,7 @@ class TestSoundSettings(tg.GuiCase):
 
 class TestGymSessionCues(tg.GuiCase):
     def _open(self, tiles=None):
-        from velo.core import layouts
+        from perennia.core import layouts
         if tiles is not None:
             layouts.save(self.app.db, "gym", [list(tiles)])
         self.app.beeper = sound.SilentBeeper()
@@ -873,7 +873,7 @@ class TestGymSessionCues(tg.GuiCase):
         self.assertEqual(scr.tile_value("phase_time"), scr._phase_text(s.phase_seconds))
 
     def test_a_timed_set_counts_down_and_the_popup_names_it(self):
-        from velo.core import layouts
+        from perennia.core import layouts
         layouts.save(self.app.db, "gym", [["hr"]])
         self.app.beeper = sound.SilentBeeper()
         wid = next(w["id"] for w in gym.workouts(self.app.db, "strength")
@@ -914,7 +914,7 @@ class TestGymSessionCues(tg.GuiCase):
 
 class TestPlanCompleteStopsAndAsks(tg.GuiCase):
     def test_running_workout_done_opens_the_finish_dialog(self):
-        from velo.ui import endurance_screens as es_
+        from perennia.ui import endurance_screens as es_
         scr = es_.EnduranceSession(self.app, "running")
         self.app.push(scr)
         scr.engine.start()
@@ -923,7 +923,7 @@ class TestPlanCompleteStopsAndAsks(tg.GuiCase):
         self.assertTrue(scr._flow_paused())                  # o tempo parou
 
     def test_rowing_workout_done_opens_the_finish_dialog(self):
-        from velo.ui import rowing_screens as rs_
+        from perennia.ui import rowing_screens as rs_
         self.app.set_rower(rio.SimulatedRower())
         scr = rs_.RowingSessionScreen(self.app)
         self.app.push(scr)
@@ -932,7 +932,7 @@ class TestPlanCompleteStopsAndAsks(tg.GuiCase):
         self.assertTrue(scr.confirming)
 
     def test_cycling_workout_done_opens_the_finish_dialog(self):
-        from velo.ui import app as am
+        from perennia.ui import app as am
         wid = self.app.db.workouts()[0]["id"]
         ride = am.RideScreen(self.app, route_id=None, workout_id=wid, kind="workout",
                              ghosts=[], erg=True)
@@ -946,7 +946,7 @@ class TestPlanCompleteStopsAndAsks(tg.GuiCase):
 
 class TestFreeWorkoutEditAfterwards(tg.GuiCase):
     def finished_free_session(self):
-        from velo.ui import sport_screens as ss_
+        from perennia.ui import sport_screens as ss_
         wid = gym.workouts(self.app.db, "strength")[0]["id"]
         scr = ss_.StrengthSessionScreen(self.app, wid, free=True)
         self.app.push(scr)
@@ -988,8 +988,8 @@ class TestFreeWorkoutEditAfterwards(tg.GuiCase):
         self.assertFalse(st.edit_free_set(db, psets[0]["id"], reps=99))
 
     def test_the_analysis_has_an_edit_button_for_free_sessions(self):
-        from velo.ui import session_analysis as sa_ui
-        from velo.ui import strength_analysis_screens as sas
+        from perennia.ui import session_analysis as sa_ui
+        from perennia.ui import strength_analysis_screens as sas
         sid = self.finished_free_session()
         an = sa_ui.SessionAnalysis(self.app, "strength", sid)
         self.app.push(an)
@@ -1011,7 +1011,7 @@ class TestFreeWorkoutEditAfterwards(tg.GuiCase):
 
 # ============================================================ teste da FC por ANT+
 
-from velo.io import ant as ant_mod  # noqa: E402
+from perennia.io import ant as ant_mod  # noqa: E402
 
 
 class FakeStick:

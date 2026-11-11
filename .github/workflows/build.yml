@@ -10,8 +10,17 @@ on:
   push:
     tags: ["v*"]
 
+# Permissões mínimas: o GITHUB_TOKEN só lê o código. Só o passo que publica a
+# Release precisa de escrever, e por isso só o job tem essa permissão.
+# (As ações vêm por etiqueta de versão; para o máximo de segurança, fixa cada
+# uma pelo hash do commit, como se explica em RUN.md, «Segurança e segredos».)
+permissions:
+  contents: read
+
 jobs:
   build:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:

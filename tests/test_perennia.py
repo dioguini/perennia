@@ -1,4 +1,4 @@
-"""Perennia: o nome novo (e os dados da VeloLocal), os temas, os objetivos
+"""Perennia: o nome novo (e a migração dos dados da versão anterior), os temas, os objetivos
 dos treinos e dos blocos, o feedback no fim das sessões cruzado com o
 objetivo, o editor do ecrã de cada desporto, o calendário mensal e a
 carga e prontidão."""
@@ -21,23 +21,23 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import calendar_view as cv  # noqa: E402
-from velo.core import feedback as fbm  # noqa: E402
-from velo.core import layouts as lay  # noqa: E402
-from velo.core import objectives as ob  # noqa: E402
-from velo.core.blocks import Block, load_blocks  # noqa: E402
-from velo.core.db import Database  # noqa: E402
-from velo.gfx import theme  # noqa: E402
+from perennia.core import calendar_view as cv  # noqa: E402
+from perennia.core import feedback as fbm  # noqa: E402
+from perennia.core import layouts as lay  # noqa: E402
+from perennia.core import objectives as ob  # noqa: E402
+from perennia.core.blocks import Block, load_blocks  # noqa: E402
+from perennia.core.db import Database  # noqa: E402
+from perennia.gfx import theme  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import brief as br  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
-from velo.ui import calendar_screens as cs  # noqa: E402
-from velo.ui import feedback_screens as fs  # noqa: E402
-from velo.ui import session_setup  # noqa: E402
-from velo.ui import layout_screens as ls  # noqa: E402
-from velo.ui import widgets  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import brief as br  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import calendar_screens as cs  # noqa: E402
+from perennia.ui import feedback_screens as fs  # noqa: E402
+from perennia.ui import session_setup  # noqa: E402
+from perennia.ui import layout_screens as ls  # noqa: E402
+from perennia.ui import widgets  # noqa: E402
 
 
 def _iso(d: datetime) -> str:
@@ -45,31 +45,60 @@ def _iso(d: datetime) -> str:
 
 
 class TestNameAndData(unittest.TestCase):
-    def test_legacy_data_folder_and_database_are_kept(self):
+    def test_previous_data_folder_is_migrated_once_without_losing_anything(self):
+        from perennia import legacy
         tmp = Path(tempfile.mkdtemp())
         try:
             old = tmp / "velolocal"
             old.mkdir()
-            Database(old / "velolocal.db").conn.close()
+            db = Database(old / "velolocal.db")
+            wid = db.insert_workout("Teste", [], "velolocal")
+            db.conn.execute(
+                "INSERT INTO rides(id, status, started_at, ftp_at_ride_w, weight_at_ride_kg,"
+                " fit_path) VALUES ('r1', 'done', '2026-01-01T00:00:00Z', 200, 70, ?)",
+                (str(old / "rides" / "a.fit"),))
+            db.conn.commit()
+            db.conn.close()
             env = dict(os.environ)
             os.environ.pop("PERENNIA_DATA_DIR", None)
-            os.environ.pop("VELO_DATA_DIR", None)
             os.environ["XDG_DATA_HOME"] = str(tmp)
             try:
                 if os.name != "nt" and sys.platform != "darwin":
-                    self.assertEqual(app_mod._default_data_dir(), old)
-                path = app_mod._database_path(old)
-                self.assertEqual(path.name, "perennia.db")
-                self.assertTrue(path.exists())
-                self.assertFalse((old / "velolocal.db").exists())
+                    new = tmp / "perennia"
+                    self.assertEqual(app_mod._default_data_dir(), new)
+                    self.assertFalse(old.exists())
+                    path = app_mod._database_path(new)
+                    self.assertEqual(path.name, "perennia.db")
+                    self.assertTrue(path.exists())
+                    self.assertFalse((new / "velolocal.db").exists())
+                    db = Database(path)
+                    row = db.conn.execute("SELECT fit_path FROM rides WHERE id='r1'").fetchone()
+                    self.assertEqual(row["fit_path"], str(new / "rides" / "a.fit"))
+                    wk = db.conn.execute("SELECT source_format FROM workouts WHERE id = ?",
+                                         (wid,)).fetchone()
+                    self.assertEqual(wk["source_format"], "perennia")
+                    self.assertEqual(legacy.migrate_db(db.conn, new), 0)     # idempotente
+                    db.conn.close()
             finally:
                 os.environ.clear()
                 os.environ.update(env)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_no_previous_name_outside_legacy_module(self):
+        import re
+        root = Path(__file__).resolve().parents[1]
+        bad = []
+        for path in list((root / "perennia").rglob("*.py")) + list((root / "tools").rglob("*.py")) \
+                + [root / "main.py", root / "packaging" / "perennia.spec"]:
+            if path.name == "legacy.py":
+                continue
+            if re.search(r"velolocal|\bvelo\b", path.read_text(encoding="utf-8"), re.I):
+                bad.append(path.name)
+        self.assertEqual(bad, [])
+
     def test_activity_names_use_the_new_prefix_and_read_the_old(self):
-        from velo.core import naming
+        from perennia.core import naming
         self.assertEqual(naming.PREFIX, "perennia")
         self.assertEqual(naming.pretty("velolocal_2026-10-30_Força-A"), "Força A")
         self.assertEqual(naming.pretty("perennia_2026-10-30_Força-A"), "Força A")
@@ -94,7 +123,7 @@ class TestThemes(unittest.TestCase):
         theme.apply("ardosia")
         self.assertNotEqual(widgets.TEXT, before)
         self.assertEqual(widgets.TEXT[:3], theme.THEMES["ardosia"].text)
-        from velo.gfx import hud
+        from perennia.gfx import hud
         self.assertEqual(hud.TEXT[:3], theme.THEMES["ardosia"].text)
         theme.apply("perennia")
         self.assertEqual(widgets.TEXT[:3], theme.THEMES["perennia"].text)
@@ -130,7 +159,7 @@ class TestObjectives(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.db = Database(self.tmp / "perennia.db")
-        from velo.core import endurance, workout_library
+        from perennia.core import endurance, workout_library
         workout_library.seed(self.db)
         endurance.seed(self.db)
 
@@ -164,7 +193,7 @@ class TestObjectives(unittest.TestCase):
         self.assertIn("Z2", b.blocks[1].goal)
 
     def test_running_targets_are_paces_and_ranges(self):
-        from velo.core import endurance as en
+        from perennia.core import endurance as en
         wid = next(w["id"] for w in en.workouts(self.db, "running") if "800" in w["name"])
         b = ob.workout_brief(self.db, "running", wid)
         eff = next(x for x in b.blocks if x.repeat == 6)
@@ -211,7 +240,7 @@ class TestBriefScreens(tg.GuiCase):
         b = self.screen()
         self.assertIsInstance(b, bs.BlockBuilder)
         self.pick("Objetivo do treino")
-        from velo.ui.goal_popup import GoalPopup
+        from perennia.ui.goal_popup import GoalPopup
         self.assertIsInstance(self.screen(), GoalPopup)
         self.press(key.DELETE)
         self.type("Ritmo de estrada")
@@ -249,7 +278,7 @@ class TestBriefScreens(tg.GuiCase):
         b.sel = 1
         b.enter()
         self.pick("Objetivo do bloco")                 # os objetivos escrevem-se numa janela
-        from velo.ui.goal_popup import GoalPopup
+        from perennia.ui.goal_popup import GoalPopup
         self.assertIsInstance(self.screen(), GoalPopup)
         self.press(key.DELETE)
         self.type("Z2 sem picos")
@@ -378,7 +407,7 @@ class TestLayouts(tg.GuiCase):
         self.assertEqual(lay.keys(self.app.db, "running")[0], "max_hr")
 
     def test_running_session_uses_the_layout(self):
-        from velo.ui import endurance_screens as es
+        from perennia.ui import endurance_screens as es
         lay.save(self.app.db, "running", [["speed", "hr", None, "time", None, None, None,
                                            None]])
         scr = es.EnduranceSession(self.app, "running")
@@ -404,7 +433,7 @@ class TestLayouts(tg.GuiCase):
         self.press(key.R)                              # pergunta numa janela
         self.press(key.ENTER)                          # «Repor»
         self.save()
-        from velo.core.boxes import DEFAULT_BOXES
+        from perennia.core.boxes import DEFAULT_BOXES
         self.assertEqual(lay.load(db, "cycling")[0], DEFAULT_BOXES[0])
 
     def test_gym_tiles_follow_the_layout(self):
@@ -525,7 +554,7 @@ class TestLoadReadiness(tg.GuiCase):
                 " ftp_at_ride_w, weight_at_ride_kg) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (f"x{k}", "route", "alone", "completed", _iso(when), 3600, 3600, 60, 250, 72))
         db.conn.commit()
-        from velo.ui import load_screens
+        from perennia.ui import load_screens
         self.press(key.ESCAPE)
         self.pick("Estatísticas gerais")
         self.pick("Carga e prontidão")

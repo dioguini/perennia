@@ -24,14 +24,14 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.core import gym, layouts  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
-from velo.ui import keymap  # noqa: E402
-from velo.ui import rowing_screens as rs  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
+from perennia.core import gym, layouts  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import keymap  # noqa: E402
+from perennia.ui import rowing_screens as rs  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
 
 SPORTS = ("cycling", "running", "swimming", "rowing", "gym")
 
@@ -339,7 +339,7 @@ class TestSettingsDuringASession(SessionCase):
 
     def test_outside_a_session_all_the_tabs_are_there(self):
         self.pick("Definições")
-        self.assertEqual(len(self.screen().tab_labels()), 7)
+        self.assertEqual(len(self.screen().tab_labels()), 8)
         self.assertIsNone(self.screen().session)
 
 
@@ -405,7 +405,7 @@ class TestUnifiedShortcutsInSessions(SessionCase):
 
 class TestSkipBlockEverywhere(SessionCase):
     def test_n_skips_the_block_in_running(self):
-        from velo.core import endurance as en
+        from perennia.core import endurance as en
         wid = next(w["id"] for w in en.workouts(self.app.db, "running")
                    if w["name"].startswith("Intervalos"))
         scr = es.EnduranceSession(self.app, "running", workout_id=wid)
@@ -422,7 +422,7 @@ class TestSkipBlockEverywhere(SessionCase):
         self.assertEqual(e.workout.idx, idx0 + 2)
 
     def test_n_skips_the_block_in_rowing(self):
-        from velo.core import rowing as rw
+        from perennia.core import rowing as rw
         wid = next(w["id"] for w in rw.workouts(self.app.db) if w["name"].startswith("Base"))
         self.app.set_rower(rio.SimulatedRower())
         scr = rs.RowingSessionScreen(self.app, workout_id=wid)
@@ -616,7 +616,7 @@ class TestRunWithoutPyCharm(unittest.TestCase):
     def test_launchers_and_icons_exist(self):
         for rel in ("Perennia.bat", "perennia.sh", "criar_atalho_windows.bat",
                     "packaging/criar_atalho.ps1", "packaging/perennia.ico",
-                    "velo/assets/app_icon.png", "tools/make_app_icon.py"):
+                    "perennia/assets/app_icon.png", "tools/make_app_icon.py"):
             self.assertTrue((self.ROOT / rel).exists(), rel)
 
     def test_windows_scripts_are_plain_ascii(self):
@@ -633,7 +633,7 @@ class TestRunWithoutPyCharm(unittest.TestCase):
     def test_the_icon_is_a_real_ico_and_png(self):
         ico = (self.ROOT / "packaging" / "perennia.ico").read_bytes()
         self.assertEqual(ico[:4], b"\x00\x00\x01\x00")          # cabeçalho .ico
-        png = (self.ROOT / "velo" / "assets" / "app_icon.png").read_bytes()
+        png = (self.ROOT / "perennia" / "assets" / "app_icon.png").read_bytes()
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_the_spec_uses_the_icon_only_when_it_exists_on_windows(self):

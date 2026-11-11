@@ -22,23 +22,23 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import endurance as en  # noqa: E402
-from velo.core import fitness_tests as ft  # noqa: E402
-from velo.core import garmin_sync as gsync  # noqa: E402
-from velo.core import gym  # noqa: E402
-from velo.core import importers  # noqa: E402
-from velo.core import sport_challenges as sc  # noqa: E402
-from velo.core.db import Database  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import endurance as en  # noqa: E402
+from perennia.core import fitness_tests as ft  # noqa: E402
+from perennia.core import garmin_sync as gsync  # noqa: E402
+from perennia.core import gym  # noqa: E402
+from perennia.core import importers  # noqa: E402
+from perennia.core import sport_challenges as sc  # noqa: E402
+from perennia.core.db import Database  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
-from velo.ui import challenge_screens as chs  # noqa: E402
-from velo.ui import health_screens as hs  # noqa: E402
-from velo.ui import rowing_screens as rs  # noqa: E402
-from velo.ui import session_setup  # noqa: E402
-from velo.ui import widgets as wd  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import challenge_screens as chs  # noqa: E402
+from perennia.ui import health_screens as hs  # noqa: E402
+from perennia.ui import rowing_screens as rs  # noqa: E402
+from perennia.ui import session_setup  # noqa: E402
+from perennia.ui import widgets as wd  # noqa: E402
 
 
 # ================================================================== widgets
@@ -290,7 +290,7 @@ class TestSettingsTabs(tg.GuiCase):
         scr = self.screen()
         self.assertEqual(scr.tab_labels(), ["Atleta", "Geral", "Desportos", "Ecrã e idioma",
                                             "Ligações Externas", "Atalhos de teclado",
-                                            "Configurações sonoras"])
+                                            "Configurações sonoras", "Avançado"])
         self.assertIn("FTP do remo", [i.label for i in scr.list.items])
         ftp = next(i for i in scr.list.items if i.label.startswith("FTP"))
         self.assertIn("limiar", ftp.detail)                   # cada métrica explicada
@@ -416,7 +416,9 @@ class TestGarminSync(unittest.TestCase):
         self.assertEqual(cfg["data"]["sleep_start_date"], "01/15/2026")
         self.assertEqual(cfg["data"]["sleep_end_date"], "03/01/2026")
         self.assertEqual(cfg["data"]["weight_start_date"], "12/31/2019")   # não escolhido
-        self.assertEqual(cfg["credentials"]["password"], "segredo")        # intacto
+        # a palavra-passe já não fica no ficheiro (retirada na sincronização), nem na cópia .bak
+        self.assertEqual(cfg["credentials"]["password"], "")
+        self.assertNotIn("segredo", (self.cfg_dir / "GarminConnectConfig.json.bak").read_text())
         self.assertTrue((self.cfg_dir / "GarminConnectConfig.json.bak").exists())
         self.assertNotIn("--latest", calls[0])
         self.assertNotIn("segredo", " ".join(calls[0]))
@@ -538,9 +540,9 @@ class TestLapsInOnePlace(tg.GuiCase):
 
 class TestZoneColours(tg.GuiCase):
     def test_hr_zone_bars_use_the_builder_colours(self):
-        from velo.gfx.hud import zone_color
-        from velo.core import intensity as it
-        from velo.ui import stats_screens as sts
+        from perennia.gfx.hud import zone_color
+        from perennia.core import intensity as it
+        from perennia.ui import stats_screens as sts
         scr = sts.SportStatsScreen(self.app, "running")
         self.app.push(scr)
         scr.set_tab(4)                                        # Zonas de FC
@@ -572,7 +574,7 @@ class TestTestsShowBlocks(tg.GuiCase):
 
 class TestNoArchive(tg.GuiCase):
     def test_exercise_editor_has_no_archive_and_hidden_come_back(self):
-        from velo.ui import hub_screens as hub
+        from perennia.ui import hub_screens as hub
         eid = gym.exercises(self.app.db, "strength")[0]["id"]
         scr = hub.ExerciseEditor(self.app, eid, "strength")
         self.app.push(scr)
@@ -601,7 +603,7 @@ class TestRowingRecords(tg.GuiCase):
         rec = next(i for i in st.list.items if i.label == "Maior distância")
         self.assertIn("em ", rec.detail)
         rec.action()
-        from velo.ui import session_analysis as sa_ui
+        from perennia.ui import session_analysis as sa_ui
         self.assertIsInstance(self.screen(), sa_ui.SessionAnalysis)
         self.assertEqual(self.screen().kind, "row")
 
@@ -612,7 +614,7 @@ if __name__ == "__main__":
 
 class TestRideInfographics(tg.GuiCase):
     def _ride(self, seconds=900):
-        from velo.ui import app as am
+        from perennia.ui import app as am
         ride = am.RideScreen(self.app, route_id=self.route_id, workout_id=None, kind="route",
                              ghosts=[], erg=False)
         self.app.push(ride)
@@ -625,8 +627,8 @@ class TestRideInfographics(tg.GuiCase):
         return ride.engine.ride_id
 
     def test_detail_peaks_and_infographics(self):
-        from velo.core import peaks as pk
-        from velo.ui import ride_report_screens as rr
+        from perennia.core import peaks as pk
+        from perennia.ui import ride_report_screens as rr
         rid = self._ride()
         det = app_mod.RideDetailScreen(self.app, rid)        # a análise em separadores
         self.app.push(det)

@@ -7,7 +7,7 @@ atributos que não existem, ecrãs que rebentam ao abrir, contas que dão
 divisão por zero. É nesse tipo de erro que se gasta a primeira hora de
 quem instala a aplicação.
 
-Instala-se chamando `install()` antes de importar `velo.ui` ou `velo.gfx`.
+Instala-se chamando `install()` antes de importar `perennia.ui` ou `perennia.gfx`.
 """
 from __future__ import annotations
 
