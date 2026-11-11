@@ -1013,10 +1013,14 @@ class TestDevicesShowLiveValues(tg.GuiCase):
         self.press(key.F4)                                    # Dispositivos
         scr = self.screen()
         row = lambda: next(i for i in scr.list.items if "ANT+ Cardio #7125" in i.label)  # noqa
-        self.assertEqual(row().value, "ANT+ · sem dados")      # ligado, mas ainda mudo
+        info_row = lambda: [i for i in scr.list.items  # noqa: E731
+                            if "ANT+ Cardio #7125" in i.label][-1]   # a lista informativa do fim
+        self.assertEqual(row().value, "sem dados")             # ligado, mas ainda mudo
+        self.assertEqual(info_row().value, "ANT+ · sem dados")
         stick._dispatch(ant_mod.MSG_BROADCAST_DATA, bytes((2, 0x04, 0, 0, 0, 0, 0, 0, 61)))
         scr.update(1.2)                                        # refresca ao segundo
-        self.assertEqual(row().value, "ANT+ · 61 bpm")
+        self.assertEqual(row().value, "61 bpm")
+        self.assertEqual(info_row().value, "ANT+ · 61 bpm")
         self.assertIn("61 bpm", scr.chrome.subtitle.text)
         self.assertEqual(a.hub.live_of("ant:7125:120")["hr"][0], 61)
 

@@ -38,7 +38,7 @@ ROW_FIELDS: dict[str, tuple[str, str]] = {
     "wkg": ("W/kg", "W/kg"),
     "jps": ("Energia por remada", "Energy per stroke"),
     "distance": ("Distância", "Distance"),
-    "time": ("Tempo", "Time"),
+    "time": ("Tempo total", "Total time"),
     "strokes": ("Remadas", "Strokes"),
     "dps": ("Metros por remada", "Metres per stroke"),
     "hr": ("FC", "HR"),
@@ -72,7 +72,7 @@ ROW_DEFAULT = ["pace", "spm", "power", "distance",
 
 ENDURANCE_METRICS: dict[str, tuple[str, str]] = {
     "distance": ("Distância", "Distance"),
-    "time": ("Tempo", "Time"),
+    "time": ("Tempo total", "Total time"),
     "avg_pace": ("Ritmo médio", "Avg pace"),
     "cur_pace": ("Ritmo atual", "Current pace"),
     "speed": ("Velocidade", "Speed"),
@@ -89,7 +89,10 @@ ENDURANCE_METRICS: dict[str, tuple[str, str]] = {
     "target": ("Alvo do passo", "Step target"),
     "load": ("Carga", "Load"),
 }
-DEFAULT_RUN = ["distance", "avg_pace", "hr", "hr_zone", "lap", "lap_pace", "speed", "cur_pace"]
+# o tempo total e o da volta são métricas (já não há contador no topo); a velocidade e a
+# inclinação têm os seus botões ao meio do ecrã
+DEFAULT_RUN = ["time", "distance", "avg_pace", "cur_pace", "hr", "hr_zone", "lap_time",
+               "lap_pace"]
 DEFAULT_SWIM = ["distance", "avg_pace", "hr", "hr_zone", "lap", "lap_pace", "lengths", "avg_hr"]
 
 # ------------------------------------------------------------------ ginásio

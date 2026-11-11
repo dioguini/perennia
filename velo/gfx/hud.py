@@ -279,7 +279,7 @@ class Hud:
         w, h = self.window.width, self.window.height
 
         # ---- cabeçalho
-        self._clock = make_label("0:00", font_size=30, bold=True, color=ACCENT,
+        self._clock = make_label("", font_size=30, bold=True, color=ACCENT,
                                  anchor_x="center", anchor_y="top", batch=b)
         self._clock_cap = make_label("", font_size=10, color=DIM, anchor_x="center",
                                      anchor_y="top", batch=b)

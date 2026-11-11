@@ -46,6 +46,16 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 13** — a janela de **Dispositivos** tem um bloco por ligação (**Bluetooth**, **ANT+** e
+  **SEM HARDWARE**): os aparelhos encontrados ficam por baixo da sua ligação, os ligados levam o ✓ e
+  os valores ao vivo, e no fim há a lista informativa dos **Dispositivos ligados**; a **corrida livre**
+  tem, ao meio do ecrã, os cartões **Velocidade** (de 0,1 em 0,1 km/h) e **Inclinação** (de 0,5 em
+  0,5 %), com a escolha **registada ao segundo** para a análise do treino (e no `.fit`); a corrida e o
+  remo já não têm o contador do topo nem textos repetidos — o **tempo total** e o **tempo da volta**
+  são métricas — e a letra das voltas é maior; os treinos de ciclismo ficam, por agora, com o fundo da
+  cor do tema (sem 3D); a **Disposição dos painéis** do ginásio abre o ecrã do ginásio; e a linha
+  «Número de métricas no ecrã» saiu das Definições. Base de dados: uma coluna nova
+  (`endurance_samples.incline_pct`), acrescentada sozinha.
 - **Ronda 12** — as **Configurações sonoras** (Definições): bips para os primeiros/últimos N
   segundos de um bloco, de uma série ou de um descanso (por exemplo, os últimos 5 s com 2 bips por
   segundo), e os últimos 5 segundos **sempre à vista** (a caixa do tempo pisca); ao acabar o **último
@@ -185,8 +195,8 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Pesquisa na barra do topo** (sempre no mesmo sítio, Ctrl+F), **mensagens**
   a bold ao centro do título, e o calendário maior no ecrã inicial, com as
   próximas atividades à esquerda.
-- **Número de métricas do ecrã da sessão** à tua escolha (1 até ao máximo do
-  desporto): a sessão de corrida, remo e ginásio desenha-as sozinha.
+- **Métricas do ecrã da sessão** à tua escolha (1 até ao máximo do desporto, no editor
+  «Escolher as métricas do ecrã»): a sessão de corrida, remo e ginásio desenha-as sozinha.
 - **Upload manual** de uma atividade (.fit ou .tcx): vês o que o ficheiro tem
   e guardas no desporto respetivo; os testes têm a lista de resultados e
   janelas para registar, editar e apagar; qualquer treino se **exporta**

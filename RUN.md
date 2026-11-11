@@ -130,10 +130,13 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    No nome, escreve diretamente com o teclado (Backspace apaga). As setas
    ←/→ ajustam os valores (no peso, 0,1 kg por toque; Shift+←/→ dá 1 kg);
    Enter alterna unidades, idioma e pausa automática.
-2. **Dispositivos** (no topo, ou F4) → `Procurar Bluetooth` encontra o trainer, a cinta
-   e a máquina de remo; `Procurar ANT+` usa a antena USB.
-   Se ainda não quiseres hardware, escolhe **SEM HARDWARE - Trainer** (ou
-   **SEM HARDWARE - Remo**) e podes experimentar a aplicação toda.
+2. **Dispositivos** (no topo, ou F4) → a janela tem um bloco por ligação: **Bluetooth**
+   (`Procurar Bluetooth` encontra o trainer, a cinta e a máquina de remo) e **ANT+** (`Procurar
+   ANT+` usa a antena USB). Os aparelhos encontrados ficam **por baixo** da sua ligação, recuados;
+   os ligados levam o **✓** e o que estão a mandar agora («150 W · 88 rpm»); Enter liga ou desliga.
+   Se ainda não quiseres hardware, o bloco **SEM HARDWARE** tem o Trainer, a Banda cardíaca, o
+   Remo e a Passadeira simulados e podes experimentar a aplicação toda. No fim da janela, **Dispositivos
+   ligados** é só uma lista informativa (sem ações) com a ligação e os valores de cada aparelho.
 3. **Ciclismo** → separador Treinar → **Sessão de treino**: abre uma
    janela (grande) com os modos da sessão — **Livre**, **Carregar
    treino**, **Do computador**, **Challenge** e **Testes**. Tudo pode ser
@@ -147,8 +150,9 @@ Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
    rotas numa janela) ou **Carregar um .gpx novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
    e em Documentos), **Segmentos do Strava** dessa rota, **Modo de sessão**
    (sozinho ou comparação), ERG (nos treinos ERG) e **Auto lap**. A sessão
-   livre precisa de uma rota; num treino a rota é opcional (é paisagem). A
-   qualidade do 3D está em Definições → Ecrã e idioma.
+   livre precisa de uma rota; num treino a rota é opcional. **Por agora, as sessões de treino
+   não desenham o mundo 3D**: o fundo é da cor do tema (a sessão livre, com rota, continua a ter
+   a estrada). A qualidade do 3D está em Definições → Ecrã e idioma.
    O mundo é construído antes de arrancar — vês a barra "A preparar a rota".
 5. Pedala.
 
@@ -286,15 +290,14 @@ Sincronização**). Tab e Shift+Tab mudam de separador; também podes clicar.
   quando é manual: **níveis do rolo**, **n.º de resistências** (remo),
   **velocidade e inclinação máximas** (passadeira). O construtor de
   treinos respeita estes limites. O ginásio não tem Sessões Não ERG.
-- **Disposição do ecrã de sessão → Número de métricas no ecrã**: de 1 até
-  ao total de métricas que o desporto tem (as ligadas) — ←/→ muda de um em
-  um. O ecrã da sessão **desenha-as sozinho**: a grelha ajusta-se (8 →
-  4 × 2, 12 → 4 × 3…); no remo, mais de 12 passam a mais páginas (V muda);
-  no ginásio, as filas de 4. No ciclismo é o total das 6 caixas. O número e
-  as métricas também se mudam em **Escolher as métricas do ecrã** (o
-  editor mostra «12 de 16 métricas» e tem os botões **− Métrica** e
-  **+ Métrica**, ou as teclas **[** e **]**). Esse editor e a **Disposição
-  dos painéis** só têm o separador do desporto de onde vieste.
+- **Disposição do ecrã de sessão**: **Escolher as métricas do ecrã** (o editor mostra «12 de 16
+  métricas» e tem os botões **− Métrica** e **+ Métrica**, ou as teclas **[** e **]** — é por aqui que
+  se muda o número de métricas; a linha «Número de métricas no ecrã» já não existe) e **Disposição
+  dos painéis**, que abre sempre o ecrã **do desporto em que estás** (o ginásio abre o do ginásio).
+  O ecrã da sessão desenha as métricas sozinho: a grelha ajusta-se (8 → 4 × 2, 12 → 4 × 3…); no
+  remo, mais de 12 passam a mais páginas (V muda); no ginásio, o ecrã tem os painéis estado,
+  métricas, séries e lista, que se arrumam como os do ciclismo. Esse editor e a **Disposição dos
+  painéis** só têm o separador do desporto de onde vieste.
 
 **Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
 qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
@@ -814,9 +817,19 @@ separador.
 Ainda não há sensores de passadeira nem de piscina: os dados entram à mão.
 O relógio só começa quando carregas em **Espaço**.
 
-- **Corrida (passadeira):** +/− mudam a velocidade 0,5 km/h (Shift+ dá
-  1 km/h). Com **T** escreves a distância total que a passadeira mostra, e a
+- **Corrida livre (passadeira):** ao meio do ecrã há dois cartões, **Velocidade** e **Inclinação**,
+  cada um com os seus − e +. A velocidade muda de **0,1 em 0,1 km/h** (teclas **+** e **−**; com
+  Shift de 0,5 em 0,5) e a inclinação de **0,5 em 0,5 %** (teclas **↑** e **↓**; é o «passo da
+  inclinação» de Definições → Desportos → Corrida → Sessões Não ERG, e nunca passa da inclinação
+  máxima). **Tudo o que escolheres fica registado ao segundo**: na análise do treino (Estatísticas →
+  a sessão → Análise) aparece a linha **Inclinação (%)** junto à velocidade e à FC, e o `.fit` leva
+  a inclinação (campo *grade*) em cada registo. Num treino por blocos, a passadeira segue o treino
+  e os cartões não aparecem. Com **T** escreves a distância total que a passadeira mostra, e a
   aplicação acerta a distância por ela.
+- **Sem contador no topo** (corrida e remo): o tempo total da sessão e o tempo da volta são
+  **métricas** como as outras — **Tempo total** e **Tempo da volta** — e escolhem-se em
+  *Escolher as métricas do ecrã*. O ecrã também já não repete o desporto por baixo do título
+  nem a meio do ecrã, e o painel das **voltas** (à direita) tem letra maior.
 - **Natação:** + conta um comprimento de piscina, − desfaz o último.
 - **As duas:** L marca uma volta e P pausa. Esc pergunta se queres
   terminar, com a opção de terminar sem guardar.
@@ -2437,6 +2450,20 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 13 acrescenta UMA coluna — e continua a ser tudo automático** (**não tens de fazer nada**
+para que fique guardado na base local: ao abrir a versão nova a Perennia acrescenta a coluna sozinha,
+sem tocar nos dados que já lá estão; antes de abrires a versão nova podes fazer um backup: *Backups e
+Sincronização → Exportar → Tudo*, ou `python main.py --backup`). O que muda:
+
+| Onde | O quê |
+|---|---|
+| `endurance_samples.incline_pct` (coluna nova, `REAL`) | a **inclinação da passadeira**, ao segundo, nas sessões de corrida (o que escolheste nos cartões Velocidade/Inclinação, ou a do bloco do treino). As sessões antigas ficam com a coluna **vazia** (a análise só mostra a linha «Inclinação (%)» quando há valores). A velocidade já se gravava (`speed_mps`) e continua |
+| definição `screen_layout_gym` (tabela `settings`) | a **disposição dos painéis do ecrã do ginásio** (estado, métricas, séries, lista). Sem nada guardado vale a de origem. Vai no backup, na componente «Ecrã da sessão» |
+| definições `layout_<desporto>` | deixa de haver o «Número de métricas no ecrã»: o número é o das métricas que escolheres no editor (a lista guardada é a mesma de antes) |
+
+Os **backups** levam a coluna nova (e um backup feito **antes** da ronda 13 repõe-se na mesma: a
+inclinação fica por preencher) e nenhuma tabela ficou por tratar.
+
 **A ronda 12 NÃO cria tabelas — e continua a ser tudo automático** (**não tens de fazer nada** para
 que fique guardado na base local; antes de abrires a versão nova podes fazer um backup:
 *Backups e Sincronização → Exportar → Tudo*, ou `python main.py --backup`). O que muda:
@@ -2577,7 +2604,18 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (851 testes a passar).
+**Verificado com testes automáticos nesta versão** (865 testes a passar).
+
+*Novidades da ronda 13 (13 testes novos em `tests/test_round13.py`, e os antigos atualizados):* a
+janela de **Dispositivos** por ligação (os blocos Bluetooth, ANT+ e SEM HARDWARE pela ordem
+certa, cada um com o seu «Procurar»; os encontrados recuados por baixo; o ✓ nos ligados; Enter
+liga e desliga; a passadeira e o remo simulados nos ligados; a lista informativa do fim, sem
+ações; a janela que cresce para caber tudo e passa a duas colunas se a janela for pequena); a
+**corrida livre** (as teclas e os cliques nos cartões, os passos de 0,1 km/h e 0,5 %, o limite da
+inclinação, o tempo total e o da volta como métricas, o subtítulo vazio, a inclinação gravada ao
+segundo, a linha da análise e o campo *grade* do `.fit`); a coluna `incline_pct` numa base antiga e
+nos backups (também num backup sem a coluna); a disposição dos painéis do ginásio a abrir o ecrã do
+ginásio; as Definições sem «Número de métricas no ecrã»; e o treino de ciclismo sem o mundo 3D.
 
 *Novidades da ronda 12 (testes novos em `tests/test_round11.py`, e os antigos atualizados):* o
 calendário (um dia passado só carrega treino, hoje e o futuro planeiam; o seletor de datas do

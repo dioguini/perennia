@@ -17,7 +17,8 @@ from velo.ui.brief import BriefScreen, endurance_brief
 from velo.ui.session_flow import FinishFlow
 from velo.ui.session_radar import RadarSide
 from velo.ui.session_panels import OFF, ArrangedPanels
-from velo.ui.widgets import ACCENT, DIM, GOOD, PANEL, TEXT, Item, LapPanel, SessionClock
+from velo.ui.widgets import (ACCENT, DIM, GOOD, HEADER, HEADER_TEXT, PANEL, TEXT, CountdownBadge,
+                             Item, LapPanel)
 
 
 def _m(v) -> str:
@@ -174,6 +175,91 @@ class EndurancePreview(BriefScreen):
 
 
 
+class RunControls:
+    """Corrida livre: **velocidade** e **inclinação** ao meio do ecrã, em dois cartões, cada um
+    com − valor +. A velocidade muda de 0,1 em 0,1 km/h e a inclinação de 0,5 em 0,5 % (o passo
+    das Definições → Desportos → Corrida). O que escolhes fica registado ao segundo e vê-se na
+    análise da sessão."""
+
+    W, H, GAP = 430, 170, 24
+
+    def __init__(self, batch):
+        self.cards = []
+        for kind in ("speed", "incline"):
+            outline = pyglet.shapes.Rectangle(0, 0, 10, 10, color=P_BORDER(), batch=batch)
+            bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=batch)
+            title = make_label("", font_size=12, bold=True, color=DIM, anchor_x="center",
+                               anchor_y="top", batch=batch)
+            value = make_label("", font_size=32, bold=True, color=TEXT, anchor_x="center",
+                               anchor_y="center", batch=batch)
+            hint = make_label("", font_size=11, color=DIM, anchor_x="center",
+                              anchor_y="bottom", batch=batch)
+            btns = []
+            for sign in ("−", "+"):
+                bb = pyglet.shapes.Rectangle(0, 0, 10, 10, color=HEADER[:3], batch=batch)
+                bl = make_label(sign, font_size=30, bold=True, color=HEADER_TEXT,
+                                anchor_x="center", anchor_y="center", batch=batch)
+                btns.append((bb, bl))
+            self.cards.append({"kind": kind, "outline": outline, "bg": bg, "title": title,
+                               "value": value, "hint": hint, "btns": btns, "rects": {}})
+        self.visible = False
+
+    def layout(self, cx: float, cy: float) -> None:
+        total = 2 * self.W + self.GAP
+        left = cx - total / 2
+        bottom = cy - self.H / 2
+        for i, c in enumerate(self.cards):
+            x = left + i * (self.W + self.GAP)
+            c["outline"].x, c["outline"].y = x - 1, bottom - 1
+            c["outline"].width, c["outline"].height = self.W + 2, self.H + 2
+            c["bg"].x, c["bg"].y, c["bg"].width, c["bg"].height = x, bottom, self.W, self.H
+            c["title"].x, c["title"].y = x + self.W / 2, bottom + self.H - 12
+            c["value"].x, c["value"].y = x + self.W / 2, bottom + self.H / 2 + 2
+            c["hint"].x, c["hint"].y = x + self.W / 2, bottom + 8
+            by = bottom + self.H / 2 - 32
+            for j, (bb, bl) in enumerate(c["btns"]):
+                bx = x + 14 if j == 0 else x + self.W - 14 - 64
+                bb.x, bb.y, bb.width, bb.height = bx, by, 64, 64
+                bl.x, bl.y = bx + 32, by + 32
+                c["rects"]["-" if j == 0 else "+"] = (bx, by, 64, 64)
+
+    def set(self, speed_kmh: float, incline_pct: float, incline_step: float) -> None:
+        self.cards[0]["title"].text = tr("VELOCIDADE", "SPEED")
+        self.cards[0]["value"].text = f"{speed_kmh:.1f} km/h"
+        self.cards[0]["hint"].text = tr("passo 0,1 km/h · + / −", "step 0.1 km/h · + / −")
+        self.cards[1]["title"].text = tr("INCLINAÇÃO", "INCLINE")
+        self.cards[1]["value"].text = f"{incline_pct:.1f} %"
+        self.cards[1]["hint"].text = tr(f"passo {incline_step:g} % · ↑ / ↓".replace(".", ","),
+                                        f"step {incline_step:g} % · ↑ / ↓")
+
+    def hit(self, x: float, y: float) -> tuple[str, int] | None:
+        """(«speed» ou «incline», ±1) se o clique foi num botão."""
+        if not self.visible:
+            return None
+        for c in self.cards:
+            for sign, (bx, by, bw, bh) in c["rects"].items():
+                if bx <= x <= bx + bw and by <= y <= by + bh:
+                    return c["kind"], (1 if sign == "+" else -1)
+        return None
+
+    def show(self, on: bool) -> None:
+        self.visible = on
+        for c in self.cards:
+            for r in (c["outline"], c["bg"]):
+                r.opacity = 255 if on else 0
+            for bb, bl in c["btns"]:
+                bb.opacity = 255 if on else 0
+                bl.opacity = 255 if on else 0
+            if not on:
+                for k in ("title", "value", "hint"):
+                    c[k].text = ""
+
+
+def P_BORDER():
+    from velo.gfx import theme
+    return theme.P.border[:3]
+
+
 class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
     KEY_SCOPE = "endurance"
     AGENT = False
@@ -220,7 +306,9 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.toast = ""
         self._toast_until = 0.0
         b = self.batch = pyglet.graphics.Batch()
-        self.clock = SessionClock(app.window, batch=b)
+        self.clock = CountdownBadge(app.window, batch=b)   # só os últimos segundos de um bloco
+        self.controls = RunControls(b)       # corrida livre: velocidade e inclinação
+        self.controls.show(False)
         self.cells = []
         from velo.core import layouts as _lay
         for _ in range(max(1, len(_lay.keys(app.db, self.engine.sport)))):    # nº de métricas
@@ -276,6 +364,13 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.arr_layout_extras()
         self.list.y = -1000
         self.clock.layout()
+        # a velocidade e a inclinação, ao meio do ecrã: no meio do espaço livre por baixo dos
+        # quadrados (ou, se não houver quadrados, a meio da janela)
+        mt = self.arr_rect("metrics")
+        low = self.arr_area()[1]
+        cy = ((mt[1] + low) / 2 if mt is not None else self.app.window.height / 2)
+        cx = (sx + sw / 2) if st is not None else self.app.window.width / 2
+        self.controls.layout(cx, cy)
         self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
@@ -286,11 +381,11 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         e = self.engine
         if e.sport == "running":
             if not e.manual_laps:
-                return tr("Espaço começa · +/− velocidade · T total do visor · P pausa · "
-                          "F10 terminar e guardar", "Space starts · +/− speed · T display "
-                          "total · P pause · F10 stop and save")
-            return tr("Espaço começa · +/− velocidade · T total do visor · L volta · P pausa · "
-                      "F10 terminar e guardar", "Space starts · +/− speed · T display total · "
+                return tr("Espaço começa · +/− velocidade · P pausa · F10 terminar e guardar",
+                          "Space starts · +/− speed · P pause · F10 stop and save")
+            return tr("Espaço começa · +/− velocidade (0,1) · ↑/↓ inclinação (0,5) · T total do "
+                      "visor · L volta · P pausa · F10 terminar e guardar",
+                      "Space starts · +/− speed (0.1) · ↑/↓ incline (0.5) · T display total · "
                       "L lap · P pause · F10 stop and save")
         return tr("Espaço começa · + piscina (− corrige) · L volta · P pausa · "
                   "F10 terminar e guardar", "Space starts · + length (− corrects) · L lap · "
@@ -300,7 +395,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         e = self.engine
         self.list.y = -1000
         self.refresh_buttons(force=True)                  # − + Pausa Terminar, em baixo
-        self.chrome.set(e.title, sp.name(e.sport), self.footer())
+        self.chrome.set(e.title, "", self.footer())
 
     def cells_data(self) -> list[tuple[str, str]]:
         """Os 8 quadrados, pela ordem escolhida no editor do ecrã (Definições)."""
@@ -389,6 +484,13 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                 size -= 2
             val.font_size = size
         self.refresh_buttons()
+        free_run = e.sport == "running" and e.workout is None
+        if free_run != self.controls.visible:
+            self.controls.show(free_run)
+        if free_run:
+            from velo.core import workout_meta as wm
+            self.controls.set(e.speed_kmh, e.incline_pct,
+                              wm.device_limits(self.app.db)["treadmill_incline_step"])
         status = {"waiting": tr("ESPAÇO PARA COMEÇAR", "SPACE TO START"),
                   "paused": tr("EM PAUSA (P)", "PAUSED (P)")}.get(e.status, "")
         if self.typing is not None:
@@ -467,7 +569,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
     def _plan_title(self) -> str:
         e = self.engine
         if e.workout is None:
-            return sp.name(e.sport).upper()
+            return ""                    # sessão livre: sem o nome do desporto a meio do ecrã
         s = e.workout.step
         if s is None:
             return tr("TREINO CONCLUÍDO", "WORKOUT DONE")
@@ -574,7 +676,10 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         plus = symbol in (key.PLUS, key.EQUAL, key.NUM_ADD)
         minus = symbol in (key.MINUS, key.NUM_SUBTRACT)
         if plus or minus:
-            self._flow_adjust(1 if plus else -1, 2 if modifiers & key.MOD_SHIFT else 1)
+            self._flow_adjust(1 if plus else -1, 5 if modifiers & key.MOD_SHIFT else 1)
+            return True
+        if symbol in (key.UP, key.DOWN) and e.sport == "running":
+            self._incline_step(1 if symbol == key.UP else -1, 2 if modifiers & key.MOD_SHIFT else 1)
             return True
         if symbol == key.T and e.sport == "running":
             if e.speed_locked:
@@ -597,6 +702,12 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         return True
 
     def on_mouse(self, x: int, y: int) -> bool:
+        if not self.confirming:
+            hit = self.controls.hit(x, y)           # os − + da velocidade e da inclinação
+            if hit is not None:
+                kind, sign = hit
+                (self._flow_adjust if kind == "speed" else self._incline_step)(sign, 1)
+                return True
         handled = self.finish_mouse(x, y)
         return handled if handled is not None else super().on_mouse(x, y)
 
@@ -609,15 +720,30 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                 {"load": s.get("load"), "moving_s": s.get("moving_s"),
                  "elapsed_s": s.get("elapsed_s")})
 
+    def _flow_has_adjust(self) -> bool:
+        """Na corrida livre a velocidade e a inclinação têm os botões ao meio do ecrã; os − + de
+        baixo ficam para a natação (piscinas) e para os treinos."""
+        e = self.engine
+        return not (e.sport == "running" and e.workout is None)
+
     def _flow_adjust(self, step: int, mult: int = 1) -> None:
         e = self.engine
         if e.sport == "running":
             if e.speed_locked:
                 self._locked_toast()
                 return
-            e.set_speed(e.speed_kmh + 0.5 * step * mult)
+            e.set_speed(e.speed_kmh + 0.1 * step * mult)       # de 0,1 em 0,1 km/h
         else:
             e.add_length(step)
+
+    def _incline_step(self, step: int, mult: int = 1) -> None:
+        """A inclinação da passadeira, de 0,5 em 0,5 % (o passo das Definições)."""
+        e = self.engine
+        if e.sport != "running" or e.speed_locked:
+            return
+        from velo.core import workout_meta as wm
+        unit = wm.device_limits(self.app.db)["treadmill_incline_step"]
+        e.set_incline(e.incline_pct + unit * step * mult)
 
     def _flow_toggle_pause(self) -> None:
         self.engine.toggle_pause()

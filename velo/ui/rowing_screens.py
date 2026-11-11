@@ -22,7 +22,7 @@ from velo.ui.session_panels import OFF, ArrangedPanels
 from velo.ui.sport_screens import EditScreen, LiveEditPopup
 from velo.ui.brief import BriefScreen as _BriefBase
 from velo.ui.widgets import (ACCENT, BAD, BoardPanel, Chart, DIM, GOOD, P, PANEL, TEXT, Item,
-                             LapPanel, SessionClock)
+                             LapPanel, CountdownBadge)
 
 
 def _m(v: float | None) -> str:
@@ -320,7 +320,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
                                       anchor_y="top", batch=b)
         self.track = pyglet.shapes.Rectangle(0, 0, 10, 8, color=P().panel2, batch=b)
         self.bar = pyglet.shapes.Rectangle(0, 0, 0, 8, color=ACCENT[:3], batch=b)
-        self.clock = SessionClock(app.window, batch=b)
+        self.clock = CountdownBadge(app.window, batch=b)   # só os últimos segundos de um bloco
         self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
         self.arr_load("rowing")             # Definições → Ecrã da sessão → Disposição
@@ -455,8 +455,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         e = self.engine
         self.list.y = -1000
         self.refresh_buttons(force=True)                  # − + Pausa Terminar, em baixo
-        self.chrome.set(e.title, f"FTP {e.ftp} W · {getattr(e.rower, 'name', '')}",
-                        self.footer())
+        self.chrome.set(e.title, "", self.footer())
 
     def update(self, dt: float) -> None:
         a = self.app
@@ -522,7 +521,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
             dist, secs, _ = e.test
             return (f"{_m(max(0.0, dist - e.distance_m))} " + tr("para o fim", "to go")
                     if dist else hms(max(0.0, secs - e.t)) + " " + tr("para o fim", "to go"))
-        return tr("REMO LIVRE", "FREE ROW")
+        return ""                       # remo livre: sem texto a meio do ecrã
 
     def _plan_text(self) -> str:
         e = self.engine

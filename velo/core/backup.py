@@ -123,9 +123,10 @@ COMPONENTS: tuple[Component, ...] = (
     Component("atalhos", "Atalhos de teclado", "Keyboard shortcuts",
               "as teclas que mudaste", "the keys you changed", settings=_is_atalho),
     Component("ecra", "Ecrã da sessão", "Session screen",
-              "disposição do ecrã, número de métricas e métricas de sessão disponíveis em "
-              "cada desporto",
-              "screen layout, number of metrics and available session metrics of each sport",
+              "disposição dos painéis (ciclismo, remo, corrida, natação e ginásio), métricas do "
+              "ecrã e métricas de sessão disponíveis em cada desporto",
+              "panel layout (cycling, rowing, running, swimming and gym), screen metrics and "
+              "available session metrics of each sport",
               settings=_is_ecra),
     Component("aparelhos", "Aparelhos", "Devices",
               "dispositivos emparelhados e calibrações", "paired devices and calibrations",

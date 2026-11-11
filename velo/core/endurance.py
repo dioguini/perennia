@@ -56,6 +56,9 @@ def ensure(db: Database) -> None:
     if "status" not in cols:            # ativo · apagado · só de uma sessão
         db.conn.execute("ALTER TABLE endurance_workouts ADD COLUMN status TEXT NOT NULL"
                         " DEFAULT 'active'")
+    scols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_samples)")}
+    if "incline_pct" not in scols:      # a inclinação da passadeira, ao segundo (corrida)
+        db.conn.execute("ALTER TABLE endurance_samples ADD COLUMN incline_pct REAL")
     cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(endurance_sessions)")}
     if "route_id" not in cols:          # corrida numa rota do menu Rotas
         db.conn.execute("ALTER TABLE endurance_sessions ADD COLUMN route_id TEXT")
@@ -471,8 +474,14 @@ class EnduranceEngine:
             self.treadmill.set_speed(self.speed_kmh if not self.paused else 0.0)
 
     def set_incline(self, pct: float) -> None:
-        """A inclinação a pôr na passadeira (a de um bloco, ou a da rota)."""
-        self.incline_pct = max(0.0, float(pct))
+        """A inclinação a pôr na passadeira (a de um bloco, a da rota ou a que escolhes na
+        sessão livre). Não passa da inclinação máxima das Definições → Desportos."""
+        top = 15.0
+        try:
+            top = float(self.db.get("treadmill_max_incline", 15.0) or 15.0)
+        except Exception:
+            pass
+        self.incline_pct = max(0.0, min(top, round(float(pct), 1)))
         if self.treadmill is not None:
             self.treadmill.set_incline(self.incline_pct)
 
@@ -575,7 +584,12 @@ class EnduranceEngine:
                 self.hr_zone_s[min(z, len(self.hr_zone_s)) - 1] += 1.0
         real = self.treadmill.speed_kmh if self.treadmill is not None else self.speed_kmh
         speed = real / 3.6 if self.sport == "running" else None
-        self._pending.append((self.session_id, int(self.t), round(self.distance_m, 1), speed, hr))
+        inc = None
+        if self.sport == "running":      # a inclinação em vigor (a da passadeira, se for a real)
+            inc = self.treadmill.incline_pct if self.treadmill is not None else self.incline_pct
+            inc = round(float(inc or 0.0), 1)
+        self._pending.append((self.session_id, int(self.t), round(self.distance_m, 1), speed, hr,
+                              inc))
         if len(self._pending) >= FLUSH_EVERY:
             self.flush()
 
@@ -654,7 +668,7 @@ class EnduranceEngine:
         if self._pending:
             self.db.conn.executemany(
                 "INSERT OR REPLACE INTO endurance_samples(session_id, t_s, dist_m, speed_mps,"
-                " hr_bpm) VALUES (?,?,?,?,?)", self._pending)
+                " hr_bpm, incline_pct) VALUES (?,?,?,?,?,?)", self._pending)
             self.db.conn.commit()
             self._pending.clear()
         if not self.finished:
@@ -669,6 +683,7 @@ class EnduranceEngine:
                 "autolap": self.autolap.as_dict()}, {
                 "t": self.t, "paused_s": self.paused_s, "distance_m": self.distance_m,
                 "lengths": self.lengths, "speed_kmh": self.speed_kmh, "started": self.started,
+                "incline_pct": self.incline_pct,
                 "hr_zone_s": self.hr_zone_s, "lap": asdict(self._lap),
                 "workout": self.workout.snapshot() if self.workout else None})
         except Exception:
@@ -680,6 +695,7 @@ class EnduranceEngine:
         self.distance_m = float(snap.get("distance_m", 0))
         self.lengths = int(snap.get("lengths", 0))
         self.speed_kmh = float(snap.get("speed_kmh", self.speed_kmh))
+        self.incline_pct = float(snap.get("incline_pct", self.incline_pct) or 0.0)
         self.started = bool(snap.get("started", True))
         z = snap.get("hr_zone_s")
         if z and len(z) == len(self.hr_zone_s):

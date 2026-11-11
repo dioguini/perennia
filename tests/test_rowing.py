@@ -360,8 +360,11 @@ class TestRowingGui(tg.GuiCase):
         self.assertEqual(len(values), 12)                       # 12 campos por página
         self.assertTrue(any("/15" in v for v in values))
         self.assertTrue(any(v.endswith(" m") for v in values))
-        self.assertIn("TEMPO TOTAL", ses.clock.cap.text)
-        self.assertNotEqual(ses.clock.value.text, "0:00")
+        caps0 = [c.text for _, c, _ in ses.cells]
+        self.assertIn("TEMPO TOTAL", caps0)                     # o tempo total é uma métrica…
+        self.assertIn("TEMPO DA VOLTA", caps0)                  # …e o da volta também
+        self.assertEqual(ses.chrome.subtitle.text, "")          # sem «FTP … · dispositivo»
+        self.assertEqual(ses.status.text, "")                   # sem «REMO LIVRE» a meio
         self.press(key.V)                                       # segunda página de campos
         ses.update(0.5)
         caps = [c.text for _, c, _ in ses.cells]

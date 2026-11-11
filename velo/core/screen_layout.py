@@ -16,7 +16,7 @@ from __future__ import annotations
 from .i18n import tr
 
 COLS, ROWS = 24, 16
-SPORTS = ("cycling", "rowing", "running", "swimming")
+SPORTS = ("cycling", "rowing", "running", "swimming", "gym")
 
 Rect = tuple[int, int, int, int]
 
@@ -69,6 +69,16 @@ PANELS: dict[str, dict[str, tuple]] = {
     },
 }
 PANELS["swimming"] = dict(PANELS["running"])
+PANELS["gym"] = {
+    "status": ("Estado da série", "Set status", "a fase, o alvo e o tempo da série ou do descanso",
+               "the phase, the target and the set or rest time", (0, 0, 24, 2), (8, 2)),
+    "metrics": ("Quadrados de métricas", "Metric tiles", "as métricas à escolha e as zonas de FC",
+                "the metrics of your choice and the HR zones", (0, 2, 24, 3), (8, 2)),
+    "sets": ("Séries do exercício", "Exercise sets", "as séries feitas e o que vem a seguir",
+             "the sets done and what comes next", (0, 5, 24, 2), (8, 2)),
+    "list": ("O treino em lista", "The workout list", "os exercícios, os descansos e os campos "
+             "da série", "the exercises, the rests and the set fields", (0, 7, 24, 9), (8, 4)),
+}
 
 
 def catalog(sport: str) -> list[tuple[str, str, str]]:
