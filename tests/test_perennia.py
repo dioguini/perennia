@@ -231,7 +231,7 @@ class TestBriefScreens(tg.GuiCase):
         self.press(key.RIGHT)                   # com a Serra de Teste
         self.pick("Começar")
         ride = self.screen()
-        ride.world.build_all()
+        self.assertIsNone(ride.world)               # um treino leva o fundo do tema, sem o 3D
         ride.preparing = False
         for _ in range(20):
             self.app.hub.tick(0.25)

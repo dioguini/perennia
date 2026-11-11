@@ -1375,7 +1375,9 @@ class RideScreen(Screen):
         for event in self.engine.drain_events():   # «sessão recuperada», etc.
             self.hud.handle(event)
 
-        if points:
+        # Um treino (blocos) não leva o cenário 3D, por agora: o fundo é o do tema. (O 3D, com o
+        # céu cinzento-azulado, fica para os passeios por uma rota.)
+        if points and self.kind != "workout":
             self.world = World(points, a.db.get("render_preset", "low"),
                                seed=self.route_id or "")
             self.world.setup_gl()
@@ -1930,19 +1932,37 @@ class DeviceScreen(ModalScreen):
         self._ant_result: tuple | None = None
         self._auto_seen = app.auto_generation
 
-    def enter(self) -> None:
+    # ------------------------------------------------------------ a lista
+
+    @staticmethod
+    def _transport_of(src) -> str:
+        """`ble`, `ant` ou `sim` (os aparelhos «SEM HARDWARE» não têm ligação)."""
+        tr_ = getattr(src, "transport", "")
+        return tr_ if tr_ in ("ant", "ble") else "sim"
+
+    TRANSPORT_NAME = {"ble": "Bluetooth", "ant": "ANT+"}
+
+    def _live_text(self, device_id: str) -> str:
+        """O que o aparelho está mesmo a mandar («150 W · 88 rpm»), ou «sem dados»."""
         a = self.app
-        pref = a.db.get("connection_preference", autoconnect.ANT_FIRST)
-        items = [Item(t("dev.auto") if not a.auto_running else t("dev.auto_running"),
-                      value=t(f"set.pref.{pref}"), detail=t("dev.auto_hint"),
-                      action=a.start_auto_connect, enabled=not a.auto_running),
-                 Item(t("dev.scan") if not self.scanning else t("dev.scanning"),
-                      action=self._scan, enabled=not self.scanning),
-                 Item(t("dev.scan_ant") if not self.ant_scanning else t("dev.scanning_ant"),
-                      detail=t("dev.scan_ant_hint"), action=self._scan_ant,
-                      enabled=not self.ant_scanning)]
+        live_src = a.hub.live_of(device_id) if hasattr(a.hub, "live_of") else {}
+        bits = []
+        if "power" in live_src:
+            bits.append(f"{int(live_src['power'][0])} W")
+        if "cadence" in live_src:
+            bits.append(f"{int(live_src['cadence'][0])} rpm")
+        if "hr" in live_src:
+            bits.append(f"{int(live_src['hr'][0])} bpm")
+        if "speed" in live_src and not bits:
+            bits.append(f"{live_src['speed'][0] * 3.6:.1f} km/h")
+        return " · ".join(bits) if bits else tr("sem dados", "no data")
+
+    def connected_devices(self) -> list[dict]:
+        """Os aparelhos ligados agora — do hub, a máquina de remo e a passadeira —
+        com a ligação (`ble`/`ant`/`sim`), o que mandam e o que sabem fazer."""
+        a = self.app
+        out = []
         for src in a.hub.sources:
-            name = getattr(src, "name", "?")
             caps = []
             if getattr(src, "supports_sim", False):
                 caps.append("declive")
@@ -1950,34 +1970,60 @@ class DeviceScreen(ModalScreen):
                 caps.append("ERG")
             if getattr(src, "supports_spindown", False):
                 caps.append("spindown")
-            transport = {"ant": "ANT+", "ble": "Bluetooth"}.get(
-                getattr(src, "transport", ""), "")
-            # ao vivo: o que o aparelho está mesmo a mandar (ou «sem dados», se calou)
-            live_src = a.hub.live_of(getattr(src, "device_id", "")) \
-                if hasattr(a.hub, "live_of") else {}
-            bits = []
-            if "power" in live_src:
-                bits.append(f"{int(live_src['power'][0])} W")
-            if "cadence" in live_src:
-                bits.append(f"{int(live_src['cadence'][0])} rpm")
-            if "hr" in live_src:
-                bits.append(f"{int(live_src['hr'][0])} bpm")
-            if "speed" in live_src and not bits:
-                bits.append(f"{live_src['speed'][0] * 3.6:.1f} km/h")
-            shown = (transport + " · " if transport else "") + (
-                " · ".join(bits) if bits else tr("sem dados", "no data"))
-            items.append(Item(f"✓ {name}", value=shown or t("dev.connected"),
-                              detail=" · ".join(caps),
-                              action=lambda s=src: self._disconnect(s)))
-        from velo.io import rower as rower_io
-        # a máquina de remo ligada (Bluetooth ou a simulada)
+            out.append({"name": getattr(src, "name", "?"), "via": self._transport_of(src),
+                        "live": self._live_text(getattr(src, "device_id", "")),
+                        "caps": " · ".join(caps), "id": getattr(src, "device_id", ""),
+                        "action": lambda s=src: self._disconnect(s)})
         if a.rower is not None:
-            items.append(Item(f"✓ {a.rower.name}", value=tr("REMO", "ROWER"),
-                              detail=tr("máquina de remo · Enter desliga",
-                                        "rowing machine · Enter disconnects"),
-                              action=self._drop_rower))
+            out.append({"name": a.rower.name, "via": self._transport_of(a.rower),
+                        "live": tr("máquina de remo", "rowing machine"), "caps": "",
+                        "id": getattr(a.rower, "device_id", ""), "action": self._drop_rower})
+        tm = getattr(a, "treadmill", None)
+        if tm is not None:
+            out.append({"name": getattr(tm, "name", "Passadeira"),
+                        "via": self._transport_of(tm),
+                        "live": tr("passadeira", "treadmill"), "caps": "",
+                        "id": getattr(tm, "device_id", ""),
+                        "action": self._drop_treadmill})
+        return out
+
+    def _connected_rows(self, devices: list[dict], via: str) -> list[Item]:
+        """As linhas «✓ nome» de uma ligação: Enter desliga."""
+        rows = []
+        for d in devices:
+            if d["via"] != via:
+                continue
+            rows.append(Item(f"✓ {d['name']}", value=d["live"],
+                             detail=(d["caps"] + " · " if d["caps"] else "")
+                             + tr("Enter desliga", "Enter disconnects"),
+                             action=d["action"], indent=1))
+        return rows
+
+    def enter(self) -> None:
+        """Três blocos — **Bluetooth**, **ANT+** e **SEM HARDWARE** — cada um com
+        o seu «Procurar», os aparelhos encontrados (✓ nos ligados) por baixo,
+        recuados; e, no fim, **Dispositivos ligados**: só informação."""
+        from velo.io import rower as rower_io
+        a = self.app
+        pref = a.db.get("connection_preference", autoconnect.ANT_FIRST)
+        devices = self.connected_devices()
+        linked_ids = {d["id"] for d in devices}
+        items = [Item(t("dev.auto") if not a.auto_running else t("dev.auto_running"),
+                      value=t(f"set.pref.{pref}"), detail=t("dev.auto_hint"),
+                      action=a.start_auto_connect, enabled=not a.auto_running)]
+
+        def counted(via: str) -> str:
+            n = sum(1 for d in devices if d["via"] == via)
+            return tr("{n} ligado(s)", "{n} connected", n=n) if n else ""
+
+        # ---- Bluetooth
+        items.append(Item(self.TRANSPORT_NAME["ble"], value=counted("ble"), header=True))
+        items.append(Item(t("dev.scan") if not self.scanning else t("dev.scanning"),
+                          action=self._scan, enabled=not self.scanning, indent=1))
+        items += self._connected_rows(devices, "ble")
+        ble_rows = 0
         for d in self.found:
-            if any(getattr(s, "device_id", "") == d.device_id for s in a.hub.sources):
+            if d.device_id in linked_ids:
                 continue
             proto = rower_io.is_rower(d.name, ["00001826-0000-1000-8000-00805f9b34fb"]
                                       if "ftms" in d.profiles else [])
@@ -1987,42 +2033,80 @@ class DeviceScreen(ModalScreen):
                 items.append(Item(d.name, value=tr("REMO", "ROWER"),
                                   detail=tr("máquina de remo (Bluetooth) · Enter liga",
                                             "rowing machine (Bluetooth) · Enter connects"),
-                                  action=lambda dd=d, p=proto: self._rower(dd, p)))
-                continue
-            items.append(Item(d.name, value=" ".join(d.profiles).upper() or "—",
-                              detail=f"rssi {d.rssi}" if d.rssi else "",
-                              action=lambda dd=d: self._connect(dd)))
+                                  action=lambda dd=d, p=proto: self._rower(dd, p), indent=1))
+            else:
+                items.append(Item(d.name, value=" ".join(d.profiles).upper() or "—",
+                                  detail=(f"rssi {d.rssi} · " if d.rssi else "")
+                                  + tr("Enter liga", "Enter connects"),
+                                  action=lambda dd=d: self._connect(dd), indent=1))
+            ble_rows += 1
+        if not ble_rows and not counted("ble"):
+            items.append(Item(tr("nenhum dispositivo Bluetooth", "no Bluetooth devices"),
+                              enabled=False, indent=1))
+
+        # ---- ANT+
+        items.append(Item(self.TRANSPORT_NAME["ant"], value=counted("ant"), header=True))
+        items.append(Item(t("dev.scan_ant") if not self.ant_scanning else t("dev.scanning_ant"),
+                          detail=t("dev.scan_ant_hint"), action=self._scan_ant,
+                          enabled=not self.ant_scanning, indent=1))
+        items += self._connected_rows(devices, "ant")
+        ant_rows = 0
         for channel, info in a.ant_found:
             if getattr(info, "trainer_twin", False):
                 continue          # a potência do rolo já vem pelo FE-C
-            if any(getattr(s, "device_id", "") == info.device_id for s in a.hub.sources):
+            if info.device_id in linked_ids:
                 continue
             items.append(Item(info.name, value="ANT+",
-                              detail=t(f"dev.role.{info.role}"),
-                              action=lambda ch=channel, inf=info: self._connect_ant(ch, inf)))
-        if not any(getattr(s, "device_id", "") == "sim:trainer" for s in a.hub.sources):
-            items.append(Item(t("dev.simulated"), action=self._add_sim))
-        if not any(getattr(s, "device_id", "") == "sim:hr" for s in a.hub.sources):
+                              detail=t(f"dev.role.{info.role}") + " · "
+                              + tr("Enter liga", "Enter connects"),
+                              action=lambda ch=channel, inf=info: self._connect_ant(ch, inf),
+                              indent=1))
+            ant_rows += 1
+        if not ant_rows and not counted("ant"):
+            items.append(Item(tr("nenhum dispositivo ANT+", "no ANT+ devices"),
+                              enabled=False, indent=1))
+
+        # ---- SEM HARDWARE (simulados)
+        items.append(Item(tr("SEM HARDWARE", "NO HARDWARE"), value=counted("sim"),
+                          header=True))
+        items += self._connected_rows(devices, "sim")
+        if "sim:trainer" not in linked_ids:
+            items.append(Item(t("dev.simulated"), action=self._add_sim, indent=1))
+        if "sim:hr" not in linked_ids:
             items.append(Item(tr("SEM HARDWARE - Banda cardíaca", "NO HARDWARE - Heart strap"),
                               detail=tr("FC simulada que segue o esforço · todos os desportos",
                                         "simulated HR that follows the effort · every sport"),
-                              action=self._add_sim_hr))
+                              action=self._add_sim_hr, indent=1))
         if a.rower is None or getattr(a.rower, "protocol", "") != "sim":
             items.append(Item(tr("SEM HARDWARE - Remo", "NO HARDWARE - Rower"),
                               detail=tr("para remar sem a máquina (testes, demonstração)",
                                         "to row without the machine (tests, demo)"),
-                              action=self._add_sim_rower))
+                              action=self._add_sim_rower, indent=1))
         if getattr(a, "treadmill", None) is None:
             items.append(Item(tr("SEM HARDWARE - Passadeira", "NO HARDWARE - TREADMILL"),
                               detail=tr("passadeira simulada: velocidade, inclinação e passos "
                                         "(sem FC) · corrida", "simulated treadmill: speed, "
                                         "incline and steps (no HR) · running"),
-                              action=self._add_sim_treadmill))
-        # só com um rolo ligado (que aceite comandos) é que se pode calibrar
+                              action=self._add_sim_treadmill, indent=1))
+
+        # ---- o rolo: só com um rolo ligado (que aceite comandos) é que se pode calibrar
         can_cal = a.hub.can_control and getattr(a.hub.trainer, "supports_spindown", False)
+        items.append(Item(tr("Rolo", "Trainer"), header=True))
         items.append(Item(t("dev.calibrate"), action=self._calibrate, enabled=bool(can_cal),
                           detail="" if can_cal else tr("liga primeiro um rolo",
-                                                       "connect a trainer first")))
+                                                       "connect a trainer first"),
+                          indent=1))
+
+        # ---- no fim: só informação (sem ações; as ações estão em cada ligação)
+        items.append(Item(tr("Dispositivos ligados", "Connected devices"),
+                          value=str(len(devices)) if devices else "", header=True))
+        for d in devices:
+            via = self.TRANSPORT_NAME.get(d["via"], tr("simulado", "simulated"))
+            items.append(Item(f"✓ {d['name']}", value=f"{via} · {d['live']}",
+                              detail=d["caps"], enabled=False, indent=1))
+        if not devices:
+            items.append(Item(tr("nenhum dispositivo ligado", "no device connected"),
+                              enabled=False, indent=1))
 
         reading = a.hub.reading()
         live = []
@@ -2037,6 +2121,10 @@ class DeviceScreen(ModalScreen):
                         f"{100 - reading.balance_left:.0f}")
         sub = " · ".join(live) if live else (self.note or t("dev.none"))
         self.chrome.set(t("menu.devices"), sub, self.footer())
+        # uma só coluna, com a janela a crescer para caber os blocos seguidos
+        # (só se a janela da aplicação for pequena é que passam a duas colunas)
+        rows = sum(1 for it in items if not it.button)
+        self.set_popup_size(self.W, 190 + 38 * (rows - 1))
         self.list.set_items(items, keep_index=True)
 
     def update(self, dt: float) -> None:
@@ -2188,6 +2276,10 @@ class DeviceScreen(ModalScreen):
 
     def _drop_rower(self) -> None:
         self.app.set_rower(None)
+        self.enter()
+
+    def _drop_treadmill(self) -> None:
+        self.app.set_treadmill(None)
         self.enter()
 
     def _add_sim(self) -> None:
@@ -2649,15 +2741,7 @@ class SettingsScreen(Screen):
         elif sec == "layout":
             groups = self._layout_groups(sport)
             shown = [lay.label(sport, x) for g in groups for x in g if x]
-            top = self._max_metrics(sport)
-            rows += [Item(tr("Número de métricas no ecrã", "Number of metrics on screen"),
-                          value=f"{lay.count(groups)} / {top}",
-                          detail=tr("←/→ ±1 · o ecrã da sessão desenha-as sozinho · no máximo as "
-                                    "{n} que o desporto tem", "←/→ ±1 · the session screen lays "
-                                    "them out by itself · at most the {n} the sport has", n=top),
-                          data=f"count:{sport}",
-                          action=lambda: self._open_layout_editor(sport)),
-                     Item(tr("Escolher as métricas do ecrã", "Choose the screen's metrics"),
+            rows += [Item(tr("Escolher as métricas do ecrã", "Choose the screen's metrics"),
                           detail=(", ".join(shown[:6]) + ("…" if len(shown) > 6 else ""))
                           or tr("Enter abre e arrasta as métricas", "Enter opens; drag metrics"),
                           action=lambda: self._open_layout_editor(sport)),

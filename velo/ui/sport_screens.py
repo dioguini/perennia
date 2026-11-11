@@ -24,6 +24,7 @@ from velo.ui.app import (DeviceScreen, RideScreen, Screen, StatsScreen, SummaryS
 from velo.gfx import theme as _theme
 from velo.ui.brief import GymBrief
 from velo.ui.session_flow import FinishFlow
+from velo.ui.session_panels import ArrangedPanels
 from velo.ui.widgets import ACCENT, BAD, DIM, GOOD, PANEL, TEXT, Item, text_px
 
 NUM_CHARS = "0123456789.,"
@@ -438,7 +439,7 @@ class StrengthPreview(GymBrief):
         return self.wid
 
 
-class StrengthSessionScreen(FinishFlow, EditScreen):
+class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
     """A sessão de força, como as dos outros desportos (os mesmos botões em baixo, à
     direita, o mesmo diálogo de terminar e a mesma janela de etiquetas).
 
@@ -469,7 +470,9 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         self._sig = None
         self.batch = pyglet.graphics.Batch()
         b = self.batch
-        self.panel = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
+        self.panel = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)   # estado
+        self.panel_m = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)  # métricas
+        self.panel_s = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)  # séries
         self.phase_label = make_label("", font_size=28, bold=True, color=ACCENT,
                                       anchor_y="top", batch=b)
         self.target_label = make_label("", font_size=14, color=TEXT, anchor_y="top", batch=b)
@@ -498,6 +501,7 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         self.time_label = make_label("", font_size=15, bold=True, color=GOOD, anchor_y="top",
                                      batch=b)
         self.list.max_columns = 1
+        self.arr_load("gym")                  # Definições → Ginásio → Disposição dos painéis
         from velo.ui.widgets import SessionClock
         self.clock = SessionClock(app.window, batch=b)
         self._layout_panel()
@@ -522,49 +526,81 @@ class StrengthSessionScreen(FinishFlow, EditScreen):
         return w - 96
 
     def _layout_panel(self) -> None:
-        """Em cima, o painel da série (fase, alvo e tempo, quadrados, zonas de FC); por baixo,
-        as séries do exercício e o que vem a seguir; e, a toda a largura, o treino em lista."""
-        w, h = self.app.window.width, self.app.window.height
-        x = 48
-        top = h - 120
-        pw = w - 96
-        px = x + 20
+        """Os quatro painéis, onde Definições → Ginásio → Disposição dos painéis os pôs: o
+        estado da série (fase, alvo e tempo), os quadrados de métricas com as zonas de FC, as
+        séries do exercício com o que vem a seguir, e o treino em lista."""
         from velo.core import layouts
+        OFFX = -4000
         cols, rows = layouts.grid_for(len(self.tiles), "gym")
-        dy = (rows - 1) * 62               # o resto desce quando há mais filas de métricas
-        self.panel.x, self.panel.y = x, top - 196 - dy
-        self.panel.width, self.panel.height = pw, 196 + dy
-        self.phase_label.x, self.phase_label.y = px, top - 16
-        self.target_label.x, self.target_label.y = px, top - 60
+        st, me, se, li = (self.arr_rect(k) for k in ("status", "metrics", "sets", "list"))
+        # ---- estado
+        for r in (self.panel,):
+            r.x = r.y = OFFX if st is None else 0
+        if st is not None:
+            x, y, w, h = st
+            self.panel.x, self.panel.y, self.panel.width, self.panel.height = x, y, w, h
+            top = y + h
+            self.phase_label.x, self.phase_label.y = x + 20, top - 10
+            self.target_label.x, self.target_label.y = x + 20, top - 10 - 44
+        else:
+            self.phase_label.x = self.target_label.x = OFFX
         # FC e zona passaram para os quadrados; as etiquetas antigas ficam fora do ecrã
-        self.hr_label.x, self.hr_label.y = -2000, -2000
+        self.hr_label.x, self.hr_label.y = OFFX, OFFX
         self.hr_zone_label.anchor_x = "right"
-        self.hr_zone_label.x, self.hr_zone_label.y = -2000, -2000
-        tw = (pw - 40 - (cols - 1) * 8) / cols
-        for i, (bg, cap, val) in enumerate(self.tiles):
-            r, c = divmod(i, cols)
-            tx, ty = px + c * (tw + 8), top - 142 - r * 62
-            bg.x, bg.y, bg.width, bg.height = tx, ty, tw, 54
-            cap.x, cap.y = tx + 8, ty + 50
-            val.x, val.y = tx + 8, ty + 36
-        seg_w = (pw - 40) / 5
-        for i, r in enumerate(self.hr_segs):
-            r.x, r.y, r.width, r.height = px + i * seg_w, top - 152 - dy, seg_w - 2, 10
-        self.hr_marker.y = top - 156 - dy
-        self.session_label.x, self.session_label.y = px, top - 172 - dy
-        # por baixo do painel: as séries deste exercício (à esquerda) e o que vem a seguir
-        sy = top - 212 - dy
-        self.sets_title.x, self.sets_title.y = px, sy
-        for i, lab in enumerate(self.set_lines):
-            lab.x, lab.y = px, sy - 26 - i * 22
-        self.next_label.x = x + int(pw * 0.5)
-        self.next_label.y = sy
-        self.next_label.width = max(200, int(pw * 0.5) - 20)
-        # o treino em lista, a toda a largura, até ao rodapé
-        list_top = sy - 26 - self.SET_LINES * 22 - 12
-        self.list.x, self.list.y = x, list_top
-        self.list.width = pw
-        self.list.set_visible_rows(max(3, int((list_top - 76) // 38)))
+        self.hr_zone_label.x, self.hr_zone_label.y = OFFX, OFFX
+        # ---- métricas (quadrados, zonas de FC e a linha da sessão)
+        if me is not None:
+            x, y, w, h = me
+            self.panel_m.x, self.panel_m.y, self.panel_m.width, self.panel_m.height = x, y, w, h
+            top = y + h
+            th = max(30.0, min(54.0, (h - 56) / rows - 8))
+            tw = (w - 40 - (cols - 1) * 8) / cols
+            for i, (bg, cap, val) in enumerate(self.tiles):
+                r, c = divmod(i, cols)
+                tx = x + 20 + c * (tw + 8)
+                ty = top - 10 - th - r * (th + 8)
+                bg.x, bg.y, bg.width, bg.height = tx, ty, tw, th
+                cap.x, cap.y = tx + 8, ty + th - 4
+                val.x, val.y = tx + 8, ty + th - 18
+            bottom = top - 10 - rows * (th + 8)
+            seg_w = (w - 40) / 5
+            for i, r_ in enumerate(self.hr_segs):
+                r_.x, r_.y, r_.width, r_.height = x + 20 + i * seg_w, bottom - 4, seg_w - 2, 10
+            self.hr_marker.y = bottom - 8
+            self.session_label.x, self.session_label.y = x + 20, bottom - 22
+        else:
+            self.panel_m.x = OFFX
+            for bg, cap, val in self.tiles:
+                bg.x = cap.x = val.x = OFFX
+            for r_ in self.hr_segs:
+                r_.x = OFFX
+            self.hr_marker.x = OFFX
+            self.session_label.x = OFFX
+        # ---- séries do exercício e o que vem a seguir
+        if se is not None:
+            x, y, w, h = se
+            self.panel_s.x, self.panel_s.y, self.panel_s.width, self.panel_s.height = x, y, w, h
+            top = y + h
+            self.sets_title.x, self.sets_title.y = x + 20, top - 8
+            for i, lab in enumerate(self.set_lines):
+                ly = top - 34 - i * 22
+                lab.x, lab.y = (x + 20, ly) if ly > y + 6 else (OFFX, ly)
+            self.next_label.x = x + int(w * 0.5)
+            self.next_label.y = top - 8
+            self.next_label.width = max(200, int(w * 0.5) - 20)
+        else:
+            self.panel_s.x = OFFX
+            self.sets_title.x = self.next_label.x = OFFX
+            for lab in self.set_lines:
+                lab.x = OFFX
+        # ---- o treino em lista
+        if li is not None:
+            x, y, w, h = li
+            self.list.x, self.list.y = x, y + h
+            self.list.width = w
+            self.list.set_visible_rows(max(2, int(h // 38)))
+        else:
+            self.list.x = OFFX
         self.clock.layout()
         self._layout_finish()
 

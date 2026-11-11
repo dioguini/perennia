@@ -824,6 +824,7 @@ ROW_RECORD = (MSG_RECORD, [
     Field("distance", 5, "uint32", scale=100),
     Field("speed", 6, "uint16", scale=1000),
     Field("power", 7, "uint16"),
+    Field("grade", 9, "sint16", scale=100),          # a inclinação da passadeira (corrida)
 ])
 
 ROW_SESSION = (SESSION[0], SESSION[1] + [Field("total_cycles", 10, "uint32")])
@@ -853,7 +854,8 @@ def write_rowing(path: str | Path, athlete: Athlete, samples: Sequence[dict],
     for s in samples:
         w.write(ROW_RECORD, timestamp=t0 + int(s["t_s"]), heart_rate=s.get("hr_bpm"),
                 cadence=None if s.get("spm") is None else int(round(s["spm"])),
-                distance=s.get("dist_m"), speed=s.get("speed_mps"), power=s.get("power_w"))
+                distance=s.get("dist_m"), speed=s.get("speed_mps"), power=s.get("power_w"),
+                grade=s.get("incline_pct"))
     w.write(EVENT, timestamp=t0 + end_t, event=EVENT_TIMER, event_type=EVENT_TYPE_STOP_ALL)
     laps = list(laps) or [{"start_t": 0, "end_t": end_t, "distance_m": summary.get("distance_m"),
                            "avg_hr": summary.get("avg_hr"), "max_hr": summary.get("max_hr"),

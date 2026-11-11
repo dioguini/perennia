@@ -1065,7 +1065,7 @@ class TestRideFlow(GuiCase):
         self.press(key.RIGHT)                       # a Serra de Teste
         self.pick("Começar")
         ride = self.screen()
-        ride.world.build_all()
+        self.assertIsNone(ride.world)        # os treinos não têm o mundo 3D (por agora)
         ride.preparing = False
         self._run(ride, 20)
         hud = ride.hud
@@ -1207,7 +1207,7 @@ class TestRideFlow(GuiCase):
         self.press(key.RIGHT)                       # a Serra de Teste
         self.pick("Começar")
         ride = self.screen()
-        ride.world.build_all()
+        self.assertIsNone(ride.world)        # os treinos não têm o mundo 3D (por agora)
         ride.preparing = False
         self._run(ride, 90)
         self.press(key.F10, key.ENTER, key.ENTER)          # terminar → «Sim»

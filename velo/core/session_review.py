@@ -212,12 +212,17 @@ def series(db, sess: fbm.Session) -> dict:
                         (tr("Voga (spm)", "Rate (spm)"), [r[3] or 0 for r in rows],
                          (120, 200, 150))]
     elif sess.kind == "endurance":
-        rows = db.conn.execute("SELECT t_s, speed_mps, hr_bpm FROM endurance_samples"
+        cols = {c["name"] for c in db.conn.execute("PRAGMA table_info(endurance_samples)")}
+        inc = ", incline_pct" if "incline_pct" in cols else ", NULL"
+        rows = db.conn.execute("SELECT t_s, speed_mps, hr_bpm" + inc + " FROM endurance_samples"
                                " WHERE session_id = ? ORDER BY t_s", (sess.id,)).fetchall()
         out["t"] = [r[0] for r in rows]
         out["lines"] = [(tr("Velocidade (km/h)", "Speed (km/h)"),
                          [(r[1] or 0) * 3.6 for r in rows], (108, 170, 220)),
                         (tr("FC (bpm)", "HR (bpm)"), [r[2] or 0 for r in rows], (214, 54, 128))]
+        if any(r[3] for r in rows):             # a inclinação escolhida na passadeira
+            out["lines"].append((tr("Inclinação (%)", "Incline (%)"),
+                                 [r[3] or 0 for r in rows], (120, 200, 150)))
     elif sess.kind == "strength":
         out["t"] = [t for t, *_x in sess.samples]
         out["lines"] = [(tr("FC (bpm)", "HR (bpm)"), [h or 0 for *_x, h in sess.samples],

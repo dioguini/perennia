@@ -546,12 +546,12 @@ class TestSportsGui(tg.GuiCase):
             self.app._tick(0.5)
         self.assertEqual(scr.engine.t, 0.0)
         self.press(key.SPACE)                                    # começar
-        self.press(key.PLUS, key.PLUS)                           # 11 km/h
-        self.assertEqual(scr.engine.speed_kmh, 11.0)
+        self.press(key.PLUS, key.PLUS)                           # de 0,1 em 0,1: 10,2 km/h
+        self.assertEqual(scr.engine.speed_kmh, 10.2)
         for _ in range(240):
             self.app._tick(0.5)
-        self.assertGreater(scr.engine.distance_m, 350)
-        self.assertEqual(scr.clock.value.text, "2:00")
+        self.assertGreater(scr.engine.distance_m, 330)
+        self.assertEqual(scr.metric_value("time"), "2:00")      # o tempo total é uma métrica
         self.press(key.T)
         self.app._on_text("0,5")
         self.press(key.ENTER)

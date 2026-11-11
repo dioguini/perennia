@@ -126,6 +126,7 @@ class Item:
     header: bool = False          # título de secção (sombreado, saltado pelas setas)
     head: bool = False            # numa faixa à parte, por cima (ver ListView.head_y)
     cols: tuple = ()              # colunas à frente do valor (à direita): «10», «22 kg»…
+    indent: int = 0               # recuo do rótulo (níveis): filhos de um título de secção
 
     def __post_init__(self):
         if self.top:
@@ -203,6 +204,7 @@ class ListView:
         self._add_rows(visible_rows)
 
     COL_W = 112                       # a largura de cada coluna extra (`Item.cols`)
+    INDENT_PX = 22                    # o recuo de um nível (`Item.indent`)
 
     def _place_cols(self, label, item: Item, x: float, col_w: float, row_y: float) -> None:
         """As colunas à frente do valor (por exemplo, repetições e carga de um exercício)."""
@@ -400,8 +402,8 @@ class ListView:
         if not below:
             for c in range(cols):
                 col = [self.items[i] for i in shown[c * per:(c + 1) * per]]
-                widest = max([text_px(it.label, 14) for it in col
-                              if it.detail and not it.header] + [0.0])
+                widest = max([text_px(it.label, 14) + it.indent * self.INDENT_PX
+                              for it in col if it.detail and not it.header] + [0.0])
                 detail_x[c] = min(max(widest + 28, 150.0), col_w * 0.5)
         self._cells = []
         for k, (highlight, label, value, detail) in enumerate(self._rows):
@@ -446,10 +448,11 @@ class ListView:
                 head.text = ""
                 label.color = (TEXT if item.enabled else DIM) if idx != self.index \
                     else ACCENT
+            ind = item.indent * self.INDENT_PX
             if below or not d:
                 if not item.header:
-                    label.text = fit_text(item.label, free, 14)
-                    label.x, label.y = x, row_y + (6 if d else 0)
+                    label.text = fit_text(item.label, free - ind, 14)
+                    label.x, label.y = x + ind, row_y + (6 if d else 0)
                 detail.text = fit_text(d, free, 11)
                 detail.x, detail.y = x, row_y - 12
             else:
@@ -457,8 +460,8 @@ class ListView:
                           else text_px(item.label, 13 if item.header else 14,
                                        bold=item.header) + 24)
                 if not item.header:
-                    label.text = fit_text(item.label, dx - x - 12, 14)
-                    label.x, label.y = x, row_y
+                    label.text = fit_text(item.label, dx - x - 12 - ind, 14)
+                    label.x, label.y = x + ind, row_y
                 room = x + free - dx
                 detail.text = fit_text(d, room, 11) if room > 40 else ""
                 detail.x, detail.y = dx, row_y
@@ -1817,6 +1820,49 @@ class SessionClock:
             self.batch.draw()
 
 
+class CountdownBadge:
+    """Só os últimos segundos: um número grande, a vermelho e a piscar, ao centro do topo,
+    quando falta pouco para o fim de um bloco (ver `velo.core.cues`). Fora disso não se vê —
+    é o que sobra do antigo contador do topo, que a corrida e o remo já não têm (o tempo total
+    e o da volta são métricas). Mesma interface do `SessionClock` (`alert`, `layout`, `set`)."""
+
+    def __init__(self, window, batch=None):
+        self.window = window
+        self.batch = batch or pyglet.graphics.Batch()
+        self._own = batch is None
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=_theme.P.danger[:3],
+                                          batch=self.batch)
+        self.bg.opacity = 0
+        self.value = make_label("", font_size=40, bold=True, color=HEADER_TEXT,
+                                anchor_x="center", anchor_y="center", batch=self.batch)
+        self._alert: int | None = None
+        self.layout()
+
+    def layout(self) -> None:
+        w, h = self.window.width, self.window.height
+        bw, bh = 110, 74
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = w / 2 - bw / 2, h - 44 - bh, bw, bh
+        self.value.x, self.value.y = w / 2, h - 44 - bh / 2
+
+    def set(self, *_args, **_kw) -> None:
+        pass                                          # já não há contador do tempo total
+
+    def alert(self, n: int | None) -> None:
+        import time
+        self._alert = n
+        if n is None:
+            self.bg.opacity = 0
+            self.value.text = ""
+            return
+        on = int(time.monotonic() * 3) % 2 == 0       # pisca três vezes por segundo
+        self.bg.opacity = 255 if on else 90
+        self.value.text = str(n)
+
+    def draw(self) -> None:
+        if self._own:
+            self.batch.draw()
+
+
 class GridView:
     """Cartões em grelha, a ocupar a área toda (sem deslocar): para escolher
     muitas coisas de uma vez, como as métricas disponíveis. Cada cartão tem
@@ -1976,8 +2022,8 @@ class LapPanel:
     desportos (como no ecrã do ciclismo): em cima a volta em curso, com seis
     números, e por baixo as voltas já feitas. Pisca quando se marca uma."""
 
-    CELL_H = 40
-    PREV_ROW = 18
+    CELL_H = 52
+    PREV_ROW = 26
     MAX_PREV = 10
 
     def __init__(self):
@@ -1986,14 +2032,14 @@ class LapPanel:
         self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
         self.flash = pyglet.shapes.Rectangle(0, 0, 10, 10, color=ACCENT[:3], batch=b)
         self.flash.opacity = 0
-        self.title = make_label("", font_size=13, bold=True, color=ACCENT, anchor_y="top",
+        self.title = make_label("", font_size=17, bold=True, color=ACCENT, anchor_y="top",
                                 batch=b)
-        self.cells = [(make_label("", font_size=9, color=DIM, anchor_y="top", batch=b),
-                       make_label("", font_size=14, bold=True, color=TEXT, anchor_y="top",
+        self.cells = [(make_label("", font_size=11, color=DIM, anchor_y="top", batch=b),
+                       make_label("", font_size=19, bold=True, color=TEXT, anchor_y="top",
                                   batch=b)) for _ in range(6)]
-        self.prev_title = make_label("", font_size=9, bold=True, color=DIM, anchor_y="top",
+        self.prev_title = make_label("", font_size=11, bold=True, color=DIM, anchor_y="top",
                                      batch=b)
-        self.prev = [make_label("", font_size=10, color=TEXT, anchor_y="top", batch=b)
+        self.prev = [make_label("", font_size=14, color=TEXT, anchor_y="top", batch=b)
                      for _ in range(self.MAX_PREV)]
         self.geometry = (0, 0, 300, 0)
         self.rows = 0
@@ -2010,14 +2056,14 @@ class LapPanel:
         for i, (cap, val) in enumerate(self.cells):
             c, r = i % 2, i // 2
             cx = x + 12 + c * (width / 2)
-            cy = top - 32 - r * self.CELL_H
+            cy = top - 36 - r * self.CELL_H
             cap.x, cap.y = cx, cy
-            val.x, val.y = cx, cy - 12
-        py = top - 32 - 3 * self.CELL_H - 4
+            val.x, val.y = cx, cy - 15
+        py = top - 36 - 3 * self.CELL_H - 4
         self.prev_title.x, self.prev_title.y = x + 12, py
-        self.rows = max(0, min(self.MAX_PREV, int((py - 16 - bottom - 6) // self.PREV_ROW)))
+        self.rows = max(0, min(self.MAX_PREV, int((py - 20 - bottom - 6) // self.PREV_ROW)))
         for i, lab in enumerate(self.prev):
-            lab.x, lab.y = x + 12, py - 16 - i * self.PREV_ROW
+            lab.x, lab.y = x + 12, py - 20 - i * self.PREV_ROW
 
     def set(self, title: str, cells: list[tuple[str, str]], prev: list[str],
             prev_title: str = "") -> None:
@@ -2026,11 +2072,11 @@ class LapPanel:
         self.title.text = title
         for (cap, val), (c, v) in zip(self.cells, list(cells) + [("", "")] * 6):
             cap.text = c.upper()
-            val.text = _fit(v, width / 2 - 18, 14)
+            val.text = _fit(v, width / 2 - 18, 19)
         shown = prev[:self.rows]
         self.prev_title.text = prev_title if prev else ""
         for i, lab in enumerate(self.prev):
-            lab.text = _fit(shown[i], width - 24, 10) if i < len(shown) else ""
+            lab.text = _fit(shown[i], width - 24, 14) if i < len(shown) else ""
             lab.color = ACCENT if i == 0 else TEXT
 
     def pulse(self, now: float) -> None:

@@ -50,24 +50,33 @@ class TestMetricCount(tg.GuiCase):
         self.assertEqual(lay.grid_for(8), (4, 2))
         self.assertEqual(lay.grid_for(1), (1, 1))
 
-    def test_settings_row_changes_the_number_and_saves_with_save(self):
+    def test_settings_has_no_metric_count_row_in_any_sport(self):
         self.pick("Definições")
         scr = self.screen()
         scr.tab_named("Desportos")
-        scr.set_sport(2)                                   # corrida
-        scr.set_section(1)                                 # disposição do ecrã de sessão
-        row = next(i for i in scr.list.items if str(i.data).startswith("count:"))
-        self.assertEqual(row.value.split("/")[0].strip(), "8")
-        scr.list.select_data(row.data)
-        self.press(key.RIGHT, key.RIGHT)
-        self.assertEqual(lay.count(lay.load(self.app.db, "running")), 8)   # ainda em rascunho
-        self.save()
-        self.assertEqual(lay.count(lay.load(self.app.db, "running")), 10)
-        # o ecrã da sessão de corrida desenha 10 quadrados
-        from velo.ui import endurance_screens as es
-        ses = es.EnduranceSession(self.app, "running")
-        self.assertEqual(len(ses.cells), 10)
-        self.assertEqual(len(ses.cells_data()), 10)
+        for i in range(len(scr.SPORTS)):
+            scr.set_sport(i)
+            scr.set_section(1)                             # disposição do ecrã de sessão
+            labels = [x.label for x in scr.list.items]
+            self.assertNotIn("Número de métricas no ecrã", labels)
+            self.assertFalse([x for x in scr.list.items if str(x.data).startswith("count:")])
+            self.assertIn("Escolher as métricas do ecrã", labels)
+            self.assertIn("Disposição dos painéis", labels)
+
+    def test_the_layout_panels_row_opens_the_screen_of_that_sport(self):
+        from velo.ui import arrangement_screens as arr
+        self.pick("Definições")
+        scr = self.screen()
+        scr.tab_named("Desportos")
+        for i, sport in enumerate(scr.SPORTS):
+            scr.set_sport(i)
+            scr.set_section(1)
+            self.pick("Disposição dos painéis")
+            ed = self.screen()
+            self.assertIsInstance(ed, arr.ArrangementEditor)
+            self.assertEqual(ed.sport, sport)              # o ginásio já não vai para o ciclismo
+            self.press(key.ESCAPE)
+            self.assertIs(self.screen(), scr)
 
     def test_editor_buttons_and_keys(self):
         ed = ls.LayoutEditor(self.app, "running")
