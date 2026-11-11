@@ -14,8 +14,12 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 777 testes
+python -m unittest discover -s tests -t .       # 929 testes
 ```
+
+**Sem o PyCharm:** duplo clique em `Perennia.bat` (Windows) ou `./perennia.sh` (macOS, Linux) abre a
+aplicação com o ambiente do projeto; `criar_atalho_windows.bat` põe um atalho com ícone no Ambiente de
+trabalho. Detalhes em [RUN.md](RUN.md), «Abrir como uma app, sem o PyCharm».
 
 **Para partilhar com quem não usa Python:** duplo clique em
 `build_windows.bat` cria `dist/Perennia-windows.zip`, uma versão que abre
@@ -39,13 +43,25 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   com visão geral e melhores tempos; contam sozinhos nas sessões.
 - Treinos do computador (`.zwo`, `.fit`, `.mrc`, `.erg`) perguntam se ficam
   na lista; cada sessão guarda a sua cópia do treino.
-- **Terminar uma sessão** é igual no ciclismo, na corrida, no remo e no ginásio (Esc pausa, F10
+- **Terminar uma sessão** é igual no ciclismo, na corrida, no remo e no ginásio (Esc pausa e abre o
+  aviso PAUSA, F10
   pergunta, Sim / Não / Terminar sem guardar) e abre a janela das **etiquetas** do `.fit`: tipo
   de treino (sugerido pelo esforço nas sessões livres), tipo de sessão (`Perennia` sempre; o
   `Indoor …` do desporto sozinho — `Indoor Cycling`, `Indoor Strength`…; `Virtual …` só quando
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 14** — o aviso **PAUSA** ao centro, em todos os desportos (**Retomar sessão** ou **Terminar
+  treino**); **Dispositivos** e **Definições** abrem por cima da sessão e **põem-na em pausa** (nas
+  Definições só há o que se pode mexer: *Geral → passos seguintes*, o separador do desporto da sessão,
+  *Ecrã e idioma → tema, unidades e idioma*, os atalhos e os bips); os atalhos de **volta, pausa,
+  terminar e começar sem contagem são um só para todos os desportos**, com **saltar bloco** em todos,
+  **velocidade e declive** na corrida e **resistência** no remo; no **ginásio** já não há cronómetro
+  no topo nem RPE, as séries por tempo contam para trás (na métrica *Série / descanso* ou num aviso ao
+  centro), o descanso é a única linha por baixo de cada exercício e traz o tempo, e o **Saltar** passou
+  a funcionar a meio de uma série; **abre-se como uma app**, sem o PyCharm (`Perennia.bat`,
+  `perennia.sh`, o atalho com ícone e o `Perennia.exe`). Base de dados: nada a fazer — o `keymap`
+  antigo (um atalho por desporto) é unificado ao abrir, e também nos backups antigos.
 - **Ronda 13** — a janela de **Dispositivos** tem um bloco por ligação (**Bluetooth**, **ANT+** e
   **SEM HARDWARE**): os aparelhos encontrados ficam por baixo da sua ligação, os ligados levam o ✓ e
   os valores ao vivo, e no fim há a lista informativa dos **Dispositivos ligados**; a **corrida livre**
@@ -272,8 +288,8 @@ faixa sombreada e as setas saltam-nos; a descrição de cada opção fica à
 frente dela (nas listas grandes, como a dos exercícios, fica por baixo). Na
 janela da sessão, a rota escolhe-se numa lista das tuas rotas `.gpx`. Os
 aparelhos de experiência chamam-se **SEM HARDWARE - Trainer** e **SEM
-HARDWARE - Remo**. **L** marca volta, **P** ou o botão ❚❚ pausa (e pausa sozinho quando paras de pedalar), **F10** ou o botão ■ termina e grava, **F11**
-põe em ecrã inteiro. A sessão nunca termina sozinha: ao fim da rota dá a
+HARDWARE - Remo**. **L** marca volta, **P** ou o botão ❚❚ pausa (e abre o aviso **PAUSA**; no ciclismo pausa sozinho quando paras de pedalar), **N** salta o bloco, **F10** ou o botão ■ termina e grava, **F11**
+põe em ecrã inteiro (as mesmas teclas em todos os desportos). A sessão nunca termina sozinha: ao fim da rota dá a
 volta e conta as voltas; só o botão de parar a fecha.
 
 ## Estrutura
@@ -336,6 +352,7 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   tags.py            etiquetas das sessões e tipos de treino (sugestão pelo esforço, .fit)
   longevity.py       índice de longevidade, eixos, radar, impacto de uma sessão, fórmula editável
   cues.py            os avisos sonoros e visíveis do fim de um bloco, série ou descanso
+  shortcuts.py       os atalhos antigos (um por desporto) → os de agora; serve à base e aos backups
   health_csv.py      o diário de saúde em .csv (modelo, exportação, importação por data)
   strength_import.py treinos de ginásio de um .csv, .json, .txt ou .fit (TrainingPeaks…)
   gpx_convert.py     GPX Conversor: percurso → níveis do rolo / inclinação da passadeira
@@ -388,11 +405,14 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      exercise_stats_screens.py ·
                      widgets.py (inclui a barra do topo e os separadores)
 velo/paths.py        onde está a aplicação (script ou executável)
-packaging/           receita do PyInstaller e LEIA-ME para os colegas
-build_windows.bat    cria a versão para Windows, para partilhar
+packaging/           receita do PyInstaller, ícone (.ico), atalho do Windows e LEIA-ME para os colegas
+Perennia.bat         abre a aplicação sem o PyCharm (Windows); perennia.sh no macOS e no Linux
+criar_atalho_windows.bat  o atalho «Perennia», com ícone, no Ambiente de trabalho
+build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
+tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               777 testes: núcleo, protocolos, força, remo, saúde,
+tests/               929 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

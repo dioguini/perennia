@@ -656,7 +656,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         e = self.engine
-        if self.confirming:                       # o diálogo de terminar tem as teclas todas
+        if self.confirming or self.pause_popup:   # o diálogo de terminar e o popup «PAUSA»
             return self.finish_key(symbol)
         if self.typing is not None:
             if symbol in (key.ENTER, key.RETURN):
@@ -694,15 +694,28 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                 return True
             e.lap("manual")
             return True
+        if symbol == key.N:                        # saltar o bloco em curso
+            self._skip_block()
+            return True
         if symbol == key.P:
-            e.toggle_pause()
+            self._flow_toggle_pause()
             return True
         if symbol in (key.ESCAPE, key.F10):        # Esc pausa · F10 pergunta (como no ciclismo)
             return self.finish_key(symbol)
         return True
 
+    def _skip_block(self) -> None:
+        e = self.engine
+        if e.skip_step():
+            self.toast = tr("Bloco saltado", "Block skipped")
+        elif e.workout is None:
+            self.toast = tr("Não há blocos: é uma sessão livre", "No blocks: this is a free session")
+        else:
+            self.toast = tr("Não há bloco para saltar", "No block to skip")
+        self._toast_until = time.monotonic() + 3.0
+
     def on_mouse(self, x: int, y: int) -> bool:
-        if not self.confirming:
+        if not self.confirming and not self.pause_popup:
             hit = self.controls.hit(x, y)           # os − + da velocidade e da inclinação
             if hit is not None:
                 kind, sign = hit
@@ -746,7 +759,13 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         e.set_incline(e.incline_pct + unit * step * mult)
 
     def _flow_toggle_pause(self) -> None:
-        self.engine.toggle_pause()
+        if not self.engine.started:                 # antes de começar, o botão começa
+            self.engine.toggle_pause()
+            return
+        super()._flow_toggle_pause()
+
+    def _flow_can_pause(self) -> bool:
+        return bool(self.engine.started)
 
     def _flow_paused(self) -> bool:
         return bool(self.engine.paused)

@@ -23,18 +23,64 @@ from velo.ui import app as app_mod  # noqa: E402
 
 class TestKeymapCore(tg.GuiCase):
     def test_translate_new_key_to_the_original(self):
-        raw = {"ride_lap": ["K", []]}
-        self.assertEqual(keymap.translate(raw, "ride", key.K, 0), (key.L, 0))
+        raw = {"lap": ["H", []]}
+        self.assertEqual(keymap.translate(raw, "ride", key.H, 0), (key.L, 0))
         self.assertIsNone(keymap.translate(raw, "ride", key.L, 0))   # a antiga deixa de marcar
-        # noutro âmbito nada muda (o K continua a subir nas listas)
-        self.assertEqual(keymap.translate(raw, None, key.K, 0), (key.K, 0))
-        self.assertEqual(keymap.translate(raw, "rowing", key.L, 0), (key.L, 0))
+        # é uma só definição: vale em todos os desportos
+        for scope in ("rowing", "endurance", "gym"):
+            self.assertEqual(keymap.translate(raw, scope, key.H, 0), (key.L, 0), scope)
+            self.assertIsNone(keymap.translate(raw, scope, key.L, 0), scope)
+        # noutro âmbito nada muda
+        self.assertEqual(keymap.translate(raw, None, key.H, 0), (key.H, 0))
+        self.assertEqual(keymap.translate(raw, None, key.L, 0), (key.L, 0))
+
+    def test_old_per_sport_shortcuts_become_the_single_one(self):
+        old = {"ride_lap": ["K", []], "row_lap": ["M", []], "gym_pause": ["O", []],
+               "run_start": ["B", []], "ride_finish": ["F9", []]}
+        got = keymap.custom_map(old)
+        self.assertEqual(got["lap"], ["K", []])                 # a primeira que encontra
+        self.assertEqual(got["pause"], ["O", []])
+        self.assertEqual(got["start_now"], ["B", []])
+        self.assertEqual(got["finish"], ["F9", []])
+        self.assertNotIn("ride_lap", got)
+        self.assertEqual(keymap.binding(old, "lap"), ("K", ()))
+        # a definição nova ganha à antiga
+        self.assertEqual(keymap.custom_map({"ride_lap": ["K", []], "lap": ["H", []]})["lap"],
+                         ["H", []])
+        # lixo antigo ou desconhecido não rebenta
+        self.assertEqual(keymap.custom_map({"ride_pause": ["ZZ", []], "xx": ["A", []]}), {})
+
+    def test_every_sport_hears_the_five_common_actions(self):
+        common = ("lap", "pause", "finish", "start_now", "skip_block")
+        self.assertEqual(list(keymap.actions_in("session")), list(common))
+        for scope in keymap.SESSION_SCOPES:
+            live = [a[0] for a in keymap._live(scope)]
+            for a in common:
+                self.assertIn(a, live, (scope, a))
+        self.assertNotIn("lap", [a[0] for a in keymap._live("builder")])
+
+    def test_new_shortcuts_exist_with_their_defaults(self):
+        self.assertEqual(keymap.default("skip_block"), ("N", ()))
+        self.assertEqual(keymap.default("speed_up"), ("PLUS", ()))
+        self.assertEqual(keymap.default("incline_up"), ("UP", ()))
+        self.assertEqual(keymap.default("row_res_up"), ("PLUS", ()))
+        self.assertEqual(keymap.default("ride_res_down"), ("MINUS", ()))
+        for a in ("speed_up", "speed_down", "incline_up", "incline_down",
+                  "row_res_up", "row_res_down", "ride_res_up", "ride_res_down"):
+            self.assertTrue(keymap.label(a))
+        self.assertIsNone(keymap.problem({}, "incline_up", ("PAGEUP", ())))
+        self.assertIsNotNone(keymap.problem({}, "skip_block", ("PLUS", ())))
 
     def test_conflicts_and_reserved_keys(self):
-        self.assertIsNotNone(keymap.problem({}, "ride_lap", ("P", ())))      # é a pausa
-        self.assertIsNotNone(keymap.problem({}, "devices", ("J", ())))       # navega
+        self.assertIsNotNone(keymap.problem({}, "lap", ("P", ())))       # é a pausa
+        self.assertIsNotNone(keymap.problem({}, "lap", ("N", ())))       # é saltar bloco
+        self.assertIsNotNone(keymap.problem({}, "devices", ("J", ())))   # navega
+        self.assertIsNotNone(keymap.problem({}, "lap", ("J", ())))       # muda de linha no ginásio
         self.assertIsNone(keymap.problem({}, "devices", ("J", ("ctrl",))))
-        self.assertIsNone(keymap.problem({}, "ride_lap", ("K", ())))
+        self.assertIsNone(keymap.problem({}, "lap", ("K", ("ctrl",))))
+        self.assertIsNone(keymap.problem({}, "lap", ("H", ())))
+        self.assertIsNone(keymap.problem({}, "row_res_up", ("PLUS", ())))
+        self.assertIsNotNone(keymap.problem({}, "incline_up", ("PLUS", ())))
 
 
 class TestShortcutsSettings(tg.GuiCase):

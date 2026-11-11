@@ -483,6 +483,11 @@ class StrengthSession:
         self._hr_n = 0
         self._max_hr = 0
         self.entry: dict[str, Any] = {}
+        # depois de saltar ou mudar de exercício a meio do descanso, os campos
+        # já não corrigem a série anterior: passam a ser os do exercício novo
+        self._fix_closed = False
+        # séries por tempo (prancha 40 s): contam para trás e acabam sozinhas
+        self.auto_end_timed = bool(db.get("gym_auto_end_timed", True))
 
         if resume is not None:
             self.session_id = resume["session_id"]
@@ -572,15 +577,16 @@ class StrengthSession:
     def _prefill(self) -> None:
         it = self.item
         load = self.carry_load.get(self.item_idx, it.load_kg)
-        reps, rpe = it.reps, it.rpe
+        reps = it.reps
         if self.free:
-            reps, rpe = 0, None              # treino livre: nada marcado de antemão
+            reps = 0                         # treino livre: nada marcado de antemão
         tg = self.target(self.item_idx, self.done_sets(self.item_idx))
         if tg is not None:
             reps = tg.get("reps") or reps
             load = tg["load_kg"] if tg.get("load_kg") is not None else load
-            rpe = tg["rpe"] if tg.get("rpe") is not None else rpe
-        self.entry = {"reps": reps, "load_kg": load, "rpe": rpe}
+        # O RPE da série deixou de se perguntar durante a sessão: o alvo do plano
+        # não é o esforço sentido. O esforço fica no feedback do fim da sessão.
+        self.entry = {"reps": reps, "load_kg": load, "rpe": None}
 
     def _rest_after(self, idx: int, set_index: int) -> int:
         if self.free:
@@ -636,6 +642,11 @@ class StrengthSession:
                 and not self._rest_done_sent:
             self._rest_done_sent = True
             self._emit("rest_done")
+        if self.phase == WORK and self.auto_end_timed and self.timed_set \
+                and self.timed_target_s > 0:
+            if self.t - self.set_start_t >= self.timed_target_s:
+                self.end_set()
+                self._emit("set_auto_ended")
         self._accum += dt
         while self._accum >= 1.0:
             self._accum -= 1.0
@@ -687,13 +698,33 @@ class StrengthSession:
         return physics.zone_of(self.hr_bpm, self.hr_bounds, self.lthr)
 
     @property
+    def timed_set(self) -> bool:
+        """A série a decorrer é por tempo (prancha, corda)?"""
+        return self.phase == WORK and self.item.measure == "time"
+
+    @property
+    def timed_target_s(self) -> float:
+        """Os segundos que a série por tempo pede (o campo que se pode corrigir)."""
+        return float(self.entry.get("reps") or self.item.reps or 0)
+
+    @property
     def phase_seconds(self) -> float:
-        """Tempo da série a decorrer, ou o descanso que falta (negativo = passou)."""
+        """O que falta: nas séries por tempo e no descanso é uma contagem
+        decrescente (negativo = passou o tempo); nas séries por repetições é
+        o tempo que já vai."""
         if self.phase == WORK:
-            return self.t - self.set_start_t
+            elapsed = self.t - self.set_start_t
+            if self.timed_set and self.timed_target_s > 0:
+                return self.timed_target_s - elapsed
+            return elapsed
         if self.phase == REST:
             return self.rest_until - self.t
         return 0.0
+
+    @property
+    def counting_down(self) -> bool:
+        """`phase_seconds` está a contar para trás (descanso ou série por tempo)?"""
+        return self.phase == REST or (self.timed_set and self.timed_target_s > 0)
 
     # ---------------------------------------------------------- ações
 
@@ -721,8 +752,9 @@ class StrengthSession:
                 self.extra[self.item_idx] = self.extra.get(self.item_idx, 0) + 1
             else:
                 self.item_idx = nxt
-        if self.phase == REST:
+        if self.phase == REST and not self._fix_closed:
             self._prefill()
+        self._fix_closed = False
         self.phase = WORK
         self.paused = False
         self.set_start_t = self.t
@@ -755,6 +787,7 @@ class StrengthSession:
                            load, rpe, int(self.set_start_t), int(self.t), avg, mx)
         self.sets.append(logged)
         self.carry_load[self.item_idx] = load
+        self._fix_closed = False
         self.phase = REST
         self.rest_until = self.t + self._rest_after(self.item_idx, set_no - 1)
         self._rest_done_sent = False
@@ -767,7 +800,7 @@ class StrengthSession:
     @property
     def editing_last(self) -> bool:
         """No descanso, os campos corrigem a série que acabou."""
-        return self.phase in (REST, DONE) and bool(self.sets)
+        return self.phase in (REST, DONE) and bool(self.sets) and not self._fix_closed
 
     def field_value(self, name: str):
         if self.editing_last:
@@ -827,23 +860,89 @@ class StrengthSession:
             self._prefill()
         self.checkpoint()
 
-    def skip_item(self) -> None:
-        if self.phase == WORK:
-            return
-        self.skipped.add(self.item_idx)
+    def skip_item(self) -> tuple[int, int | None] | None:
+        """Salta o exercício que vem a seguir (o da próxima série). Devolve
+        (o que foi saltado, o novo), ou None se estava a meio de uma série.
+
+        Durante o descanso o ecrã mostrava ainda o exercício anterior, por isso o
+        salto não se via: agora os campos passam logo para o exercício novo. No meio de uma
+        série, o botão cancela-a (não fica gravada) e salta o exercício: antes não fazia nada
+        e, como a sessão começa logo na 1.ª série, parecia que o botão não funcionava.
+        """
+        self._cancel_set()
+        gone = self.item_idx
+        self.skipped.add(gone)
         nxt = self.next_item()
         if nxt is None:
             self.phase = DONE
+            self._fix_closed = True
         else:
             self.item_idx = nxt
-            if self.phase != REST:
+            if self.phase == REST:
+                self._fix_closed = True
+            else:
                 self.phase = READY
-                self._prefill()
+            self._prefill()
         self.checkpoint()
+        return gone, nxt
+
+    def _cancel_set(self) -> None:
+        """Deixa cair a série em curso, sem a gravar (o exercício vai ser saltado)."""
+        if self.phase == WORK:
+            self.phase = READY
+            self._set_hr = []
+            self.paused = False
+
+    def block_of(self, idx: int) -> int | None:
+        """O bloco (A, B, C…) a que o exercício `idx` pertence, nos planos feitos no
+        construtor por blocos."""
+        if self.struct is None:
+            return None
+        n = 0
+        for bi, b in enumerate(self.struct["blocks"]):
+            for _ei in b["exercises"]:
+                if n == idx:
+                    return bi
+                n += 1
+        return None
+
+    def skip_block(self) -> tuple[int, int | None] | None:
+        """Salta o bloco inteiro (um superset, um circuito…) ou, num plano simples,
+        o exercício. Devolve como `skip_item`."""
+        self._cancel_set()
+        bi = self.block_of(self.item_idx)
+        if bi is None:
+            return self.skip_item()
+        first = self.item_idx
+        for idx in range(len(self.items)):
+            if self.block_of(idx) == bi and self.done_sets(idx) < self.planned_sets(idx):
+                self.skipped.add(idx)
+        self.skipped.add(first)
+        nxt = self.next_item()
+        if nxt is None:
+            self.phase = DONE
+            self._fix_closed = True
+        else:
+            self.item_idx = nxt
+            if self.phase == REST:
+                self._fix_closed = True
+            else:
+                self.phase = READY
+            self._prefill()
+        self.checkpoint()
+        return first, nxt
 
     def toggle_pause(self) -> None:
         self.paused = not self.paused
         self.checkpoint()
+
+    def pause(self) -> None:
+        if not self.paused:
+            self.toggle_pause()
+
+    def resume(self) -> None:
+        if self.paused:
+            self.toggle_pause()
 
     # --------------------------------------------------- recuperação
 
@@ -916,6 +1015,7 @@ class StrengthSession:
         by_idx = {i: it for i, it in enumerate(self.items)}
         volume = 0.0
         rpes = []
+        plan_rpes = []                  # só para estimar a carga quando não há FC
         per_exercise: dict[int, dict] = {}
         for s in self.sets:
             it = by_idx.get(s.item_idx)
@@ -925,6 +1025,8 @@ class StrengthSession:
             volume += v
             if s.rpe:
                 rpes.append(s.rpe)
+            if s.rpe or (it is not None and it.rpe):
+                plan_rpes.append(s.rpe or it.rpe)
             ex = per_exercise.setdefault(s.exercise_id, {
                 "name": it.name if it else "?", "sets": 0, "reps": 0, "volume": 0.0,
                 "best_e1rm": None, "measure": measure, "lines": []})
@@ -940,7 +1042,8 @@ class StrengthSession:
         load = hr_load(self._hr_all, self.lthr)
         source = "hr"
         if load is None or self._hr_n < 0.5 * max(1, len(self._hr_all)):
-            alt = rpe_load(self.t, avg_rpe)
+            alt = rpe_load(self.t, avg_rpe or (sum(plan_rpes) / len(plan_rpes)
+                                               if plan_rpes else None))
             if alt is not None:
                 load, source = alt, "rpe"
         if load is None:

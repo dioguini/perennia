@@ -351,6 +351,16 @@ class RowWorkoutRunner:
         got = self.step_t if s.dur_type == "time" else self.step_m
         if got < s.dur_value:
             return []
+        return self._end_step()
+
+    def skip(self) -> list[tuple[str, dict]]:
+        """Salta o passo em curso, como se tivesse acabado agora."""
+        if self.done:
+            return []
+        return self._end_step()
+
+    def _end_step(self) -> list[tuple[str, dict]]:
+        a = self._acc
         n = max(1, a["n"])
         self.results.append({"idx": self.idx, "seconds": self.step_t, "meters": self.step_m,
                              "avg_power_w": a["w"] / n if a["n"] else None,
@@ -1007,6 +1017,37 @@ class RowEngine:
         self.manual_pause = not self.manual_pause
         self.events.append(("paused" if self.manual_pause else "resumed", {}))
         self.checkpoint()
+
+    def pause(self) -> None:
+        if not self.manual_pause:
+            self.toggle_pause()
+
+    def resume(self) -> None:
+        if self.manual_pause:
+            self.toggle_pause()
+
+    def start_now(self) -> bool:
+        """Começa já, sem esperar pela primeira remada. False se já tinha começado."""
+        if self.started or self.finished:
+            return False
+        self.started = True
+        self.events.append(("started", {}))
+        if self._want_level:
+            self._send_level(self._want_level)
+        return True
+
+    def skip_step(self) -> bool:
+        """Salta o passo (bloco) do treino em curso. False se não houver."""
+        if self.workout is None or self.workout.done or not self.started:
+            return False
+        for kind, data in self.workout.skip():
+            self.events.append((kind, data))
+            if kind == "step_end":
+                self.lap("workout_step", step_idx=data["idx"])
+            elif kind == "step":
+                self._apply_step()
+        self.checkpoint()
+        return True
 
     # ---------------------------------------------------------- recuperação
 

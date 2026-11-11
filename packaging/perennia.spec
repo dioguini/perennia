@@ -14,6 +14,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(SPECPATH).parent
+ICON = ROOT / "packaging" / "perennia.ico"          # o ícone do .exe (tools/make_app_icon.py)
 
 datas = [(str(ROOT / "tests" / "teste.gpx"), "tests"),
          (str(ROOT / "velo" / "assets"), "velo/assets")]      # ícones
@@ -67,6 +68,7 @@ exe = EXE(
     name="Perennia",
     console=False,            # sem janela preta; os erros vão para perennia-erro.log
     upx=False,
+    icon=str(ICON) if sys.platform == "win32" and ICON.exists() else None,
 )
 
 coll = COLLECT(exe, a.binaries, a.datas, name="Perennia", upx=False)

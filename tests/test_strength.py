@@ -124,7 +124,8 @@ class TestStrengthCore(unittest.TestCase):
         self.assertGreater(result["load"], 0)
         self.assertGreater(sum(result["hr_zone_s"]), 0)
         squat = next(e for e in result["exercises"] if e["name"].startswith("Agachamento"))
-        self.assertAlmostEqual(squat["best_e1rm"], 60 * (1 + (6 + 2.5) / 30), places=3)
+        # a sessão já não pede o RPE: sem ele a série conta como feita até ao limite (sem RIR)
+        self.assertAlmostEqual(squat["best_e1rm"], 60 * (1 + 6 / 30), places=3)
         # na base: sessão concluída, ponto de recuperação apagado
         row = self.db.conn.execute("SELECT * FROM strength_sessions").fetchone()
         self.assertEqual(row["status"], "completed")
@@ -569,15 +570,15 @@ class TestStrengthGui(tg.GuiCase):
         self.app._on_draw()
         for _ in range(20):
             self.app._tick(0.5)
-        self.assertEqual(scr.clock.value.text, "0:10")   # tempo total ao centro
-        self.assertIn("série", scr.clock.sub.text)
+        self.assertFalse(hasattr(scr, "clock"))           # sem cronómetro no topo
         self.press(key.SPACE)                             # Lap: termina a série
         self.assertEqual(len(scr.session.sets), 1)
-        self.select("Segundos")                            # corrige: foram 280 s
-        self.app._on_text("280")
+        # as repetições corrigem-se na linha do exercício (não há linhas à parte, nem RPE)
+        self.assertFalse([i for i in scr.list.items if i.label in ("Segundos", "RPE", "Carga")])
+        scr.list.select_data(("ex", 0))
+        self.app._on_text("280")                           # foram 280 s
         self.assertEqual(scr.session.sets[-1].reps, 280)
-        self.select("RPE")
-        self.press(key.RIGHT, key.RIGHT)
+        self.assertEqual(scr.session.sets[-1].rpe, None)   # a sessão já não pede o RPE
         self.app._on_draw()
         self.press(key.SPACE)                             # Lap: série seguinte
         self.assertEqual(scr.session.phase, "work")

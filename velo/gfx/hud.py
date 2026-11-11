@@ -202,6 +202,100 @@ class FinishDialog:
             self.batch.draw()
 
 
+class PauseDialog:
+    """O popup «PAUSA», ao centro, quando a sessão está parada à mão: **Retomar sessão** ou
+    **Terminar treino**. É o mesmo em todos os desportos (ciclismo, corrida, natação, remo e
+    ginásio). P, Esc, Enter ou Espaço retomam; F10 (ou D) pergunta se termina."""
+
+    def __init__(self):
+        self.batch = pyglet.graphics.Batch()           # por cima de tudo
+        self.visible = False
+        tb = self.batch
+        self.shade = _rect(tb, _theme.P.shade, 0)
+        self.box = _rect(tb, _theme.P.panel, 0)
+        self.edge = _rect(tb, _theme.P.accent, 0)
+        self.title = make_label("", font_size=40, bold=True, color=ACCENT,
+                                anchor_x="center", anchor_y="center", batch=tb)
+        self.sub = make_label("", font_size=13, color=DIM, anchor_x="center",
+                              anchor_y="center", batch=tb)
+        self.resume = _rect(tb, _theme.P.accent, 0)
+        self.finish = _rect(tb, _theme.P.danger, 0)
+        self.resume_label = make_label("", font_size=14, bold=True, color=_theme.rgba(
+            _theme.P.accent_text), anchor_x="center", anchor_y="center", batch=tb)
+        self.finish_label = make_label("", font_size=14, bold=True, color=ON_DARK,
+                                       anchor_x="center", anchor_y="center", batch=tb)
+        self.hint = make_label("", font_size=11, color=DIM, anchor_x="center",
+                               anchor_y="center", batch=tb)
+        self.icons = {"resume": icons.sprite("ui_play", 0, 0, 18, batch=tb, opacity=0),
+                      "finish": icons.sprite("ui_stop", 0, 0, 18, batch=tb, opacity=0)}
+
+    def _place_icons(self) -> None:
+        from velo.ui.widgets import text_px
+        for k, rect, lab in (("resume", self.resume, self.resume_label),
+                             ("finish", self.finish, self.finish_label)):
+            ic = self.icons.get(k)
+            if ic is None:
+                continue
+            text_w = text_px(lab.text, 14, True) if lab.text else 0
+            cx = rect.x + rect.width / 2
+            ic.x = cx - (text_w + 26) / 2
+            ic.y = rect.y + (rect.height - 18) / 2
+            ic.opacity = 235 if self.visible else 0
+            lab.x = ic.x + 26 + text_w / 2
+
+    def layout(self, w: int, h: int) -> None:
+        self.shade.x, self.shade.y = 0, 0
+        self.shade.width, self.shade.height = w, h
+        bw, bh = 560, 250
+        bx, by = (w - bw) // 2, (h - bh) // 2
+        self.box.x, self.box.y, self.box.width, self.box.height = bx, by, bw, bh
+        self.edge.x, self.edge.y, self.edge.width, self.edge.height = bx, by + bh - 4, bw, 4
+        self.title.x, self.title.y = w // 2, by + bh - 62
+        self.sub.x, self.sub.y = w // 2, by + bh - 112
+        bwid = bw // 2 - 40
+        for r, x0 in ((self.resume, bx + 30), (self.finish, bx + bw // 2 + 10)):
+            r.x, r.y, r.width, r.height = x0, by + 62, bwid, 56
+        self.resume_label.y = self.finish_label.y = by + 62 + 28
+        self.hint.x, self.hint.y = w // 2, by + 28
+        self._place_icons()
+
+    def show(self) -> None:
+        self.visible = True
+        self.shade.opacity = _theme.P.shade_alpha
+        self.box.opacity = 250
+        self.edge.opacity = self.resume.opacity = self.finish.opacity = 255
+        self.title.text = tr("PAUSA", "PAUSED")
+        self.sub.text = tr("A sessão está parada.", "The session is on hold.")
+        self.resume_label.text = tr("Retomar sessão", "Resume session")
+        self.finish_label.text = tr("Terminar treino", "Finish workout")
+        self.hint.text = tr("P ou Esc retomam  ·  F10 termina",
+                            "P or Esc resume  ·  F10 finishes")
+        self._place_icons()
+
+    def hide(self) -> None:
+        self.visible = False
+        for ic in self.icons.values():
+            ic.opacity = 0
+        for r in (self.shade, self.box, self.edge, self.resume, self.finish):
+            r.opacity = 0
+        for lab in (self.title, self.sub, self.resume_label, self.finish_label, self.hint):
+            lab.text = ""
+
+    def hit(self, x: float, y: float) -> str | None:
+        """«resume», «finish», ou None. Com o popup aberto, o clique nunca passa para baixo."""
+        if not self.visible:
+            return None
+        if _hit(self.resume, x, y):
+            return "resume"
+        if _hit(self.finish, x, y):
+            return "finish"
+        return None
+
+    def draw(self) -> None:
+        if self.visible:
+            self.batch.draw()
+
+
 @dataclass
 class Toast:
     text: str
@@ -253,6 +347,7 @@ class Hud:
 
         self.batch = pyglet.graphics.Batch()
         self.finish_dialog = FinishDialog()           # o diálogo de confirmação, por cima
+        self.pause_dialog = PauseDialog()             # «PAUSA»: retomar ou terminar
         self.toasts: list[Toast] = []
         self.sign: Sign | None = None
         self.climb: dict | None = None
@@ -624,6 +719,7 @@ class Hud:
 
         # ---------------- diálogo
         self.finish_dialog.layout(w, h)
+        self.pause_dialog.layout(w, h)
 
     def _layout_arranged(self, w: int, h: int, top: float) -> None:
         """Cada painel no retângulo que lhe deste (velo.core.screen_layout).
@@ -983,6 +1079,8 @@ class Hud:
         self.status = state.status
         text = {"waiting": t("ride.waiting"), "paused": t("ride.paused"),
                 "auto_paused": t("ride.auto_paused")}.get(state.status, "")
+        if self.pause_popup and state.status == "paused":
+            text = ""                       # o popup «PAUSA» já o diz
         if self.confirm_visible:
             text = ""
         self._paused_label.text = text
@@ -1539,6 +1637,20 @@ class Hud:
     # ============================================================ diálogo
 
     @property
+    def pause_popup(self) -> bool:
+        """O popup «PAUSA» está aberto (então o aviso «em pausa» do ecrã cala-se)."""
+        return self.pause_dialog.visible
+
+    def show_pause(self) -> None:
+        self.pause_dialog.show()
+
+    def hide_pause(self) -> None:
+        self.pause_dialog.hide()
+
+    def pause_hit(self, x: float, y: float) -> str | None:
+        return self.pause_dialog.hit(x, y)
+
+    @property
     def confirm_visible(self) -> bool:
         return self.finish_dialog.visible
 
@@ -1576,5 +1688,6 @@ class Hud:
         self.window.view = Mat4()
         self.batch.draw()
         self.board_panel.draw()
+        self.pause_dialog.draw()
         self.finish_dialog.draw()
         glEnable(GL_DEPTH_TEST)

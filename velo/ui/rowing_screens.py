@@ -597,7 +597,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
     # ------------------------------------------------------------- teclas
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
-        if self.confirming:                       # o diálogo de terminar tem as teclas todas
+        if self.confirming or self.pause_popup:   # o diálogo de terminar e o popup «PAUSA»
             return self.finish_key(symbol)
         e = self.engine
         if symbol in (key.PLUS, key.EQUAL, key.NUM_ADD, getattr(key, "PAGEUP", -1)):
@@ -617,8 +617,15 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         if symbol == key.V:
             self.page = (self.page + 1) % self.pages
             return True
+        if symbol == key.N:                        # saltar o bloco (passo) em curso
+            if e.skip_step():
+                self.toast = tr("Bloco saltado", "Block skipped")
+            else:
+                self.toast = tr("Não há bloco para saltar", "No block to skip")
+            self._toast_until = time.monotonic() + 3.0
+            return True
         if symbol == key.P:
-            e.toggle_pause()
+            self._flow_toggle_pause()
             return True
         if symbol in (key.ESCAPE, key.F10):        # Esc pausa · F10 pergunta (como no ciclismo)
             return self.finish_key(symbol)
@@ -641,8 +648,8 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
     def _flow_adjust(self, step: int, mult: int = 1) -> None:
         self.engine.adjust_resistance(step)
 
-    def _flow_toggle_pause(self) -> None:
-        self.engine.toggle_pause()
+    def _flow_can_pause(self) -> bool:
+        return bool(self.engine.started)
 
     def _flow_paused(self) -> bool:
         return bool(self.engine.manual_pause)

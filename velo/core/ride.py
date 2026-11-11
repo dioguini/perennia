@@ -760,7 +760,7 @@ class RideEngine:
         if self.chase is not None:
             self.chase.observe_power(r.power_w)
         if self.workout is not None:
-            if not self._workout_done and self._t >= self.workout.total_s:
+            if not self._workout_done and self._t + self.workout.skipped_s >= self.workout.total_s:
                 self._workout_done = True
                 self._emit("workout_done")
             changed = self.workout.observe(self._t, r.power_w, r.hr_bpm, r.cadence_rpm)
@@ -821,6 +821,7 @@ class RideEngine:
             "loop_start_t": self._loop_start_t, "best_loop_s": self._best_loop_s,
             "route_finished": self.route_finished, "workout_done": self._workout_done,
             "difficulty": self.difficulty, "intensity": st.intensity,
+            "skipped_s": self.workout.skipped_s if self.workout is not None else 0.0,
             "last_sample_ele": self._last_sample_ele, "chase": chase,
             "chase_result": self.chase_result,
             "game": self.game.snapshot() if self.game is not None else None,
@@ -834,6 +835,8 @@ class RideEngine:
         self._moving_s = float(snap.get("moving_s", 0.0))
         self._paused_s = float(snap.get("paused_s", 0.0))
         st.paused_s = self._paused_s
+        if self.workout is not None:
+            self.workout.skipped_s = float(snap.get("skipped_s", 0.0))
         st.dist_m = float(snap.get("dist_m", 0.0))
         st.pos_m = float(snap.get("pos_m", 0.0))
         st.loops = int(snap.get("loops", 0))
@@ -1200,6 +1203,28 @@ class RideEngine:
                 self.trainer.set_sim(0.0, self.athlete.crr, self.athlete.cda)
             except Exception:
                 pass
+
+    def start_now(self) -> bool:
+        """Começa já, sem esperar pela primeira pedalada. False se já tinha começado."""
+        if self.started or self.finished:
+            return False
+        self.started = True
+        self._emit("ride_started")
+        return True
+
+    def skip_block(self) -> bool:
+        """Salta o passo do treino em curso. False se a sessão não tem passos."""
+        if self.workout is None or self._workout_done or not self.started:
+            return False
+        moved = self.workout.skip_step(self._t)
+        if moved is None:
+            return False
+        self._last_target_sent = None
+        self.state.target_power_w = self.workout.target_watts(self._t)
+        if self.workout.step_at(self._t) is None and not self._workout_done:
+            self._workout_done = True
+            self._emit("workout_done")
+        return True
 
     def resume(self) -> None:
         self.manual_pause = False

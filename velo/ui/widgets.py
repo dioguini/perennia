@@ -1863,6 +1863,69 @@ class CountdownBadge:
             self.batch.draw()
 
 
+class CenterNotice:
+    """Aviso ao centro do ecrã, sem escurecer o resto: um título, um número grande e uma linha
+    por baixo. É onde a sessão de ginásio mostra a contagem decrescente da série (por tempo) ou
+    do descanso quando a métrica «Série / descanso» não está no ecrã."""
+
+    def __init__(self, window, batch=None):
+        self.window = window
+        self.batch = batch or pyglet.graphics.Batch()
+        self._own = batch is None
+        self.visible = False
+        self.outline = pyglet.shapes.Rectangle(0, 0, 10, 10, color=_theme.P.border[:3],
+                                               batch=self.batch)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=self.batch)
+        self.edge = pyglet.shapes.Rectangle(0, 0, 10, 5, color=ACCENT[:3], batch=self.batch)
+        self.title = make_label("", font_size=18, bold=True, color=ACCENT, anchor_x="center",
+                                anchor_y="center", batch=self.batch)
+        self.big = make_label("", font_size=64, bold=True, color=TEXT, anchor_x="center",
+                              anchor_y="center", batch=self.batch)
+        self.sub = make_label("", font_size=13, color=DIM, anchor_x="center",
+                              anchor_y="center", batch=self.batch)
+        for r in (self.outline, self.bg, self.edge):
+            r.opacity = 0
+        self.layout()
+
+    def layout(self) -> None:
+        w, h = self.window.width, self.window.height
+        bw, bh = min(460, w - 60), 230
+        x, y = (w - bw) / 2, (h - bh) / 2
+        self.outline.x, self.outline.y = x - 1, y - 1
+        self.outline.width, self.outline.height = bw + 2, bh + 2
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y, bw, bh
+        self.edge.x, self.edge.y, self.edge.width = x, y + bh - 5, bw
+        self.title.x, self.title.y = w / 2, y + bh - 34
+        self.big.x, self.big.y = w / 2, y + bh / 2 - 6
+        self.sub.x, self.sub.y = w / 2, y + 26
+
+    def show(self, title: str, big: str, sub: str = "", color=None) -> None:
+        self.visible = True
+        col = color or _theme.P.accent
+        for r in (self.outline, self.bg, self.edge):
+            r.opacity = 255
+        self.edge.color = tuple(col[:3])
+        self.title.text, self.sub.text = title, sub
+        self.title.color = _theme.rgba(col)
+        self.update_big(big, col)
+
+    def update_big(self, big: str, color=None) -> None:
+        self.big.text = big
+        if color is not None:
+            self.big.color = _theme.rgba(color)
+            self.edge.color = tuple(color[:3])
+
+    def hide(self) -> None:
+        self.visible = False
+        for r in (self.outline, self.bg, self.edge):
+            r.opacity = 0
+        self.title.text = self.big.text = self.sub.text = ""
+
+    def draw(self) -> None:
+        if self._own and self.visible:
+            self.batch.draw()
+
+
 class GridView:
     """Cartões em grelha, a ocupar a área toda (sem deslocar): para escolher
     muitas coisas de uma vez, como as métricas disponíveis. Cada cartão tem

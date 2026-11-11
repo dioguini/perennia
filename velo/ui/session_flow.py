@@ -18,7 +18,7 @@ import time
 from pyglet.window import key
 
 from velo.core.i18n import t, tr
-from velo.gfx.hud import FinishDialog
+from velo.gfx.hud import FinishDialog, PauseDialog
 from velo.ui.widgets import Item
 
 
@@ -43,7 +43,10 @@ def workout_step_cues(screen, w) -> int | None:
 
 class FinishFlow:
     finish_dialog: FinishDialog | None = None
+    pause_dialog: PauseDialog | None = None
     _resume_on_cancel = False
+    _pause_before_finish = False       # o popup «PAUSA» estava aberto quando se pediu para terminar
+    _menu_pause = False                # a pausa veio de abrir Dispositivos ou Definições
 
     # ------------------------------------------------- botões (como no ciclismo)
     #
@@ -59,7 +62,11 @@ class FinishFlow:
         return True
 
     def _flow_toggle_pause(self) -> None:
-        self._flow_set_paused(not self._flow_paused())
+        """Pausa/Retomar (botão, P ou o atalho): a pausa à mão abre o popup «PAUSA»."""
+        if self._flow_paused():
+            self.resume_session()
+        else:
+            self.pause_session()
 
     def session_buttons(self) -> list[Item]:
         paused = self._flow_paused()
@@ -116,13 +123,62 @@ class FinishFlow:
 
     def init_finish(self) -> None:
         self.finish_dialog = FinishDialog()
+        self.pause_dialog = PauseDialog()
         self._layout_finish()
 
     def _layout_finish(self) -> None:
         if self.finish_dialog is not None:
             w = self.app.window
             self.finish_dialog.layout(w.width, w.height)
+            if self.pause_dialog is not None:
+                self.pause_dialog.layout(w.width, w.height)
             self.place_session_buttons()
+
+    # ----------------------------------------------------- o popup «PAUSA»
+
+    @property
+    def pause_popup(self) -> bool:
+        return self.pause_dialog is not None and self.pause_dialog.visible
+
+    def _flow_can_pause(self) -> bool:
+        """A sessão já começou (antes disso não há o que pausar)?"""
+        return True
+
+    def pause_session(self) -> None:
+        """Pausa à mão: o motor pára e abre-se o popup, ao centro, com **Retomar sessão** e
+        **Terminar treino**."""
+        if self.confirming or self.counting or not self._flow_can_pause():
+            return
+        if not self._flow_paused():
+            self._flow_set_paused(True)
+        if self._flow_paused() and self.pause_dialog is not None:
+            self.pause_dialog.show()
+
+    def resume_session(self) -> None:
+        if self.pause_dialog is not None:
+            self.pause_dialog.hide()
+        self._menu_pause = False
+        if self._flow_paused():
+            self._flow_set_paused(False)
+
+    def pause_for_menu(self) -> None:
+        """Dispositivos e Definições abrem por cima da sessão: ela fica em pausa e, quando o
+        menu fecha, aparece o popup «PAUSA» (a sessão não retoma sozinha)."""
+        if self.confirming or self.counting or not self._flow_can_pause():
+            return
+        if not self._flow_paused():
+            self._flow_set_paused(True)
+        if self._flow_paused():
+            self._menu_pause = True
+            if self.pause_dialog is not None:
+                self.pause_dialog.hide()
+
+    def on_modal_closed(self) -> None:
+        """O menu que estava por cima da sessão fechou."""
+        if self._menu_pause:
+            self._menu_pause = False
+            if self._flow_paused() and not self.confirming and self.pause_dialog is not None:
+                self.pause_dialog.show()
 
     @property
     def confirming(self) -> bool:
@@ -132,6 +188,10 @@ class FinishFlow:
         """Terminar pergunta primeiro. Enquanto pergunta, a sessão fica parada."""
         if self.finish_dialog is None or self.confirming:
             return
+        self._pause_before_finish = self.pause_popup or self._menu_pause
+        if self.pause_dialog is not None:
+            self.pause_dialog.hide()
+        self._menu_pause = False
         self._resume_on_cancel = not self._flow_paused()
         if self._resume_on_cancel:
             self._flow_set_paused(True)
@@ -147,6 +207,13 @@ class FinishFlow:
         """«Não»: volta à sessão (retoma, se foi o diálogo que a parou)."""
         if self.finish_dialog is not None:
             self.finish_dialog.hide()
+        if self._pause_before_finish:
+            # estava no popup «PAUSA»: volta a ele (a sessão continua parada)
+            self._pause_before_finish = False
+            self._resume_on_cancel = False
+            if self._flow_paused() and self.pause_dialog is not None:
+                self.pause_dialog.show()
+            return
         if self._resume_on_cancel and self._flow_paused():
             self._flow_set_paused(False)
         self._resume_on_cancel = False
@@ -190,18 +257,30 @@ class FinishFlow:
                 self.finish_dialog.hide()
                 self._discard()
             return True
+        if self.pause_popup:
+            # o popup «PAUSA»: P, Esc, Enter ou Espaço retomam · F10 ou D perguntam se termina
+            if symbol in (key.P, key.ESCAPE, key.ENTER, key.RETURN, key.SPACE):
+                self.resume_session()
+            elif symbol in (key.F10, key.D):
+                self.ask_finish()
+            return True
         if symbol == key.F10:
             self.ask_finish()
             return True
         if symbol == key.ESCAPE:
-            # Esc não termina: pausa e mostra como terminar (como no ciclismo)
-            if not self._flow_paused():
-                self._flow_set_paused(True)
-            self._flow_toast(t("ride.paused_hint"))
+            # Esc não termina: pausa e abre o popup «PAUSA» (Retomar ou Terminar)
+            self.pause_session()
             return True
         return None
 
     def finish_mouse(self, x: int, y: int) -> bool | None:
+        if self.pause_popup and not self.confirming:
+            choice = self.pause_dialog.hit(x, y)
+            if choice == "resume":
+                self.resume_session()
+            elif choice == "finish":
+                self.ask_finish()
+            return True                    # com o popup aberto, nada passa para baixo
         if self.confirming:
             choice = self.finish_dialog.hit(x, y)
             if choice == "yes":
@@ -219,5 +298,7 @@ class FinishFlow:
         return None
 
     def draw_finish(self) -> None:
+        if self.pause_dialog is not None:
+            self.pause_dialog.draw()
         if self.finish_dialog is not None:
             self.finish_dialog.draw()
