@@ -27,6 +27,7 @@ from velo.core import longevity as lg  # noqa: E402
 from velo.core import strength as st  # noqa: E402
 from velo.core import tags as tag_core  # noqa: E402
 from velo.core.db import Database  # noqa: E402
+from velo.core.units import hms  # noqa: E402
 from velo.io import rower as rio  # noqa: E402
 from velo.gfx import icons  # noqa: E402
 from velo.ui import day_popups as dp  # noqa: E402
@@ -454,10 +455,31 @@ class TestStrengthSessionScreen(tg.GuiCase):
         self.assertEqual(len(rows), len(scr.session.items))
         for r in rows:
             self.assertEqual(len(r.cols), 2)
-        # o exercício em curso traz por baixo os campos da série
+        # sem linhas à parte para as repetições, a carga e o RPE: só o exercício e o descanso
+        datas = [i.data for i in scr.list.items]
+        self.assertFalse([d for d in datas if isinstance(d, str) and d.startswith("num:")])
+        self.assertFalse([i for i in scr.list.items if "RPE" in i.label])
         k = scr.list.items.index(rows[0])
-        self.assertEqual(scr.list.items[k + 1].data, "num:reps")
-        self.assertEqual(scr.list.items[k + 2].data, "num:load_kg")
+        self.assertEqual(scr.list.items[k + 1].data, ("rest", 0))   # logo a seguir, o descanso
+
+    def test_the_rest_row_shows_its_time_in_the_reps_column(self):
+        scr = self.open_session()
+        rests = [i for i in scr.list.items if isinstance(i.data, tuple) and i.data[0] == "rest"]
+        self.assertTrue(rests)
+        s = scr.session
+        for r in rests:
+            ex = s.items[r.data[1]]
+            self.assertEqual(r.cols[0], hms(ex.rest_s))
+            self.assertEqual(r.cols[1], "")
+            self.assertEqual(r.label.strip(), "Descanso")
+        # em descanso, a linha em curso conta para trás (e passa a +m:ss se ultrapassar)
+        self.press(key.SPACE)                                # Lap: descanso
+        cur = [i for i in scr.list.items if i.data == ("rest", 0)][0]
+        self.assertTrue(cur.label.startswith("▶"))
+        self.assertRegex(cur.cols[0], r"^\d+:\d\d$")
+        self.app._tick(0.5)
+        left = s.rest_until - s.t
+        self.assertAlmostEqual(left, s.items[0].rest_s - 0.5, delta=1.5)
 
     def test_the_workout_is_a_list_and_enter_starts_the_set(self):
         scr = self.open_session()
@@ -801,22 +823,93 @@ class TestSoundSettings(tg.GuiCase):
 
 
 class TestGymSessionCues(tg.GuiCase):
-    def test_a_timed_rest_beeps_in_the_last_seconds_and_blinks_the_clock(self):
+    def _open(self, tiles=None):
+        from velo.core import layouts
+        if tiles is not None:
+            layouts.save(self.app.db, "gym", [list(tiles)])
         self.app.beeper = sound.SilentBeeper()
         wid = gym.workouts(self.app.db, "strength")[0]["id"]
         scr = ss.StrengthSessionScreen(self.app, wid)
         self.app.push(scr)
+        return scr, layouts
+
+    def test_there_is_no_clock_at_the_top(self):
+        scr, _ = self._open()
+        self.assertFalse(hasattr(scr, "clock"))
+
+    def test_a_timed_rest_beeps_and_shows_the_countdown_in_the_centre(self):
+        scr, layouts = self._open(["hr", "sets"])           # sem «Série / descanso» no ecrã
+        self.assertFalse(scr.phase_time_on_screen())
         for _ in range(4):
             self.app._tick(0.5)
         self.press(key.SPACE)                    # Lap: descanso (de 30 s no 1.º exercício)
         s = scr.session
+        self.app._tick(0.5)
+        self.assertTrue(scr.notice.visible)      # sem a métrica, abre-se o aviso ao centro
+        self.assertEqual(scr.notice.title.text, "DESCANSO")
+        self.assertIn("A seguir", scr.notice.sub.text)
         left = s.rest_until - s.t
         self.app._tick(left - 3.2)               # faltam ~3 s
-        self.assertIn(scr.clock._alert, (3, 4))
+        self.assertIn(scr._cue_n, (3, 4))
+        self.assertRegex(scr.notice.big.text, r"^0:0[0-4]$")
         for _ in range(8):
             self.app._tick(0.5)
         self.assertGreaterEqual(self.app.beeper.log.count("short"), 3)
         self.assertIn("long", self.app.beeper.log)
+
+    def test_with_the_set_rest_tile_on_screen_there_is_no_popup(self):
+        scr, _ = self._open(["hr", "phase_time"])
+        self.assertTrue(scr.phase_time_on_screen())
+        for _ in range(4):
+            self.app._tick(0.5)
+        self.press(key.SPACE)
+        self.app._tick(0.5)
+        self.assertFalse(scr.notice.visible)
+        s = scr.session
+        self.assertEqual(scr.tile_value("phase_time"), scr._phase_text(s.phase_seconds))
+        self.app._tick(s.rest_until - s.t - 3.2)
+        self.assertIn(scr._cue_n, (3, 4))
+        self.assertFalse(scr.notice.visible)
+        self.assertEqual(scr.tile_value("phase_time"), scr._phase_text(s.phase_seconds))
+
+    def test_a_timed_set_counts_down_and_the_popup_names_it(self):
+        from velo.core import layouts
+        layouts.save(self.app.db, "gym", [["hr"]])
+        self.app.beeper = sound.SilentBeeper()
+        wid = next(w["id"] for w in gym.workouts(self.app.db, "strength")
+                   if w["name"].startswith("Força A"))
+        scr = ss.StrengthSessionScreen(self.app, wid)
+        self.app.push(scr)
+        s = scr.session
+        k = next(i for i, ex in enumerate(s.items) if ex.name == "Prancha")
+        self.press(key.SPACE)                              # Lap: acaba o 1.º, descanso
+        scr._start_exercise(k)                             # Enter na prancha
+        self.app._tick(0.5)
+        self.assertEqual(s.item.name, "Prancha")
+        self.assertTrue(s.timed_set)
+        self.assertTrue(s.counting_down)
+        left0 = s.phase_seconds
+        self.assertLessEqual(left0, 45)
+        self.app._tick(2.0)
+        self.assertLess(s.phase_seconds, left0)            # para trás, como o descanso
+        self.assertTrue(scr.notice.visible)
+        self.assertEqual(scr.notice.title.text, "PRANCHA")
+        self.assertIn("Série 1 de", scr.notice.sub.text)
+        # os últimos 5 s têm bips, como no descanso
+        self.app._tick(s.phase_seconds - 3.2)
+        self.assertIn(scr._cue_n, (3, 4))
+
+    def test_the_popup_goes_away_when_paused_or_finishing(self):
+        scr, _ = self._open(["hr"])
+        for _ in range(4):
+            self.app._tick(0.5)
+        self.press(key.SPACE)
+        self.app._tick(0.5)
+        self.assertTrue(scr.notice.visible)
+        self.press(key.P)
+        self.app._tick(0.5)
+        self.assertFalse(scr.notice.visible)              # o PAUSA ocupa o centro
+        self.assertTrue(scr.pause_popup)
 
 
 class TestPlanCompleteStopsAndAsks(tg.GuiCase):

@@ -681,6 +681,9 @@ class Database:
                                   (json.dumps(hud),))
             self.conn.execute("INSERT INTO settings(key, value) VALUES (?, 'true')",
                               (flag,))
+        # os atalhos de volta, pausa, terminar e começar eram um por desporto: agora é um só
+        from . import shortcuts
+        shortcuts.migrate_db(self.conn)
         if self.conn.execute("SELECT COUNT(*) AS n FROM challenges").fetchone()["n"] == 0:
             self.conn.executemany(
                 "INSERT INTO challenges(name, metric, target, is_default) VALUES (?,?,?,1)",

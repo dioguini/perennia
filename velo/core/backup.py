@@ -115,13 +115,19 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("athlete",)),
     Component("definicoes", "Definições", "Settings",
               "unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, forma e "
-              "fadiga, a fórmula da Longevidade, as configurações sonoras (bips), preferências de "
-              "ligação…",
+              "fadiga, a fórmula da Longevidade, as configurações sonoras (bips), os passos "
+              "seguintes do treino, a contagem antes de começar, preferências de ligação…",
               "units, theme, zones, General, non-ERG device limits, form and fatigue, "
-              "the Longevity formula, the sound settings (beeps), connection preferences…",
+              "the Longevity formula, the sound settings (beeps), the next steps of the workout, "
+              "the countdown before starting, connection preferences…",
               settings=_is_definicao),
     Component("atalhos", "Atalhos de teclado", "Keyboard shortcuts",
-              "as teclas que mudaste", "the keys you changed", settings=_is_atalho),
+              "as teclas que mudaste (volta, pausa, terminar, começar sem contagem e saltar bloco "
+              "são as mesmas em todos os desportos; mais a velocidade e o declive na corrida e a "
+              "resistência no remo)",
+              "the keys you changed (lap, pause, finish, start without countdown and skip block "
+              "are the same in every sport; plus speed and incline when running and resistance "
+              "when rowing)", settings=_is_atalho),
     Component("ecra", "Ecrã da sessão", "Session screen",
               "disposição dos painéis (ciclismo, remo, corrida, natação e ginásio), métricas do "
               "ecrã e métricas de sessão disponíveis em cada desporto",
@@ -736,7 +742,14 @@ def _fix_orphans(db) -> int:
 
 
 def _after(db) -> None:
-    """Arrumação depois de repor: cópias de treinos e tempos sem sessão."""
+    """Arrumação depois de repor: cópias de treinos e tempos sem sessão, e os atalhos de um
+    backup antigo (um por desporto) passados para os de agora (um só para todos)."""
+    try:
+        from . import shortcuts
+        if shortcuts.migrate_db(db.conn):
+            db.conn.commit()
+    except Exception:
+        pass
     for mod_name in ("session_workouts", "segments"):
         try:
             import importlib

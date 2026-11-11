@@ -87,6 +87,18 @@ class TestComponents(Base):
             self.assertEqual(len(owners), 1, (k, owners))
 
 
+    def test_the_session_settings_of_round_14_belong_to_one_component(self):
+        # a contagem, os bips, os passos seguintes e o fim automático das séries por tempo
+        for k in ("session_countdown_s", "sound_rules", "sound_on", "sound_end",
+                  "workout_lookahead", "gym_auto_end_timed", "keymap"):
+            owners = [c.key for c in bk.COMPONENTS if c.settings and c.settings(k)]
+            self.assertEqual(len(owners), 1, (k, owners))
+        self.assertEqual([c.key for c in bk.COMPONENTS if c.settings and c.settings("keymap")],
+                         ["atalhos"])
+        for k in ("session_countdown_s", "sound_rules", "gym_auto_end_timed"):
+            self.assertEqual([c.key for c in bk.COMPONENTS if c.settings and c.settings(k)],
+                             ["definicoes"], k)
+
     def test_every_module_that_creates_tables_is_prepared(self):
         core = Path(bk.__file__).parent
         have = sorted(p.stem for p in core.glob("*.py")
@@ -131,6 +143,46 @@ class TestExportAndRestore(Base):
         self.assertEqual(db2.get("keymap"), {"pause": ["Q", []]})
         self.assertIsNone(db2.get("strava_client_secret"))
         self.assertEqual(db2.conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+    def test_an_old_backup_with_one_shortcut_per_sport_comes_back_unified(self):
+        d, db, _rid = self.with_a_ride()
+        # como estava numa versão anterior: um atalho por desporto
+        db.set("keymap", {"ride_lap": ["K", []], "row_lap": ["M", []], "gym_pause": ["O", []],
+                          "run_start": ["B", []], "devices": ["F6", []]})
+        m = bk.export(db, d, d / "backups", ["atalhos"])
+        d2, db2 = self.place()
+        bk.restore(db2, d2, m["path"], ["atalhos"])
+        self.assertEqual(db2.get("keymap"), {"devices": ["F6", []], "lap": ["K", []],
+                                             "pause": ["O", []], "start_now": ["B", []]})
+
+    def test_a_backup_with_the_new_shortcuts_is_restored_as_it_is(self):
+        d, db, _rid = self.with_a_ride()
+        keys = {"lap": ["H", []], "skip_block": ["B", []], "speed_up": ["W", []],
+                "incline_down": ["PAGEDOWN", []], "row_res_up": ["Z", ["ctrl"]]}
+        db.set("keymap", keys)
+        m = bk.export(db, d, d / "backups", ["atalhos"])
+        d2, db2 = self.place()
+        bk.restore(db2, d2, m["path"], ["atalhos"])
+        self.assertEqual(db2.get("keymap"), keys)
+
+    def test_opening_a_database_with_old_shortcuts_unifies_them(self):
+        d, db = self.place()
+        db.set("keymap", {"row_finish": ["F9", []], "ride_pause": ["O", []],
+                          "run_pause": ["Y", []], "save": ["W", ["ctrl"]]})
+        db.conn.commit()
+        db.close()
+        again = Database(d / "perennia.db")
+        self.assertEqual(again.get("keymap"), {"save": ["W", ["ctrl"]], "finish": ["F9", []],
+                                               "pause": ["O", []]})
+        again.close()
+
+    def test_the_new_unified_id_wins_over_an_old_one(self):
+        from velo.core import shortcuts
+        self.assertEqual(shortcuts.migrate({"ride_lap": ["K", []], "lap": ["H", []]}),
+                         {"lap": ["H", []]})
+        self.assertEqual(shortcuts.migrate({}), {})
+        self.assertIsNone(shortcuts.migrate(None))
+        self.assertEqual(shortcuts.migrate({"devices": ["F6", []]}), {"devices": ["F6", []]})
 
     def test_partial_export_and_credentials_only_when_asked(self):
         d, db, _rid = self.with_a_ride()

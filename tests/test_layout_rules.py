@@ -313,8 +313,15 @@ class TestSettingsTabs(tg.GuiCase):
         for k in ("Ctrl+S", "L", "P", "F10"):
             self.assertIn(k, values)
         self.assertIn("Guardar", labels)
-        self.assertIn("Marcar volta (lap)", labels)
+        self.assertIn("Marcar volta", labels)
+        self.assertEqual(labels.count("Marcar volta"), 1)       # uma só para todos os desportos
+        self.assertEqual(labels.count("Pausa / retomar"), 1)
+        for lab in ("Terminar", "Começar sem contagem", "Saltar bloco",
+                    "Corrida: aumentar velocidade (natação: + piscina)",
+                    "Corrida: aumentar declive", "Aumentar resistência"):
+            self.assertIn(lab, labels)
         self.assertTrue(any(i.header and i.label == "Sessão de ciclismo" for i in items))
+        self.assertTrue(any(i.header and i.label.startswith("Sessões de treino") for i in items))
 
     def test_sports_tab_has_a_tab_per_sport_and_three_sections(self):
         self.pick("Definições")

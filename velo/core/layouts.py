@@ -76,6 +76,7 @@ ENDURANCE_METRICS: dict[str, tuple[str, str]] = {
     "avg_pace": ("Ritmo médio", "Avg pace"),
     "cur_pace": ("Ritmo atual", "Current pace"),
     "speed": ("Velocidade", "Speed"),
+    "incline": ("Declive", "Incline"),
     "hr": ("FC", "HR"),
     "hr_zone": ("Zona de FC", "HR zone"),
     "avg_hr": ("FC média", "Avg HR"),
@@ -182,7 +183,7 @@ def catalog(sport: str) -> list[tuple[str, str]]:
         return [(k, tr(*v)) for k, v in ROW_FIELDS.items()]
     if sport in ("running", "swimming"):
         keys = [k for k in ENDURANCE_METRICS if not (sport == "running" and k == "lengths")
-                and not (sport == "swimming" and k in ("speed", "cur_pace"))]
+                and not (sport == "swimming" and k in ("speed", "cur_pace", "incline"))]
         return [(k, tr(*ENDURANCE_METRICS[k])) for k in keys]
     return [(k, tr(*v)) for k, v in GYM_METRICS.items()]
 

@@ -124,6 +124,57 @@ placa gráfica não aceitar 4×, a aplicação tenta 2× e depois sem, sozinha.
 Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
 **Definições → Suavização**; a mudança aplica-se ao reabrir a aplicação.
 
+### Abrir como uma app, sem o PyCharm
+
+O PyCharm serve para **programar**; para **usar** a Perennia não precisas dele. Há dois caminhos
+e os **dados são os mesmos** nos dois (a mesma base de dados, os mesmos `.fit`), por isso podes
+trocar à vontade.
+
+**Caminho 1 — o mais rápido (usa o teu projeto, tal como está):**
+
+| Sistema | Como |
+|---|---|
+| **Windows** | duplo clique em **`Perennia.bat`**. Usa o ambiente virtual do projeto (`.venv`, o que o PyCharm criou, ou o da secção 2) e abre **sem a janela preta**. |
+| **macOS / Linux / Raspberry Pi** | `./perennia.sh` (no terminal, ou duplo clique se o gestor de ficheiros deixar). |
+
+Depois de um `git pull` a versão nova já é a que abre: não há nada para reconstruir. Se a
+aplicação fechar com um erro, fica em **`perennia-erro.log`** na pasta dos dados (secção 8); para
+veres as mensagens em direto, abre um terminal e corre `python main.py`.
+
+**Um ícone no Ambiente de trabalho (Windows):** duplo clique em **`criar_atalho_windows.bat`**.
+Aparece o atalho **Perennia**, com o ícone da aplicação. Botão direito no atalho → *Fixar na barra
+de tarefas* (ou *Fixar no Iniciar*) e já a abres como qualquer outra app. Se já fizeste o build
+(caminho 2), o atalho aponta para o `Perennia.exe`; senão, para o ambiente do projeto.
+
+**Caminho 2 — uma app a sério (`Perennia.exe`, sem precisar de Python):**
+
+1. Duplo clique em **`build_windows.bat`** (uns minutos da primeira vez; é o da secção 7). Corre o
+   autoteste e empacota. No fim tens **`dist\Perennia\Perennia.exe`**, já com o ícone.
+2. Duplo clique em **`criar_atalho_windows.bat`** outra vez: o atalho passa a apontar para ele.
+   (Ou arrasta o `Perennia.exe` para o Ambiente de trabalho com *Alt* carregado, para criar um atalho.)
+3. Para teres uma versão nova da app depois de um `git pull`, voltas a correr o `build_windows.bat`.
+   A pasta `dist` não vai para o git. Os dados ficam, que estão em `%APPDATA%\Perennia`.
+
+No Mac e no Linux o empacotamento é o `./build.sh` (sai `dist/Perennia-mac.zip`, com a
+`Perennia.app` lá dentro: arrasta-a para a pasta *Aplicações*). O GitHub também a pode gerar sozinho
+(secção 7, «Alternativa: o GitHub faz tudo»).
+
+**Linux com ícone no menu de aplicações:** cria o ficheiro `~/.local/share/applications/perennia.desktop`
+com (troca `/caminho/para` pela pasta do projeto):
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Perennia
+Exec=/caminho/para/perennia/perennia.sh
+Icon=/caminho/para/perennia/velo/assets/app_icon.png
+Terminal=false
+Categories=Sports;
+```
+
+O ícone da aplicação está em `velo/assets/app_icon.png` (janela) e `packaging/perennia.ico` (o `.exe`);
+`python tools/make_app_icon.py` volta a desenhá-los.
+
 ### Primeira vez, passo a passo
 
 1. **Definições** (no topo, ou F8) → separador Atleta: mete o teu nome, ano de nascimento, peso e FTP.
@@ -163,32 +214,75 @@ sem os segmentos) ou **Cancelar a sessão**.
 
 ### Teclas durante a sessão
 
+As teclas são **as mesmas em todos os desportos** — ciclismo, corrida, natação, remo e ginásio:
+
 | Tecla | O que faz |
 |---|---|
-| **L** | marca uma volta (como nos Garmin) |
-| **+ / −** ou **↑ / ↓** | mais ou menos resistência (ou intensidade, em ERG) |
-| **P** ou clique em **❚❚ Pausa** | pausa manual / retoma |
-| **Esc** | pausa e lembra como terminar — não termina por acidente |
-| **F10** ou clique em **■ Terminar** | pergunta "Terminar a sessão?"; Sim grava o `.fit` e vai para o resumo, Não volta à sessão em pausa |
+| **L** | marca uma **volta** (como nos Garmin) |
+| **P** ou clique em **❚❚ Pausa** | **pausa** — abre o aviso **PAUSA** ao centro — e retoma |
+| **Esc** | também pausa (abre o **PAUSA**) e **não termina** por acidente; com o PAUSA aberto, Esc retoma |
+| **F10** ou clique em **■ Terminar** | pergunta «Terminar a sessão?»; Sim grava o `.fit` e vai para o resumo, Não volta |
 | **D** (na pergunta de terminar) | **Terminar sem guardar**: apaga a sessão, sem `.fit` nem histórico |
-| **F4** | janela dos dispositivos, sem parar a sessão |
+| **N** | **saltar bloco**: o passo do treino (ciclismo, corrida, remo) ou o exercício/bloco (ginásio) |
+| **Espaço** | **começar sem contagem**, durante a contagem dos 15 s (no ginásio, durante a sessão, é o Lap) |
+| **+ / −** | ciclismo e remo: mais / menos **resistência** · corrida: **velocidade** · natação: + / − piscina |
+| **↑ / ↓** | corrida: **declive** · ciclismo: resistência (ou intensidade, em ERG) · ginásio: linha anterior / seguinte |
+| **T** | corrida: escrever o total que o visor da passadeira mostra |
+| **V** | remo: outra página de campos |
+| **F4** | **Dispositivos** — a sessão **fica em pausa** enquanto estiver aberto |
+| **F8** | **Definições** (só algumas; ver abaixo) — a sessão **fica em pausa** |
 | **F11** | ecrã inteiro |
 
+**O aviso PAUSA.** Quando a sessão está em pausa (à mão ou por teres aberto um menu), aparece ao centro
+um aviso com a palavra **PAUSA** e dois botões:
+
+- **Retomar sessão** (clique, **P**, **Esc**, **Enter** ou **Espaço**): o tempo volta a correr;
+- **Terminar treino** (clique, **F10** ou **D**): pergunta «Terminar a sessão?» (Sim · Não · Terminar
+  sem guardar). Se escolheres **Não**, voltas ao PAUSA.
+
+A **pausa automática** do ciclismo (parares de pedalar) continua a ser só um aviso no topo, que
+desaparece quando pedalas; o aviso ao centro é para a pausa **à mão** e para a dos menus.
+
+**Dispositivos e Definições durante uma sessão.** Podes abri-los a qualquer altura (F4, F8 ou os
+botões da barra do topo): abrem **por cima** da sessão e **põem-na em pausa** — o tempo, o treino e o
+`.fit` ficam parados. Ao fechar, a sessão **não arranca sozinha**: vês o aviso PAUSA e retomas tu.
+Nas **Definições** só aparece o que se pode mexer sem estragar a sessão:
+
+| Separador | O que tem durante a sessão |
+|---|---|
+| **Geral** | só os **passos seguintes** no treino |
+| **Desportos** | só o separador **do desporto em que estás** (a natação não tem) |
+| **Ecrã e idioma** | só **Tema, Unidades e Idioma** |
+| **Atalhos de teclado** | tudo |
+| **Configurações sonoras** | tudo (os bips são os mesmos para todos os desportos) |
+
+Não aparecem o **Atleta**, as **Ligações Externas**, a resolução, a suavização… (isso muda-se fora da
+sessão). **Guardar** (Ctrl+S) grava; **Esc** com alterações por guardar pergunta primeiro. Os atalhos e
+os bips novos valem já ao voltar; as métricas e a disposição do ecrã, e o tema, valem por inteiro na
+sessão seguinte. **Backups** e **Desligar** continuam a cinzento até terminares a sessão.
+
 Todas as sessões (ciclismo, corrida, natação, remo, ginásio) começam com uma
-**contagem de 15 s** ao centro do ecrã; a sessão só arranca no fim. **Esc**
+**contagem de 15 s** ao centro do ecrã; a sessão só arranca no fim, ou antes se carregares em
+**Espaço** (começar sem contagem). **Esc**
 durante a contagem cancela (nada fica gravado). Nos **treinos estruturados**
 (um treino da lista, um teste, um plano de voltas) não há auto lap para
 escolher: **cada bloco feito fecha uma volta**, sozinho.
 
-As teclas destas tabelas são as de origem: em **Definições → Atalhos de
-teclado** mudas qualquer uma (Enter na linha e carrega na tecla nova). A
+**Atalhos únicos.** As teclas destas tabelas são as de origem: em **Definições → Atalhos de
+teclado** mudas qualquer uma (Enter na linha e carrega na tecla nova). **Marcar volta, Pausa / retomar,
+Terminar, Começar sem contagem e Saltar bloco são uma só definição para todos os desportos**
+(grupo «Sessões de treino (todos os desportos)»): mudas uma vez e vale em todos. Só ficam à parte as
+que fazem sentido num desporto: a **resistência** (ciclismo e remo), a **velocidade e o declive** da
+corrida e o escrever o total do visor, e a **página de campos** do remo. Se já tinhas mudado a
+tecla de um desporto (por exemplo a volta do remo), essa passa para a definição única, sozinha. A
 aplicação avisa se a tecla já é de outro atalho no mesmo contexto ou se é de
-navegação (setas, Enter, Esc, Tab…, que são fixas). **Guardar** fixa,
+navegação (setas, Enter, Esc, Tab…, que são fixas; **J** e **K** também não, porque mudam de linha no
+ginásio — só com Ctrl ou Alt). **Guardar** fixa,
 **Cancelar** desfaz, e **Repor as teclas de origem** volta tudo atrás.
 
-O **tempo total** fica em grande, ao centro, no topo de todas as sessões
-(ciclismo, remo, corrida, natação, ginásio). Por baixo aparece o tempo da
-volta, ou da série e do descanso no ginásio.
+O **tempo total** fica em grande, ao centro, no topo das sessões de ciclismo, remo, corrida e natação.
+Por baixo aparece o tempo da volta. **O ginásio já não tem esse relógio**: a contagem da série (por
+tempo) e a do descanso vão para a métrica **Série / descanso** (ver «A sessão de força»).
 
 **Volta automática.** Antes de começar qualquer treino há a opção **Volta
 automática**, desligada por omissão. Enter alterna entre desligada, por
@@ -256,11 +350,12 @@ ecrãs:
   **Dispositivos** (F4), **Backups**, **Definições** (F8) e **Desligar**
   (Ctrl+Q). Backups fica a cinzento durante uma sessão.
 - **Dispositivos** abre uma janela por cima do ecrã onde estás, também a
-  meio de uma sessão. Aí ligas ou desligas cada aparelho e a sessão
-  continua por baixo. Quando um aparelho se desliga aparece o aviso
+  meio de uma sessão — e, numa sessão, **a sessão fica em pausa** até voltares (aparece o aviso
+  PAUSA). Aí ligas ou desligas cada aparelho. Quando um aparelho se desliga aparece o aviso
   "⚠ … desligou-se", e quando volta, "… voltou".
-- **Definições** e **Desligar** ficam a cinzento durante uma sessão. Termina
-  a sessão primeiro.
+- **Definições** também abre durante uma sessão (a sessão fica em pausa), mas só com os separadores
+  e as opções que se podem mexer sem a estragar (ver «Teclas durante a sessão»). **Desligar** fica
+  a cinzento: termina a sessão primeiro.
 - **Desligar** pergunta sempre "Sair da Perennia?". A resposta já
   escolhida é "Não", para um Enter distraído não fechar a aplicação.
 - **As mensagens** («Guardado», um erro, onde ficou um ficheiro…) aparecem
@@ -300,9 +395,15 @@ Sincronização**). Tab e Shift+Tab mudam de separador; também podes clicar.
   painéis** só têm o separador do desporto de onde vieste.
 
 **Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
-qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
+qualquer ecrã, **sessões de treino de todos os desportos**, ciclismo, remo, corrida e natação,
 construtores, listas e calendário). **Ctrl+S** guarda em qualquer ecrã que
-tenha alguma coisa para guardar.
+tenha alguma coisa para guardar. Os atalhos de volta, pausa, terminar, começar sem contagem e
+saltar bloco são **um só para todos os desportos**; a resistência, a velocidade e o declive têm o
+seu (ver «Teclas durante a sessão»).
+
+**Durante uma sessão** as Definições têm só cinco separadores: **Geral** (os passos seguintes),
+**Desportos** (só o desporto da sessão), **Ecrã e idioma** (tema, unidades e idioma), **Atalhos de
+teclado** e **Configurações sonoras**.
 
 **As regras de todos os ecrãs:**
 
@@ -882,10 +983,12 @@ força criado no TrainingPeaks) e pergunta se fica na lista; a **Lista de treino
 **aparelhos** (a banda de FC) e o **auto lap**, que aparece **bloqueado** porque o ginásio faz
 auto lap a cada bloco do treino.
 
-**A sessão de força** tem os mesmos botões das outras, **em cima, à direita, ao lado do relógio**:
+**A sessão de força** tem os mesmos botões das outras, **em cima, à direita**:
 **Lap**, **+ Série**, **Saltar**, **Pausa** e o **Terminar a vermelho** (como no ciclismo; em janelas
-estreitas descem para a barra de baixo), o mesmo diálogo de terminar (Esc pausa, F10 pergunta; Sim ·
-Não · Terminar sem guardar) e as etiquetas do `.fit`.
+estreitas descem para a barra de baixo), o mesmo aviso **PAUSA** e o mesmo diálogo de terminar (Esc
+pausa, F10 pergunta; Sim · Não · Terminar sem guardar) e as etiquetas do `.fit`. **Já não há
+cronómetro no topo** nem campos de **RPE**: a sessão não os pede (o RPE da sessão inteira continua
+no feedback do fim).
 
 - **Começa sozinha**, como as outras sessões: passada a contagem de **15 s** (Definições) arranca
   logo o 1.º exercício — **já não há «Começar série 1»**. O botão é só o **Lap** (também Espaço e
@@ -893,10 +996,22 @@ Não · Terminar sem guardar) e as etiquetas do `.fit`.
 - **O treino está numa lista, num só ecrã**: uma linha por exercício com o **alvo**, as
   **repetições e a carga à frente** (colunas «Repetições» e «Carga»: o que o plano pede, ou o que
   fizeste) e as séries feitas (`2/4`); **seguido do seu descanso** (assim o treino está todo
-  descrito e é só segui-lo). ▶ é o exercício (ou o descanso, com a contagem) em curso, ✓ os feitos.
-  **Mesmo por baixo do exercício em curso** ficam os campos da série (repetições/segundos, carga,
-  RPE): ←/→ ajustam, escrever números substitui. **Enter num exercício** vai para ele e começa a
-  série (a meio de uma série avisa).
+  descrito e é só segui-lo). ▶ é o exercício (ou o descanso, com a contagem) em curso, ✓ os feitos,
+  – os saltados. **O descanso é a única linha por baixo de cada exercício** (já não há linhas à parte
+  para as repetições, a carga e o RPE) e leva o **tempo na coluna das repetições** (`1:30`; no que
+  está a decorrer conta para trás e passa a `+0:05` a vermelho se ultrapassares).
+  As **repetições** (ou os segundos) do exercício em curso mudam-se **na própria linha dele**: ←/→
+  ajustam, escrever um número substitui; a **carga** muda com **[** e **]**. **Enter num exercício**
+  vai para ele e começa a série (a meio de uma série avisa).
+- **Séries por tempo (a prancha de 40 s)**: o tempo da série **conta para trás**, como o descanso, com
+  os mesmos bips nos últimos segundos; quando chega a zero a série **termina sozinha** e passa ao
+  descanso (e daí ao exercício seguinte). O botão **Lap** termina-a antes, se quiseres.
+- **A contagem decrescente** (da série por tempo e do descanso) aparece na métrica **Série /
+  descanso**. Se essa métrica **não estiver no ecrã** (Definições → Desportos → Ginásio → Disposição),
+  abre-se um **aviso ao centro** com a descrição — **DESCANSO** (e o exercício que vem a seguir) ou o
+  nome do exercício e «Série 2 de 4» — e o número grande. Some-se quando pausas ou terminas.
+- **Saltar** salta o exercício, mesmo **a meio de uma série** (a série não fica gravada); **N** salta o
+  **bloco** inteiro (um superset, um circuito). No descanso, passa ao exercício seguinte.
 - **Treino concluído**: quando a **última série acaba**, o tempo **pára de imediato** e abre-se
   sozinho o diálogo de terminar (como se tivesses carregado em «Terminar»). O mesmo nos treinos
   **por blocos** de ciclismo, corrida e remo: ao acabar o último bloco, o tempo pára e abre-se a
@@ -1260,22 +1375,24 @@ já feitas daquele exercício.
 
 1. **Espaço** (ou Enter na primeira linha) começa a série.
 2. **Espaço** outra vez termina-a. Fica registada com o que está nos campos
-   (repetições, carga e RPE, que começam com o que o plano pede) e com a FC
+   (repetições e carga, que começam com o que o plano pede) e com a FC
    média dessa série. Começa o descanso, em contagem decrescente; fica
    vermelho quando passa do tempo.
-3. **Durante o descanso, os campos corrigem a série que acabou**: se saíram 5
-   em vez de 6, ou se foi mais duro, ←/→ (Shift para passos maiores) ou
-   escreve o número. A carga que puseres passa para a série seguinte.
+3. **Durante o descanso, a linha do exercício corrige a série que acabou**: se saíram 5
+   em vez de 6, ←/→ (Shift para passos maiores) ou
+   escreve o número; a carga muda com **[** e **]**. A carga que puseres passa para a série seguinte.
 4. **Espaço** começa a série seguinte. Quando um exercício acaba, passa ao
    seguinte; o painel diz qual vem.
 
-Também podes: mudar de exercício (linha **Exercício**, ←/→), **+ Série
-extra**, **Saltar exercício**, **Pausa** (P). **Terminar o treino** (ou Esc,
-ou a seta Voltar) pergunta primeiro. No fim tens o resumo por exercício, com
+Também podes: **+ Série extra**, **Saltar** (o exercício, mesmo a meio de uma série; **N** salta o
+bloco), **Pausa** (P, que abre o aviso **PAUSA**). **Terminar o treino** (F10, ou a seta Voltar)
+pergunta primeiro; Esc só pausa. No fim tens o resumo por exercício, com
 a 1RM estimada, e o `.fit` fica na pasta `strength/`.
 
-A **1RM estimada** usa a fórmula de Epley contando as repetições que ficaram
-em reserva: 6 repetições a RPE 8 contam como 8. Só vale até umas 12–15
+A **1RM estimada** usa a fórmula de Epley. Como a sessão já não pede o RPE, uma série conta como
+feita até ao limite (6 repetições contam como 6); se uma série tem RPE registado (treinos antigos,
+séries editadas depois, ou importadas), conta as repetições em reserva: 6 repetições a RPE 8 contam
+como 8. Só vale até umas 12–15
 repetições no total; acima disso não se calcula. O **volume** é carga ×
 repetições; nos exercícios com o peso do corpo (elevações, flexões…) entra a
 parte do teu peso que o exercício move.
@@ -1397,7 +1514,8 @@ desativam.
 
 ### Configurações sonoras (bips)
 
-Em **Definições → Configurações sonoras** escolhes os **bips** que avisam do fim (ou do princípio)
+Em **Definições → Configurações sonoras** (também durante uma sessão, onde se aplicam já ao voltar)
+escolhes os **bips** que avisam do fim (ou do princípio)
 de um **bloco**, de uma **série** ou de um **descanso** — para perceberes que o tempo está a
 acabar sem olhar para o ecrã. O bip é um tom gerado pela própria Perennia (sem ficheiros nem
 dependências); se o computador não tiver som, toca o «beep» do terminal (o sino, que em muitos PC
@@ -1415,20 +1533,23 @@ dependências); se o computador não tiver som, toca o «beep» do terminal (o s
 - **De origem**: os **últimos 5 segundos, um bip por segundo**, mais o bip longo no fim.
 - **Visível**: os últimos 5 segundos **vêem-se sempre**, mesmo com o som desligado: a caixa do tempo
   (em cima, ao centro) **pisca a vermelho** e mostra **5 · 4 · 3 · 2 · 1** (no ciclismo, o número
-  aparece grande ao centro, no topo).
+  aparece grande ao centro, no topo). **No ginásio** não há relógio no topo: a contagem vai para a
+  métrica **Série / descanso**, que pisca; sem essa métrica no ecrã, o aviso ao centro mostra o número.
 - Onde conta: nos **descansos** e nas **séries com tempo** do ginásio, e nos **blocos de tempo** dos
   treinos de ciclismo, corrida e remo (blocos por distância não têm contagem). A regra «só nos
   descansos» não se aplica ao ciclismo (os blocos de ciclismo não têm descanso à parte). As
   regras que mudares valem a partir da sessão seguinte.
 
-### Terminar uma sessão (ciclismo, corrida e remo)
+### Terminar uma sessão (todos os desportos)
 
 O **ciclismo é a base** e a corrida e o remo fazem agora **exatamente o mesmo**:
 
-- **P** pausa e retoma. **Esc não termina**: pausa e diz «P retomar · F10 terminar
-  e guardar». **F10** (ou o botão de voltar) abre o diálogo **«Terminar a
+- **P** pausa e retoma. **Esc não termina**: pausa e abre o aviso **PAUSA** (com **Retomar
+  sessão** e **Terminar treino**; P ou Esc retomam, F10 termina). **F10** (ou o botão de voltar)
+  abre o diálogo **«Terminar a
   sessão?»** — o mesmo do ciclismo, com **Sim, terminar** · **Não, continuar** ·
-  **Terminar sem guardar (D)**. Enquanto o diálogo está aberto a sessão fica parada.
+  **Terminar sem guardar (D)**. Enquanto o diálogo está aberto a sessão fica parada. Se a
+  sessão estava no PAUSA, «Não» volta a ele.
 - No diálogo: **Enter, S ou Y** terminam · **Esc ou N** voltam (e retomam, se foi o
   diálogo que parou a sessão) · **D** termina sem guardar (nada de .fit nem estatísticas).
 - **Sim, terminar** abre a **janela das etiquetas** (ver abaixo); **Enter, Enter** termina
@@ -1735,8 +1856,8 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
-| Atalhos de teclado | as teclas que mudaste |
+| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
+| Atalhos de teclado | as teclas que mudaste (volta, pausa, terminar, começar sem contagem e saltar bloco são as mesmas em todos os desportos). Um backup antigo, com um atalho por desporto, **volta já unificado** |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
 | Rotas | os .gpx: pontos, perfil, subidas |
@@ -2450,6 +2571,21 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 14 NÃO cria tabelas nem colunas — e continua a ser tudo automático** (**não tens de fazer
+nada** para que fique guardado na base local: o que muda são só **definições**, na tabela `settings`,
+e a Perennia arruma-as sozinha ao abrir; antes de abrires a versão nova podes fazer um backup:
+*Backups e Sincronização → Exportar → Tudo*, ou `python main.py --backup`). O que muda:
+
+| Onde | O quê |
+|---|---|
+| definição `keymap` (tabela `settings`) | os atalhos de **volta, pausa, terminar e começar** eram um por desporto (`ride_lap`, `row_lap`, `run_lap`, `ride_pause`, `row_pause`, `run_pause`, `gym_pause`, `ride_finish`, `row_finish`, `run_finish`, `gym_finish`, `run_start`); agora são **um só para todos** (`lap`, `pause`, `finish`, `start_now`) e há ids novos: `skip_block` (saltar bloco), `ride_res_up`/`ride_res_down` e `row_res_up`/`row_res_down` (resistência), `row_fields`, `speed_up`/`speed_down` e `incline_up`/`incline_down` (corrida) e `run_total`. **Ao abrir**, a Perennia reescreve **uma vez** o que já tinhas mudado para os ids novos (fica a primeira tecla que encontra, pela ordem ciclismo, remo, corrida, ginásio) e apaga os ids antigos; se não tinhas mudado nada, nada acontece. Vai no backup, componente «Atalhos de teclado»; um **backup antigo** repõe-se na mesma e fica já unificado |
+| definição `gym_auto_end_timed` (opcional) | as séries **por tempo** do ginásio (a prancha de 40 s) terminam sozinhas quando a contagem chega a zero. Não existe na base: vale **ligado**. (Não há opção para isto nas Definições; quem quiser desligar escreve `false` nesta chave.) Vai no backup, componente «Definições» |
+| `strength_sets.rpe` | a sessão de ginásio já **não pede o RPE**: nas séries novas a coluna fica vazia; as antigas mantêm o que tinham. A 1RM estimada só conta as repetições em reserva quando há RPE |
+| `session_countdown_s`, `sound_rules`, `workout_lookahead` | continuam como estavam; agora podem mudar-se durante uma sessão (Definições → Geral e Configurações sonoras) |
+
+Os **backups** continuam a levar tudo e nenhuma tabela ficou por tratar; **nada** do que aqui está
+precisa de um script de migração à mão.
+
 **A ronda 13 acrescenta UMA coluna — e continua a ser tudo automático** (**não tens de fazer nada**
 para que fique guardado na base local: ao abrir a versão nova a Perennia acrescenta a coluna sozinha,
 sem tocar nos dados que já lá estão; antes de abrires a versão nova podes fazer um backup: *Backups e
@@ -2604,7 +2740,20 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (865 testes a passar).
+**Verificado com testes automáticos nesta versão** (929 testes a passar).
+
+*Novidades da ronda 14 (testes novos em `tests/test_round14.py`, `tests/test_ui_walk.py` e nos de
+backup, e os antigos atualizados):* o aviso **PAUSA** nos cinco desportos (P, Esc, os botões
+Retomar e Terminar, F10/D, o «Não» que volta ao PAUSA, nada antes de a sessão começar); Dispositivos
+e Definições a **pôr a sessão em pausa** e o PAUSA à espera ao voltar; as Definições durante a
+sessão (os cinco separadores, só o desporto da sessão, só os passos seguintes e o tema, as unidades e
+o idioma, perguntar antes de sair com alterações); os **atalhos únicos** (a mesma tecla em todos os
+desportos, a migração dos antigos, os novos: saltar bloco, velocidade, declive, resistência); o
+**ginásio** (sem cronómetro nem RPE, a contagem decrescente na métrica Série / descanso ou no aviso ao
+centro, a série por tempo a contar para trás, o descanso com o tempo na coluna das repetições, o
+Saltar a meio de uma série); o **robô** que percorre todos os menus e carrega em teclas ao acaso em
+cada sessão (`SEEDS=30 python -m unittest tests.test_ui_walk`); e os backups (os atalhos antigos
+voltam unificados, a base unifica-os ao abrir).
 
 *Novidades da ronda 13 (13 testes novos em `tests/test_round13.py`, e os antigos atualizados):* a
 janela de **Dispositivos** por ligação (os blocos Bluetooth, ANT+ e SEM HARDWARE pela ordem

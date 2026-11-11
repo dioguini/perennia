@@ -596,6 +596,23 @@ class LapSession:
         self.paused = not self.paused
         self.checkpoint()
 
+    def pause(self) -> None:
+        if not self.paused:
+            self.toggle_pause()
+
+    def resume(self) -> None:
+        if self.paused:
+            self.toggle_pause()
+
+    def skip_block(self) -> dict | None:
+        """Salta a próxima volta do plano (sem a começar). Devolve o que foi saltado."""
+        it = self.next_planned
+        if it is None:
+            return None
+        self.plan_idx += 1
+        self.checkpoint()
+        return it
+
     # -------------------------------------------------------- recuperação
 
     def checkpoint(self) -> None:

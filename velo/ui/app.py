@@ -67,6 +67,7 @@ class Screen:
     AGENT = True          # F1 / F2: resumos do agente (não durante as sessões)
     IN_SESSION = False    # sessão de treino: Definições e Sair ficam indisponíveis
     MODAL = False         # janela por cima (o ecrã de baixo continua a correr)
+    OPAQUE = False        # janela por cima que tapa o ecrã de baixo (não o desenha)
     TABBED = False        # separadores por baixo do título (Tab / Shift+Tab)
     _pending_hub = None   # ver `hub`: o menu do desporto por cima deste ecrã
     KEY_SCOPE: str | None = None   # o âmbito dos atalhos de teclado (ver keymap)
@@ -173,6 +174,12 @@ class Screen:
     def enter(self) -> None: ...
     def leave(self) -> None: ...
     def update(self, dt: float) -> None: ...
+
+    def pause_for_menu(self) -> None:
+        """Dispositivos ou Definições vão abrir por cima desta sessão: pára-a."""
+
+    def on_modal_closed(self) -> None:
+        """O menu que estava por cima desta sessão fechou."""
 
     # --------------------------------------------------------- classificação
 
@@ -1449,6 +1456,23 @@ class RideScreen(Screen):
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if self.engine is None:
             return True
+        hud = self.hud
+        if hud is not None and hud.confirm_visible:
+            # diálogo aberto: S/Enter terminam, N/Esc voltam à sessão
+            if symbol in (key.ENTER, key.RETURN, key.S, key.Y):
+                self._finish_with_tags()
+            elif symbol in (key.ESCAPE, key.N):
+                self._cancel_finish()
+            elif symbol == key.D:
+                self._discard()
+            return True
+        if hud is not None and hud.pause_popup:
+            # o popup «PAUSA»: P, Esc, Enter ou Espaço retomam · F10 ou D perguntam se termina
+            if symbol in (key.P, key.ESCAPE, key.ENTER, key.RETURN, key.SPACE):
+                self._toggle_pause()
+            elif symbol in (key.F10, key.D):
+                self._ask_finish()
+            return True
         if symbol == key.L:                     # volta manual (req. 13)
             if not self.engine.manual_laps:
                 if self.hud is not None:
@@ -1459,14 +1483,8 @@ class RideScreen(Screen):
         if symbol == key.P:
             self._toggle_pause()
             return True
-        if self.hud is not None and self.hud.confirm_visible:
-            # diálogo aberto: S/Enter terminam, N/Esc voltam à sessão
-            if symbol in (key.ENTER, key.RETURN, key.S, key.Y):
-                self._finish_with_tags()
-            elif symbol in (key.ESCAPE, key.N):
-                self._cancel_finish()
-            elif symbol == key.D:
-                self._discard()
+        if symbol == key.N:                      # saltar o bloco do treino em curso
+            self._skip_block()
             return True
         if symbol == key.F10:
             self._ask_finish()
@@ -1478,14 +1496,19 @@ class RideScreen(Screen):
             self.engine.adjust_resistance(-1)
             return True
         if symbol == key.ESCAPE:
-            # Esc não termina: pausa e mostra como terminar. Só o botão de
-            # parar (F10 ou o clique) fecha a sessão e grava o .fit.
-            if not self.engine.manual_pause:
-                self.engine.pause()
-            if self.hud is not None:
-                self.hud.toast(t("ride.paused_hint"))
+            # Esc não termina: pausa e abre o popup «PAUSA» (Retomar ou Terminar). Só o botão
+            # de terminar (F10 ou o clique) fecha a sessão e grava o .fit.
+            self._pause_with_popup()
             return True
         return True                              # a sessão não navega menus
+
+    def _skip_block(self) -> None:
+        if self.hud is None or self.engine is None:
+            return
+        if self.engine.skip_block():
+            self.hud.toast(tr("Bloco saltado", "Block skipped"))
+        else:
+            self.hud.toast(tr("Não há bloco para saltar", "No block to skip"))
 
     def on_mouse(self, x: int, y: int) -> bool:
         if self.hud is not None and self.hud.confirm_visible:
@@ -1497,6 +1520,13 @@ class RideScreen(Screen):
             elif choice == "discard":
                 self._discard()
             return True
+        if self.hud is not None and self.hud.pause_popup:
+            choice = self.hud.pause_hit(x, y)
+            if choice == "resume":
+                self._toggle_pause()
+            elif choice == "finish":
+                self._ask_finish()
+            return True                          # com o popup aberto nada passa para baixo
         if self.hud is not None and self.hud.stop_button_hit(x, y):
             self._ask_finish()
             return True
@@ -1510,11 +1540,16 @@ class RideScreen(Screen):
             return True
         return False
 
+    _pause_before_finish = False
+
     def _ask_finish(self) -> None:
         """Terminar pergunta primeiro. Enquanto pergunta, a sessão fica parada."""
         if self.engine is None or self.hud is None:
             self._finish()
             return
+        self._pause_before_finish = self.hud.pause_popup or self._menu_pause
+        self._menu_pause = False
+        self.hud.hide_pause()
         self.engine.pause(confirming=True)
         self.hud.show_confirm()
 
@@ -1538,11 +1573,26 @@ class RideScreen(Screen):
         self._finish()
 
     def _cancel_finish(self) -> None:
-        """«Não»: volta à sessão em pausa; pedalar retoma."""
+        """«Não»: volta à sessão em pausa; pedalar retoma. Se estava no popup «PAUSA», volta a ele
+        (a sessão continua parada até se escolher Retomar)."""
         if self.hud is not None:
             self.hud.hide_confirm()
+        if self._pause_before_finish:
+            self._pause_before_finish = False
+            if self.hud is not None and self.engine is not None and self.engine.manual_pause:
+                self.hud.show_pause()
+            return
         if self.engine is not None:
             self.engine.resume_on_pedal()
+
+    def _pause_with_popup(self) -> None:
+        """Pausa à mão e abre o popup «PAUSA»."""
+        e = self.engine
+        if e is None or self.hud is None or self.counting or self.hud.confirm_visible:
+            return
+        if not e.manual_pause:
+            e.pause()
+        self.hud.show_pause()
 
     def _toggle_pause(self) -> None:
         # Só a pausa manual se desfaz aqui. A automática sai ao pedalar, e
@@ -1550,9 +1600,44 @@ class RideScreen(Screen):
         if self.engine is None:
             return
         if self.engine.manual_pause:
+            self._menu_pause = False
+            if self.hud is not None:
+                self.hud.hide_pause()
             self.engine.resume()
         else:
-            self.engine.pause()
+            self._pause_with_popup()
+
+    # ------------------------------------------- Dispositivos e Definições por cima
+
+    _menu_pause = False
+
+    def pause_for_menu(self) -> None:
+        """Dispositivos ou Definições abrem por cima: a sessão pára e, quando o menu fecha,
+        aparece o popup «PAUSA»."""
+        e = self.engine
+        if e is None or self.hud is None or self.counting or self.hud.confirm_visible:
+            return
+        if not e.manual_pause:
+            e.pause()
+        self._menu_pause = True
+        self.hud.hide_pause()
+
+    def on_modal_closed(self) -> None:
+        if self._menu_pause:
+            self._menu_pause = False
+            if self.hud is not None and self.engine is not None and self.engine.manual_pause \
+                    and not self.hud.confirm_visible:
+                self.hud.show_pause()
+        self._reload_settings()
+
+    def _reload_settings(self) -> None:
+        """O que se mudou nas Definições durante a sessão e que ela já pode usar."""
+        self._cue_tracker = None               # as regras sonoras novas valem já
+        if self.hud is not None:
+            try:
+                self.hud.lookahead = int(self.app.db.get("workout_lookahead", 2))
+            except Exception:
+                pass
 
     def _discard(self) -> None:
         """Terminar sem guardar: nada de .fit, resumo nem estatísticas."""
@@ -2319,6 +2404,16 @@ class DeviceScreen(ModalScreen):
 # ---------------------------------------------------------------- definições
 
 
+def _session_sport(scr) -> str | None:
+    """O desporto de uma sessão de treino (ciclismo, remo, corrida, natação ou ginásio)."""
+    eng = getattr(scr, "engine", None) or getattr(scr, "session", None)
+    sport = getattr(eng, "sport", None)
+    if sport in ("running", "swimming", "rowing", "cycling", "gym"):
+        return sport
+    return {"ride": "cycling", "rowing": "rowing", "endurance": "running",
+            "gym": "gym"}.get(getattr(scr, "KEY_SCOPE", None))
+
+
 class SettingsScreen(Screen):
     """Definições por separadores: Atleta · Geral · Desportos · Ecrã e idioma ·
     Ligações Externas · Atalhos de teclado. (A Sincronização está no menu
@@ -2348,7 +2443,26 @@ class SettingsScreen(Screen):
               ("@sounds",))
     ATH_FIELDS = ("name", "birth_year", "weight_kg", "ftp_w", "lthr")
 
-    def __init__(self, app: "App"):
+    # Durante uma sessão de treino as Definições abrem por cima dela (e param-na), mas só com
+    # o que se pode mexer sem a estragar: **Geral** (os passos seguintes do treino), **Desportos**
+    # (só o desporto da sessão), **Ecrã e idioma** (tema, unidades e idioma), **Atalhos de
+    # teclado** (tudo) e **Configurações sonoras**. Fora desta lista, nada (o atleta, as
+    # ligações externas, o modo do ecrã…).
+    SESSION_TABS = (1, 2, 3, 5, 6)             # índices de `GROUPS`
+    SESSION_ROWS = {1: ("lookahead",), 3: ("theme", "units", "language")}
+
+    def __init__(self, app: "App", session=None):
+        # (antes do `super().__init__`, que já pede os nomes dos separadores)
+        self.session = session                 # o ecrã da sessão que está por baixo, se houver
+        self.session_sport = _session_sport(session) if session is not None else None
+        self._tab_ids = list(range(len(self.GROUPS)))
+        if session is not None:
+            self.MODAL = True                  # a sessão de baixo não é fechada nem abortada
+            self.OPAQUE = True
+            self._tab_ids = [i for i in self.SESSION_TABS
+                             if not (i == 2 and self.session_sport not in self.SPORTS)]
+            if self.session_sport in self.SPORTS:
+                self.SPORTS = (self.session_sport,)      # só o desporto desta sessão
         super().__init__(app)
         self.draft: dict = {}
         self._orig: dict = {}
@@ -2380,14 +2494,29 @@ class SettingsScreen(Screen):
         return self.SPORTS[self.sport_tab % len(self.SPORTS)]
 
     def tab_labels(self) -> list[str]:
-        return [tr("Atleta", "Athlete"), tr("Geral", "General"), tr("Desportos", "Sports"),
-                tr("Ecrã e idioma", "Display & language"),
-                tr("Ligações Externas", "External connections"),
-                tr("Atalhos de teclado", "Keyboard shortcuts"),
-                tr("Configurações sonoras", "Sound settings")]
+        names = [tr("Atleta", "Athlete"), tr("Geral", "General"), tr("Desportos", "Sports"),
+                 tr("Ecrã e idioma", "Display & language"),
+                 tr("Ligações Externas", "External connections"),
+                 tr("Atalhos de teclado", "Keyboard shortcuts"),
+                 tr("Configurações sonoras", "Sound settings")]
+        return [names[i] for i in self._tab_ids]
+
+    def tab_id(self) -> int:
+        return self._tab_ids[self.tab % len(self._tab_ids)]
 
     def group(self) -> tuple:
-        return self.GROUPS[self.tab % len(self.GROUPS)]
+        group = self.GROUPS[self.tab_id()]
+        if self.session is not None and self.tab_id() in self.SESSION_ROWS:
+            return tuple(k for k in group if k in self.SESSION_ROWS[self.tab_id()])
+        return group
+
+    def go_back(self) -> None:
+        """Esc / «Voltar». Numa sessão as Definições são uma janela por cima, e as janelas não
+        perguntam sozinhas: pergunta-se aqui se há alterações por guardar."""
+        if self.session is not None and self.dirty:
+            self.app.ask_unsaved(self)
+            return
+        self.app.pop()
 
     # ------------------------------------------------------------ rascunho
 
@@ -2910,7 +3039,7 @@ class SettingsScreen(Screen):
             self.capturing = None
             self.enter()
             return True
-        name = keymap.name_of(symbol)
+        name = keymap.name_of(symbol, extra=True)
         if name is None:
             self.app.message(tr("Essa tecla é de navegação: escolhe uma letra, F1–F12 ou o "
                                 "Espaço.", "That key is for navigation: pick a letter, F1–F12 "
@@ -4199,6 +4328,12 @@ class App:
             self.window.set_minimum_size(*MIN_SIZE)
         except Exception:
             pass
+        try:                                  # o ícone da janela (e da barra de tarefas)
+            icon = paths.resource("velo", "assets", "app_icon.png")
+            if icon.exists():
+                self.window.set_icon(pyglet.image.load(str(icon)))
+        except Exception:
+            pass
         pyglet.gl.glClearColor(BG[0] / 255, BG[1] / 255, BG[2] / 255, 1.0)
 
         self.hub = SensorHub()
@@ -4346,6 +4481,7 @@ class App:
         top = self.stack.pop()
         top.leave()
         if top.MODAL and self.stack[-1].IN_SESSION:
+            self.stack[-1].on_modal_closed()      # a sessão de baixo continua; em pausa, se foi o menu
             return                 # a sessão de baixo nunca deixou de correr
         self.stack[-1].enter()
 
@@ -4541,6 +4677,13 @@ class App:
         pyglet.gl.glClearColor(bg[0] / 255, bg[1] / 255, bg[2] / 255, 1.0)
         self.topbar = TopBar(self.window)
         self._topbar_texts()
+        if self.in_session:
+            # numa sessão não se reconstrói nada (perdia-se a sessão): o tema novo vê-se já nos
+            # menus e na barra, e na sessão a partir da próxima
+            if persist:
+                self.message(tr("Tema guardado: aplica-se por completo na próxima sessão.",
+                                "Theme saved: it applies fully from the next session."))
+            return
         # Os ecrãs abertos foram desenhados com a paleta antiga: volta-se a
         # construir o ecrã inicial e as Definições, no mesmo separador.
         top = self.stack[-1] if self.stack else None
@@ -4596,17 +4739,33 @@ class App:
                         else "lost"))
         return out
 
+    def session_screen(self):
+        """O ecrã da sessão de treino aberta (ou None)."""
+        for scr in reversed(self.stack):
+            if scr.IN_SESSION:
+                eng = getattr(scr, "engine", None) or getattr(scr, "session", None)
+                if eng is None or not getattr(eng, "finished", False):
+                    return scr
+        return None
+
     def open_devices(self) -> None:
         if isinstance(self.current, DeviceScreen):
             return
+        scr = self.session_screen()
+        if scr is not None:
+            scr.pause_for_menu()            # a sessão fica em pausa enquanto o menu está aberto
         self.push(DeviceScreen(self))
 
     def open_settings(self) -> None:
-        if self.in_session:
-            self.message(tr("As definições não estão disponíveis durante uma sessão de treino.",
-                            "Settings are not available during a workout."))
-            return
         if isinstance(self.current, SettingsScreen):
+            return
+        scr = self.session_screen()
+        if scr is not None:
+            # numa sessão: abre por cima dela (e pára-a), só com o que se pode mexer
+            while self.current is not None and self.current.MODAL:
+                self.pop()
+            scr.pause_for_menu()
+            self.push(SettingsScreen(self, session=scr))
             return
         while self.current is not None and self.current.MODAL:
             self.pop()
@@ -4663,7 +4822,7 @@ class App:
         self._rower_ok = now
         self.topbar.set_devices(self.device_states())
         busy = self.in_session
-        self.topbar.set_enabled("settings", not busy)
+        self.topbar.set_enabled("settings", True)        # numa sessão abre só o que se pode mexer
         self.topbar.set_enabled("backups", not busy)
         self.topbar.set_enabled("quit", not busy)
 
@@ -4759,7 +4918,8 @@ class App:
             return
         if screen.MODAL:
             below = self._below_modal()
-            if below is not None and below is not screen:
+            opaque = screen.OPAQUE or any(m.OPAQUE for m in self.stack if m.MODAL)
+            if below is not None and below is not screen and not opaque:
                 if isinstance(below, RideScreen) and below.world is not None \
                         and not below.preparing:
                     below.world.setup_gl()
@@ -4849,6 +5009,9 @@ class App:
             if symbol == key.ESCAPE:
                 screen.start_cd = None
                 screen.cancel_countdown()
+            elif symbol == key.SPACE and screen.KEY_SCOPE in keymap.SESSION_SCOPES:
+                screen.start_cd = None        # «Começar sem contagem» (atalho de todos os desportos)
+                screen.countdown_done()
             return True                       # durante a contagem nada mais conta
         if screen is not None:
             return bool(screen.on_key(symbol, modifiers))

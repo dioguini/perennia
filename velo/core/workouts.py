@@ -237,12 +237,15 @@ class WorkoutRunner:
             acc += s.duration_s
         self.total_s = acc
         self.current_idx = -1
+        self.skipped_s = 0.0          # tempo de passos saltados: o treino anda para a frente
         self.intensity = 1.0          # +/− a meio da sessão multiplica o alvo
         # acumuladores por passo, para avaliar o cumprimento
         self._acc: dict[int, dict] = {}
 
     def step_at(self, elapsed_s: float) -> tuple[int, Step, float] | None:
-        """Devolve (índice, passo, progresso 0..1) ou None se terminou."""
+        """Devolve (índice, passo, progresso 0..1) ou None se terminou.
+        O tempo conta com os passos saltados (`skipped_s`)."""
+        elapsed_s += self.skipped_s
         if elapsed_s >= self.total_s:
             return None
         lo, hi = 0, len(self.workout.steps) - 1
@@ -256,6 +259,25 @@ class WorkoutRunner:
         offset = elapsed_s - self._starts[lo]
         progress = offset / step.duration_s if step.duration_s else 1.0
         return lo, step, progress
+
+    def skip_step(self, elapsed_s: float) -> tuple[int, int] | None:
+        """Salta o passo em curso: o treino anda para o início do seguinte.
+        Devolve (passo saltado, passo novo; -1 se acabou) ou None se já terminou."""
+        found = self.step_at(elapsed_s)
+        if found is None:
+            return None
+        idx, step, progress = found
+        self.skipped_s += step.duration_s * (1.0 - progress)
+        after = self.step_at(elapsed_s)
+        return idx, (after[0] if after is not None else -1)
+
+    def remaining_in_step(self, elapsed_s: float) -> float | None:
+        """Segundos que faltam ao passo em curso (None se o treino acabou)."""
+        found = self.step_at(elapsed_s)
+        if found is None:
+            return None
+        _, step, progress = found
+        return step.duration_s * (1.0 - progress)
 
     def target_watts(self, elapsed_s: float) -> int | None:
         found = self.step_at(elapsed_s)

@@ -315,6 +315,15 @@ class Runner:
         got = self.step_t if s.dur_type == "time" else self.step_m
         if got < s.dur_value:
             return []
+        return self._end_step()
+
+    def skip(self) -> list[tuple[str, dict]]:
+        """Salta o passo em curso, como se tivesse acabado agora."""
+        if self.done:
+            return []
+        return self._end_step()
+
+    def _end_step(self) -> list[tuple[str, dict]]:
         ev = [("step_end", {"idx": self.idx, "seconds": self.step_t, "meters": self.step_m})]
         self.idx += 1
         self.step_t = self.step_m = 0.0
@@ -462,6 +471,14 @@ class EnduranceEngine:
             self.treadmill.set_speed(0.0 if self.paused else self.speed_kmh)
         self.checkpoint()
 
+    def pause(self) -> None:
+        if self.started and not self.paused:
+            self.toggle_pause()
+
+    def resume(self) -> None:
+        if self.paused:
+            self.toggle_pause()
+
     def set_speed(self, kmh: float) -> None:
         top = 30.0
         if self.sport == "running":
@@ -484,6 +501,15 @@ class EnduranceEngine:
         self.incline_pct = max(0.0, min(top, round(float(pct), 1)))
         if self.treadmill is not None:
             self.treadmill.set_incline(self.incline_pct)
+
+    def skip_step(self) -> bool:
+        """Salta o bloco (passo do treino) em curso. False se não houver."""
+        if self.workout is None or self.workout.done or not self.started:
+            return False
+        for kind, data in self.workout.skip():
+            self._workout_event(kind, data)
+        self.checkpoint()
+        return True
 
     def add_length(self, n: int = 1) -> None:
         """Natação: mais uma piscina (ou menos, para corrigir)."""
