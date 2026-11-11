@@ -17,20 +17,20 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import endurance as en  # noqa: E402
-from velo.core import rowing as rw  # noqa: E402
-from velo.core import workout_meta as wm  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.ride import RideEngine  # noqa: E402
-from velo.core.workouts import Step, Workout, WorkoutRunner  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
-from velo.io.hub import SensorHub  # noqa: E402
-from velo.io.sim import SimulatedTrainer  # noqa: E402
+from perennia.core import endurance as en  # noqa: E402
+from perennia.core import rowing as rw  # noqa: E402
+from perennia.core import workout_meta as wm  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.ride import RideEngine  # noqa: E402
+from perennia.core.workouts import Step, Workout, WorkoutRunner  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
+from perennia.io.hub import SensorHub  # noqa: E402
+from perennia.io.sim import SimulatedTrainer  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
 
 
 class Base(unittest.TestCase):
@@ -181,8 +181,8 @@ class TestSessionWorkoutCopy(Base):
                                                  .as_dict()], "zwo")
 
     def test_session_keeps_its_own_copy(self):
-        from velo.core import feedback as fbm
-        from velo.core import session_workouts as sw
+        from perennia.core import feedback as fbm
+        from perennia.core import session_workouts as sw
         wid = self._wid()
         e = self._ride_with(wid)
         link = sw.of_session(self.db, "ride", e.ride_id)
@@ -206,7 +206,7 @@ class TestSessionWorkoutCopy(Base):
         self.assertIn("Apagado", sw.state_text("deleted"))
 
     def test_discarded_session_takes_the_copy_with_it(self):
-        from velo.core import session_workouts as sw
+        from perennia.core import session_workouts as sw
         wid = self._wid()
         e = self._ride_with(wid)
         copy = sw.of_session(self.db, "ride", e.ride_id)["copy_id"]
@@ -216,7 +216,7 @@ class TestSessionWorkoutCopy(Base):
         self.assertEqual(sw.status(self.db, "cycling", wid), "active")
 
     def test_run_and_row_sessions_copy_too_and_purge_cleans_orphans(self):
-        from velo.core import session_workouts as sw
+        from perennia.core import session_workouts as sw
         wid = en.save_workout(self.db, None, "running", "T", "",
                               [en.Step("active", "time", 120, 80, 85)])
         e = en.EnduranceEngine(self.db, self.db.athlete(), "running", workout_id=wid,
@@ -237,9 +237,9 @@ class TestSessionWorkoutCopy(Base):
 
 class TestWorkoutFiles(Base):
     def test_fit_and_zwo_for_every_sport(self):
-        from velo.core import fit
-        from velo.core import session_workouts as sw
-        from velo.core import workout_files as wf
+        from perennia.core import fit
+        from perennia.core import session_workouts as sw
+        from perennia.core import workout_files as wf
         p = fit.write_row_workout(self.tmp / "r.fit", "Remo X", [
             {"name": "aq", "seconds": 300, "lo_w": 100, "hi_w": 120, "intensity": "warmup"},
             {"name": "forte", "meters": 500, "lo_w": 200, "intensity": "active"}])
@@ -274,9 +274,9 @@ class TestLoadFromComputer(tg.GuiCase):
         return zwo
 
     def test_start_from_the_computer_just_for_this_session(self):
-        from velo.core import session_workouts as sw
-        from velo.ui import session_setup
-        from velo.ui.workout_import import WorkoutFilePopup
+        from perennia.core import session_workouts as sw
+        from perennia.ui import session_setup
+        from perennia.ui.workout_import import WorkoutFilePopup
         zwo = self._zwo()
         self.pick("Sessão de treino")
         self.pick("Do computador")
@@ -293,8 +293,8 @@ class TestLoadFromComputer(tg.GuiCase):
         self.assertEqual(setup.title(), "Do PC")
 
     def test_keep_in_the_list_from_a_running_session(self):
-        from velo.core import session_workouts as sw
-        from velo.ui import session_setup
+        from perennia.core import session_workouts as sw
+        from perennia.ui import session_setup
         zwo = self._zwo("Corrida PC")
         self.press(key.ESCAPE)
         self.pick("Corrida")
@@ -308,7 +308,7 @@ class TestLoadFromComputer(tg.GuiCase):
         self.assertIn("Corrida PC", [w["name"] for w in en.workouts(self.app.db, "running")])
 
     def test_delete_from_any_builder_list_keeps_the_steps(self):
-        from velo.core import session_workouts as sw
+        from perennia.core import session_workouts as sw
         self.press(key.ESCAPE)
         self.pick("Remo")
         hub = self.screen()
@@ -329,7 +329,7 @@ class TestLoadFromComputer(tg.GuiCase):
 
 class TestSimulatedHeartStrap(unittest.TestCase):
     def test_hr_follows_the_effort(self):
-        from velo.io.sim import SimulatedHeartStrap
+        from perennia.io.sim import SimulatedHeartStrap
         effort = {"v": None}
         strap = SimulatedHeartStrap(effort=lambda: effort["v"])
         for _ in range(120):
@@ -347,7 +347,7 @@ class TestSimulatedHeartStrap(unittest.TestCase):
         self.assertLess(strap.reading().hr_bpm, hard - 15)
 
     def test_strap_wins_over_the_trainer_hr(self):
-        from velo.io.sim import SimulatedHeartStrap
+        from perennia.io.sim import SimulatedHeartStrap
         hub = SensorHub()
         hub.add_source(SimulatedTrainer(base_power=200), role="simulated", is_trainer=True)
         hub.add_source(SimulatedHeartStrap(effort=lambda: 1.2), role="hr_monitor")
@@ -385,8 +385,8 @@ class TestHeartStrapInDevices(tg.GuiCase):
 
 class TestRoutesAndSegmentsCore(tg.GuiCase):
     def test_times_done_profile_and_perennia_segments(self):
-        from velo.core import routes as routes_mod
-        from velo.core import segments as seg_mod
+        from perennia.core import routes as routes_mod
+        from perennia.core import segments as seg_mod
         db = self.app.db
         prof = routes_mod.profile(db, self.route_id)
         self.assertEqual(len(prof), 160)
@@ -411,7 +411,7 @@ class TestRoutesAndSegmentsCore(tg.GuiCase):
         self.assertEqual(seg_mod.load(db, self.route_id, ("perennia",)), [])
 
     def test_tracker_keeps_strava_and_perennia_apart(self):
-        from velo.core import segments as seg_mod
+        from perennia.core import segments as seg_mod
         a = seg_mod.Segment(7, "S", 100, 400, source="strava")
         b = seg_mod.Segment(7, "P", 100, 300, source="perennia")
         tr_ = seg_mod.SegmentTracker([a, b])
@@ -429,7 +429,7 @@ class TestRoutesMenu(tg.GuiCase):
         self.app._on_resize(1920, 1080)
 
     def test_home_tile_opens_routes_with_times_done(self):
-        from velo.ui import route_screens
+        from perennia.ui import route_screens
         self.press(key.ESCAPE)
         self.pick("Rotas")
         scr = self.screen()
@@ -448,8 +448,8 @@ class TestRoutesMenu(tg.GuiCase):
         self.assertTrue(any(b.opacity for b in ov.chart.bars))
 
     def test_new_segment_from_the_route_and_the_overview(self):
-        from velo.core import segments as seg_mod
-        from velo.ui import route_screens, segment_screens
+        from perennia.core import segments as seg_mod
+        from perennia.ui import route_screens, segment_screens
         self.app.push(route_screens.RouteOverview(self.app, self.route_id))
         self.pick("+ Novo segmento")
         ed = self.screen()
@@ -487,9 +487,9 @@ class TestRoutesMenu(tg.GuiCase):
         self.assertEqual(seg_mod.load(self.app.db, self.route_id, ("perennia",)), [])
 
     def test_running_on_a_route_times_the_segment(self):
-        from velo.core import routes as routes_mod
-        from velo.core import segments as seg_mod
-        from velo.ui import route_screens
+        from perennia.core import routes as routes_mod
+        from perennia.core import segments as seg_mod
+        from perennia.ui import route_screens
         sid = seg_mod.save_perennia(self.app.db, None, self.route_id, "Reta", 50, 400)
         self.app.push(route_screens.RouteOverview(self.app, self.route_id))
         self.pick("Começar na corrida")

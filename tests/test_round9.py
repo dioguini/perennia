@@ -15,11 +15,11 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import layouts as lay  # noqa: E402
+from perennia.core import layouts as lay  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import layout_screens as ls  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import layout_screens as ls  # noqa: E402
 
 
 # ============================================ número de métricas no ecrã
@@ -64,7 +64,7 @@ class TestMetricCount(tg.GuiCase):
             self.assertIn("Disposição dos painéis", labels)
 
     def test_the_layout_panels_row_opens_the_screen_of_that_sport(self):
-        from velo.ui import arrangement_screens as arr
+        from perennia.ui import arrangement_screens as arr
         self.pick("Definições")
         scr = self.screen()
         scr.tab_named("Desportos")
@@ -97,7 +97,7 @@ class TestMetricCount(tg.GuiCase):
     def test_rowing_session_pages_follow_the_number(self):
         names = [k for k, _ in lay.catalog("rowing")][:14]
         lay.save(self.app.db, "rowing", lay.split(names, "rowing"))
-        from velo.ui import rowing_screens as rs
+        from perennia.ui import rowing_screens as rs
         ses = rs.RowingSessionScreen(self.app)
         self.assertEqual(ses.pages, 2)
         self.assertEqual(len(ses.cells), 7)
@@ -109,12 +109,12 @@ class TestMetricCount(tg.GuiCase):
     def test_gym_session_tiles_follow_the_number(self):
         names = [k for k, _ in lay.catalog("gym")][:7]
         lay.save(self.app.db, "gym", [names])
-        from velo.core import strength as st
+        from perennia.core import strength as st
         ex = st.exercises(self.app.db)[0]
         wid = st.save_workout(self.app.db, None, "T", None, [
             {"exercise_id": ex["id"], "sets": 3, "reps": 8, "load_kg": 20.0, "rpe": None,
              "rest_s": 60}])
-        from velo.ui import sport_screens as ss
+        from perennia.ui import sport_screens as ss
         scr = ss.StrengthSessionScreen(self.app, wid)
         self.assertEqual(len(scr.tiles), 7)
         self.app.push(scr)
@@ -186,9 +186,9 @@ def _write_fit(path, minutes: int = 30):
     """Um .fit de ciclismo escrito pelo próprio codificador da Perennia."""
     import time
 
-    from velo.core import fit, gpx
-    from velo.core.db import Athlete, Lap, RideSummary, Sample
-    from velo.core.route_index import RouteIndex
+    from perennia.core import fit, gpx
+    from perennia.core.db import Athlete, Lap, RideSummary, Sample
+    from perennia.core.route_index import RouteIndex
     gpx_path = Path(__file__).parent / "teste.gpx"
     _, raw = gpx.parse_gpx(gpx_path)
     idx = RouteIndex(gpx.resample(raw))
@@ -213,7 +213,7 @@ def _write_fit(path, minutes: int = 30):
 
 class TestManualUpload(tg.GuiCase):
     def test_fit_is_decoded(self):
-        from velo.core import activity_upload as au
+        from perennia.core import activity_upload as au
         f = _write_fit(Path(self.tmp) / "ride.fit")
         info = au.parse(f)
         self.assertEqual(info["format"], "fit")
@@ -227,7 +227,7 @@ class TestManualUpload(tg.GuiCase):
         self.assertTrue(info["started_at"].endswith("Z"))
 
     def test_broken_and_foreign_files_are_refused(self):
-        from velo.core import activity_upload as au
+        from perennia.core import activity_upload as au
         f = _write_fit(Path(self.tmp) / "ride.fit")
         cut = Path(self.tmp) / "cut.fit"
         cut.write_bytes(f.read_bytes()[:300])
@@ -241,7 +241,7 @@ class TestManualUpload(tg.GuiCase):
             au.parse(Path(self.tmp) / "nada.fit")
 
     def test_tcx_is_read(self):
-        from velo.core import activity_upload as au
+        from perennia.core import activity_upload as au
         p = Path(self.tmp) / "run.tcx"
         p.write_text("""<?xml version="1.0"?>
 <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
@@ -256,8 +256,8 @@ class TestManualUpload(tg.GuiCase):
                          ("running", 5000.0, 150.0))
 
     def test_upload_flow_saves_to_the_sport_and_counts_in_history(self):
-        from velo.core import garmin_sync as gs
-        from velo.ui import upload_screens as up
+        from perennia.core import garmin_sync as gs
+        from perennia.ui import upload_screens as up
         f = _write_fit(Path(self.tmp) / "ride.fit")
         scr = self.open_sync()
         labels = scr.sync.source_labels()
@@ -285,12 +285,12 @@ class TestManualUpload(tg.GuiCase):
         self.screen().upload()                           # volta a gravar o mesmo: atualiza
         self.assertEqual(len(gs.activities(self.app.db)), 1)
         # aparece no Histórico do desporto
-        from velo.ui.sync_screens import history_items
+        from perennia.ui.sync_screens import history_items
         self.assertTrue(any("upload manual" in i.detail for i in history_items(self.app, "cycling")
                             if i.detail))
 
     def test_dropping_a_fit_opens_the_upload(self):
-        from velo.ui import upload_screens as up
+        from perennia.ui import upload_screens as up
         f = _write_fit(Path(self.tmp) / "drop.fit", minutes=5)
         self.app._on_file_drop(0, 0, [str(f)])
         self.assertIsInstance(self.screen(), up.UploadPreview)
@@ -317,17 +317,17 @@ class TestResultsAndExport(tg.GuiCase):
         super().tearDown()
 
     def _test_id(self, sport: str) -> int:
-        from velo.core import fitness_tests as ft
+        from perennia.core import fitness_tests as ft
         ft.seed(self.app.db)
         if sport == "swimming":
-            from velo.core import endurance as en
+            from perennia.core import endurance as en
             en.seed(self.app.db)
         x = next(t for t in ft.tests(self.app.db, sport) if not t["protocol"])
         return x["id"]
 
     def test_results_list_and_the_popups_to_edit_and_delete(self):
-        from velo.core import fitness_tests as ft
-        from velo.ui import health_screens as hs
+        from perennia.core import fitness_tests as ft
+        from perennia.ui import health_screens as hs
         tid = self._test_id("running")
         ft.add_result(self.app.db, tid, 100.0, done_on="2026-05-01", notes="a")
         ft.add_result(self.app.db, tid, 120.0, done_on="2026-06-01")
@@ -353,8 +353,8 @@ class TestResultsAndExport(tg.GuiCase):
         self.assertIsInstance(self.screen(), hs.TestDetail)
 
     def test_new_result_in_a_popup_and_no_timer_test_in_swimming(self):
-        from velo.core import fitness_tests as ft
-        from velo.ui import health_screens as hs
+        from perennia.core import fitness_tests as ft
+        from perennia.ui import health_screens as hs
         sw = self._test_id("swimming")
         self.app.push(hs.TestDetail(self.app, sw))
         labels = [i.label for i in self.screen().list.items]
@@ -372,9 +372,9 @@ class TestResultsAndExport(tg.GuiCase):
         self.assertEqual(ft.results(self.app.db, run)[0]["value"], 42.0)
 
     def test_export_popup_names_the_file_and_saves_in_downloads(self):
-        from velo.core import endurance as en
-        from velo.ui import endurance_screens as es
-        from velo.ui import upload_screens as up
+        from perennia.core import endurance as en
+        from perennia.ui import endurance_screens as es
+        from perennia.ui import upload_screens as up
         en.seed(self.app.db)
         w = en.workouts(self.app.db, "running")[0]
         self.app.push(es.EndurancePreview(self.app, "running", w["id"]))
@@ -399,7 +399,7 @@ class TestResultsAndExport(tg.GuiCase):
         self.assertIs(self.screen(), prev)
 
     def test_cycling_exports_zwo_erg_mrc_fit(self):
-        from velo.core import workout_download as wd
+        from perennia.core import workout_download as wd
         self.assertEqual([f for f, _ in wd.formats("cycling")],
                          ["zwo", "erg", "mrc", "fit", "json", "txt"])
         self.assertEqual([f for f, _ in wd.formats("rowing")], ["fit", "json", "txt"])
@@ -412,8 +412,8 @@ class TestResultsAndExport(tg.GuiCase):
         self.assertTrue(again.name.endswith("_2.zwo"))              # não escreve por cima
 
     def test_brief_has_no_about_section_and_swimming_has_no_session(self):
-        from velo.core import endurance as en
-        from velo.ui import endurance_screens as es
+        from perennia.core import endurance as en
+        from perennia.ui import endurance_screens as es
         en.seed(self.app.db)
         run = es.EndurancePreview(self.app, "running", en.workouts(self.app.db, "running")[0]["id"])
         self.app.push(run)
@@ -461,7 +461,7 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
         self.assertEqual(next(iter(xs.values()))[1], "left")
 
     def test_goal_popup_cancel_and_unsaved_question(self):
-        from velo.ui.goal_popup import GoalPopup
+        from perennia.ui.goal_popup import GoalPopup
         b = self._builder()
         self.pick("Objetivo do treino")
         pop = self.screen()
@@ -475,7 +475,7 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
         self.assertNotEqual(b.wgoal, "rascunho")
 
     def test_session_window_is_bigger_and_has_every_mode(self):
-        from velo.ui import session_setup as ss
+        from perennia.ui import session_setup as ss
         self.pick("Sessão de treino")
         pop = self.screen()
         self.assertIsInstance(pop, ss.SessionModePopup)
@@ -494,7 +494,7 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
         self.assertIsNot(self.screen(), pop)
 
     def test_every_sport_has_the_window_except_swimming(self):
-        from velo.ui import session_setup as ss
+        from perennia.ui import session_setup as ss
         self.press(key.ESCAPE)
         for name in ("Remo", "Corrida", "Ginásio"):
             self.pick(name)
@@ -517,16 +517,16 @@ class TestCliAndBackup(tg.GuiCase):
             data_dir = str(Path(self.tmp) / "cli-data")
             importar = ("atividade", str(f))
         self.assertEqual(main.import_cli(A), 0)
-        from velo.core.db import Database
-        from velo.datadir import database_path, data_dir_for
+        from perennia.core.db import Database
+        from perennia.datadir import database_path, data_dir_for
         db = Database(database_path(data_dir_for(A.data_dir)))
-        from velo.core import garmin_sync as gs
+        from perennia.core import garmin_sync as gs
         rows = gs.activities(db, "cycling")
         db.close()
         self.assertEqual((len(rows), rows[0]["source"]), (1, "upload"))
 
     def test_layout_keys_and_synced_uploads_are_in_the_backup_components(self):
-        from velo.core import backup
+        from perennia.core import backup
         for k in ("layout_running", "layout_gym", "row_fields", "hud_boxes",
                   "metrics_disabled_gym"):
             self.assertTrue(backup.BY_KEY["ecra"].settings(k), k)

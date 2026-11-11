@@ -17,7 +17,7 @@ S = 256
 OUT = 64
 INK = (236, 240, 246, 255)
 CLEAR = (0, 0, 0, 0)
-DEST = Path(__file__).resolve().parents[1] / "velo" / "assets" / "icons"
+DEST = Path(__file__).resolve().parents[1] / "perennia" / "assets" / "icons"
 
 
 def canvas():
@@ -442,7 +442,7 @@ def power_button():
 
 
 # ------------------------------------------------------------------ botões
-# Um ícone por ação, sempre o mesmo (menus e janelas): ver velo.gfx.icons.button_icon.
+# Um ícone por ação, sempre o mesmo (menus e janelas): ver perennia.gfx.icons.button_icon.
 
 def ui_save():
     """Guardar: a disquete."""

@@ -20,22 +20,22 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import endurance as en  # noqa: E402
-from velo.core import evolution as ev  # noqa: E402
-from velo.core import health  # noqa: E402
-from velo.core import inventory as inv  # noqa: E402
-from velo.core import labs  # noqa: E402
-from velo.core import stats  # noqa: E402
-from velo.core import tp_import  # noqa: E402
-from velo.core import tss  # noqa: E402
-from velo.core import workout_meta as wm  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.i18n import PT, set_language  # noqa: E402
+from perennia.core import endurance as en  # noqa: E402
+from perennia.core import evolution as ev  # noqa: E402
+from perennia.core import health  # noqa: E402
+from perennia.core import inventory as inv  # noqa: E402
+from perennia.core import labs  # noqa: E402
+from perennia.core import stats  # noqa: E402
+from perennia.core import tp_import  # noqa: E402
+from perennia.core import tss  # noqa: E402
+from perennia.core import workout_meta as wm  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.i18n import PT, set_language  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import pickers  # noqa: E402
-from velo.ui.widgets import Item  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import pickers  # noqa: E402
+from perennia.ui.widgets import Item  # noqa: E402
 
 TODAY = date(2026, 6, 30)
 
@@ -236,7 +236,7 @@ class TestLimits(DbCase):
 
 class TestBackupAndCli(DbCase):
     def test_new_settings_go_to_the_right_component(self):
-        from velo.core import backup
+        from perennia.core import backup
         self.assertTrue(backup.BY_KEY["ecra"].settings("metrics_disabled_running"))
         for k in ("pmc_synced", "rower_levels", "treadmill_max_kmh"):
             self.assertTrue(backup.BY_KEY["definicoes"].settings(k), k)
@@ -302,7 +302,7 @@ class TestUi(tg.GuiCase):
         self.assertNotIn("Calendário", labels)
 
     def test_evolution_screen_tabs(self):
-        from velo.ui.evolution_screens import EvolutionScreen
+        from perennia.ui.evolution_screens import EvolutionScreen
         self.app.push(EvolutionScreen(self.app))
         s = self.screen()
         for tab in range(3):

@@ -19,16 +19,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import agent, health, importers, labs  # noqa: E402
-from velo.core import segments as sg  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.io import strava  # noqa: E402
+from perennia.core import agent, health, importers, labs  # noqa: E402
+from perennia.core import segments as sg  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.io import strava  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import backup_screens as bks  # noqa: E402
-from velo.ui import connect_screens as cs  # noqa: E402
-from velo.ui import health_screens as hs  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import backup_screens as bks  # noqa: E402
+from perennia.ui import connect_screens as cs  # noqa: E402
+from perennia.ui import health_screens as hs  # noqa: E402
 
 LAT0, LON0 = 38.7223, -9.1393          # o início da rota de teste (tests/make_gpx.py)
 M_LAT = 110540.0
@@ -77,7 +77,7 @@ class TestStravaCore(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.db = Database(self.tmp / "v.db")
         self.db.save_athlete(Athlete(name="T", birth_year=1990, weight_kg=72, ftp_w=250))
-        from velo.core import climbs, gpx
+        from perennia.core import climbs, gpx
         _, raw = gpx.parse_gpx(tg.GPX)
         self.points = gpx.resample(raw)
         self.rid = self.db.insert_route("Serra", self.points, climbs.detect(self.points))

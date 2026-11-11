@@ -14,11 +14,11 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.gfx import theme as theme_mod  # noqa: E402
-from velo.ui import keymap  # noqa: E402
+from perennia.gfx import theme as theme_mod  # noqa: E402
+from perennia.ui import keymap  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
 
 
 class TestKeymapCore(tg.GuiCase):

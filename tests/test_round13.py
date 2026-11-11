@@ -20,15 +20,15 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import backup as bk  # noqa: E402
-from velo.core import feedback as fbm, fit, layouts as lay, session_review  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
+from perennia.core import backup as bk  # noqa: E402
+from perennia.core import feedback as fbm, fit, layouts as lay, session_review  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.io import ant  # noqa: E402
-from velo.io.sim import SimulatedTreadmill  # noqa: E402
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
+from perennia.io import ant  # noqa: E402
+from perennia.io.sim import SimulatedTreadmill  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
 
 
 class FakeStick:
@@ -313,7 +313,7 @@ class TestInclineInTheDatabaseAndBackups(unittest.TestCase):
 
     @staticmethod
     def add_samples(db):
-        from velo.core import endurance
+        from perennia.core import endurance
         endurance.ensure(db)
         db.conn.execute("INSERT INTO endurance_sessions (id, sport, started_at, status)"
                         " VALUES ('s1', 'running', '2026-11-11T10:00:00', 'completed')")
@@ -329,7 +329,7 @@ class TestInclineInTheDatabaseAndBackups(unittest.TestCase):
         db.conn.execute("CREATE TABLE endurance_samples (session_id TEXT, t_s INTEGER,"
                         " dist_m REAL, speed_mps REAL, hr_bpm INTEGER)")        # o formato antigo
         db.conn.commit()
-        from velo.core import endurance
+        from perennia.core import endurance
         endurance.ensure(db)
         endurance.ensure(db)                                   # e não falha a segunda vez
         self.assertIn("incline_pct", bk.columns(db, "endurance_samples"))

@@ -2,12 +2,13 @@
 
 Este guia leva-te do zero à aplicação a correr. Tudo funciona offline.
 
-**A aplicação chamava-se VeloLocal e passou a chamar-se Perennia.** Se já
-tinhas dados, não perdes nada: a Perennia continua a usar a pasta antiga
-(`VeloLocal` / `velolocal`) enquanto ela existir. A base de dados passa a
-chamar-se `perennia.db`; a antiga (`velolocal.db`) é renomeada sozinha na
-primeira vez que abres a aplicação. Os `.fit` novos chamam-se
-`perennia_<data>_<nome>.fit`.
+**Se vens da versão antiga (VeloLocal), não tens de fazer nada à mão.** Na primeira vez que
+abres a Perennia, ela **renomeia** a pasta de dados antiga (`VeloLocal` / `velolocal`) para
+`Perennia` / `perennia` (uma só operação, na mesma pasta-mãe, sem copiar nada), a base `velolocal.db`
+passa a `perennia.db`, e os caminhos e o formato das sessões antigas que estavam guardados na base
+são atualizados. Fica tudo na mesma. Se as duas pastas existirem, a nova ganha e a antiga fica
+intacta (nada se apaga). Os `.fit` novos chamam-se `perennia_<data>_<nome>.fit`. Daqui para a frente,
+**o nome VeloLocal só existe num ficheiro do código** (`perennia/legacy.py`, que faz esta migração).
 
 ---
 
@@ -107,7 +108,7 @@ python main.py --fullscreen
 python main.py --window                 # em janela, mesmo que da última vez não fosse
 python main.py --width 1920 --height 1080
 python main.py --data-dir ./dados       # base de dados nesta pasta
-VELO_FPS=1 python main.py               # mostra os fotogramas por segundo
+PERENNIA_FPS=1 python main.py               # mostra os fotogramas por segundo
 ```
 
 **Resolução.** Não precisas destas opções: em **Definições → Resolução**,
@@ -167,12 +168,12 @@ com (troca `/caminho/para` pela pasta do projeto):
 Type=Application
 Name=Perennia
 Exec=/caminho/para/perennia/perennia.sh
-Icon=/caminho/para/perennia/velo/assets/app_icon.png
+Icon=/caminho/para/perennia/perennia/assets/app_icon.png
 Terminal=false
 Categories=Sports;
 ```
 
-O ícone da aplicação está em `velo/assets/app_icon.png` (janela) e `packaging/perennia.ico` (o `.exe`);
+O ícone da aplicação está em `perennia/assets/app_icon.png` (janela) e `packaging/perennia.ico` (o `.exe`);
 `python tools/make_app_icon.py` volta a desenhá-los.
 
 ### Primeira vez, passo a passo
@@ -780,8 +781,8 @@ e **o mesmo ícone para a mesma ação**: **+** para acrescentar (o «+» da eti
 pelo ícone), disquete para Guardar, caixote para Apagar / Remover / Terminar sem guardar, **×**
 para Cancelar / Fechar, lápis para Editar, calendário para Planear, um ícone próprio para
 Exportar e outro para Importar, ▶ para Começar / Retomar, ⏸ para Pausa, ■ para Terminar, ✓ para
-Sim / OK / Aplicar e ← para Voltar. (Os ícones vêm de `velo/assets/icons`, gerados por
-`tools/make_icons.py`, e a regra de qual vai com cada etiqueta está em `velo/gfx/icons.py`.)
+Sim / OK / Aplicar e ← para Voltar. (Os ícones vêm de `perennia/assets/icons`, gerados por
+`tools/make_icons.py`, e a regra de qual vai com cada etiqueta está em `perennia/gfx/icons.py`.)
 
 ### Os menus de cada desporto
 
@@ -1040,7 +1041,7 @@ depois arrancas. As voltas com tempo passam à seguinte sozinhas; as outras
 passam com L ou com **▶ Volta do plano**.
 
 **Para acrescentar uma modalidade nova**, basta um bloco
-`register(Modality(...), [exercícios])` no ficheiro `velo/core/gym.py`.
+`register(Modality(...), [exercícios])` no ficheiro `perennia/core/gym.py`.
 Aparece sozinha no menu, com surpresa, treinos, histórico e inventário de
 exercícios.
 
@@ -1208,6 +1209,111 @@ Cada tipo de gráfico é um separador; muda-se com Tab ou com o rato. A
 primeira linha, **Desporto**, escolhe o desporto com ←/→. No remo, na
 corrida e na natação os separadores são Distância, Tempo, Carga, Ritmo médio
 e Zonas de FC. O ciclismo e o ginásio mantêm os gráficos que já tinham.
+
+### AdHoc Analysis (o centro exploratório das Estatísticas gerais)
+
+É o **último separador das Estatísticas gerais** (Tab, ou o rato). Serve para duas coisas, sobre os
+mesmos dados, sem escreveres uma linha de código:
+
+1. **Construir um dataset e exportá-lo para .csv** (escolhes o nome do ficheiro e o separador).
+2. **Montar um gráfico dinâmico**, ao estilo Power BI, com o que quiseres.
+
+À esquerda estão os controlos; à direita, o gráfico (ou a pré-visualização do dataset). Em cada linha,
+**Enter ou um clique abrem uma lista com pesquisa** (escreves para filtrar) e **←/→ passam à opção
+seguinte**. Tudo o que escolhes **fica guardado** e volta quando reabres o separador.
+
+| Linha | O que faz |
+|---|---|
+| **Modo** | *Gráfico dinâmico* ou *Dataset (campos e .csv)* |
+| **Fonte dos dados** | **Sessões** (todos os desportos, uma linha por sessão; as importadas do Garmin/TrainingPeaks também; **nunca** o Strava), **Séries de força** (uma linha por série), **Diário** (saúde e alimentação), **Análises clínicas** (um marcador por linha) e **Testes de longevidade** |
+| **Vista guardada** | abre uma vista que guardaste (fonte, campos, filtros e gráfico) |
+| **Período** | tudo, 7/30/90 dias, último ano, este ano, ou *datas à escolha* (aparecem «de» e «até», com calendário) |
+| **Filtros** | até 6 (muda-se em Avançado). Cada filtro é *campo · operador · valor*: as categorias dão-te a lista dos valores que existem, os números escrevem-se, as datas abrem o calendário |
+| **Campos do dataset** | (modo dataset) marcas os campos que queres no .csv |
+| **Eixo X** | qualquer campo: uma data (agrupada por dia, semana, mês ou ano — os períodos vazios contam como zero nas somas e contagens), uma categoria (maior primeiro, ou pela ordem natural; as que passam do limite ficam em «Outros») ou um número (vira um histograma com as classes que definires) |
+| **Valor (eixo Y)** | um campo numérico, ou a *contagem de linhas* |
+| **Agregação** | soma, média, mínimo, máximo, mediana ou contagem |
+| **Legenda** | uma série por categoria (por exemplo, uma cor por desporto); as séries a mais ficam em «Outros» |
+| **Tipo de gráfico** | colunas (lado a lado, se houver legenda), colunas empilhadas, linhas ou dispersão (dois números: um em X, outro em Y) |
+
+Clica num ponto do gráfico para ver o valor. Por baixo do gráfico, uma linha diz quantas linhas
+passaram nos filtros.
+
+**Botões, em baixo à direita:**
+
+- **Exportar .csv…** — abre uma janela com o **nome do ficheiro**, o **separador de valores**
+  (`;` `,` Tab ou `|`), o separador decimal, o cabeçalho (nomes legíveis ou chaves técnicas) e o
+  UTF-8 com BOM (o Excel abre bem os acentos). Em modo gráfico podes exportar o **dataset** ou os
+  **números do gráfico**. Os valores por omissão estão em Definições → Avançado → Análise AdHoc. O
+  ficheiro vai para a pasta `exports` dos dados (ou a que definires) e **nunca substitui** um que já
+  exista (junta `-2`, `-3`…). Se escreveres pastas no nome (`../x`), só conta o nome do ficheiro: nunca sai da pasta de destino.
+- **Guardar vista…** — dá um nome à vista. **Apagar vista** apaga a que está aberta.
+
+O .csv defende-se de «injeção de fórmulas»: uma célula de texto que comece por `=`, `+`, `-` ou `@`
+leva um `'` à frente, para o Excel não a executar.
+
+**Pela linha de comandos** (sem abrir a janela), a mesma exportação:
+
+```bash
+python main.py --adhoc-exportar sessions --destino ~/Documentos --nome as-minhas-sessoes --separador ";"
+python main.py --adhoc-exportar sessions --vista "Carga por semana"
+```
+
+As fontes são `sessions`, `sets`, `daily`, `labs` e `tests`. Sem `--vista` leva os campos por omissão
+da fonte; com `--vista`, os campos, o período e os filtros dessa vista.
+
+**Privacidade.** Nada daqui sai do computador, e o agente de IA nunca vê os dados da AdHoc: só vê o
+que o ecrã mostra, e só se o pedires.
+
+### Definições → Avançado (as opções afináveis)
+
+Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
+Avançado**. Os números mudam com ←/→ (Shift: 10 passos) ou escrevendo o valor (só conta se estiver
+dentro dos limites); as escolhas abrem uma lista (Enter ou clique); o texto escreve-se. Como o resto
+das Definições, **só fica gravado com Guardar** (Ctrl+S). Cada linha diz quando o valor já não é o
+de omissão. Não estão disponíveis durante uma sessão.
+
+| Opção | Limites | Por omissão | Para quê |
+|---|---|---|---|
+| **Sessões e aparelhos** | | | |
+| Contagem antes de começar (`session_countdown_s`) | 0 a 60 s | 15 s | segundos de contagem antes de qualquer sessão (0 = começa logo) |
+| Pausa automática ao fim de (`auto_pause_after_s`) | 1 a 30 s | 3 s | segundos sem pedalar até a sessão pausar (se a pausa automática estiver ligada) |
+| Aparelho sem dados ao fim de (`device_stale_after_s`) | 2 a 30 s | 5 s | segundos sem receber um valor até um sensor contar como perdido |
+| Procura Bluetooth: duração (`ble_scan_s`) | 3 a 30 s | 8 s | quanto tempo a procura de aparelhos Bluetooth escuta (mais tempo encontra mais) |
+| Procura ANT+: duração (`ant_scan_s`) | 3 a 60 s | 12 s | quanto tempo a procura de aparelhos ANT+ escuta (mais tempo encontra mais) |
+| Duração dos avisos (`message_seconds`) | 2 a 20 s | 6 s | quanto tempo fica no topo a mensagem («Guardado», «Exportado»…) |
+| Passadeira: velocidade máxima à partida (`treadmill_start_speed_max_kmh`) | 8 a 40 km/h | 25 km/h | o máximo que a lista de velocidades da passadeira oferece ao começar |
+| Força: passo da carga (`strength_load_step_kg`) | 0.25 a 20 kg | 2.5 kg | quanto muda a carga de uma série com cada toque nas setas |
+| Força: passo do RPE (`strength_rpe_step`) | 0.1 a 1 | 0.5 | quanto muda o RPE de uma série com cada toque nas setas |
+| **Treinos e importação** | | | |
+| Tolerância do alvo de potência (`workout_tolerance_pct`) | 1 a 25 % | 5 % | ± % do alvo que conta como «no alvo» durante um treino |
+| Tolerância na revisão da sessão (`review_tolerance_pct`) | 1 a 25 % | 6 % | ± % do limiar, na revisão, quando o bloco não define outra |
+| Exportar: potência do bloco «livre» (`export_freeride_pct`) | 20 a 100 % FTP | 50 % FTP | os formatos .erg/.mrc não têm blocos livres: pedala-se a esta % do FTP |
+| Rotas GPX: distância entre pontos (`gpx_resample_step_m`) | 1 a 50 m | 5 m | as rotas importadas são reamostradas a esta distância (vale para as novas) |
+| **Ligações externas** | | | |
+| Strava: porta do retorno local (`strava_redirect_port`) | 1024 a 65535 | 8723 | a porta onde a Perennia espera o regresso do Strava (só nesta máquina) |
+| Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 60 a 21600 s | 3600 s | a sincronização é interrompida se demorar mais do que isto |
+| **Análise AdHoc** | | | |
+| CSV: separador de valores (`adhoc_csv_sep`) | ;, ,, Tab, | | ; (ponto e vírgula) | o que se propõe ao exportar (escolhe-se de novo em cada exportação) |
+| CSV: separador decimal (`adhoc_csv_decimal`) | «.» ponto, «,» vírgula | «.» ponto | igual ao separador de valores não pode ser: usa-se o ponto |
+| CSV: UTF-8 com BOM (`adhoc_csv_bom`) | ligado / desligado | ligado | o Excel abre bem os acentos |
+| CSV: pasta das exportações (`adhoc_export_dir`) | texto | (vazio) | vazio = a pasta «exports» dentro da pasta de dados |
+| Gráfico: categorias no eixo X (`adhoc_max_categories`) | 2 a 120 | 15 | as categorias a mais ficam agrupadas em «Outros» |
+| Gráfico: séries na legenda (`adhoc_max_series`) | 1 a 7 | 6 | as séries a mais ficam agrupadas em «Outros» |
+| Gráfico: pontos na dispersão (`adhoc_max_points`) | 10 a 2000 | 400 | acima disto desenha-se uma amostra |
+| Gráfico: classes do histograma (`adhoc_bins`) | 2 a 40 | 10 | quando o eixo X é um número, agrupa-se em classes |
+| Dataset: linhas da pré-visualização (`adhoc_preview_rows`) | 1 a 16 | 12 | (o .csv leva sempre todas as linhas) |
+| Filtros por vista (`adhoc_max_filters`) | 1 a 10 | 6 |  |
+| **Agente de IA e tokens** | | | |
+| Caracteres por token (estimativa) (`agent_chars_per_token`) | 1.5 a 8 | 3.5 | serve só para estimar os tokens antes de enviar; em português e com JSON costuma ser ~3,5 |
+| Máximo de tokens da resposta (`agent_max_output_tokens`) | 64 a 8192 | 1024 | o limite que se pede ao fornecedor para a resposta |
+| Avisar acima de (tokens) (`agent_warn_tokens`) | 500 a 200000 | 8000 | um pedido maior do que isto mostra um aviso antes de enviar |
+| Preço por milhão de tokens enviados (`agent_price_in_per_mtok`) | 0 a 1000 | 0 | 0 = não mostra o custo; vê o preço no site do fornecedor |
+| Preço por milhão de tokens da resposta (`agent_price_out_per_mtok`) | 0 a 1000 | 0 |  |
+| Moeda do custo (`agent_currency`) | texto | US$ |  |
+
+Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
+Nenhuma guarda segredos.
 
 ### Treinos que vêm com a aplicação
 
@@ -1603,7 +1709,7 @@ saíram da Saúde). O índice (0–100) existe para **1 dia, 1 semana, 1 mês, 3
 seguinte (↑ ↓ =: a tendência) e, à direita, o **radar** mostra **onde o corpo tem estado mais
 ou menos concentrado** no período escolhido.
 
-A fórmula (`velo/core/longevity.py`): nove **eixos** — aeróbio, limiar, VO2máx, anaeróbio,
+A fórmula (`perennia/core/longevity.py`): nove **eixos** — aeróbio, limiar, VO2máx, anaeróbio,
 força, potência, mobilidade, estabilidade (isométricos, tendões) e recuperação. Cada sessão
 dá **minutos a cada eixo**: ciclismo pelo tempo em cada zona de potência, corrida, remo e
 natação pelo tempo em cada zona de FC (Z1 recuperação · Z2–Z3 aeróbio · Z4 limiar · Z5 VO2máx
@@ -1856,7 +1962,7 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
+| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), **Avançado** (as opções afináveis: pausa automática, tolerâncias, tokens do agente, Análise AdHoc…), as **vistas guardadas** da AdHoc Analysis, a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
 | Atalhos de teclado | as teclas que mudaste (volta, pausa, terminar, começar sem contagem e saltar bloco são as mesmas em todos os desportos). Um backup antigo, com um atalho por desporto, **volta já unificado** |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
@@ -1979,6 +2085,14 @@ python main.py --importar saude ~/Transferências/perennia_saude.csv
 ```
 
 Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
+
+**A Análise AdHoc, em .csv** (as fontes `sessions`, `sets`, `daily`, `labs`, `tests`; usa o separador
+e o decimal das Definições, se não os deres; grava na pasta `exports`, ou em `--destino`):
+
+```bash
+python main.py --adhoc-exportar sessions --destino ~/Documentos --nome minhas-sessoes --separador ";"
+python main.py --adhoc-exportar daily --vista "Peso por mês"
+```
 
 ### Rotas (menu do ecrã inicial)
 
@@ -2181,6 +2295,17 @@ enviado**, para veres a privacidade antes de o ligar. Ficam já estas regras:
 só saem as categorias autorizadas; **nada do Strava** (o acordo da API do
 Strava proíbe usar esses dados em IA); e o agente sugere, não diagnostica.
 
+**Quantos tokens vai gastar — antes de enviar.** O ecrã do agente mostra, por cima do pedido, uma
+**estimativa dos tokens**: o total, o peso de cada parte (instruções, a página, cada categoria do
+contexto), o máximo que a resposta pode ter e, se puseres os preços, **o custo** (do pedido e o pior
+caso com a resposta no limite). Acima do limite que definires aparece um **aviso** — e podes tirar
+categorias do contexto para o pedido encolher. A conta faz-se **no teu computador, sem rede e sem
+custo**: caracteres ÷ caracteres por token (3,5 por omissão, que em português e com JSON é uma boa
+aproximação). É uma **estimativa** (diz «≈»); o número exato só o fornecedor dá — a Anthropic tem um
+pedido gratuito, `count_tokens`, que fica para quando o agente estiver ligado. As opções (caracteres
+por token, máximo da resposta, limite do aviso, preços por milhão de tokens e a moeda) estão em
+Definições → Avançado → Agente de IA e tokens.
+
 ### Se a aplicação fechar a meio de uma sessão
 
 A sessão vai sendo gravada enquanto treinas: no ciclismo as amostras e um
@@ -2321,6 +2446,33 @@ minuto. Tens de pedalar para não ser apanhado.
   pelotão chegar. Uma pausa manual tira essa tentativa da classificação.
 - A classificação é por nível e por rota: a subir, a vantagem fecha mais
   devagar, por isso tempos de estradas diferentes não se comparam.
+
+### Segurança e segredos
+
+- **A palavra-passe do Garmin nunca vai para o disco nem para a linha de comandos.** Define a
+  variável de ambiente **`PERENNIA_GARMIN_PASSWORD`** (fica fora de qualquer ficheiro) ou escreve-a
+  nas Definições (fica **só na memória** até fechares a aplicação). Ao sincronizar, a Perennia
+  entrega-a ao GarminDB num ficheiro temporário privado (só o teu utilizador o lê) que apaga no fim,
+  mesmo que a sincronização falhe. Se a configuração do GarminDB ainda tiver uma palavra-passe em
+  claro (de uma versão antiga), ela é **retirada do ficheiro e da cópia `.bak`** na primeira
+  sincronização. Alternativa mais forte: o cofre do sistema (`secure_password` do GarminDB).
+- **Strava:** o *Client ID* e o *Client Secret* podem vir das variáveis de ambiente
+  **`PERENNIA_STRAVA_CLIENT_ID`** e **`PERENNIA_STRAVA_CLIENT_SECRET`** (nesse caso o segredo nem
+  chega à base de dados). A autorização usa um `state` aleatório (o retorno local só aceita o pedido
+  que a Perennia fez, e só em `127.0.0.1`).
+- **Ficheiros de fora** (`.gpx`, `.zwo`, `.tcx`) são lidos sem DTD nem entidades (recusam-se os que
+  as tragam) e com limite de tamanho. Um **backup** não pode escrever fora da pasta de dados (`..`,
+  caminhos absolutos e letras de unidade são recusados).
+- **A base de dados** fica com permissões só do dono (0600, em Linux/macOS). Os backups só levam as
+  *Ligações externas* (Strava) se o pedires.
+- **`.gitignore`:** `.claude/`, `.env*`, `*.db`, os `.fit`, `exports/`, `backups/`, chaves e
+  certificados nunca vão para o git.
+- Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
+  sempre em variáveis de ambiente.
+
+Limites conhecidos: os *tokens* de acesso do Strava ficam **em texto** na base local (protegida pelas
+permissões do ficheiro; o Windows ignora o 0600 e vale a pasta do teu utilizador); e um backup
+restaurado não tem limite de tamanho por ficheiro.
 
 ---
 
@@ -2496,6 +2648,18 @@ uma vez.
 `build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
 dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 
+**O que refazer depois de um `git pull` (a ronda 15 renomeou o pacote `velo/` para `perennia/`):**
+
+| Como abres a Perennia | O que fazer |
+|---|---|
+| `Perennia.bat` / `./perennia.sh` / `python main.py` | **nada**: já abrem o código novo |
+| um atalho que criaste com o `criar_atalho_windows.bat` (versão do projeto) | **nada**; se o atalho já não abrir, apaga-o e volta a correr `criar_atalho_windows.bat` |
+| a app construída (`dist\Perennia\Perennia.exe`) | **refazer**: apaga a pasta `build` e `dist` e corre `build_windows.bat` outra vez (o `packaging/perennia.spec` já aponta para `perennia`); depois `criar_atalho_windows.bat` para o atalho apontar para o novo `.exe` |
+| Mac / Linux | `./build.sh` |
+
+Os dados **ficam**: a pasta e a base são migradas sozinhas na primeira abertura (ver o topo deste
+guia). O `.venv` não muda (o `requirements.txt` é o mesmo).
+
 ### Mac, Linux, Raspberry Pi
 
 O empacotamento é sempre feito no sistema de destino: um `.exe` só se faz
@@ -2570,6 +2734,23 @@ O que a ronda 8 acrescentou (tudo automático ao abrir):
 Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
+
+**A ronda 15 NÃO cria tabelas nem colunas — e é tudo automático** (**não tens de fazer nada** na
+base local; antes de abrires a versão nova podes fazer um backup). O que muda:
+
+| O quê | Como fica |
+|---|---|
+| a pasta de dados `VeloLocal`/`velolocal` | passa a `Perennia`/`perennia` (renomeada de uma vez, na primeira abertura) |
+| `velolocal.db` | passa a `perennia.db` |
+| `rides.fit_path` e outros caminhos; `source_format = 'velolocal'` | atualizados (idempotente: correr duas vezes não muda nada) |
+| definição `adhoc_state` | a última vista da AdHoc Analysis (JSON) |
+| definição `adhoc_views` | as vistas guardadas (lista de nome + vista, JSON) |
+| as 31 opções de Definições → Avançado (tabela acima) | uma definição por opção, **só criada quando a mudas**; sem ela, vale o valor por omissão |
+
+Tudo isto são linhas da tabela `settings`: não há `ALTER TABLE`. Os backups levam-nas com as
+**Definições** (o conjunto «Definições» foi alargado: as opções do Avançado e as vistas da AdHoc já
+vão lá, mesmo as que se chamam `agent_…` ou `strava_…`, que não guardam segredos). A migração do
+nome antigo está toda em `perennia/legacy.py` e `Database._migrate`.
 
 **A ronda 14 NÃO cria tabelas nem colunas — e continua a ser tudo automático** (**não tens de fazer
 nada** para que fique guardado na base local: o que muda são só **definições**, na tabela `settings`,
@@ -2740,7 +2921,24 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (929 testes a passar).
+**Verificado com testes automáticos nesta versão** (1015 testes a passar).
+
+*Novidades da ronda 15 (testes novos em `tests/test_round15.py`, e os antigos atualizados):* o
+**nome Perennia em todo o lado** (o pacote `velo/` passa a `perennia/`; a pasta de dados, a base e
+os ficheiros antigos migram sozinhos e de forma idempotente; o nome antigo só existe em
+`perennia/legacy.py`); a **segurança** (a palavra-passe do Garmin só em memória ou na variável
+`PERENNIA_GARMIN_PASSWORD` e entregue ao GarminDB por um ficheiro temporário privado; o Strava por
+variáveis de ambiente e com `state`; XML de fora sem DTD; backups que não escrevem fora da pasta de
+dados; a base com permissões do dono; `.claude/`, `.env*`, `*.fit`, `exports/` no `.gitignore`;
+permissões mínimas no workflow do GitHub); as **listas pendentes** (Enter abre uma lista com pesquisa
+onde antes só havia ←/→ — exercícios, rotas, etc.; ←/→ continuam a passar ao seguinte); a
+**estimativa de tokens** (e de custo) no ecrã do agente antes de enviar; a **AdHoc Analysis** (as
+cinco fontes, filtros, os cinco tipos de gráfico, o .csv com nome, separador e decimal, a proteção
+contra fórmulas, as vistas guardadas e o `--adhoc-exportar`); **Definições → Avançado** com
+31 opções afináveis (a tabela está em «Definições → Avançado», mais atrás) e os backups a
+levá-las com as Definições. **Não foi testado com hardware real, com Windows/macOS nem com um
+GarminDB verdadeiro** (a entrega da palavra-passe por `password_file` está testada contra um
+substituto, não contra o programa real).
 
 *Novidades da ronda 14 (testes novos em `tests/test_round14.py`, `tests/test_ui_walk.py` e nos de
 backup, e os antigos atualizados):* o aviso **PAUSA** nos cinco desportos (P, Esc, os botões

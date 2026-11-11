@@ -22,14 +22,14 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import backup as bk  # noqa: E402
-from velo.core import climbs as climbs_mod  # noqa: E402
-from velo.core import gpx  # noqa: E402
-from velo.core import segments as seg  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.ride import RideEngine  # noqa: E402
-from velo.io.hub import SensorHub  # noqa: E402
-from velo.io.sim import SimulatedTrainer  # noqa: E402
+from perennia.core import backup as bk  # noqa: E402
+from perennia.core import climbs as climbs_mod  # noqa: E402
+from perennia.core import gpx  # noqa: E402
+from perennia.core import segments as seg  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.ride import RideEngine  # noqa: E402
+from perennia.io.hub import SensorHub  # noqa: E402
+from perennia.io.sim import SimulatedTrainer  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
 GPX = Path(__file__).parent / "teste.gpx"
@@ -177,7 +177,7 @@ class TestExportAndRestore(Base):
         again.close()
 
     def test_the_new_unified_id_wins_over_an_old_one(self):
-        from velo.core import shortcuts
+        from perennia.core import shortcuts
         self.assertEqual(shortcuts.migrate({"ride_lap": ["K", []], "lap": ["H", []]}),
                          {"lap": ["H", []]})
         self.assertEqual(shortcuts.migrate({}), {})
@@ -293,7 +293,7 @@ class TestBackupMenu(tg.GuiCase):
         view.activate()
 
     def test_export_some_components_then_restore_them(self):
-        from velo.ui import backup_screens as bs
+        from perennia.ui import backup_screens as bs
         self.press(key.ESCAPE)
         b = self.app.topbar.buttons["backups"][0]           # na faixa do topo
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
@@ -326,7 +326,7 @@ class TestBackupMenu(tg.GuiCase):
         self.assertEqual(self.screen().title_text, "Backup reposto")
         self.assertIsNotNone(self.app.db.route(self.route_id))
         self.press(key.ENTER)
-        from velo.ui.app import HomeScreen
+        from perennia.ui.app import HomeScreen
         self.assertIsInstance(self.screen(), HomeScreen)
         # a cópia de segurança aparece na lista do Repor
         self.app.push(bs.BackupScreen(self.app, tab=1))
@@ -334,7 +334,7 @@ class TestBackupMenu(tg.GuiCase):
         self.assertTrue(any(n.startswith("perennia-antes-de-repor") for n in names))
 
     def test_dropping_a_backup_on_the_window_opens_the_restore(self):
-        from velo.ui import backup_screens as bs
+        from perennia.ui import backup_screens as bs
         m = bk.export(self.app.db, Path(self.tmp), Path(self.tmp) / "x" / "b.zip", ["atalhos"])
         self.app._on_file_drop(10, 10, [m["path"]])
         self.assertIsInstance(self.screen(), bs.RestorePopup)

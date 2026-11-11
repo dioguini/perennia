@@ -18,19 +18,19 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.core import csv_sync as cs  # noqa: E402
-from velo.core import fit  # noqa: E402
-from velo.core import gpx_convert as gc  # noqa: E402
-from velo.core import gym, muscles  # noqa: E402
-from velo.core import longevity as lg  # noqa: E402
-from velo.core import tags as tg_core  # noqa: E402
-from velo.core.db import Database  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
-from velo.io.sim import SimulatedTrainer, SimulatedTreadmill  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
-from velo.ui import rowing_screens as rs  # noqa: E402
-from velo.ui import tag_popup as tagpop  # noqa: E402
+from perennia.core import csv_sync as cs  # noqa: E402
+from perennia.core import fit  # noqa: E402
+from perennia.core import gpx_convert as gc  # noqa: E402
+from perennia.core import gym, muscles  # noqa: E402
+from perennia.core import longevity as lg  # noqa: E402
+from perennia.core import tags as tg_core  # noqa: E402
+from perennia.core.db import Database  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
+from perennia.io.sim import SimulatedTrainer, SimulatedTreadmill  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import rowing_screens as rs  # noqa: E402
+from perennia.ui import tag_popup as tagpop  # noqa: E402
 
 
 def fresh_db() -> Database:
@@ -265,7 +265,7 @@ class TestTags(tg.GuiCase):
         self.press(key.RIGHT)                               # ←/→ percorre os tipos
         self.assertEqual(b.wtype, "recovery")
         self.press(key.ENTER)                               # Enter abre a lista com pesquisa
-        from velo.ui.pickers import ChoicePopup
+        from perennia.ui.pickers import ChoicePopup
         self.assertIsInstance(self.screen(), ChoicePopup)
         self.press(key.ESCAPE)
         b.name = "Meu treino"
@@ -341,7 +341,7 @@ class TestLongevityCore(tg.GuiCase):
         self.assertIn("1 sem", lg.impact_text(imp))
 
     def test_tests_and_habits_enter_the_index(self):
-        from velo.core import fitness_tests as ft
+        from perennia.core import fitness_tests as ft
         from datetime import date
         db = self.app.db
         ft.seed(db)
@@ -381,7 +381,7 @@ class TestLongevityScreens(tg.GuiCase):
         self.assertIn("Flexões em 1 minuto", [i.label for i in menu.list.items])
 
     def test_session_pages_show_the_radar_and_the_impact(self):
-        from velo.ui import session_analysis as sa
+        from perennia.ui import session_analysis as sa
         from datetime import date
         add_endurance(self.app.db, "e9", date.today().isoformat(), [0, 3600, 0, 0, 0])
         an = sa.open_session(self.app, "running", "e9")
@@ -456,7 +456,7 @@ class TestGpxConverter(tg.GuiCase):
         self.app.push(b)
         b.tab = len(b.modes)
         b.on_tab()
-        from velo.ui.gpx_convert_screens import GpxConverter
+        from perennia.ui.gpx_convert_screens import GpxConverter
         conv = self.screen()
         self.assertIsInstance(conv, GpxConverter)
         conv.set_route(self.route_id)
@@ -474,7 +474,7 @@ class TestGpxConverter(tg.GuiCase):
                             self.app.db.route_points(self.route_id), conv.p)))
 
     def test_treadmill_incline_step_setting(self):
-        from velo.core import workout_meta as wm
+        from perennia.core import workout_meta as wm
         self.assertEqual(wm.device_limits(self.app.db)["treadmill_incline_step"], 0.5)
         self.app.db.set("treadmill_incline_step", 1.0)
         self.assertEqual(wm.device_limits(self.app.db)["treadmill_incline_step"], 1.0)
@@ -520,8 +520,8 @@ class TestExercises(tg.GuiCase):
         self.assertNotIn(key_, [g["key"] for g in muscles.groups(db)])
 
     def test_editor_uses_dropdowns_for_group_subgroup_modalities_and_equipment(self):
-        from velo.ui.hub_screens import ExerciseEditor
-        from velo.ui.pickers import ChoicePopup, MultiChoicePopup
+        from perennia.ui.hub_screens import ExerciseEditor
+        from perennia.ui.pickers import ChoicePopup, MultiChoicePopup
         ed = ExerciseEditor(self.app, None, "strength")
         self.app.push(ed)
         labels = [i.label for i in ed.list.items]
@@ -595,7 +595,7 @@ class TestCsv(tg.GuiCase):
         self.assertEqual((rep["created"], rep["updated"]), (1, 0))
         rep = cs.import_csv(db, "artigos", text.replace(";2;", ";3;"))
         self.assertEqual((rep["created"], rep["updated"]), (0, 1))
-        from velo.core import inventory
+        from perennia.core import inventory
         items = inventory.items(db)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["qty"], 3)
@@ -646,7 +646,7 @@ class TestCsv(tg.GuiCase):
         key, rep = cs.import_file(self.app.db, p)
         self.assertEqual(key, "artigos")
         self.assertEqual(rep["created"], 1)
-        from velo.core import file_import
+        from perennia.core import file_import
         _r, text = file_import.import_file(self.app.db, "csv", p)
         self.assertIn("Artigos", text)
         _ = os
@@ -661,7 +661,7 @@ class TestCsv(tg.GuiCase):
             labels = [i.label for i in items]
             self.assertIn("Exercícios", labels)
             self.assertIn("Grupos e subgrupos musculares", labels)
-            from velo.ui.csv_screens import CsvDatasetPopup
+            from perennia.ui.csv_screens import CsvDatasetPopup
             pop = CsvDatasetPopup(self.app, "exercicios")
             self.app.push(pop)
             self.pick("Descarregar o modelo (.csv)")
@@ -692,7 +692,7 @@ class TestSmallThings(tg.GuiCase):
         self.assertEqual(hud._dist.text, "")
 
     def test_backup_knows_the_new_tables(self):
-        from velo.core import backup
+        from perennia.core import backup
         backup.prepare(self.app.db)
         known = {t_ for c in backup.COMPONENTS for t_ in c.tables}
         for table in ("workout_types", "session_tags", "tag_catalog", "muscle_groups",

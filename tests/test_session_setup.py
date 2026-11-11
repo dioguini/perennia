@@ -15,16 +15,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import fitness_tests as ft  # noqa: E402
-from velo.core import rowing as rw  # noqa: E402
-from velo.core import workout_meta as wm  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import fitness_tests as ft  # noqa: E402
+from perennia.core import rowing as rw  # noqa: E402
+from perennia.core import workout_meta as wm  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import brief as br  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
-from velo.ui import session_setup as ss  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import brief as br  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import session_setup as ss  # noqa: E402
 
 
 class FakeStrava:

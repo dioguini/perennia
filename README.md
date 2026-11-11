@@ -1,7 +1,6 @@
 # Perennia
 
-*Perene: que dura ao longo dos anos sem perder a vitalidade.* (Antes:
-VeloLocal.)
+*Perene: que dura ao longo dos anos sem perder a vitalidade.*
 
 Aplicação de treino indoor que corre inteiramente offline: ciclismo, remo,
 corrida, natação e ginásio. No ciclismo carrega um `.gpx`, pedala essa
@@ -14,7 +13,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 929 testes
+python -m unittest discover -s tests -t .       # 1015 testes
 ```
 
 **Sem o PyCharm:** duplo clique em `Perennia.bat` (Windows) ou `./perennia.sh` (macOS, Linux) abre a
@@ -258,8 +257,29 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   dados (atividades, monitorização, FC em repouso, HRV, sono, peso).
 - **Strava:** os segmentos que cruzam as tuas rotas e os teus PR, com a
   comparação ao vivo durante o passeio (nunca enviados ao agente de IA).
+- **AdHoc Analysis** (último separador das Estatísticas gerais): o centro
+  exploratório. Escolhes a fonte (sessões, séries de força, diário, análises
+  clínicas, testes), filtras, e ou **exportas um .csv** (com o nome do
+  ficheiro, o separador de valores e o decimal à tua escolha) ou montas um
+  **gráfico dinâmico** ao estilo Power BI (eixo X, valor, agregação, legenda,
+  colunas, empilhadas, linhas ou dispersão). As vistas guardam-se. Também
+  existe na linha de comandos: `python main.py --adhoc-exportar sessions`.
+- **Definições → Avançado:** os valores que antes estavam fixos no código
+  (contagem antes da sessão, pausa automática, tolerâncias dos treinos, passos
+  do ginásio, porta do Strava, tokens do agente, limites da AdHoc…) são
+  opções, cada uma com limites e valor por omissão; entram nos backups.
 - **Agente de IA preparado** (F1 resumo da página, F2 resumo contextualizado),
-  em pré-visualização até ser ligado.
+  em pré-visualização até ser ligado. Antes de enviar mostra uma **estimativa
+  dos tokens** (e do custo, se puseres os preços), com aviso acima de um limite.
+- **Segurança:** a palavra-passe do Garmin e os dados do Strava vêm de
+  **variáveis de ambiente** (`PERENNIA_GARMIN_PASSWORD`,
+  `PERENNIA_STRAVA_CLIENT_ID`, `PERENNIA_STRAVA_CLIENT_SECRET`) e nunca ficam
+  num ficheiro nem na linha de comandos; a base tem permissões só do dono;
+  `.gpx/.zwo/.tcx` lêem-se sem DTD; os backups não escrevem fora da pasta de
+  dados. Detalhes em [RUN.md](RUN.md), «Segurança e segredos».
+- **Se vinhas da versão anterior** (que tinha outro nome) não tens de fazer nada: a
+  pasta de dados e a base são renomeadas sozinhas na primeira abertura (ver
+  [RUN.md](RUN.md)).
 - **Recuperação**: se a aplicação fechar a meio, retoma-se a sessão onde
   estava (ou guarda-se como está).
 - Guarda tudo num **único ficheiro SQLite portátil** e escreve um **`.fit`**
@@ -280,8 +300,9 @@ hora estão na faixa do topo. Acrescentar ou editar (artigos, exercícios,
 desafios, testes, passos) abre uma janela com **Cancelar · Guardar · Guardar
 e sair**; o Guardar só acende quando há alterações, e sair com alterações
 pergunta *Sair sem guardar · Cancelar · Sair e guardar*. **Enter nunca muda
-valores sozinho**: numa escolha abre uma **lista com pesquisa**, e numa
-data o **seletor de datas** (←/→ continuam a mudar números). Todos os
+valores sozinho**: numa escolha abre uma **lista com pesquisa** (escreves para filtrar: não se
+percorre um exercício a exercício com as setas) e numa
+data o **seletor de datas**; **←/→** passam ao valor seguinte e continuam a mudar números. Todos os
 separadores têm **pesquisa** no canto superior direito (Ctrl+F), que filtra
 enquanto escreves; todos os botões de ação ficam em baixo à direita. Os títulos das listas ficam numa
 faixa sombreada e as setas saltam-nos; a descrição de cada opção fica à
@@ -295,8 +316,10 @@ volta e conta as voltas; só o botão de parar a fecha.
 ## Estrutura
 
 ```
-main.py              ponto de entrada e autoteste
-velo/core/           lógica — sem interface, sem rádio, inteiramente testada
+main.py              ponto de entrada, autoteste e exportação AdHoc (--adhoc-exportar)
+perennia/datadir.py      onde ficam os dados de cada sistema
+perennia/legacy.py       o único sítio que conhece o nome antigo (migração automática)
+perennia/core/           lógica — sem interface, sem rádio, inteiramente testada
   db.py              SQLite: esquema, repositórios, portabilidade
   gpx.py             importação, projeção local, reamostragem
   climbs.py          deteção de subidas e placas
@@ -333,7 +356,10 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   calendar_view.py   calendário mensal, plano por dia e resumos das semanas
   strength_builder.py treinos de força por blocos (superset, circuito…), séries e parâmetros
   strength_analysis.py análise pós-treino da força e histórico de cada exercício
-  agent.py           pedidos ao agente de IA (por ligar)
+  agent.py           pedidos ao agente de IA (por ligar), estimativa de tokens e custo
+  options.py         registo único das opções afináveis (Definições → Avançado)
+  adhoc.py           AdHoc Analysis: fontes, filtros, agregação, gráfico, .csv
+  safexml.py         leitura de XML de fora sem DTD nem entidades
   chase.py           modo fuga: o pelotão que acelera
   boards.py          classificações para os menus e para a sessão
   boxes.py           as 6 caixas de métricas do ecrã da sessão
@@ -363,7 +389,7 @@ velo/core/           lógica — sem interface, sem rádio, inteiramente testada
   workout_download.py exportar um treino de qualquer desporto
   curves.py          curvas suaves para os gráficos (cúbica monótona, escala log)
   i18n.py units.py   traduções e unidades
-velo/io/             rádio e sensores
+perennia/io/             rádio e sensores
   ble.py             FTMS, Cycling Power, Heart Rate, CSC
   ant.py             FE-C, potência, cardio
   hub.py             fusão de vários sensores por prioridade
@@ -373,10 +399,10 @@ velo/io/             rádio e sensores
   sound.py           os bips (um tom gerado em memória; sem som, o beep do terminal)
   strava.py          Strava: autorização e pedidos (só leitura)
   stall.py           pedais parados que continuam a emitir contam como zero
-velo/gfx/            world.py (estrada 3D) · hud.py (HUD e sinalética) · icons.py ·
+perennia/gfx/            world.py (estrada 3D) · hud.py (HUD e sinalética) · icons.py ·
                      theme.py (temas)
-velo/assets/icons/   ícones PNG (refeitos com tools/make_icons.py)
-velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
+perennia/assets/icons/   ícones PNG (refeitos com tools/make_icons.py)
+perennia/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      Challenge, estatísticas gerais, recuperação) ·
                      health_screens.py (saúde, testes, agente) ·
                      rowing_screens.py (remo) · connect_screens.py (Strava) ·
@@ -402,9 +428,10 @@ velo/ui/             app.py (ecrãs) · sport_screens.py (força, construtores,
                      day_popups.py (a janela do dia e o planear) · sound_screens.py (configurações sonoras) ·
                      load_screens.py (carga e prontidão) ·
                      strength_builder_screens.py · strength_analysis_screens.py ·
-                     exercise_stats_screens.py ·
+                     exercise_stats_screens.py · adhoc_screens.py (AdHoc Analysis) ·
+                     option_screens.py (Definições → Avançado) ·
                      widgets.py (inclui a barra do topo e os separadores)
-velo/paths.py        onde está a aplicação (script ou executável)
+perennia/paths.py        onde está a aplicação (script ou executável)
 packaging/           receita do PyInstaller, ícone (.ico), atalho do Windows e LEIA-ME para os colegas
 Perennia.bat         abre a aplicação sem o PyCharm (Windows); perennia.sh no macOS e no Linux
 criar_atalho_windows.bat  o atalho «Perennia», com ícone, no Ambiente de trabalho
@@ -412,7 +439,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               929 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1015 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

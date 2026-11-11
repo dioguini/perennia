@@ -3,7 +3,7 @@
 
     python tools/make_app_icon.py
 
-Cria velo/assets/app_icon.png (256×256) e packaging/perennia.ico (16 a 256 px). Precisa do
+Cria perennia/assets/app_icon.png (256×256) e packaging/perennia.ico (16 a 256 px). Precisa do
 Pillow só para gerar; o projeto traz os ficheiros já feitos.
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ def draw() -> Image.Image:
 
 def main() -> None:
     img = draw()
-    png = ROOT / "velo" / "assets" / "app_icon.png"
+    png = ROOT / "perennia" / "assets" / "app_icon.png"
     img.resize((256, 256), Image.LANCZOS).save(png)
     ico = ROOT / "packaging" / "perennia.ico"
     sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]

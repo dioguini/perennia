@@ -20,16 +20,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import agent, fit, fitness_tests as ft, games, health  # noqa: E402
-from velo.core import laps_session as ls  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.ride import Reading  # noqa: E402
+from perennia.core import agent, fit, fitness_tests as ft, games, health  # noqa: E402
+from perennia.core import laps_session as ls  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.ride import Reading  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import health_screens as hs  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import health_screens as hs  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
 
 
 def make_db(tmp: Path) -> Database:
@@ -248,7 +248,7 @@ class TestFitnessTests(unittest.TestCase):
         self.assertNotIn(tid, [x["id"] for x in ft.tests(self.db, "longevity")])
 
     def test_cycling_protocols(self):
-        from velo.core import ftp
+        from perennia.core import ftp
         for proto in ftp.TEST_PROTOCOLS:
             wk = ftp.build(proto, 250)
             self.assertTrue(wk.steps)
@@ -611,8 +611,8 @@ class TestLapSession(unittest.TestCase):
 
 class TestLapSessionGui(tg.GuiCase):
     def test_conditioning_plan_first_then_start(self):
-        from velo.ui import gym_screens as gs
-        from velo.ui import hub_screens as hs_
+        from perennia.ui import gym_screens as gs
+        from perennia.ui import hub_screens as hs_
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.pick("Sessão de treino")
