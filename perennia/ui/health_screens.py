@@ -114,7 +114,7 @@ class AgentScreen(Screen):
             rows.append(Item(label, value=f"≈ {n(tokens)}", enabled=False, indent=1))
         rows.append(Item(tr("Resposta: no máximo", "Reply: at most"),
                          value=tr("{n} tokens", "{n} tokens", n=n(rep["max_output"])),
-                         detail=tr("Definições → Ligações externas", "Settings → External links"),
+                         detail=tr("Definições → Avançado", "Settings → Advanced"),
                          enabled=False))
         if rep["priced"]:
             cur = rep["currency"]
@@ -127,9 +127,9 @@ class AgentScreen(Screen):
         else:
             rows.append(Item(tr("Custo estimado", "Estimated cost"), value="—",
                              detail=tr("define o preço por milhão de tokens nas Definições "
-                                       "(Ligações externas) para ver o custo",
-                                       "set the price per million tokens in Settings (External "
-                                       "links) to see the cost"), enabled=False))
+                                       "(Avançado) para ver o custo",
+                                       "set the price per million tokens in Settings "
+                                       "(Advanced) to see the cost"), enabled=False))
         return rows
 
     def enter(self) -> None:
@@ -211,11 +211,37 @@ class HealthMenu(Screen):
     Tendências · Métricas. Os testes de longevidade passaram para o menu Longevidade."""
 
     TABBED = True
-    TAB_KEYS = ("labs", "diary", "trends", "metrics")
+    # os separadores fixos; a seguir vêm os que criaste (`health_tabs`), um por cada
+    TAB_KEYS = ("labs", "diary", "trends", "metrics", "bp", "assistant")
+    CUSTOM = "tab:"
 
     @staticmethod
     def TITLE() -> str:
         return tr("Saúde", "Health")
+
+    def tab_keys(self) -> list[str]:
+        from perennia.core import health_tabs
+        return list(self.TAB_KEYS) + [self.CUSTOM + t_["key"]
+                                      for t_ in health_tabs.tabs(self.app.db)]
+
+    def tab_key(self) -> str:
+        keys = self.tab_keys()
+        return keys[self.tab % len(keys)]
+
+    def refresh_tabs(self, select: str | None = None) -> None:
+        """Depois de criar, mudar o nome ou apagar um separador teu."""
+        keys = self.tab_keys()
+        if self.tabs is not None:
+            self.tabs.set_labels(self.tab_labels())
+        if select in keys:
+            self.tab = keys.index(select)
+        self.tab = min(self.tab, len(keys) - 1)
+        if self.tabs is not None:
+            self.tabs.select(self.tab)
+        self.list.index = 0
+        self.inner = None
+        self.on_resize(self.app.window.width, self.app.window.height)
+        self.enter()
 
     def __init__(self, app, tab: int = 0, report_id: int | None = None):
         super().__init__(app)
@@ -226,8 +252,13 @@ class HealthMenu(Screen):
             self.tabs.select(tab)
 
     def tab_labels(self) -> list[str]:
-        return [tr("Análises", "Lab results"), tr("Diários", "Daily logs"),
-                tr("Tendências", "Trends"), tr("Métricas", "Metrics")]
+        from perennia.core import health_tabs
+        fixed = {"labs": tr("Análises", "Lab results"), "diary": tr("Diários", "Daily logs"),
+                 "trends": tr("Tendências", "Trends"), "metrics": tr("Métricas", "Metrics"),
+                 "bp": tr("Pressão arterial", "Blood pressure"),
+                 "assistant": tr("Assistente de saúde", "Health assistant")}
+        return [fixed[k] for k in self.TAB_KEYS] + [t_["name"]
+                                                   for t_ in health_tabs.tabs(self.app.db)]
 
     def on_tab(self) -> None:
         self.inner = None
@@ -246,7 +277,8 @@ class HealthMenu(Screen):
         a = self.app
         health.seed(a.db)
         ft.seed(a.db)
-        k = self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
+        k = self.tab_key()
+        self.list.detail_below = False       # os separadores com textos compridos ligam-no
         if k == "labs":
             self.inner = None
             self._labs()
@@ -256,8 +288,17 @@ class HealthMenu(Screen):
         elif k == "trends":
             self.inner = None
             self._trends()
-        else:
+        elif k == "metrics":
             self._embed(MetricsManager).enter()
+        else:
+            from perennia.ui import health_extra_screens as hx
+            self.inner = None
+            if k == "bp":
+                hx.bp_tab(self)
+            elif k == "assistant":
+                hx.assistant_tab(self)
+            else:
+                hx.custom_tab(self, k[len(self.CUSTOM):])
 
     # --------------------------------------------------------- diários
 
@@ -274,6 +315,8 @@ class HealthMenu(Screen):
             rows.append(Item(day_label(d), value=f"{done}/{total}",
                              detail=_excerpt(note, 80) if note else "",
                              action=lambda dd=d: a.push(DailyLogScreen(a, dd))))
+        from perennia.ui import health_extra_screens as hx
+        rows.append(hx.new_tab_button(self))
         self.chrome.set(self.TITLE(), tr("Os diários dos últimos dias · Enter abre o dia",
                                          "The last days' logs · Enter opens the day"),
                         self.footer())
@@ -341,6 +384,8 @@ class HealthMenu(Screen):
         rows += [Item(tr("Colheitas", "Collections"), button=True, action=self._labs_back),
                  Item(tr("Catálogo", "Catalog"), button=True,
                       action=lambda: a.push(ParameterCatalog(a))),
+                 Item(tr("Assistente de saúde", "Health assistant"), button=True,
+                      action=self._labs_assistant),
                  Item(tr("Comentário geral do médico", "Doctor's general comment"), button=True,
                       action=self._edit_general),
                  Item(tr("Editar esta colheita", "Edit this collection"), button=True,
@@ -370,7 +415,9 @@ class HealthMenu(Screen):
                              detail=tr("cria uma (botão em baixo) ou importa do Excel/CSV",
                                        "create one (button below) or import from Excel/CSV"),
                              enabled=False))
-        rows += [Item(tr("Catálogo", "Catalog"), button=True,
+        from perennia.ui import health_extra_screens as hx
+        rows += [hx.new_tab_button(self),
+                 Item(tr("Catálogo", "Catalog"), button=True,
                       action=lambda: a.push(ParameterCatalog(a))),
                  Item(tr("+ Nova análise", "+ New lab report"), button=True, primary=True,
                       action=lambda: a.push(LabReportEditor(a, None)))]
@@ -378,6 +425,11 @@ class HealthMenu(Screen):
                                          "The collections · Enter opens one's report"),
                         self.footer())
         self.list.set_items(rows, keep_index=True)
+
+    def _labs_assistant(self) -> None:
+        """O que o Assistente de saúde lê nesta colheita (o que existe para o médico fica)."""
+        from perennia.ui import health_extra_screens as hx
+        hx.open_component(self.app, "labs", report_id=self.report_id)
 
     def _open_report(self, report_id: int) -> None:
         self.report_id = report_id
@@ -391,7 +443,7 @@ class HealthMenu(Screen):
 
     def go_back(self) -> None:
         """Esc ou «Voltar»: dentro de uma colheita volta à lista das colheitas."""
-        if self.TAB_KEYS[self.tab % len(self.TAB_KEYS)] == "labs" and self.report_id is not None:
+        if self.tab_key() == "labs" and self.report_id is not None:
             self._labs_back()
             return
         super().go_back()
@@ -467,6 +519,12 @@ class DailyLogScreen(EditScreen):
             if m["grp"] != group:
                 group = m["grp"]
                 rows.append(Item(f"— {group_name(group)} —", enabled=False))
+            if m["key"] in ("bp_sys", "bp_dia"):
+                # a pressão arterial tem várias medições por dia: uma linha que as abre
+                if m["key"] == "bp_sys":
+                    from perennia.ui import health_extra_screens as hx
+                    rows.append(hx.diary_bp_row(self.app, self.day))
+                continue
             v = vals.get(m["id"])
             value = health.fmt(m, v["value"]) if v else "—"
             detail = ""

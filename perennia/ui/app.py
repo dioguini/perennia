@@ -733,18 +733,19 @@ class HomeScreen(Screen):
     do mês, grande, no resto da largura."""
 
     ROOT = True
-    # Os desportos e a saúde na primeira fila; rotas, segmentos, estatísticas
+    # Os desportos, a saúde e o Treinador na primeira fila; rotas, segmentos, estatísticas
     # e inventários na segunda (ao centro). O calendário está por baixo, no
     # próprio ecrã. Dispositivos, Backups, Definições e Sair estão na faixa do
     # topo (sempre à vista).
     TILES = (("home.cycling", "bike", ""), ("home.rowing", "rower", ""),
              ("home.running", "runner", ""), ("home.swimming", "swimmer", ""),
              ("home.gym", "kettlebell", ""), ("home.health", "heart", ""),
+             ("home.coach", "target", ""),
              ("home.routes", "road", ""), ("home.segments", "flag", ""),
              ("home.stats", "stats", ""),
              ("home.inventory", "box", ""), ("home.exercises", "checklist", ""),
              ("home.longevity", "recover", ""))
-    BIG = 6               # cartões por fila
+    BIG = 7               # cartões por fila
     UPCOMING_DAYS = 14
     UPCOMING_ROWS = 12
 
@@ -785,6 +786,7 @@ class HomeScreen(Screen):
                 lambda: a.push(hub.SportHub(a, "swimming")),
                 lambda: a.push(hub.SportHub(a, "gym")),
                 lambda: a.push(_extra_health().HealthMenu(a)),
+                lambda: a.push(_coach_ui().CoachMenu(a)),
                 lambda: a.push(_routes().RoutesScreen(a)),
                 lambda: a.push(_segments_ui().SegmentsScreen(a)),
                 lambda: a.push(hub.stats_screen(a, None)),
@@ -1308,10 +1310,16 @@ class StartOptions(AutoLapOptions, Screen):
     def enter(self) -> None:
         items = [Item(t("mode.start"), action=self._go)]
         if "pool_m" in self.options:
-            items.append(Item(tr("Piscina", "Pool"), value=f"{self.options['pool_m']:g} m",
-                              detail=tr("←/→ muda (25 m, 50 m, 33,3 m, 20 m)",
-                                        "←/→ changes (25 m, 50 m, 33.3 m, 20 m)"),
-                              data="pool"))
+            pools = list(self.POOLS_M)
+            cur = self.options["pool_m"]
+            items.append(Item(tr("Piscina", "Pool"), value=f"{cur:g} m",
+                              detail=tr("Enter abre a lista · ←/→ muda",
+                                        "Enter opens the list · ←/→ changes"),
+                              data="pool",
+                              dropdown=Dropdown([f"{p:g} m" for p in pools],
+                                                pools.index(cur) if cur in pools else 0,
+                                                lambda k: self.options.__setitem__(
+                                                    "pool_m", pools[k]))))
         if "speed_kmh" in self.options:
             items.append(Item(tr("Velocidade inicial da passadeira", "Treadmill start speed"),
                               value=f"{self.options['speed_kmh']:.1f} km/h",
@@ -1324,8 +1332,10 @@ class StartOptions(AutoLapOptions, Screen):
                         self.footer())
         self.list.set_items(items, keep_index=True)
 
+    POOLS_M = (25.0, 50.0, 33.3, 20.0)          # os comprimentos de piscina que existem
+
     def _cycle_pool(self, step: int) -> None:
-        opts = [25.0, 50.0, 33.3, 20.0]
+        opts = list(self.POOLS_M)
         cur = self.options.get("pool_m", 25.0)
         i = opts.index(cur) if cur in opts else 0
         self.options["pool_m"] = opts[(i + step) % len(opts)]
@@ -1341,7 +1351,8 @@ class StartOptions(AutoLapOptions, Screen):
                 self._cycle_pool(step)
                 return True
             if item.data == "speed":
-                self.options["speed_kmh"] = max(0.0, min(25.0, self.options["speed_kmh"]
+                top = float(opt_mod.get(self.app.db, "treadmill_start_speed_max_kmh"))
+                self.options["speed_kmh"] = max(0.0, min(top, self.options["speed_kmh"]
                                                          + 0.5 * step))
                 self.enter()
                 return True
@@ -2665,6 +2676,9 @@ class SettingsScreen(Screen):
         if any(k in opt_mod.BY_KEY for k in draft):
             opt_mod.apply(db)                       # as opções com constantes nos módulos
             a.hub._stale = float(opt_mod.get(db, "device_stale_after_s"))
+        if "bp_daily_mode" in draft or "bp_discard_first" in draft:
+            from perennia.core import bp           # a forma de calcular mudou: refazer as médias
+            bp.resync_all(db)
         self.draft.clear()
         self._orig.clear()
         self.ath = db.athlete()
@@ -3881,6 +3895,7 @@ class ChallengeDetail(Screen):
                                   enabled=False))
         else:
             items.append(Item(t("stats.no_data"), enabled=False))
+        items.append(_coach_ui().challenge_button(a, ch))
         items.append(Item(t("ch.reset"), action=self._reset, button=True))
         if not ch["is_default"]:
             items.append(Item(t("ch.delete"), action=self._delete, button=True))
@@ -5541,6 +5556,11 @@ def _segments_mod():
 def _longevity_ui():
     from perennia.ui import longevity_screens
     return longevity_screens
+
+
+def _coach_ui():
+    from perennia.ui import coach_screens
+    return coach_screens
 
 
 def _extra_health():

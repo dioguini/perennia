@@ -333,10 +333,14 @@ class FeedbackScreen(SnapshotUnsaved, Screen):
     # ---- análise
     def _draw_analysis(self) -> None:
         P = _theme.P
-        res = fbm.analyse(self.app.db, self.sess, self._fb())
+        from perennia.core import coach
+        try:
+            res = coach.review_session(self.app.db, self.sess, self._fb())
+        except Exception:                       # o Treinador nunca impede a análise de base
+            res = fbm.analyse(self.app.db, self.sess, self._fb())
         self.analysis = res
         x, y, cw, ch = self.geo[1]
-        self.h_an.text = tr("Análise", "Analysis")
+        self.h_an.text = tr("Treinador", "Coach")
         tone_bg = {"good": _theme.mix(P.good, P.panel, 0.82), "warn": P.warn_bg,
                    "bad": _theme.mix(P.bad, P.panel, 0.82)}[res["tone"]]
         tone_fg = {"good": P.good, "warn": P.warn, "bad": P.bad}[res["tone"]]

@@ -13,7 +13,7 @@ guarda um `.fit`.
 ```
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1015 testes
+python -m unittest discover -s tests -t .       # 1094 testes
 ```
 
 **Sem o PyCharm:** duplo clique em `Perennia.bat` (Windows) ou `./perennia.sh` (macOS, Linux) abre a
@@ -257,6 +257,28 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   dados (atividades, monitorização, FC em repouso, HRV, sono, peso).
 - **Strava:** os segmentos que cruzam as tuas rotas e os teus PR, com a
   comparação ao vivo durante o passeio (nunca enviados ao agente de IA).
+- **Treinador** (cartão no ecrã inicial): avalia cada treino no fim da sessão;
+  **planeia um evento numa data** (uma volta com o .gpx, a velocidade média e a
+  hora de partida; ou um evento de força, como «200 flexões e 50 elevações em
+  5 min») com perguntas, viabilidade, fases, alimentação e hidratação, e põe as
+  sessões no calendário; dá **feedback a um desafio** (longe/perto, pergunta a
+  importância e ajusta os treinos); propõe o **caminho para a longevidade** a
+  partir das tuas fraquezas; sugere o treino e os comportamentos de **hoje**;
+  **programa um treino no construtor** e dá **feedback a um treino construído**
+  à luz da tua forma (com versão mais leve e veredicto ao vivo depois de pedires).
+- **Assistente de saúde** (separador da Saúde): avaliação geral e por componente
+  (análises, pressão arterial, recuperação e sono, corpo, hábitos, sinais do
+  treino, as tuas notas). O que existe para o médico fica como estava. Não faz
+  diagnósticos.
+- **Aconselhamento em três modos**, para as duas figuras: **regras da Perennia**
+  (offline, funciona já), **LLM local** (offline) e **agente online** (Claude,
+  ChatGPT, Gemini…) — estes dois preparados e por ligar: mostram o pedido, os
+  **tokens**, a janela do modelo local ou o custo, e os dados partilhados antes
+  de qualquer envio. A chave vem só de uma variável de ambiente.
+- **Pressão arterial:** várias medições por dia, por período (manhã, tarde,
+  noite ou os teus); cada período tem a sua média e o dia tem a média diária.
+- **Separadores da Saúde criados por ti**, sempre com Notas (como as
+  disciplinas do ginásio).
 - **AdHoc Analysis** (último separador das Estatísticas gerais): o centro
   exploratório. Escolhes a fonte (sessões, séries de força, diário, análises
   clínicas, testes), filtras, e ou **exportas um .csv** (com o nome do
@@ -357,6 +379,12 @@ perennia/core/           lógica — sem interface, sem rádio, inteiramente tes
   strength_builder.py treinos de força por blocos (superset, circuito…), séries e parâmetros
   strength_analysis.py análise pós-treino da força e histórico de cada exercício
   agent.py           pedidos ao agente de IA (por ligar), estimativa de tokens e custo
+  advice.py          o formato comum do que o Treinador e o Assistente dizem
+  advisor.py         regras / LLM local / agente online: o pedido e os tokens (sem chamadas)
+  coach.py           o Treinador: sessão, eventos, desafios, longevidade, hoje, construtor
+  health_assistant.py  o Assistente de saúde: avaliação geral e por componente
+  bp.py              pressão arterial: medições, médias por período e diária
+  health_tabs.py     separadores da Saúde criados por ti, com notas
   options.py         registo único das opções afináveis (Definições → Avançado)
   adhoc.py           AdHoc Analysis: fontes, filtros, agregação, gráfico, .csv
   safexml.py         leitura de XML de fora sem DTD nem entidades
@@ -430,6 +458,8 @@ perennia/ui/             app.py (ecrãs) · sport_screens.py (força, construtor
                      strength_builder_screens.py · strength_analysis_screens.py ·
                      exercise_stats_screens.py · adhoc_screens.py (AdHoc Analysis) ·
                      option_screens.py (Definições → Avançado) ·
+                     coach_screens.py (Treinador) · advice_screens.py (conselhos e pedido ao LLM) ·
+                     health_extra_screens.py (pressão arterial, separadores, assistente) ·
                      widgets.py (inclui a barra do topo e os separadores)
 perennia/paths.py        onde está a aplicação (script ou executável)
 packaging/           receita do PyInstaller, ícone (.ico), atalho do Windows e LEIA-ME para os colegas
@@ -439,7 +469,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1015 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1094 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```
