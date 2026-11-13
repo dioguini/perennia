@@ -95,7 +95,7 @@ def main() -> int:
                         help="exporta um conjunto para .csv e sai")
     parser.add_argument("--adhoc-exportar", default=None, metavar="FONTE",
                         help="exporta para .csv uma fonte da Análise AdHoc e sai (sessions, "
-                             "sets, daily, labs ou tests); com --vista usa os campos e filtros "
+                             "sets, daily, labs, tests ou bp); com --vista usa os campos e filtros "
                              "dessa vista guardada")
     parser.add_argument("--vista", default=None,
                         help="com --adhoc-exportar: o nome de uma vista guardada")

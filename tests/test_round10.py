@@ -374,7 +374,7 @@ class TestLongevityScreens(tg.GuiCase):
         labels = [i.label for i in menu.list.items]
         self.assertEqual(labels, ["1 dia", "1 semana", "1 mês", "3 meses", "6 meses",
                                   "9 meses", "1 ano", "2 anos", "3 anos", "5 anos", "10 anos",
-                                  "15 anos", "20 anos"])
+                                  "15 anos", "20 anos", "Treinador: caminho para a longevidade"])
         self.app._on_draw()                                  # desenha o radar
         self.assertEqual(len(menu.radar.values), len(lg.AXES))
         menu.tab_named("Testes de longevidade")

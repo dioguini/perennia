@@ -1531,17 +1531,20 @@ class TestHomeScreen(GuiCase):
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
         titles = [tile.title_text for tile in home.tiles]
-        self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
-                                      "Saúde"])
-        self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Estatísticas gerais",
+        self.assertEqual(titles[:7], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
+                                      "Saúde", "Treinador"])
+        self.assertEqual(titles[7:], ["Rotas", "Segmentos", "Estatísticas gerais",
                                       "Inventário de artigos", "Exercícios", "Longevidade"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
-        self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
-        self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
-        # a segunda fila (também seis cartões) alinha com a primeira
-        self.assertEqual(home.tiles[6].bg.x, home.tiles[0].bg.x)
-        self.assertEqual(home.tiles[11].bg.x, home.tiles[5].bg.x)
+        self.assertGreater(home.tiles[0].bg.y, home.tiles[7].bg.y)
+        self.assertEqual(home.tiles[0].bg.y, home.tiles[6].bg.y)      # o Treinador em cima
+        # a segunda fila (seis cartões) fica ao centro, por baixo dos sete de cima
+        self.assertGreater(home.tiles[7].bg.x, home.tiles[0].bg.x)
+        self.assertLess(home.tiles[7].bg.x, home.tiles[1].bg.x)
+        self.assertLess(home.tiles[12].bg.x + home.tiles[12].bg.width,
+                        home.tiles[6].bg.x + home.tiles[6].bg.width)
+        self.assertEqual(len(home.tiles), 13)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
         for tl in home.tiles:                        # o título não fica por baixo do ícone
@@ -1591,7 +1594,7 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.press(key.DOWN)                        # para a fila de baixo
-        self.assertTrue(home.tiles[6].selected)
+        self.assertTrue(home.tiles[7].selected)
         self.press(key.RIGHT, key.RIGHT, key.ENTER)
         self.assertIsInstance(self.screen(), app_mod.StatsScreen)    # as gerais
         self.assertEqual(type(self.screen()).__name__, "GeneralStatsScreen")

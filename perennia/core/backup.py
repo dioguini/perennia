@@ -194,14 +194,17 @@ COMPONENTS: tuple[Component, ...] = (
               "testes, resultados e testes de FTP", "tests, results and FTP tests",
               tables=("fitness_tests", "test_results", "ftp_tests")),
     Component("saude", "Saúde", "Health",
-              "valores diários (HRV4Training incluído), métricas e análises clínicas com os "
-              "comentários do médico", "daily values (HRV4Training included), metrics and "
-              "lab reports with the doctor's comments",
+              "valores diários (HRV4Training incluído), métricas, análises clínicas com os "
+              "comentários do médico, as medições da pressão arterial e os separadores que "
+              "criaste (com as notas)", "daily values (HRV4Training included), metrics, lab "
+              "reports with the doctor's comments, blood pressure readings and the tabs you "
+              "created (with their notes)",
               tables=("metric_defs", "daily_values", "lab_parameters", "lab_reports",
-                      "lab_results")),
+                      "lab_results", "bp_readings", "health_tabs", "health_tab_notes")),
     Component("calendario", "Calendário", "Calendar",
-              "treinos planeados e notas do dia", "planned workouts and day notes",
-              tables=("training_plan", "day_notes")),
+              "treinos planeados, notas do dia e os eventos do Treinador (com as respostas)",
+              "planned workouts, day notes and the coach's events (with the answers)",
+              tables=("training_plan", "day_notes", "coach_events")),
     Component("ficheiros", "Ficheiros", "Files",
               "treinos exportados, importações e a pasta workouts",
               "exported workouts, imports and the workouts folder",
@@ -232,7 +235,8 @@ def folder_of(c: Component) -> str:
 ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "games",
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
-                  "muscles", "strength_builder", "tags", "workout_meta")
+                  "muscles", "strength_builder", "tags", "workout_meta", "bp", "health_tabs",
+                  "coach")
 
 
 def prepare(db) -> None:
@@ -420,6 +424,20 @@ class BackupError(ValueError):
     pass
 
 
+def _check_size(db: Database, path: Path) -> None:
+    """Recusa um backup que, descomprimido, passe do máximo (opção `backup_restore_max_mb`):
+    um .zip pequeno pode ter sido feito para encher o disco."""
+    limit = int(options.get(db, "backup_restore_max_mb")) * 1024 * 1024
+    with zipfile.ZipFile(path) as z:
+        total = sum(i.file_size for i in z.infolist())
+    if total > limit:
+        raise BackupError(tr("o backup descomprimido tem {a:.0f} MB e o máximo é {b:.0f} MB "
+                             "(Definições → Avançado → Dados e backups)",
+                             "the uncompressed backup is {a:.0f} MB and the maximum is {b:.0f} "
+                             "MB (Settings → Advanced → Data and backups)",
+                             a=total / 1048576, b=limit / 1048576))
+
+
 def inspect(path: Path | str) -> dict:
     """O manifest de um backup (para mostrar antes de repor). Erro se o
     ficheiro não for um backup da Perennia."""
@@ -539,6 +557,7 @@ def restore(db, data_dir: Path | None, path: Path | str, keys: list[str] | None 
     if safety and data_dir is not None:
         report["safety"] = safety_backup(db, data_dir)["path"]
     old_dir = m.get("data_dir")
+    _check_size(db, path)
     have = set(tables_in(db))
     conn = db.conn
     conn.commit()

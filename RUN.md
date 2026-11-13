@@ -320,9 +320,9 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Doze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
-(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e a
-**Saúde**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
+Treze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), a
+**Saúde** e o **Treinador**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
 gerais**, **Inventário de artigos**, **Exercícios** e **Longevidade**. O Calendário deixou
 de ser um cartão: **está no próprio ecrã inicial** (ver abaixo), e os
 **Backups e Sincronização** estão na barra do topo. Um título que não caiba numa linha parte-se em
@@ -587,6 +587,12 @@ abre a análise em quatro separadores (Tab muda):
    mudam de vista).
 
 ### Feedback no fim de cada sessão
+
+**A avaliação do treino é agora do Treinador** (ver «O Treinador», mais abaixo): o painel da
+direita chama-se **Treinador** e começa pela leitura dele — a forma com que entraste na sessão,
+se foi um dia pesado para a tua carga habitual, o que acrescentou à longevidade e **o que fazer a
+seguir** (descansar, baixar ou subir alvos, repetir, seguir o plano, e o próximo treino do
+calendário). Por baixo continua a análise que já existia (execução, objetivo, sensações).
 
 Quando uma sessão termina, por cima do resumo aparece **«Como correu esta
 sessão?»**:
@@ -1225,7 +1231,7 @@ seguinte**. Tudo o que escolhes **fica guardado** e volta quando reabres o separ
 | Linha | O que faz |
 |---|---|
 | **Modo** | *Gráfico dinâmico* ou *Dataset (campos e .csv)* |
-| **Fonte dos dados** | **Sessões** (todos os desportos, uma linha por sessão; as importadas do Garmin/TrainingPeaks também; **nunca** o Strava), **Séries de força** (uma linha por série), **Diário** (saúde e alimentação), **Análises clínicas** (um marcador por linha) e **Testes de longevidade** |
+| **Fonte dos dados** | **Sessões** (todos os desportos, uma linha por sessão; as importadas do Garmin/TrainingPeaks também; **nunca** o Strava), **Séries de força** (uma linha por série), **Diário** (saúde e alimentação), **Análises clínicas** (um marcador por linha), **Testes de longevidade** e **Pressão arterial** (uma medição por linha) |
 | **Vista guardada** | abre uma vista que guardaste (fonte, campos, filtros e gráfico) |
 | **Período** | tudo, 7/30/90 dias, último ano, este ano, ou *datas à escolha* (aparecem «de» e «até», com calendário) |
 | **Filtros** | até 6 (muda-se em Avançado). Cada filtro é *campo · operador · valor*: as categorias dão-te a lista dos valores que existem, os números escrevem-se, as datas abrem o calendário |
@@ -1259,7 +1265,7 @@ python main.py --adhoc-exportar sessions --destino ~/Documentos --nome as-minhas
 python main.py --adhoc-exportar sessions --vista "Carga por semana"
 ```
 
-As fontes são `sessions`, `sets`, `daily`, `labs` e `tests`. Sem `--vista` leva os campos por omissão
+As fontes são `sessions`, `sets`, `daily`, `labs`, `tests` e `bp` (pressão arterial). Sem `--vista` leva os campos por omissão
 da fonte; com `--vista`, os campos, o período e os filtros dessa vista.
 
 **Privacidade.** Nada daqui sai do computador, e o agente de IA nunca vê os dados da AdHoc: só vê o
@@ -1311,6 +1317,64 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Preço por milhão de tokens enviados (`agent_price_in_per_mtok`) | 0 a 1000 | 0 | 0 = não mostra o custo; vê o preço no site do fornecedor |
 | Preço por milhão de tokens da resposta (`agent_price_out_per_mtok`) | 0 a 1000 | 0 |  |
 | Moeda do custo (`agent_currency`) | texto | US$ |  |
+| **Saúde e pressão arterial** | | | |
+| Pressão arterial: média diária (`bp_daily_mode`) | média das médias dos períodos, média de todas as medições | média das médias dos períodos | «períodos»: manhã e noite pesam o mesmo, mesmo com números de medições diferentes |
+| Pressão arterial: ignorar a 1.ª medição (`bp_discard_first`) | ligado / desligado | desligado | em cada período com 3 ou mais medições, a primeira não conta para a média (costuma sair mais alta) |
+| Pressão alta: máxima a partir de (`bp_high_sys`) | 110 a 180 mmHg | 135 mmHg | limiar para medições em casa (135/85 é o valor habitual das recomendações) |
+| Pressão alta: mínima a partir de (`bp_high_dia`) | 60 a 120 mmHg | 85 mmHg |  |
+| Pressão baixa: máxima abaixo de (`bp_low_sys`) | 70 a 110 mmHg | 90 mmHg |  |
+| Pressão baixa: mínima abaixo de (`bp_low_dia`) | 40 a 80 mmHg | 60 mmHg |  |
+| Pressão muito alta: máxima a partir de (`bp_crisis_sys`) | 150 a 220 mmHg | 180 mmHg | acima disto a Perennia diz para repetires a medição e contactares um médico |
+| Pressão muito alta: mínima a partir de (`bp_crisis_dia`) | 95 a 140 mmHg | 110 mmHg |  |
+| Período «manhã» até às (`bp_morning_until_h`) | 6 a 14 h | 12 h | a hora da medição sugere o período (podes sempre escolher outro) |
+| Período «tarde» até às (`bp_afternoon_until_h`) | 14 a 22 h | 19 h |  |
+| Assistente de saúde: período recente (`health_window_days`) | 3 a 60 d | 14 d | os dias mais recentes, que se comparam com o período de base |
+| Assistente de saúde: período de base (`health_baseline_days`) | 14 a 365 d | 90 d |  |
+| Sono: mínimo desejável (`health_sleep_min_h`) | 4 a 10 h | 7 h |  |
+| FC em repouso: subida que merece aviso (`health_rhr_rise_bpm`) | 1 a 20 bpm | 5 bpm | média recente acima da de base por este valor |
+| HRV: descida que merece aviso (`health_hrv_drop_pct`) | 3 a 50 % | 15 % |  |
+| Bebidas alcoólicas: máximo por semana (`health_alcohol_week_max`) | 0 a 30 | 7 |  |
+| Peso: variação que merece aviso (`health_weight_change_pct`) | 0.5 a 10 % | 2 % | diferença entre a média recente e a de base |
+| Assistente de saúde: dias mínimos de registo (`health_min_days`) | 1 a 14 d | 3 d | com menos dias do que isto no período, não tira conclusões sobre a métrica |
+| Dias seguidos de treino que pedem descanso (`health_streak_rest_days`) | 3 a 30 d | 10 d |  |
+| **Treinador e Assistente de saúde** | | | |
+| Treinador: aconselhamento (`advisor_coach_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) | as regras funcionam já, sem rede; o LLM local e o agente online ficam preparados (mostram o pedido e os tokens, sem enviar) |
+| Assistente de saúde: aconselhamento (`advisor_health_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) |  |
+| Agente online: fornecedor (`advisor_online_provider`) | Claude, ChatGPT, Gemini, Outro | Claude (Anthropic) | a chave vem SEMPRE de uma variável de ambiente (ver RUN.md); nunca se escreve aqui |
+| Agente online: modelo (`advisor_online_model`) | texto | (vazio) | o nome do modelo no fornecedor (vazio: o de omissão do fornecedor) |
+| LLM local: endereço (`advisor_local_url`) | texto | http://127.0.0.1:11434 | onde o teu LLM local (Ollama, LM Studio, llama.cpp) escuta — só no teu computador |
+| LLM local: modelo (`advisor_local_model`) | texto | (vazio) | por exemplo «qwen2.5:7b» ou «llama3.1:8b» |
+| LLM local: janela de contexto (`advisor_local_context_tokens`) | 1024 a 262144 tokens | 8192 tokens | um pedido maior do que isto não cabe no modelo local: a Perennia avisa |
+| Construtor: feedback do Treinador ao vivo (`coach_live_feedback`) | ligado / desligado | ligado | depois de pedires feedback uma vez, o veredicto atualiza-se enquanto editas |
+| Subida máxima da forma (CTL) por semana (`coach_ramp_max_per_week`) | 1 a 12 | 5 | acima disto o Treinador diz que a semana é carga a mais |
+| Forma (TSB) abaixo da qual se alivia (`coach_tired_tsb`) | -50 a 0 | -20 |  |
+| Forma (TSB) abaixo da qual se descansa (`coach_overload_tsb`) | -70 a -5 | -30 |  |
+| Forma (TSB) acima da qual se está fresco (`coach_fresh_tsb`) | -5 a 30 | 5 |  |
+| Treino pesado: vezes a carga habitual (`coach_heavy_factor`) | 1.1 a 4 | 1.5 | a carga de um treino a dividir pela carga típica das tuas sessões recentes |
+| Treino pesado demais: vezes a carga habitual (`coach_very_heavy_factor`) | 1.2 a 6 | 2.2 |  |
+| Treinador: dias de histórico que conta (`coach_history_days`) | 14 a 180 d | 42 d |  |
+| Evento: dias de afinação antes (`coach_taper_days`) | 2 a 21 d | 7 d |  |
+| Evento: semanas que vão para o calendário (`coach_plan_weeks_max`) | 1 a 52 | 16 | o plano mais comprido do que isto só agenda as primeiras semanas |
+| Disponibilidade por omissão: dia de semana (`coach_weekday_minutes`) | 0 a 300 min | 60 min |  |
+| Disponibilidade por omissão: dia de fim de semana (`coach_weekend_minutes`) | 0 a 600 min | 180 min |  |
+| Evento: hidratos por hora (`coach_carbs_g_per_h`) | 20 a 120 g | 60 g | para esforços até à duração «evento longo» |
+| Evento longo: hidratos por hora (`coach_carbs_long_g_per_h`) | 30 a 120 g | 80 g |  |
+| Evento longo a partir de (`coach_long_event_h`) | 1 a 8 h | 2.5 h |  |
+| Evento: líquidos por hora (`coach_fluid_ml_per_h`) | 200 a 1200 ml | 600 ml |  |
+| Longevidade: eixo fraco abaixo de (`coach_weak_axis_score`) | 10 a 90 | 50 | os eixos do índice de longevidade abaixo desta nota entram no caminho proposto |
+| Longevidade: duração de cada fase (`coach_path_weeks`) | 2 a 12 | 4 |  |
+| Evento: treino longo necessário (`coach_long_share_pct`) | 40 a 100 % | 75 % | a parte da duração do evento a que o teu treino mais longo deve chegar antes |
+| Evento: partida «cedo» antes das (`coach_early_start_h`) | 5 a 11 h | 9 h | antes desta hora, a refeição que conta é o jantar da véspera |
+| Treino: máximo em Z5 ou acima (`coach_z5_max_min`) | 5 a 90 min | 30 min | acima disto o Treinador avisa |
+| Treino: máximo em Z4 (`coach_z4_max_min`) | 10 a 180 min | 60 min |  |
+| Força: progressão exigente (repetições) (`coach_reps_week_soft_pct`) | 1 a 20 % | 6 % | subida por semana acima da qual o objetivo passa de «realista» a «exigente» |
+| Força: progressão muito ambiciosa (repetições) (`coach_reps_week_hard_pct`) | 2 a 40 % | 12 % |  |
+| Força: progressão exigente (kg) (`coach_load_week_soft_pct`) | 0.5 a 10 % | 2.5 % |  |
+| Força: progressão muito ambiciosa (kg) (`coach_load_week_hard_pct`) | 1 a 20 % | 5 % |  |
+| Força: ritmo muito denso (`coach_reps_per_min_dense`) | 10 a 80 rep/min | 30 rep/min | repetições por minuto (num evento com limite de tempo) que já pedem aviso |
+| Força: ritmo acima do possível (`coach_reps_per_min_max`) | 15 a 120 rep/min | 45 rep/min |  |
+| **Dados e backups** | | | |
+| Backup: tamanho máximo ao repor (`backup_restore_max_mb`) | 64 a 1.04858e+06 MB | 4096 MB | um backup que, descomprimido, passe disto é recusado (defesa contra ficheiros feitos para encher o disco) |
 
 Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
 Nenhuma guarda segredos.
@@ -1809,8 +1873,9 @@ O cartão **Saúde** tem:
   desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
-- **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências** e
-  **Métricas**. (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
+- **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências**,
+  **Métricas**, **Pressão arterial**, **Assistente de saúde** e **os que criares** (ver abaixo).
+  (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
 - **Análises:** a lista das **colheitas** (uma por data, com o laboratório e o número de
   resultados; **+ Nova análise** em baixo, à direita). **Enter numa colheita** abre-a: todos
   os resultados, por área, cada um com o **valor atual, a tendência e os 3 valores
@@ -1843,6 +1908,147 @@ O cartão **Saúde** tem:
   certas e ficam marcadas com a origem; as outras ignoram-se, ou criam
   métricas novas se ligares essa opção. Põe os ficheiros na pasta `imports/`
   (dentro da pasta dos dados) ou em Transferências.
+
+### Pressão arterial (várias medições por dia, por período)
+
+Separador **Pressão arterial** da Saúde. Cada medição é um registo: **dia, período, hora, máxima,
+mínima, pulsação e nota**. Fazes as que quiseres por dia.
+
+- **+ Medição** abre a janela. O período vem sugerido pela hora (manhã / tarde / noite) e
+  escolhe-se numa lista. **«Guardar e mais uma»** grava e deixa a janela pronta para a seguinte
+  do mesmo período — é assim que fazes **3 medições de manhã** de seguida. **«Guardar e sair»**
+  fecha.
+- **Cada período tem a sua média** (3 medições de manhã → um valor da manhã; 3 à noite → um
+  valor da noite) e **o dia tem a média diária**. A lista mostra, por dia, a média diária e as
+  dos períodos com o número de medições: `126/82 · Manhã 130/84 (3) · Noite 122/80 (3)`.
+- **Enter num dia** abre as medições desse dia, por período; Enter numa medição edita-a ou
+  apaga-a. **Outro dia…** abre o calendário.
+- **Períodos** (botão): muda os nomes ou cria os teus (até 6), por exemplo «Antes do treino».
+  Se tirares um período, as medições dele não se perdem: ficam «Sem período».
+- **Média diária:** por omissão é a **média das médias dos períodos** (manhã e noite pesam o
+  mesmo); podes mudar para a média de todas as medições. Também podes mandar **ignorar a 1.ª
+  medição** de cada período com 3 ou mais. Ambas em Definições → Avançado → Saúde e pressão
+  arterial (ao guardar, as médias são refeitas).
+- **Classificação** (baixa / normal / alta / muito alta) pelos limiares das opções (135/85 por
+  omissão, o valor habitual para medições em casa). Não é um diagnóstico.
+- No **Diário**, as duas linhas antigas da tensão passaram a **uma linha «Pressão arterial»**
+  que mostra a média do dia e abre as medições. A média diária continua a alimentar as
+  **Tendências** (métricas «Tensão arterial (máxima)» e «(mínima)»), a longevidade e a AdHoc.
+- Os valores que já tinhas no diário passaram, sozinhos, a medições «Sem período».
+- **Exportar:** AdHoc Analysis → fonte **Pressão arterial** (uma medição por linha, com a média
+  do período e a do dia ao lado), ou `python main.py --adhoc-exportar bp`.
+
+### Separadores da Saúde criados por ti
+
+Como as disciplinas do ginásio: o botão **+ Separador** (em cima, à direita, em quase todos os
+separadores da Saúde) pede um nome e cria um separador novo (Fisioterapia, Dentista,
+Suplementos…). **Todo o separador tem a componente Notas**: **+ Nota** (data, título e texto);
+Enter numa nota edita-a ou apaga-a. **Mudar o nome** e **Apagar separador** (apaga também as
+notas, com confirmação) estão em baixo. O módulo próprio de cada separador fica para depois; a
+base (separador, notas, backup, e o que o Assistente de saúde lê) já existe.
+
+### O Assistente de saúde
+
+Separador **Assistente de saúde** da Saúde. Conhece as **análises**, a **pressão arterial**, o
+**diário** (sono, FC em repouso, HRV, peso, cintura, hábitos), **as notas dos teus separadores**
+e **sinais do treino** (carga, forma, FC das sessões). Mostra uma linha por componente, com o
+que acha; **Enter abre** cada uma:
+
+| Componente | O que olha |
+|---|---|
+| **Avaliação geral** | uma linha por componente e o que merece atenção primeiro |
+| **Análises clínicas** | o que está fora do intervalo (e se já estava nas anteriores), o que se mexeu muito dentro do intervalo, o que o médico disse |
+| **Pressão arterial** | a média recente, por período, a tendência face à base; uma medição isolada muito alta é sempre assinalada |
+| **Recuperação e sono** | sono, FC em repouso e HRV recentes face à tua base; dores, stress, energia |
+| **Corpo** | peso e cintura face à base |
+| **Hábitos diários** | álcool por semana, doces, refeições fora, água, passos, cafés |
+| **Sinais do treino** | carga crónica, fadiga, forma, dias seguidos, FC máxima vista |
+| **Os teus separadores** | as notas mais recentes de cada separador teu |
+
+Compara o **período recente** (14 dias) com o **de base** (90 dias); as janelas e todos os
+limiares estão em Definições → Avançado → Saúde e pressão arterial. Numa colheita, o botão
+**Assistente de saúde** abre a leitura dessa colheita. **O que existia para o médico fica como
+estava** (comentários por resultado e comentário geral): o assistente é mais uma leitura, não a
+substitui. **Não faz diagnósticos**; diz quando é caso para falar com um médico.
+
+### O Treinador
+
+Cartão **Treinador** no ecrã inicial. Tem cinco separadores:
+
+- **Hoje** — o que fazer hoje (descanso, fácil, qualidade…) a partir da tua forma, da carga de
+  ontem, da recuperação (sono, FC em repouso, HRV, dores), do que está no calendário e do teu
+  eixo mais fraco da longevidade; e os **comportamentos** a cuidar. **«Abrir este treino no
+  construtor»** programa-o.
+- **Eventos** — planear um evento numa data. **+ Evento de resistência** ou **+ Evento de
+  força** abrem as perguntas do Treinador:
+  - *Resistência* (ciclismo, corrida, remo, natação): nome, data, prioridade, **a rota (.gpx)**
+    — escolhida numa lista das rotas importadas, preenche a distância e a subida —, a
+    **velocidade média pretendida**, a **hora de partida**, a **disponibilidade** (minutos por
+    dia de semana e por dia de fim de semana), **férias de/até** (um período em que podes
+    treinar mais; sem férias fica limitado ao dia a dia e ao fim de semana) e notas.
+  - *Força*: nome, data, prioridade, **limite de tempo** (ex.: 5 min), sessões por semana e os
+    **objetivos** — cada um com o exercício (lista dos teus exercícios, ou escrito), a unidade
+    (repetições, kg, segundos, metros), o objetivo e **o que fazes hoje**. Serve para «200
+    flexões e 50 elevações em 5 min» e para «flexões, elevações, peso morto, agachamento e
+    saco de areia».
+  - **Enter num evento** abre o plano: quanto falta, **se é realista** (na bicicleta: a potência
+    média que a velocidade pede face à tua FTP e ao que se aguenta nessa duração; o teu treino
+    mais longo face ao evento; na força: a progressão por semana de cada objetivo e o ritmo em
+    repetições por minuto), a disponibilidade, as **fases** (base → construção → específica →
+    afinação, com datas), a **alimentação e hidratação** (hidratos e líquidos por hora, totais,
+    e as refeições acertadas pela hora de partida) e as **perguntas** sobre o que ficou por
+    dizer. **«Pôr no calendário»** agenda as sessões propostas (dentro dos minutos de cada dia;
+    nas férias há mais dias); voltar a pôr substitui as anteriores; **«Tirar do calendário»**
+    desfaz. Apagar o evento tira também as sessões dele.
+- **Desafios** — todos os teus desafios com o que o Treinador acha. **Enter** (ou o botão
+  **Treinador** no detalhe de um desafio) abre o feedback: onde estás, **longe ou perto**, o
+  que falta por semana, e a pergunta **«Quão importante é este desafio para ti?»** (lista:
+  baixa / média / alta). Com a resposta, **ajusta os treinos**: propõe as sessões por semana e
+  **«Pôr no calendário»** agenda-as (prioridade alta: 4 semanas; média: 2; baixa: não mexe).
+- **Longevidade** — o **caminho para a longevidade**: o índice, os teus pontos fortes, as
+  **fraquezas** (eixos abaixo de 50) e as **fases** propostas (4 semanas cada, duas fraquezas de
+  cada vez: mais aeróbio, força, VO2máx…), com o que fazer em cada uma; a primeira fase pode ir
+  para o calendário. O mesmo abre-se no menu Longevidade (**Treinador: caminho para a
+  longevidade**).
+- **Programar treino** — escolhes o **desporto** (ciclismo, corrida, remo), o **foco**
+  (recuperação, Z2, tempo, sweet spot, limiar, VO2máx, anaeróbio) e a **duração**; o Treinador
+  mostra o treino que faria e o feedback dele, e **«Abrir no construtor»** abre-o no construtor
+  de treinos, por guardar, para ajustares. Se estiveres cansado, encurta o bloco principal.
+
+**Feedback a um treino construído.** No construtor de treinos, o botão **Treinador** dá o
+feedback ao treino que lá está, **tendo em conta a tua forma atual**: a carga face à carga típica
+das tuas sessões, como ficas no dia seguinte (TSB), a duração face ao teu treino mais longo, a
+recuperação, os minutos em Z4 e Z5, a falta de aquecimento, blocos fortes seguidos. Um treino
+pesado demais para a forma que tens é apanhado, com uma sugestão concreta e o botão **«Aplicar a
+versão mais leve»** (tira repetições até a carga descer; fica por guardar). **Só aparece depois
+de pedires**; a partir daí o veredicto fica **ao vivo** na linha por baixo do título e
+atualiza-se a cada alteração (desliga-se em Definições → Avançado → «Construtor: feedback do
+Treinador ao vivo»). O Treinador programa treinos de ciclismo, corrida e remo; para a força,
+planeia as sessões no calendário (ainda não preenche o construtor de força).
+
+### Aconselhamento: regras, LLM local ou agente online
+
+O Treinador e o Assistente de saúde têm, no topo, a linha **Aconselhamento** (lista):
+
+| Modo | O que é | Estado |
+|---|---|---|
+| **Regras da Perennia (offline)** | as regras descritas acima, com os limiares das opções; sem rede e sem IA | **funciona já** |
+| **LLM local (offline)** | um modelo a correr no teu computador (Ollama, LM Studio, llama.cpp); nada sai da máquina | preparado, **por ligar** |
+| **Agente online** | Claude, ChatGPT, Gemini ou outro compatível; **os dados do pedido seriam partilhados com o fornecedor** | preparado, **por ligar** |
+
+Nos dois modos com LLM, **antes de qualquer envio** vês: os **tokens do pedido** (≈), se **cabe
+na janela do modelo local** ou o **custo máximo** no online, os **dados partilhados** (as
+categorias autorizadas; **nada do Strava**), e **«Ver o que seria enviado»** mostra o pedido
+inteiro, os tokens por partes e deixa desligar categorias. Podes juntar **a tua pergunta**.
+Como as chamadas ainda não estão ativas, o botão Enviar fica desligado e o ecrã mostra a leitura
+das regras. A escolha guarda-se por figura.
+
+- **Chave do fornecedor: só por variável de ambiente** — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+  `GEMINI_API_KEY` ou `PERENNIA_AI_API_KEY` (outro). Nunca se escreve na aplicação nem fica na
+  base; o ecrã só diz «definida» ou «em falta».
+- **LLM local:** o endereço (por omissão `http://127.0.0.1:11434`; ou a variável
+  `PERENNIA_LLM_URL`) e o nome do modelo estão em Definições → Avançado. Se o endereço não for
+  deste computador, o ecrã avisa que isso já não seria offline.
 
 ### Sincronização (GarminDB)
 
@@ -1962,7 +2168,7 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), **Avançado** (as opções afináveis: pausa automática, tolerâncias, tokens do agente, Análise AdHoc…), as **vistas guardadas** da AdHoc Analysis, a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
+| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), **Avançado** (as opções afináveis: pausa automática, tolerâncias, tokens do agente, Análise AdHoc…), as **vistas guardadas** da AdHoc Analysis, os **períodos da pressão arterial**, o modo de **aconselhamento** do Treinador e do Assistente de saúde e a **importância dos desafios**, a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
 | Atalhos de teclado | as teclas que mudaste (volta, pausa, terminar, começar sem contagem e saltar bloco são as mesmas em todos os desportos). Um backup antigo, com um atalho por desporto, **volta já unificado** |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
@@ -1975,8 +2181,8 @@ Copia-o para uma pen ou para a nuvem.
 | Análises e feedback | o feedback e a análise de cada sessão, picos e curvas de potência |
 | Desafios | desafios e tentativas |
 | Testes de aptidão | testes, resultados, testes de FTP |
-| Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico |
-| Calendário | treinos planeados e notas do dia |
+| Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico, **as medições da pressão arterial** e **os separadores que criaste, com as notas** |
+| Calendário | treinos planeados, notas do dia e **os eventos do Treinador** (com as respostas) |
 | Ficheiros | treinos exportados, importações, a pasta `workouts` |
 | Ligações externas (credenciais) | Strava (chaves e sessão) e GarminDB (pastas) — **só se pedires** |
 
@@ -2086,7 +2292,7 @@ python main.py --importar saude ~/Transferências/perennia_saude.csv
 
 Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
 
-**A Análise AdHoc, em .csv** (as fontes `sessions`, `sets`, `daily`, `labs`, `tests`; usa o separador
+**A Análise AdHoc, em .csv** (as fontes `sessions`, `sets`, `daily`, `labs`, `tests`, `bp`; usa o separador
 e o decimal das Definições, se não os deres; grava na pasta `exports`, ou em `--destino`):
 
 ```bash
@@ -2283,6 +2489,9 @@ estatísticas gerais.
 
 ### O agente de IA (preparado, por ligar)
 
+(O **Treinador** e o **Assistente de saúde** usam o mesmo mecanismo de pedido e de tokens: ver
+«Aconselhamento: regras, LLM local ou agente online».)
+
 Em quase todos os ecrãs (não durante as sessões), **F1** pede o **resumo
 desta página** e **F2** o **resumo contextualizado**. O primeiro leva o que
 está no ecrã (linhas, valores, classificações, dados do gráfico). O segundo
@@ -2470,9 +2679,16 @@ minuto. Tens de pedalar para não ser apanhado.
 - Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
   sempre em variáveis de ambiente.
 
+- **Treinador e Assistente de saúde:** a chave de um agente online vem **só** de uma variável de
+  ambiente (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERENNIA_AI_API_KEY`);
+  nenhuma chamada a LLM está ativa nesta versão; o pedido que seria enviado vê-se inteiro antes.
+- **Repor um backup** recusa um ficheiro que, descomprimido, passe do máximo (4 GB por omissão;
+  Definições → Avançado → Dados e backups): um .zip pequeno pode ser feito para encher o disco.
+
 Limites conhecidos: os *tokens* de acesso do Strava ficam **em texto** na base local (protegida pelas
-permissões do ficheiro; o Windows ignora o 0600 e vale a pasta do teu utilizador); e um backup
-restaurado não tem limite de tamanho por ficheiro.
+permissões do ficheiro; o Windows ignora o 0600 e vale a pasta do teu utilizador); as ações do
+workflow do GitHub estão por etiqueta de versão e não por hash; e o `criar_atalho_windows.bat` usa
+`-ExecutionPolicy Bypass` só para o script do atalho.
 
 ---
 
@@ -2648,7 +2864,7 @@ uma vez.
 `build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
 dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 
-**O que refazer depois de um `git pull` (a ronda 15 renomeou o pacote `velo/` para `perennia/`):**
+**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; a ronda 16 só junta ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma):
 
 | Como abres a Perennia | O que fazer |
 |---|---|
@@ -2735,6 +2951,25 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 16 cria 4 tabelas novas — sozinha, na primeira vez que são precisas** (**não tens de
+fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nenhuma tabela
+antiga muda de colunas:
+
+| O quê | Como fica |
+|---|---|
+| tabela `bp_readings` | as medições da pressão arterial (dia, período, hora, máxima, mínima, pulsação, nota, origem) |
+| tabela `health_tabs` | os separadores que criares na Saúde |
+| tabela `health_tab_notes` | as notas de cada separador |
+| tabela `coach_events` | os eventos do Treinador (com as respostas e as sessões que pôs no calendário) |
+| `daily_values` (tensão máxima e mínima) | passam a guardar a **média diária** das medições (origem `bp`); os valores que lá tinhas viram uma medição «Sem período» (automático e idempotente) |
+| definição `bp_periods` | os teus períodos, se os mudares |
+| definições `coach_challenge_priority`, `coach_plans` | a importância de cada desafio e as sessões que o Treinador pôs no calendário |
+| as opções novas de Definições → Avançado | uma definição por opção, só criada quando a mudas |
+
+As tabelas criam-se com `CREATE TABLE IF NOT EXISTS` em `bp.ensure`, `health_tabs.ensure` e
+`coach.ensure`. Os backups levam-nas: as três primeiras com a **Saúde**, `coach_events` com o
+**Calendário**, e as definições com as **Definições**.
+
 **A ronda 15 NÃO cria tabelas nem colunas — e é tudo automático** (**não tens de fazer nada** na
 base local; antes de abrires a versão nova podes fazer um backup). O que muda:
 
@@ -2745,7 +2980,7 @@ base local; antes de abrires a versão nova podes fazer um backup). O que muda:
 | `rides.fit_path` e outros caminhos; `source_format = 'velolocal'` | atualizados (idempotente: correr duas vezes não muda nada) |
 | definição `adhoc_state` | a última vista da AdHoc Analysis (JSON) |
 | definição `adhoc_views` | as vistas guardadas (lista de nome + vista, JSON) |
-| as 31 opções de Definições → Avançado (tabela acima) | uma definição por opção, **só criada quando a mudas**; sem ela, vale o valor por omissão |
+| as opções de Definições → Avançado (tabela acima) | uma definição por opção, **só criada quando a mudas**; sem ela, vale o valor por omissão |
 
 Tudo isto são linhas da tabela `settings`: não há `ALTER TABLE`. Os backups levam-nas com as
 **Definições** (o conjunto «Definições» foi alargado: as opções do Avançado e as vistas da AdHoc já
@@ -2921,7 +3156,23 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1015 testes a passar).
+**Verificado com testes automáticos nesta versão** (1094 testes a passar).
+
+*Novidades da ronda 16 (testes novos em `tests/test_round16.py`):* a **pressão arterial** com
+várias medições por dia e por período (média de cada período, média diária nas duas formas,
+ignorar a 1.ª, validação, períodos teus, migração dos valores antigos do diário, AdHoc e backup);
+os **separadores da Saúde criados por ti**, com Notas; o **Assistente de saúde** (avaliação geral
+e por componente, com os limiares nas opções); o **Treinador** (avaliação da sessão, eventos de
+resistência e de força com perguntas, viabilidade, fases, alimentação e calendário, feedback aos
+desafios com a importância, caminho para a longevidade, sugestão do dia, treino programado para o
+construtor e feedback a um treino construído, com versão mais leve e veredicto ao vivo); o
+**aconselhamento** em três modos (regras; LLM local e agente online preparados, com tokens, janela
+e custo à vista, chave só por variável de ambiente e nada do Strava); o **limite de tamanho ao
+repor um backup**; a piscina passou a escolher-se numa lista; e as opções do Avançado são agora
+86. **O LLM local e o agente online não foram ligados nem testados contra um modelo real**
+(continuamos offline): só o pedido, os tokens e os ecrãs. As regras do Treinador e do Assistente
+são heurísticas de treino e de leitura de registos, testadas na lógica, **não validadas por um
+treinador ou por um médico**. Sem hardware real, sem Windows/macOS.
 
 *Novidades da ronda 15 (testes novos em `tests/test_round15.py`, e os antigos atualizados):* o
 **nome Perennia em todo o lado** (o pacote `velo/` passa a `perennia/`; a pasta de dados, a base e

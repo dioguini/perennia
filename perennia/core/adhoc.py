@@ -185,6 +185,21 @@ LAB_FIELDS = TIME_FIELDS + (
     _f("comment", "Comentário", "Comment", TEXT),
 )
 
+BP_FIELDS = TIME_FIELDS + (
+    _f("period", "Período", "Period", CAT),
+    _f("time", "Hora", "Time", CAT),
+    _f("sys", "Máxima (sistólica)", "Systolic", NUM),
+    _f("dia", "Mínima (diastólica)", "Diastolic", NUM),
+    _f("pulse", "Pulsação", "Pulse", NUM),
+    _f("period_sys", "Média do período: máxima", "Period mean: systolic", NUM),
+    _f("period_dia", "Média do período: mínima", "Period mean: diastolic", NUM),
+    _f("day_sys", "Média do dia: máxima", "Day mean: systolic", NUM),
+    _f("day_dia", "Média do dia: mínima", "Day mean: diastolic", NUM),
+    _f("class", "Classificação (média do dia)", "Class (day mean)", CAT),
+    _f("notes", "Notas", "Notes", TEXT),
+    _f("origin", "Origem", "Origin", CAT),
+)
+
 TEST_FIELDS = TIME_FIELDS + (
     _f("sport", "Desporto", "Sport", CAT),
     _f("test", "Teste", "Test", CAT),
@@ -430,6 +445,35 @@ def load_tests(db: Database) -> list[dict]:
     return out
 
 
+def load_bp(db: Database) -> list[dict]:
+    """A pressão arterial: uma linha por medição, com a média do período e a do dia ao lado."""
+    from . import bp
+    out: list[dict] = []
+    try:
+        days = bp.days(db)
+    except Exception:
+        return out
+    for s in days:
+        means = dict(s["periods"])
+        daily = s["daily"] or {}
+        cls = bp.category_name(bp.classify(db, daily.get("sys"), daily.get("dia")))
+        for r in bp.readings(db, s["day"]):
+            row = _blank(BP_FIELDS)
+            row.update(time_columns(_day(r["day"])))
+            row.pop("hour", None)
+            pm = means.get(r["period"]) or {}
+            row.update(period=bp.period_name(db, r["period"]), time=r["at"],
+                       sys=_num(r["sys"]), dia=_num(r["dia"]), pulse=_num(r["pulse"]),
+                       period_sys=_num(pm.get("sys")), period_dia=_num(pm.get("dia")),
+                       day_sys=_num(daily.get("sys")), day_dia=_num(daily.get("dia")),
+                       notes=r["notes"], origin=r["source"])
+            row["class"] = cls
+            if row["date"] is not None:
+                out.append(row)
+    out.sort(key=lambda r: (r["date"], r["time"] or ""))
+    return out
+
+
 SOURCES: dict[str, Source] = {s.key: s for s in (
     Source("sessions", "Sessões (todos os desportos)", "Sessions (all sports)", SESSION_FIELDS,
            load_sessions, "training"),
@@ -440,6 +484,8 @@ SOURCES: dict[str, Source] = {s.key: s for s in (
     Source("labs", "Análises clínicas (um marcador por linha)", "Lab results (one marker per row)",
            LAB_FIELDS, load_labs, "labs"),
     Source("tests", "Testes de longevidade", "Longevity tests", TEST_FIELDS, load_tests, "tests"),
+    Source("bp", "Pressão arterial (uma medição por linha)", "Blood pressure (one reading per "
+           "row)", BP_FIELDS, load_bp, "health"),
 )}
 SOURCE_ORDER = tuple(SOURCES)
 
@@ -583,6 +629,9 @@ def defaults_for(source: str) -> Spec:
                      series="marker", chart="lines"),
         "tests": dict(fields=["date", "sport", "test", "value", "unit"], x="date",
                       grain="month", y="value", agg="avg", series="test", chart="lines"),
+        "bp": dict(fields=["date", "period", "time", "sys", "dia", "pulse", "period_sys",
+                           "period_dia", "day_sys", "day_dia"], x="date", grain="day",
+                   y="sys", agg="avg", series="period", chart="lines"),
     }.get(src.key, {})
     return Spec.from_dict({"source": src.key, **base})
 

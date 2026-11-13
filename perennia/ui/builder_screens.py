@@ -653,8 +653,10 @@ class BlockBuilder(EditScreen):
             r.x = x
             r.width = width * secs / tot
             x += r.width
+        # (o impacto na longevidade e o veredicto do Treinador ficavam apagados aqui)
         self.chrome.subtitle.text = (f"{wm.control_name(self.control)} · " if self.sport != "gym"
-                                     else "") + self.summary.text.replace("\n", "  ·  ")
+                                     else "") + self.summary.text.replace("\n", "  ·  ") \
+            + self._longevity_text() + self._coach_text()
 
     def draw(self) -> None:
         super().draw()
@@ -763,6 +765,7 @@ class BlockBuilder(EditScreen):
                       or tr("Enter escreve o objetivo (numa janela)",
                             "Enter writes the goal (in a window)"),
                       data="text:wgoal", head=True, action=lambda: self._edit_goal("wgoal")),
+                 Item(tr("Treinador", "Coach"), button=True, action=self._coach),
                  Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
                       button=True, primary=True)]
         sport_name = {"cycling": tr("Ciclismo", "Cycling"), "rowing": tr("Remo", "Rowing"),
@@ -771,7 +774,8 @@ class BlockBuilder(EditScreen):
         self.chrome.set(tr("Construtor de treinos", "Workout builder") + f" · {sport_name}"
                         + f" · {wm.control_name(self.control)}",
                         f"{wm.control_name(self.control)} · "
-                        + self.summary.text.replace("\n", "  ·  ") + self._longevity_text(),
+                        + self.summary.text.replace("\n", "  ·  ") + self._longevity_text()
+                        + self._coach_text(),
                         tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
                            "D duplicar · Del apagar · Tab vista · o tipo de treino também "
                            "etiqueta o .fit",
@@ -791,6 +795,17 @@ class BlockBuilder(EditScreen):
         self.dirty = True
         self.redraw()
         self.enter()
+
+    def _coach(self) -> None:
+        """O feedback do Treinador ao treino que está no construtor (só quando o pedes)."""
+        from perennia.ui import coach_screens
+        coach_screens.builder_feedback(self.app, self)
+
+    def _coach_text(self) -> str:
+        """Depois de pedires feedback uma vez, o veredicto acompanha as alterações (ao vivo)."""
+        from perennia.ui import coach_screens
+        text = coach_screens.live_verdict(self.app, self)
+        return ("  ·  " + text) if text else ""
 
     def _longevity_text(self) -> str:
         """O que este treino acrescentaria ao índice de longevidade (se o fizesses hoje):

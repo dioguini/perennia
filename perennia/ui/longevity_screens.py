@@ -84,6 +84,10 @@ class LongevityMenu(Screen):
                             p=lg.period_label(nxt))
             rows.append(Item(lg.period_label(key), value=f"{idx:.0f}", detail=detail,
                              data=("period", key)))
+        from perennia.ui import coach_screens
+        rows.append(Item(tr("Treinador: caminho para a longevidade",
+                            "Coach: path to longevity"), button=True, primary=True,
+                         action=lambda: coach_screens.open_longevity(self.app)))
         self.chrome.set(self.TITLE(),
                         tr("O índice (0–100) de cada período · o radar mostra onde o corpo tem "
                            "estado mais ou menos concentrado",
