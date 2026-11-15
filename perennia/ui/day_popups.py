@@ -112,9 +112,12 @@ class DayPopup(PopupMixin, Screen):
             items.append(Item(tr("Nada feito nem planeado neste dia", "Nothing done or planned "
                                  "on this day"), enabled=False))
         done_h, total_h = health.completeness(a.db, self.day)
-        items += [Item(tr("Nota do dia", "Day note"), button=True, action=self._edit_note),
-                  Item(tr("Diário de saúde", "Health log") + f" {done_h}/{total_h}", button=True,
-                       action=self._open_log)]
+        items.append(Item(tr("Nota do dia", "Day note"), button=True, action=self._edit_note))
+        if self.day <= date.today():              # o diário de saúde: até hoje, não no futuro
+            items.append(Item(tr("Diário de saúde", "Health log") + f" {done_h}/{total_h}",
+                              button=True, action=self._open_log))
+        if self.day >= date.today():              # um evento: hoje e depois, com o Treinador
+            items.append(cs.event_item(a, self.day, button=True))
         if self.past:
             # um dia que já passou não se planeia: ver o que se fez e, se o treino foi feito
             # noutro sítio, carregar o ficheiro
@@ -165,6 +168,10 @@ class DayPopup(PopupMixin, Screen):
             lambda text: health.set_day_note(self.app.db, self.day, text)))
 
     def _open_log(self) -> None:
+        if self.day > date.today():
+            self.app.message(tr("O diário de saúde só se preenche até hoje.",
+                                "The health log can only be filled in up to today."))
+            return
         from perennia.ui.health_screens import DailyLogScreen
         self.app.push(DailyLogScreen(self.app, self.day))
 

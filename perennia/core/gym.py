@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Any, Sequence
 
 from . import inventory, muscles
 from . import strength as st
@@ -406,8 +406,8 @@ def ensure(db: Database) -> None:
     db.conn.execute("CREATE TABLE IF NOT EXISTS exercise_equipment (exercise_id INTEGER NOT"
                     " NULL REFERENCES exercises(id) ON DELETE CASCADE, kind TEXT NOT NULL,"
                     " PRIMARY KEY (exercise_id, kind)) WITHOUT ROWID")
-    for table, cols in (("exercises", (("description", "TEXT"), ("archived", "INTEGER NOT NULL"
-                                                                  " DEFAULT 0"))),
+    for table, cols in (("exercises", (("description", "TEXT"), ("notes", "TEXT"),
+                                       ("archived", "INTEGER NOT NULL DEFAULT 0"))),
                         ("strength_workouts", (("modality", "TEXT NOT NULL DEFAULT 'strength'"),
                                                ("hidden", "INTEGER NOT NULL DEFAULT 0"))),
                         ("strength_sessions", (("modality", "TEXT"),))):
@@ -506,10 +506,13 @@ def exercise(db: Database, eid: int) -> dict | None:
     return None
 
 
+KEEP: Any = object()       # «não mexas»: distingue «sem nota» de «nota não indicada»
+
+
 def save_exercise(db: Database, eid: int | None, *, name: str, mods: Sequence[str],
                   group: str = "full", measure: str = "reps", bodyweight: float = 0.0,
                   equipment: Sequence[str] = (), description: str | None = None,
-                  subgroup: int | None = None) -> int:
+                  subgroup: int | None = None, notes: str | None = KEEP) -> int:
     ensure(db)
     name = (name or "").strip() or tr("Exercício", "Exercise")
     if eid is None:
@@ -522,6 +525,9 @@ def save_exercise(db: Database, eid: int | None, *, name: str, mods: Sequence[st
         _ = fit_cat
     db.conn.execute("UPDATE exercises SET description = ?, subgroup_id = ? WHERE id = ?",
                     (description, subgroup, eid))
+    if notes is not KEEP:                       # a nota grande (várias linhas), à parte da descrição
+        db.conn.execute("UPDATE exercises SET notes = ? WHERE id = ?",
+                        ((notes or "").strip() or None, eid))
     db.conn.execute("DELETE FROM exercise_modalities WHERE exercise_id = ?", (eid,))
     db.conn.execute("DELETE FROM exercise_equipment WHERE exercise_id = ?", (eid,))
     for m in dict.fromkeys(mods or ["strength"]):

@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from pyglet.window import key
 
 from perennia.core import garmin_sync as gs
+from perennia.core import options as opt_mod
 from perennia.core.i18n import t, tr
 from perennia.ui.app import ConfirmScreen, Screen
 from perennia.ui.widgets import Item
@@ -87,6 +88,8 @@ class SyncPanel:
         self.store = store or screen    # o rascunho das Definições
         self.runner = runner            # para os testes: corre «subprocess.run» falso
         self.job = None
+        self.log: gs.SyncLog | None = None      # os passos e o que o GarminDB vai dizendo
+        self._seen = -1
         self.last_report: dict | None = None
         self.last_error = ""
 
@@ -371,6 +374,8 @@ class SyncPanel:
                  (st["last_sync"] or tr("nunca sincronizado", "never synced")),
                  detail=state + ("" if st["cli"] else " · pip install garmindb"),
                  enabled=False),
+            *self.log_rows(),
+            *self.requirement_rows(o),
             Item(tr("Período", "Period"), value=_period_name(o.period), data="sync:period",
                  detail={"latest": tr("--latest: desde o último dia que o GarminDB já tem",
                                       "--latest: since the last day GarminDB already has"),
@@ -444,6 +449,64 @@ class SyncPanel:
                  primary=True, enabled=ready),
         ]
         return rows
+
+    # ------------------------------------------------------- passos e requisitos
+
+    def log_rows(self) -> list[Item]:
+        """O que está a acontecer (ou aconteceu na última sincronização), passo a passo, e as
+        últimas linhas do que o GarminDB escreveu — como na linha de comandos."""
+        if self.log is None:
+            return []
+        steps, lines = self.log.snapshot()
+        icon = {"run": "▶", "ok": "✓", "fail": "✗", "skip": "–"}
+        rows = [Item(tr("— O que está a acontecer —", "— What is happening —") if self.busy else
+                     tr("— Última sincronização —", "— Last sync —"), enabled=False)]
+        for n, st in enumerate(steps, 1):
+            rows.append(Item(f"{icon[st['state']]} {n}. {st['text']}",
+                             detail=st["detail"], enabled=False))
+        if lines:
+            rows.append(Item(tr("— O que o GarminDB diz —", "— What GarminDB says —"),
+                              enabled=False))
+            rows += [Item("   " + ln, enabled=False) for ln in lines]
+        return rows
+
+    def requirement_rows(self, o: gs.Options) -> list[Item]:
+        """O que é preciso para sincronizar, com ✓/✗ e, no que falta, como se resolve."""
+        checks = gs.preflight(self.app.db, o)
+        rows = [Item(tr("— Requisitos —", "— Requirements —"), enabled=False,
+                     detail=tr("o que o GarminDB precisa neste computador",
+                               "what GarminDB needs on this computer"))]
+        for c in checks:
+            rows.append(Item(("✓ " if c["ok"] else "✗ ") + c["text"], enabled=False,
+                             detail="" if c["ok"] else c["fix"]))
+        rows.append(Item(tr("Primeira vez? Passo a passo", "First time? Step by step"),
+                         action=self.show_guide,
+                         detail=tr("o que fazer num computador novo (ou para um colega)",
+                                   "what to do on a new computer (or for a colleague)")))
+        return rows
+
+    def show_guide(self) -> None:
+        a = self.app
+        a.push(ConfirmScreen(
+            a, tr("Sincronizar o GarminDB pela primeira vez", "Syncing GarminDB for the first "
+                  "time"),
+            tr("1) Instala o GarminDB: pip install garmindb. 2) Em Definições → Ligações "
+               "externas → Garmin escreve o e-mail da conta (a Perennia cria a configuração). "
+               "3) Define a variável PERENNIA_GARMIN_PASSWORD com a palavra-passe antes de "
+               "abrir a Perennia (ou escreve-a nas Definições: fica só na memória). 4) Se a "
+               "conta tem verificação em dois passos, corre uma vez garmindb_cli.py --download "
+               "--latest numa linha de comandos. 5) Aqui, escolhe o período e os dados e carrega "
+               "em «Sincronizar agora»: os passos e o que o GarminDB diz aparecem ao vivo. "
+               "Cada pessoa usa a sua conta Garmin: a Perennia não leva a tua.",
+               "1) Install GarminDB: pip install garmindb. 2) In Settings → External "
+               "connections → Garmin type the account e-mail (Perennia creates the config). "
+               "3) Set the PERENNIA_GARMIN_PASSWORD variable with the password before opening "
+               "Perennia (or type it in Settings: kept in memory only). 4) If the account has "
+               "two-step verification, run garmindb_cli.py --download --latest once in a command "
+               "line. 5) Here, pick the period and data and press «Sync now»: the steps and "
+               "what GarminDB says show live. Everyone uses their own Garmin account: Perennia "
+               "does not carry yours."),
+            [(tr("Fechar", "Close"), a.pop)], default=0, buttons=True, cancel=a.pop))
 
     # ------------------------------------------------------------- mexer
 
@@ -519,14 +582,33 @@ class SyncPanel:
                                 "GarminDB not installed: importing what is already there."))
             self.import_only()
             return
-        self._job(lambda: gs.sync(db, o, runner=runner))
+        bad = gs.blocking_problems(gs.preflight(db, o))
+        if bad:
+            self.log = gs.SyncLog(self.log_lines(), self.log_chars())
+            self.log.step(tr("A verificar os requisitos", "Checking the requirements"))
+            self.log.end(False, "; ".join(c["text"] for c in bad))
+            self.app.message(tr("Falta: ", "Missing: ") + bad[0]["text"] + " — " + bad[0]["fix"])
+            self.screen.enter()
+            return
+        self.log = gs.SyncLog(self.log_lines(), self.log_chars())
+        log = self.log
+        self.log.step(tr("A verificar os requisitos", "Checking the requirements"))
+        self.log.end(True)
+        self._job(lambda: gs.sync(db, o, runner=runner, log=log))
+
+    def log_lines(self) -> int:
+        return int(opt_mod.get(self.app.db, "garmin_log_lines"))
+
+    def log_chars(self) -> int:
+        return int(opt_mod.get(self.app.db, "garmin_log_line_chars"))
 
     def import_only(self) -> None:
         if self.busy or self.pending:
             return
         db, o = self.app.db, self.opts
+        self.log = gs.SyncLog(self.log_lines(), self.log_chars())
         try:
-            ok, msg, rep = gs.sync(db, o, run_source=False)
+            ok, msg, rep = gs.sync(db, o, run_source=False, log=self.log)
         except Exception as e:
             ok, msg, rep = False, str(e), None
         self._done(ok, msg, rep)
@@ -544,7 +626,11 @@ class SyncPanel:
         def go() -> None:
             a.pop()
             db, runner = a.db, self.runner
-            self._job(lambda: (gs.maintenance(db, action, runner=runner), action))
+            self.log = gs.SyncLog(self.log_lines(), self.log_chars())
+            log = self.log
+            log.step(tr("A correr o GarminDB: {a}", "Running GarminDB: {a}",
+                        a="--backup" if action == "backup" else "--rebuild_db"))
+            self._job(lambda: (gs.maintenance(db, action, runner=runner, log=log), action))
         a.push(ConfirmScreen(a, title, sub, [(tr("Cancelar", "Cancel"), a.pop),
                                              (tr("Sim, continuar", "Yes, go on"), go)],
                              default=0, buttons=True, cancel=a.pop))
@@ -556,7 +642,10 @@ class SyncPanel:
             a.message(tr("Sincronizado: {v} valores em {d} dias · {n} atividades ({k} novas)",
                          "Synced: {v} values over {d} days · {n} activities ({k} new)",
                          v=rep["values"], d=rep["days"], n=rep["activities"],
-                         k=rep["new_activities"]))
+                         k=rep["new_activities"]) +
+                      (" · " + tr("{n} valores mantidos (a Fonte do indicador é outra)",
+                                  "{n} values kept (the indicator's source is another)",
+                                  n=rep["kept"]) if rep.get("kept") else ""))
         else:
             self.last_error = msg
             a.message("GarminDB: " + (msg or tr("falhou", "failed")))
@@ -564,15 +653,23 @@ class SyncPanel:
 
     def update(self) -> None:
         j = self.job
+        if self.log is not None and self.busy and self.log.version != self._seen:
+            self._seen = self.log.version          # o relato mudou: redesenha as linhas
+            self.screen.enter()
         if j is None or not j.done:
             return
         self.job = None
         res = j.result
         if j.error:
+            if self.log is not None:
+                self.log.end(False, j.error)
             self._done(False, j.error, None)
         elif isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], str) \
                 and res[1] in ("backup", "rebuild"):
             (ok, out), action = res
+            if self.log is not None:
+                self.log.end(ok, "" if ok else (gs.diagnose(out) or out.splitlines()[-1:] and
+                                                  out.splitlines()[-1] or ""))
             self.app.message(("GarminDB: " + (tr("cópia feita", "backup done") if action ==
                                               "backup" else tr("bases reconstruídas",
                                                                "databases rebuilt")))

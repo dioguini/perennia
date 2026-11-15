@@ -151,7 +151,7 @@ def import_hrv4training(db: Database, path: str | Path, create_unknown: bool = F
     order = _date_order([r[idx["date"]] for r in rows[1:] if len(r) > idx.get("date", 0)])
     cache: dict = {}
     before = {m["key"] for m in health.metrics(db, include_inactive=True)}
-    report = {"days": set(), "values": 0, "skipped_rows": 0, "date_order": order}
+    report = {"days": set(), "values": 0, "skipped_rows": 0, "date_order": order, "kept": 0}
     handled = set(H4T_COLUMNS) | {"date", "local", "note"} | {
         f"custom_tag_{n}_{k}" for n in (1, 2, 3) for k in ("name", "value")}
     unused: dict[str, None] = {}
@@ -170,9 +170,9 @@ def import_hrv4training(db: Database, path: str | Path, create_unknown: bool = F
                     put_spec = (key, h, "number", "", "other")
                     mid = _metric_id(db, put_spec, cache)
                     if mid is not None:
-                        health.set_value(db, day, mid, health._number(v),
-                                         source="hrv4training")
-                        report["values"] += 1
+                        if health.import_value(db, day, mid, health._number(v),
+                                               "hrv4training", report):
+                            report["values"] += 1
                     continue
                 unused.setdefault(h)
 
@@ -180,9 +180,9 @@ def import_hrv4training(db: Database, path: str | Path, create_unknown: bool = F
             mid = _metric_id(db, spec, cache)
             if mid is None or value in (None, ""):
                 return
-            health.set_value(db, day, mid, value, source="hrv4training")
-            report["days"].add(day)
-            report["values"] += 1
+            if health.import_value(db, day, mid, value, "hrv4training", report):
+                report["days"].add(day)
+                report["values"] += 1
 
         for col, spec in H4T_COLUMNS.items():
             raw = row.get(col, "")
@@ -349,7 +349,7 @@ def import_garmindb(db: Database, folder: str | Path | None = None,
     present = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     cache: dict = {}
     before = {m["key"] for m in health.metrics(db, include_inactive=True)}
-    report = {"days": set(), "values": 0, "tables": []}
+    report = {"days": set(), "values": 0, "tables": [], "kept": 0}
     for table in ("daily_summary", "sleep", "resting_hr", "hrv", "weight"):
         if table not in present or (tables is not None and table not in tables):
             continue
@@ -378,9 +378,9 @@ def import_garmindb(db: Database, folder: str | Path | None = None,
                 mid = _metric_id(db, spec[:5], cache)
                 if mid is None:
                     continue
-                health.set_value(db, day, mid, v, source="garmin")
-                report["days"].add(day)
-                report["values"] += 1
+                if health.import_value(db, day, mid, v, "garmin", report):
+                    report["days"].add(day)
+                    report["values"] += 1
     src.close()
     after = {m["key"] for m in health.metrics(db, include_inactive=True)}
     report["created"] = sorted(after - before)

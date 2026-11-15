@@ -50,6 +50,17 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 18** — **Glossário** (botão na barra do topo, antes de Dispositivos, ou F9): os termos da
+  Perennia, dos ficheiros (.gpx, .fit…), do treino (forma, fadiga, série…) e da saúde, por separadores,
+  com adicionar, editar, apagar e repor. **Tamanho da letra** configurável (Definições e janelas de
+  sessão, com pré-visualização). **Barra do bloco** (ciclismo, remo, corrida, ginásio em tempo) que
+  passa a amarelo, vermelho e preto, configurável; **gráfico ao vivo** configurável por desporto, com
+  um traço em cada volta; sem comparação com sessões passadas num treino carregado; **remo** com
+  velocidade e remadas totais; **Notas** nos exercícios e artigos; **Fonte** em cada indicador de
+  saúde (respeitada pelas sincronizações); sincronização do GarminDB com **requisitos, passos e
+  relato ao vivo**; calendário sem diário de saúde no futuro, com **Planear evento** (Treinador) e
+  treinos futuros só para ver; o botão de recuar do rato volta atrás; o menu de saída com as opções
+  lado a lado; Página ↑/↓ andam nas listas (comandos Bluetooth «apresentador»).
 - **Ronda 14** — o aviso **PAUSA** ao centro, em todos os desportos (**Retomar sessão** ou **Terminar
   treino**); **Dispositivos** e **Definições** abrem por cima da sessão e **põem-na em pausa** (nas
   Definições só há o que se pode mexer: *Geral → passos seguintes*, o separador do desporto da sessão,

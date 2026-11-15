@@ -27,6 +27,7 @@ ACTIONS = (
     ("save", "global", "S", ("ctrl",), "Guardar", "Save"),
     ("devices", "global", "F4", (), "Dispositivos", "Devices"),
     ("settings", "global", "F8", (), "Definições", "Settings"),
+    ("glossary", "global", "F9", (), "Glossário", "Glossary"),
     ("fullscreen", "global", "F11", (), "Ecrã inteiro", "Full screen"),
     ("quit", "global", "Q", ("ctrl",), "Sair da Perennia", "Quit Perennia"),
     ("agent_page", "global", "F1", (), "Resumo da página (agente)", "Page summary (agent)"),

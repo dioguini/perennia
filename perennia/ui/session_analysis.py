@@ -100,11 +100,20 @@ def general_items(app, kind: str, sid: str, sess) -> list[Item]:
         fit = r["fit_path"]
     elif kind == "row":
         from perennia.core import rowing as rw
-        from perennia.ui.rowing_screens import pace_text
+        from perennia.ui.rowing_screens import pace_text, speed_text
         r = db.conn.execute("SELECT * FROM row_sessions WHERE id = ?", (sid,)).fetchone()
+        units = db.get("units", "metric")
+        avg_mps = (r["distance_m"] or 0) / r["moving_s"] if r["moving_s"] else None
+        best = r["best_pace_s"] if "best_pace_s" in r.keys() else None
         rows += [Item(tr("Distância", "Distance"), value=_m(r["distance_m"]), enabled=False),
                  Item(tr("Tempo", "Time"), value=hms(r["moving_s"] or 0), enabled=False),
-                 Item(tr("Ritmo médio", "Avg pace"), value=pace_text(r["avg_pace_s"]),
+                 Item(tr("Ritmo médio", "Avg pace"), value=pace_text(r["avg_pace_s"]) + " /500 m",
+                      detail=tr("melhor {p}", "best {p}", p=pace_text(best)), enabled=False),
+                 Item(tr("Velocidade média", "Avg speed"), value=speed_text(avg_mps, units),
+                      detail=tr("máxima {v}", "max {v}",
+                                v=speed_text(500.0 / best if best else None, units)),
+                      enabled=False),
+                 Item(tr("Total de remadas", "Total strokes"), value=str(r["strokes"] or 0),
                       enabled=False),
                  Item(tr("Potência média", "Avg power"),
                       value=f"{r['avg_power_w']:.0f} W" if r["avg_power_w"] else "—",

@@ -85,7 +85,8 @@ class Component:
 
 ATALHOS = ("keymap",)
 ECRA_PREFIXES = ("screen_layout_", "layout_", "hud_", "metrics_disabled_")
-ECRA_KEYS = ("row_fields", "metrics_disabled")
+ECRA_KEYS = ("row_fields", "metrics_disabled", "live_chart_cycling", "live_chart_rowing",
+             "live_chart_running", "live_chart_swimming")
 LIGACOES_PREFIXES = ("strava_", "garmindb_", "agent_")
 LIGACOES_KEYS = ("sync_garmindb",)
 SECRET_WORDS = ("secret", "token", "password", "passwd", "api_key", "apikey")
@@ -218,6 +219,10 @@ COMPONENTS: tuple[Component, ...] = (
               "Strava (keys and session) and GarminDB (folders) — only if you ask: the file "
               "keeps your keys",
               settings=_is_ligacao, sensitive=True),
+    Component("glossario", "Glossário", "Glossary",
+              "os termos que acrescentaste e as edições ou remoções dos termos de origem",
+              "the terms you added and the edits or removals of the built-in terms",
+              tables=("glossary",)),
 )
 BY_KEY = {c.key: c for c in COMPONENTS}
 # o que não entra: estado interno e caches que se refazem sozinhas
@@ -239,7 +244,7 @@ ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "ga
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
                   "muscles", "strength_builder", "tags", "workout_meta", "bp", "health_tabs",
-                  "coach", "programs")
+                  "coach", "programs", "glossary")
 
 
 def prepare(db) -> None:
@@ -441,6 +446,13 @@ def _check_size(db: Database, path: Path) -> None:
                              a=total / 1048576, b=limit / 1048576))
 
 
+def _own_table(c: Component, t) -> bool:
+    """A tabela pertence a esta componente? («settings» só nas que têm chaves de definições.)"""
+    if t == "settings":
+        return c.settings is not None
+    return isinstance(t, str) and t in c.tables
+
+
 def inspect(path: Path | str) -> dict:
     """O manifest de um backup (para mostrar antes de repor). Erro se o
     ficheiro não for um backup da Perennia."""
@@ -552,6 +564,9 @@ def restore(db, data_dir: Path | None, path: Path | str, keys: list[str] | None 
     mode = "merge" if mode in ("merge", "juntar") else "replace"
     entries = [e for e in m["components"] if e["key"] in BY_KEY and
                (keys is None or e["key"] in keys)]
+    # um backup vindo de fora não escolhe que tabelas se mexem: só as da própria componente
+    entries = [dict(e, tables=[t for t in e.get("tables", []) if _own_table(BY_KEY[e["key"]], t)])
+               for e in entries]
     if not entries:
         raise BackupError(tr("nada para repor", "nothing to restore"))
     prepare(db)

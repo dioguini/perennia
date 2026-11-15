@@ -175,7 +175,7 @@ class TestSessionsFollowTheLayout(tg.GuiCase):
             self.app._tick(0.5)
         self.app._on_draw()
         self.assertTrue(ses.live_chart is not None)
-        self.assertGreater(len(ses._series["a"]), 3)
+        self.assertGreater(ses.live.total, 3)
 
     def test_hidden_panel_goes_off_screen(self):
         p = sl.defaults("running")

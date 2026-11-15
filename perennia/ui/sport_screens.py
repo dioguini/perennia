@@ -16,6 +16,7 @@ from perennia.core import stats
 from perennia.core import strength as st
 from perennia.core import workout_export as wx
 from perennia.core import workouts
+from perennia.gfx.compat import scale_factor
 from perennia.core.i18n import t, tr
 from perennia.core.units import hms, km, parse_number, zone_text
 from perennia.gfx.compat import label as make_label
@@ -511,6 +512,10 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
         # o tempo da série (ou do descanso) logo a seguir ao alvo
         self.time_label = make_label("", font_size=15, bold=True, color=GOOD, anchor_y="top",
                                      batch=b)
+        from perennia.core import block_bar as _bb
+        from perennia.ui.widgets import BlockBar
+        self.block_bar = BlockBar(batch=b, height=7)       # só nas séries e descansos por tempo
+        self.block_cfg = _bb.Config.from_db(app.db)
         self.list.max_columns = 1
         self.arr_load("gym")                  # Definições → Ginásio → Disposição dos painéis
         # Sem relógio no topo. A contagem decrescente da série (por tempo) e do descanso vai para a
@@ -557,8 +562,10 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
             top = y + h
             self.phase_label.x, self.phase_label.y = x + 20, top - 10
             self.target_label.x, self.target_label.y = x + 20, top - 10 - 44
+            self.block_bar.place(x + 20, y + 8, w - 40)
         else:
             self.phase_label.x = self.target_label.x = OFFX
+            self.block_bar.place(OFFX, OFFX, 10)
         # FC e zona passaram para os quadrados; as etiquetas antigas ficam fora do ecrã
         self.hr_label.x, self.hr_label.y = OFFX, OFFX
         self.hr_zone_label.anchor_x = "right"
@@ -1062,6 +1069,12 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
             self.time_label.color = BAD if left < 0 else ACCENT
         self.time_label.x = self.target_label.x + text_px(self.target_label.text, 14) + 28
         self.time_label.y = self.target_label.y + 2
+        prog = s.block_progress()            # a barra do tempo: só séries e descansos por tempo
+        if prog is None:
+            self.block_bar.hide()
+        else:
+            self.block_bar.cfg = self.block_cfg
+            self.block_bar.set(prog, base=ACCENT if s.phase == st.REST else GOOD)
         hr = s.hr_bpm
         zone = s.hr_zone
         if hr:
@@ -1156,7 +1169,7 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
             v = self.tile_value(k)
             val.text = v
             size = 20
-            while size > 11 and len(v) * size * 0.66 > bg.width - 14:
+            while size > 11 and len(v) * size * scale_factor() * 0.66 > bg.width - 14:
                 size -= 1
             val.font_size = size
             if k in ("hr", "hr_zone") and s_zone(self.session):

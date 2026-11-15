@@ -20,7 +20,7 @@ from perennia.gfx.compat import label as make_label
 from perennia.ui.app import FtpRouteChoice, Screen, SnapshotUnsaved
 from perennia.ui.goal_popup import GoalPopup
 from perennia.ui.sport_screens import EditPopup, EditScreen
-from perennia.ui.widgets import ACCENT, BAD, Chart, DIM, GOOD, PANEL, TEXT, Item
+from perennia.ui.widgets import ACCENT, BAD, Chart, DIM, Dropdown, GOOD, PANEL, TEXT, Item
 
 WEEKDAYS_PT = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
 
@@ -527,11 +527,11 @@ class DailyLogScreen(EditScreen):
                 continue
             v = vals.get(m["id"])
             value = health.fmt(m, v["value"]) if v else "—"
-            detail = ""
+            fonte = health.source_name(v["source"] if v else m.get("source")) \
+                if (v or m.get("source")) else ""
+            detail = tr("Fonte", "Source") + ": " + fonte if fonte else ""
             if v and v.get("notes"):
-                detail = "✎ " + _excerpt(v["notes"], 80)
-            elif v and v.get("source") not in (None, "manual"):
-                detail = tr("de {s}", "from {s}", s=v["source"])
+                detail = "✎ " + _excerpt(v["notes"], 60) + (" · " + detail if detail else "")
             kind = m["kind"]
             data = (f"cyc:m{m['id']}" if kind in ("bool", "choice") else
                     f"text:m{m['id']}" if kind in ("text", "time") else f"num:m{m['id']}")
@@ -668,7 +668,8 @@ class MetricsManager(Screen):
         for m in health.metrics(a.db, include_inactive=True):
             rows.append(Item(("✓ " if m["active"] else "✗ ") + m["name"],
                              value=kind_name(m["kind"]) + (f" · {m['unit']}" if m["unit"] else ""),
-                             detail=group_name(m["grp"]),
+                             detail=group_name(m["grp"]) + " · " + tr("Fonte", "Source") + ": " +
+                             health.source_name(m.get("source")),
                              action=lambda mid=m["id"]: a.push(MetricEditor(a, mid)),
                              data=("metric", m["id"], m["active"])))
         n = len(rows)
@@ -714,9 +715,11 @@ class MetricEditor(EditPopup):
         self.group = m["grp"] if m else "other"
         self.choices = ", ".join(m["choices"]) if m and m["choices"] else ""
         self.active = bool(m["active"]) if m else True
+        self.source = (m or {}).get("source", "manual") if m else "manual"
 
     def state(self):
-        return (self.name, self.kind, self.unit, self.group, self.choices, self.active)
+        return (self.name, self.kind, self.unit, self.group, self.choices, self.active,
+                self.source)
 
     def title(self) -> str:
         return tr("Métrica", "Metric") if self.metric_id else tr("Nova métrica", "New metric")
@@ -725,10 +728,26 @@ class MetricEditor(EditPopup):
         return self.name
 
     def rows(self) -> list[Item]:
+        kinds, groups, sources = list(health.KINDS), list(health.GROUPS), health.source_keys()
         rows = [Item(tr("Nome", "Name"), value=self.name or "—", data="text:name"),
-                Item(tr("Tipo", "Type"), value=kind_name(self.kind), data="cyc:kind"),
+                Item(tr("Tipo", "Type"), value=kind_name(self.kind),
+                     dropdown=Dropdown([kind_name(k) for k in kinds], kinds.index(self.kind),
+                                       lambda i: self._pick("kind", kinds[i]),
+                                       title=tr("Tipo", "Type"))),
                 Item(tr("Unidade", "Unit"), value=self.unit or "—", data="text:unit"),
-                Item(tr("Grupo", "Group"), value=group_name(self.group), data="cyc:group")]
+                Item(tr("Grupo", "Group"), value=group_name(self.group),
+                     dropdown=Dropdown([group_name(g) for g in groups], groups.index(self.group),
+                                       lambda i: self._pick("group", groups[i]),
+                                       title=tr("Grupo", "Group"))),
+                Item(tr("Fonte", "Source"), value=health.source_name(self.source),
+                     dropdown=Dropdown([health.source_name(k) for k in sources],
+                                       sources.index(self.source) if self.source in sources
+                                       else 0, lambda i: self._pick("source", sources[i]),
+                                       title=tr("Fonte", "Source")),
+                     detail=tr("de onde vem este indicador; uma importação de outra origem "
+                               "não substitui os valores que já lá estão",
+                               "where this indicator comes from; an import from another "
+                               "origin does not replace the values already there"))]
         if self.kind == "choice":
             rows.append(Item(tr("Opções (separadas por vírgulas)", "Options (comma separated)"),
                              value=self.choices or "—", data="text:choices"))
@@ -736,14 +755,12 @@ class MetricEditor(EditPopup):
                       else tr("não", "no"), data="cyc:active")]
         return rows
 
+    def _pick(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+        self.enter()
+
     def cycle(self, field: str, step: int) -> None:
-        if field == "kind":
-            ks = list(health.KINDS)
-            self.kind = ks[(ks.index(self.kind) + step) % len(ks)]
-        elif field == "group":
-            gs = list(health.GROUPS)
-            self.group = gs[(gs.index(self.group) + step) % len(gs)]
-        elif field == "active":
+        if field == "active":
             self.active = not self.active
 
     def text_input(self, field: str, text: str) -> None:
@@ -761,7 +778,7 @@ class MetricEditor(EditPopup):
         choices = [c.strip() for c in self.choices.split(",") if c.strip()]
         self.metric_id = health.save_metric(self.app.db, self.metric_id, name=self.name,
                                             kind=self.kind, unit=self.unit, group=self.group,
-                                            choices=choices or None)
+                                            choices=choices or None, source=self.source)
         health.set_active(self.app.db, self.metric_id, self.active)
         return True
 

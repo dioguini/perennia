@@ -49,6 +49,8 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -56,6 +58,7 @@ from typing import Any, Callable
 
 from . import importers
 from .db import Database, now_iso
+from .i18n import tr
 
 SOURCES = ("garmindb",)
 
@@ -442,8 +445,176 @@ def command_text(db: Database, opts: Options, cfg_dir: Path | None = None) -> st
     return " ".join(cmd)
 
 
+# ------------------------------------------------- o relato (passos e linhas)
+
+
+class SyncLog:
+    """O que a sincronização está a fazer, para o ecrã mostrar (como o GarminDB faz na linha
+    de comandos): uma lista de **passos** (a decorrer, feito, falhou) e as últimas linhas
+    que o GarminDB foi escrevendo. Pode ser lido pelo ecrã enquanto outra thread escreve."""
+
+    def __init__(self, keep: int = 14, line_chars: int = 300):
+        self.line_chars = max(20, int(line_chars))       # opção «garmin_log_line_chars»
+        self._lock = threading.Lock()
+        self.steps: list[dict] = []
+        self.lines: deque = deque(maxlen=max(1, int(keep)))
+        self.version = 0
+
+    def step(self, text: str) -> None:
+        """Começa um passo (o anterior, se ainda decorria, fica feito)."""
+        with self._lock:
+            if self.steps and self.steps[-1]["state"] == "run":
+                self.steps[-1]["state"] = "ok"
+            self.steps.append({"text": text, "state": "run", "detail": ""})
+            self.version += 1
+
+    def detail(self, text: str) -> None:
+        with self._lock:
+            if self.steps:
+                self.steps[-1]["detail"] = text
+                self.version += 1
+
+    def end(self, ok: bool = True, detail: str | None = None) -> None:
+        """Fecha o passo atual: feito (ok) ou falhou."""
+        with self._lock:
+            if self.steps:
+                self.steps[-1]["state"] = "ok" if ok else "fail"
+                if detail is not None:
+                    self.steps[-1]["detail"] = detail
+                self.version += 1
+
+    def skip(self, text: str, why: str = "") -> None:
+        with self._lock:
+            self.steps.append({"text": text, "state": "skip", "detail": why})
+            self.version += 1
+
+    def line(self, text: str) -> None:
+        text = (text or "").strip()
+        if text:
+            with self._lock:
+                self.lines.append(text[:self.line_chars])
+                self.version += 1
+
+    def snapshot(self) -> tuple[list[dict], list[str]]:
+        with self._lock:
+            return [dict(s) for s in self.steps], list(self.lines)
+
+    @property
+    def failed(self) -> bool:
+        return any(s["state"] == "fail" for s in self.steps)
+
+
+# palavras que o GarminDB usa nas suas linhas → em que fase vai
+_PHASES = (("download", re.compile(r"download|fetch|get(ting)? ", re.I),
+            ("a descarregar do Garmin Connect", "downloading from Garmin Connect")),
+           ("import", re.compile(r"import|process(ing)? |read(ing)? ", re.I),
+            ("a importar para as bases do GarminDB", "importing into the GarminDB databases")),
+           ("analyze", re.compile(r"analy[sz]|summar|calculat", re.I),
+            ("a analisar e resumir", "analysing and summarising")))
+
+
+def phase_of(line: str) -> str | None:
+    """A fase em que o GarminDB vai, a julgar por uma linha do que escreve (ou None)."""
+    for _k, pat, (pt, en) in _PHASES:
+        if pat.search(line or ""):
+            return tr(pt, en)
+    return None
+
+
+# (padrão, mensagem PT, mensagem EN): o que uma falha típica quer dizer e o que fazer
+_DIAGNOSES = (
+    (re.compile(r"mfa|2fa|two.?factor|verification code|security code", re.I),
+     ("A conta Garmin tem verificação em dois passos (MFA): o GarminDB pede o código no "
+      "terminal. Corre uma vez «garmindb_cli.py --download --latest» numa linha de comandos, "
+      "introduz o código, e depois volta a sincronizar aqui.",
+      "The Garmin account has two-step verification (MFA): GarminDB asks for the code in the "
+      "terminal. Run «garmindb_cli.py --download --latest» once in a command line, enter the "
+      "code, then sync here again.")),
+    (re.compile(r"429|too many requests|rate.?limit", re.I),
+     ("O Garmin limitou os pedidos (demasiadas tentativas). Espera uns 30 minutos e tenta "
+      "outra vez.", "Garmin limited the requests (too many attempts). Wait about 30 minutes "
+      "and try again.")),
+    (re.compile(r"401|403|unauthori[sz]ed|invalid (user|cred|pass)|incorrect|login failed|"
+                r"authentication|sign.?in", re.I),
+     ("O Garmin recusou o utilizador ou a palavra-passe. Confirma o utilizador na "
+      "configuração e a palavra-passe (variável PERENNIA_GARMIN_PASSWORD ou Definições).",
+      "Garmin rejected the user or password. Check the user in the config and the password "
+      "(PERENNIA_GARMIN_PASSWORD variable or Settings).")),
+    (re.compile(r"no such file|not found|GarminConnectConfig|config.*(missing|not)", re.I),
+     ("O GarminDB não encontrou a configuração. Confirma a «Pasta da configuração» e que "
+      "GarminConnectConfig.json existe lá.",
+      "GarminDB did not find its configuration. Check the «Config folder» and that "
+      "GarminConnectConfig.json exists there.")),
+    (re.compile(r"ssl|certificate|connection|timed? ?out|resolve|network|unreachable", re.I),
+     ("Falhou a ligação à internet ou ao Garmin. Confirma a rede e tenta outra vez.",
+      "The connection to the internet or to Garmin failed. Check the network and try "
+      "again.")),
+    (re.compile(r"permission denied", re.I),
+     ("Sem permissão para escrever numa pasta do GarminDB. Confirma as pastas nas opções.",
+      "No permission to write to a GarminDB folder. Check the folders in the options.")),
+)
+
+
+def diagnose(output: str) -> str | None:
+    """Uma explicação em português/inglês para uma falha típica do GarminDB, ou None."""
+    for pat, (pt, en) in _DIAGNOSES:
+        if pat.search(output or ""):
+            return tr(pt, en)
+    return None
+
+
+def preflight(db: Database, opts: "Options") -> list[dict]:
+    """Os requisitos para sincronizar, um a um: `{key, ok, text, fix, blocking}`. Serve para
+    dizer ao utilizador o que falta **antes** de correr, em vez de um erro do GarminDB."""
+    opts.clean()
+    path = config_path(db)
+    cfg = read_config(path)
+    user, has_pw = credentials(path) if cfg is not None else ("", False)
+    online = bool(opts.download)                   # só descarregar precisa de conta Garmin
+    cli = importers.garmindb_cli() is not None
+    out = [
+        {"key": "cli", "ok": cli, "blocking": False,
+         "text": tr("GarminDB instalado", "GarminDB installed"),
+         "fix": tr("instala-o com «pip install garmindb» (sem ele só se importa o que já está "
+                   "nas bases)", "install it with «pip install garmindb» (without it only what "
+                   "is already in the databases is imported)")},
+        {"key": "config", "ok": cfg is not None, "blocking": cli,
+         "text": tr("Configuração do GarminDB", "GarminDB configuration"),
+         "fix": tr("falta {p} · em Definições → Ligações externas → Garmin guarda o utilizador "
+                   "e a Perennia cria-o", "{p} is missing · in Settings → External connections "
+                   "→ Garmin save the user and Perennia creates it", p=str(path))},
+        {"key": "user", "ok": bool(user), "blocking": cli and online,
+         "text": tr("Utilizador do Garmin Connect", "Garmin Connect user"),
+         "fix": tr("escreve o e-mail da conta em Definições → Ligações externas → Garmin",
+                   "type the account e-mail in Settings → External connections → Garmin")},
+        {"key": "password", "ok": has_pw, "blocking": cli and online,
+         "text": tr("Palavra-passe disponível", "Password available"),
+         "fix": tr("define a variável de ambiente {v} antes de abrir a Perennia, ou escreve-a "
+                   "nas Definições (fica só na memória)", "set the {v} environment variable "
+                   "before opening Perennia, or type it in Settings (kept in memory only)",
+                   v=ENV_PASSWORD)},
+        {"key": "stats", "ok": bool(opts.stats), "blocking": True,
+         "text": tr("Pelo menos um tipo de dados", "At least one kind of data"),
+         "fix": tr("liga um dos tipos em «Dados»", "turn on one of the kinds under «Data»")},
+        {"key": "steps", "ok": bool(opts.download or opts.copy or opts.import_ or opts.analyze),
+         "blocking": False, "text": tr("Pelo menos um passo do GarminDB", "At least one "
+                                       "GarminDB step"),
+         "fix": tr("sem passos só se importa para a Perennia o que já está nas bases",
+                   "with no steps only what is already in the databases is imported")},
+    ]
+    return out
+
+
+def blocking_problems(checks: list[dict]) -> list[dict]:
+    return [c for c in checks if c["blocking"] and not c["ok"]]
+
+
 def _run(cmd: list[str], runner: Callable | None, timeout: float,
-         cwd: Path | None) -> tuple[bool, str]:
+         cwd: Path | None, log: SyncLog | None = None) -> tuple[bool, str]:
+    """Corre o comando. Com `log` (e sem um `runner` de teste), lê o que o GarminDB vai
+    escrevendo, linha a linha, e passa-o ao relato."""
+    if runner is None and log is not None:
+        return _run_streaming(cmd, timeout, cwd, log)
     run = runner or subprocess.run
     try:
         res = run(cmd, capture_output=True, text=True, timeout=timeout,
@@ -451,11 +622,55 @@ def _run(cmd: list[str], runner: Callable | None, timeout: float,
     except Exception as e:
         return False, str(e)
     out = (getattr(res, "stdout", "") or "")[-600:] + (getattr(res, "stderr", "") or "")[-600:]
+    if log is not None:
+        for ln in out.splitlines()[-log.lines.maxlen:]:
+            log.line(ln)
     return getattr(res, "returncode", 1) == 0, out.strip()
 
 
+def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
+                   log: SyncLog) -> tuple[bool, str]:
+    # a palavra-passe do ambiente não vai para o GarminDB (ele lê-a do ficheiro temporário)
+    env = {k: v for k, v in os.environ.items() if k != ENV_PASSWORD}
+    try:
+        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, errors="replace", stdin=subprocess.DEVNULL,
+                                cwd=str(cwd) if cwd and cwd.is_dir() else None)
+    except OSError as e:
+        return False, str(e)
+    fired: list[bool] = []
+
+    def _stop() -> None:
+        fired.append(True)
+        proc.kill()
+    timer = threading.Timer(timeout, _stop)
+    timer.daemon = True
+    timer.start()
+    tail: deque = deque(maxlen=40)
+    try:
+        for raw in proc.stdout:                       # type: ignore[union-attr]
+            for ln in re.split(r"[\r\n]+", raw):
+                if ln.strip():
+                    tail.append(ln.strip())
+                    log.line(ln)
+                    ph = phase_of(ln)
+                    if ph:
+                        log.detail(ph)
+        code = proc.wait()
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+    out = "\n".join(tail)[-1200:]
+    if fired:                                         # o temporizador disparou: demorou demais
+        return False, tr("o GarminDB demorou mais de {s} s e foi parado",
+                         "GarminDB took more than {s} s and was stopped", s=int(timeout))
+    return code == 0, out
+
+
 def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
-                 timeout: float | None = None) -> tuple[bool, str]:
+                 timeout: float | None = None, log: SyncLog | None = None
+                 ) -> tuple[bool, str]:
     """Corre o GarminDB com as opções escolhidas (no intervalo, escreve
     primeiro as datas na configuração)."""
     timeout = SYNC_TIMEOUT_S if timeout is None else timeout     # opção «garmin_sync_timeout_s»
@@ -477,13 +692,14 @@ def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
     try:
         with password_for_run(db):
             return _run(build_command(cli, opts, config_dir(db)), runner, timeout,
-                        db_dir(db).parent)
+                        db_dir(db).parent, log)
     except PasswordMissing as e:
         return False, str(e)
 
 
 def maintenance(db: Database, action: str, runner: Callable | None = None,
-                timeout: float | None = None) -> tuple[bool, str]:
+                timeout: float | None = None, log: SyncLog | None = None
+                ) -> tuple[bool, str]:
     """`backup` (--backup) ou `rebuild` (--rebuild_db) das bases do GarminDB."""
     timeout = SYNC_TIMEOUT_S if timeout is None else timeout
     cli = importers.garmindb_cli()
@@ -495,7 +711,7 @@ def maintenance(db: Database, action: str, runner: Callable | None = None,
         cmd += ["-f", str(config_dir(db))]
     try:
         with password_for_run(db):
-            return _run(cmd + [flag], runner, timeout, db_dir(db).parent)
+            return _run(cmd + [flag], runner, timeout, db_dir(db).parent, log)
     except PasswordMissing as e:
         return False, str(e)
 
@@ -669,14 +885,14 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
     opts.clean()
     since, until = import_range(db, opts)
     report: dict = {"since": since, "until": until, "values": 0, "days": 0,
-                    "activities": 0, "new_activities": 0, "tables": []}
+                    "activities": 0, "new_activities": 0, "tables": [], "kept": 0}
     folder = Path(folder) if folder else db_dir(db)
     tables = tuple(HEALTH_TABLES[k] for k in opts.stats if k in HEALTH_TABLES)
     if tables:
         if (folder / "garmin.db").exists():
             rep = importers.import_garmindb(db, folder, since=since, until=until, tables=tables)
             report.update(values=rep["values"], days=rep["days"], tables=rep["tables"],
-                          created=rep.get("created", []))
+                          created=rep.get("created", []), kept=rep.get("kept", 0))
         elif "activities" not in opts.stats:
             raise FileNotFoundError(f"não encontrei {folder / 'garmin.db'}")
     if "activities" in opts.stats:
@@ -688,16 +904,58 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
 
 
 def sync(db: Database, opts: Options, runner: Callable | None = None,
-         run_source: bool = True) -> tuple[bool, str, dict | None]:
-    """Corre a fonte (se `run_source`) e importa. (ok, mensagem, relatório)."""
+         run_source: bool = True, log: SyncLog | None = None
+         ) -> tuple[bool, str, dict | None]:
+    """Corre a fonte (se `run_source`) e importa. (ok, mensagem, relatório). Com `log`, vai
+    contando o que faz, passo a passo."""
+    log = log or SyncLog()
+    opts.clean()
     if run_source:
-        ok, out = run_garmindb(db, opts, runner=runner)
+        if opts.period == "range" and opts.write_config and (opts.download or opts.import_):
+            log.step(tr("A escrever o intervalo {a} → {b} na configuração do GarminDB",
+                        "Writing the range {a} → {b} to the GarminDB config",
+                        a=opts.start, b=opts.end))
+        names = [n for n, on in ((tr("descarregar", "download"), opts.download),
+                                 (tr("copiar do relógio", "copy from the watch"), opts.copy),
+                                 (tr("importar", "import"), opts.import_),
+                                 (tr("analisar", "analyse"), opts.analyze)) if on]
+        if names:
+            log.step(tr("A correr o GarminDB: {n}", "Running GarminDB: {n}",
+                        n=" → ".join(names)))
+        else:
+            log.skip(tr("GarminDB", "GarminDB"), tr("nenhum passo ligado", "no step on"))
+        ok, out = run_garmindb(db, opts, runner=runner, log=log)
         if not ok:
-            return False, out.splitlines()[-1] if out else "falhou", None
+            hint = diagnose(out)
+            last = out.splitlines()[-1] if out else tr("falhou", "failed")
+            log.end(False, hint or last)
+            return False, hint or last, None
+        if names:
+            log.end(True)
+    else:
+        log.skip(tr("GarminDB", "GarminDB"),
+                 tr("só se importa o que já está nas bases", "importing only what is already "
+                    "in the databases"))
     try:
+        log.step(tr("A importar para a Perennia", "Importing into Perennia"))
         rep = sync_into_perennia(db, opts)
     except FileNotFoundError as e:
+        log.end(False, str(e))
         return False, str(e), None
+    if opts.stats and any(k in HEALTH_TABLES for k in opts.stats):
+        log.detail(tr("saúde: {v} valores em {d} dias", "health: {v} values over {d} days",
+                      v=rep["values"], d=rep["days"]) +
+                   (" · " + tr("{k} mantidos (outra Fonte)", "{k} kept (other source)",
+                               k=rep["kept"]) if rep.get("kept") else "") +
+                   (" · " + tr("atividades: {n} ({k} novas)", "activities: {n} ({k} new)",
+                               n=rep["activities"], k=rep["new_activities"])
+                    if "activities" in opts.stats else ""))
+    elif "activities" in opts.stats:
+        log.detail(tr("atividades: {n} ({k} novas)", "activities: {n} ({k} new)",
+                      n=rep["activities"], k=rep["new_activities"]))
+    log.end(True)
+    log.step(tr("Concluído", "Done"))
+    log.end(True)
     return True, "", rep
 
 

@@ -1576,8 +1576,10 @@ class TestHomeScreen(GuiCase):
         self.assertTrue(any("Plano A" in x for x in labels))
         buttons = [i.label for i in day.list.items if i.button]
         self.assertEqual(buttons[0], "Nota do dia")
-        self.assertTrue(buttons[1].startswith("Diário de saúde"))
-        self.assertEqual(buttons[2], "+ Planear treino")
+        # um dia futuro não tem diário de saúde; tem o treino e o evento (com o Treinador)
+        self.assertFalse(any(b.startswith("Diário de saúde") for b in buttons))
+        self.assertIn("+ Planear treino", buttons)
+        self.assertIn("+ Planear evento", buttons)
         self.assertTrue(day.note_text.text)                    # a secção da nota, por baixo
 
     def test_running_hub_and_back_arrow_returns(self):

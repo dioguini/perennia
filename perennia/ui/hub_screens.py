@@ -44,6 +44,36 @@ def stats_screen(app, sport: str | None, hub=None):
 # ============================================================ inventário
 
 
+def _excerpt(text: str, n: int = 70) -> str:
+    """A primeira linha da nota, curta, para a lista."""
+    line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    return line if len(line) <= n else line[:n - 1].rstrip() + "…"
+
+
+def note_row(editor, key_: str, title: str, label: str | None = None,
+             detail: str | None = None) -> Item:
+    """A linha «Notas» de um editor: Enter abre uma janela de texto grande (várias linhas, até
+    `note_max_chars`); o que se escreve fica no editor e guarda-se com ele."""
+    from perennia.core import options as opt_mod
+
+    def edit() -> None:
+        from perennia.ui.goal_popup import GoalPopup
+
+        def done(text: str) -> None:
+            editor.v[key_] = text or ""
+            editor.enter()
+        editor.app.push(GoalPopup(editor.app, label or tr("Notas", "Notes"), title,
+                                  editor.v.get(key_) or "",
+                                  int(opt_mod.get(editor.app.db, "note_max_chars")), done,
+                                  multiline=True))
+    return Item(label or tr("Notas", "Notes"), value=_excerpt(editor.v.get(key_) or "") or "—",
+                detail=detail or tr("Enter escreve numa janela grande · informação que queiras "
+                                    "guardar (dicas, ajustes, onde comprar…)",
+                                    "Enter writes in a large window · anything you want to "
+                                    "keep (tips, settings, where to buy…)"),
+                action=edit, data=f"note:{key_}")
+
+
 class InventoryScreen(Screen):
     """O teu material: a «Visão Geral» (totais) e um separador por grupo
     (máquinas, pesos livres, estações…). **+ Novo artigo** fica em cima, à
@@ -75,7 +105,7 @@ class InventoryScreen(Screen):
         if r.get("purchase_price") is not None:
             bits.append(f"{r['purchase_price']:,.2f} €".replace(",", " "))
         if r["notes"]:
-            bits.append(r["notes"])
+            bits.append(tr("nota: ", "note: ") + _excerpt(r["notes"], 50))
         return Item(r["name"], value=f"× {r['qty']}", detail=" · ".join(bits),
                     action=lambda iid=r["id"]: a.push(ItemEditor(a, iid)),
                     data=("item", r["id"]))
@@ -194,7 +224,7 @@ class ItemEditor(EditPopup):
                      data="num:purchase_price",
                      detail=tr("escreve o valor · ←/→ ±1 € · Shift ±10 €",
                                "type the amount · ←/→ ±1 € · Shift ±10 €")),
-                Item(tr("Notas", "Notes"), value=(v["notes"] or "") + "▏", data="text:notes")]
+                note_row(self, "notes", v["name"])]
         if self.iid:
             rows.append(Item(tr("Apagar o artigo", "Delete the item"), action=self._delete,
                              detail=tr("Enter duas vezes", "Enter twice")))
@@ -380,6 +410,8 @@ class ExerciseInventory(Screen):
             if missing:
                 detail += " · " + tr("falta: {k}", "missing: {k}",
                                      k=", ".join(inventory.kind_name(k) for k in missing))
+            if e.get("notes"):
+                detail += " · " + tr("nota: ", "note: ") + _excerpt(e["notes"], 50)
             act = (lambda ex=e: self._picked(ex)) if self.pick else \
                 (lambda eid=e["id"]: a.push(ExerciseEditor(a, eid, mod)))
             items.append(Item(e["name"], value="✓" if self.pick else "", detail=detail,
@@ -419,7 +451,8 @@ class ExerciseEditor(EditPopup):
                   "bodyweight": (e or {}).get("bodyweight") or 0.0,
                   "mods": list((e or {}).get("modalities") or [modality]),
                   "kit": list((e or {}).get("equipment") or []),
-                  "description": (e or {}).get("description") or ""}
+                  "description": (e or {}).get("description") or "",
+                  "notes": (e or {}).get("notes") or ""}
 
     def title(self) -> str:
         return tr("Exercício", "Exercise") if self.eid else tr("Novo exercício", "New exercise")
@@ -458,6 +491,7 @@ class ExerciseEditor(EditPopup):
                  action=self._pick_kit),
             Item(tr("Descrição", "Description"), value=(v["description"] or "") + "▏",
                  data="text:description"),
+            note_row(self, "notes", v["name"]),
         ]
         return items
 
@@ -522,5 +556,5 @@ class ExerciseEditor(EditPopup):
                                      group=v["group"], measure=v["measure"],
                                      bodyweight=v["bodyweight"], equipment=v["kit"],
                                      description=v["description"] or None,
-                                     subgroup=v["subgroup"])
+                                     subgroup=v["subgroup"], notes=v["notes"])
         return True

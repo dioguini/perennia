@@ -3,6 +3,9 @@
 Uma linha por dia: a primeira coluna é a **data** (`data`; aceita-se AAAA-MM-DD e
 DD/MM/AAAA) e há uma coluna por **métrica do diário**, com o nome que ela tem na
 Perennia (as que ligaste ou criaste). Uma coluna extra, `nota`, é a nota livre do dia.
+Duas colunas extra: `nota` (a nota livre do dia) e `fonte` (de onde vêm os valores dessa linha:
+manual, garmin, hrv4training, csv, device, lab, other; vazia = csv). Se uma métrica tem uma
+«Fonte» diferente, a importação não substitui um valor que já lá esteja de outra origem.
 Os valores respeitam o tipo da métrica: número (`7,5`), sim/não (`sim`, `não`, `1`, `0`),
 escala 1–5, hora (`22:30`), texto e escolha (uma das opções). Colunas que não correspondam
 a nenhuma métrica ignoram-se (e dizem-se no relatório).
@@ -23,6 +26,7 @@ from .i18n import tr
 DELIM = ";"
 DATE_NAMES = ("data", "date", "dia", "day")
 NOTE_NAMES = ("nota", "notas", "note", "notes")
+SOURCE_NAMES = ("fonte", "source", "origem")
 
 
 def _fold(text) -> str:
@@ -36,7 +40,7 @@ def metrics(db) -> list[dict]:
 
 
 def columns(db) -> list[str]:
-    return ["data"] + [m["name"] for m in metrics(db)] + ["nota"]
+    return ["data"] + [m["name"] for m in metrics(db)] + ["nota", "fonte"]
 
 
 def _example(m: dict) -> str:
@@ -66,7 +70,7 @@ def _render(cols: list[str], rows: list[list]) -> str:
 
 def template(db) -> str:
     ms = metrics(db)
-    row = [date.today().isoformat()] + [_example(m) for m in ms] + [""]
+    row = [date.today().isoformat()] + [_example(m) for m in ms] + ["", "manual"]
     return _render(columns(db), [row])
 
 
@@ -91,8 +95,10 @@ def export_csv(db) -> str:
     rows = []
     for d in days:
         vals = health.values_for(db, d)
+        srcs = {v["source"] for v in vals.values() if v.get("source")}
         rows.append([d] + [_cell(m, (vals.get(m["id"]) or {}).get("value")) for m in ms]
-                    + [health.day_note(db, d)])
+                    + [health.day_note(db, d), srcs.pop() if len(srcs) == 1 else
+                       ("misto" if srcs else "")])
     return _render(columns(db), rows)
 
 
@@ -179,13 +185,15 @@ def import_csv(db, text: str) -> dict:
     cols, rows = parse(text)
     low = [_fold(c) for c in cols]
     date_i = next((i for i, c in enumerate(low) if c in DATE_NAMES), None)
-    rep = {"days": 0, "values": 0, "ignored": [], "invalid": 0}
+    rep = {"days": 0, "values": 0, "ignored": [], "invalid": 0, "kept": 0}
     if date_i is None:
         raise ValueError(tr("O .csv não tem a coluna «data».", "The .csv has no “data” column."))
     note_i = next((i for i, c in enumerate(low) if c in NOTE_NAMES), None)
+    src_i = next((i for i, c in enumerate(low) if c in SOURCE_NAMES), None)
+    known = set(health.source_keys()) - {""}
     metric_cols = {}
     for i, c in enumerate(low):
-        if i in (date_i, note_i):
+        if i in (date_i, note_i, src_i):
             continue
         if c in by_name:
             metric_cols[i] = by_name[c]
@@ -198,6 +206,9 @@ def import_csv(db, text: str) -> dict:
         day = health._parse_day(r[date_i])
         if not day:
             continue
+        origin = "csv"                      # a coluna «fonte» da linha (se for uma conhecida)
+        if src_i is not None and src_i < len(r) and _fold(r[src_i]) in known:
+            origin = _fold(r[src_i])
         for i, m in metric_cols.items():
             if i >= len(r) or not r[i].strip():
                 continue
@@ -205,9 +216,9 @@ def import_csv(db, text: str) -> dict:
             if v is None:
                 rep["invalid"] += 1
                 continue
-            health.set_value(db, day, m["id"], v, source="csv")
-            rep["values"] += 1
-            days.add(day)
+            if health.import_value(db, day, m["id"], v, origin, rep):
+                rep["values"] += 1
+                days.add(day)
         if note_i is not None and note_i < len(r) and r[note_i].strip():
             health.set_day_note(db, day, r[note_i].strip())
             days.add(day)
@@ -219,6 +230,9 @@ def report_text(rep: dict) -> str:
     t = tr("{v} valores em {d} dias", "{v} values over {d} days", v=rep["values"], d=rep["days"])
     if rep["invalid"]:
         t += " · " + tr("{n} inválidos", "{n} invalid", n=rep["invalid"])
+    if rep.get("kept"):
+        t += " · " + tr("{n} mantidos (a Fonte do indicador é outra)",
+                        "{n} kept (the indicator's source is another)", n=rep["kept"])
     if rep["ignored"]:
         t += " · " + tr("colunas ignoradas: {c}", "ignored columns: {c}",
                         c=", ".join(rep["ignored"][:3]))

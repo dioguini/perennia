@@ -392,6 +392,10 @@ def install() -> types.ModuleType:
     window_mod.Window = Window
     window_mod.FPSDisplay = FPSDisplay
     window_mod.key = key_mod
+    mouse_mod = types.ModuleType("pyglet.window.mouse")       # como a pyglet 2: 1, 2, 4, 8, 16
+    mouse_mod.LEFT, mouse_mod.MIDDLE, mouse_mod.RIGHT = 1, 2, 4
+    mouse_mod.MOUSE4, mouse_mod.MOUSE5 = 8, 16
+    window_mod.mouse = mouse_mod
 
     clock = _Clock()
     clock_mod = types.ModuleType("pyglet.clock")
@@ -431,7 +435,7 @@ def install() -> types.ModuleType:
                          ("pyglet.graphics.shader", shader_mod),
                          ("pyglet.shapes", shapes), ("pyglet.text", text),
                          ("pyglet.math", math_mod), ("pyglet.window", window_mod),
-                         ("pyglet.window.key", key_mod),
+                         ("pyglet.window.key", key_mod), ("pyglet.window.mouse", mouse_mod),
                          ("pyglet.clock", clock_mod), ("pyglet.app", app_mod),
                          ("pyglet.image", image_mod), ("pyglet.sprite", sprite_mod)):
         sys.modules[name] = module

@@ -15,6 +15,7 @@ from typing import Callable
 
 import pyglet
 from pyglet.window import key
+from pyglet.window import mouse as _mouse
 
 from perennia.core import boards
 from perennia.core import boxes as boxes_mod
@@ -412,10 +413,11 @@ class Screen:
             if symbol in (key.ENTER, key.RETURN):
                 self.list.move(1)
                 return True
-        if symbol in (key.DOWN, key.J):
+        # Page ↓/↑ andam uma linha: é o que um «apresentador» (clicker) Bluetooth envia
+        if symbol in (key.DOWN, key.J, key.PAGEDOWN):
             self.list.move(1)
             return True
-        if symbol in (key.UP, key.K):
+        if symbol in (key.UP, key.K, key.PAGEUP):
             self.list.move(-1)
             return True
         if symbol in (key.LEFT, key.RIGHT) and self.cycle_dropdown(
@@ -1196,7 +1198,59 @@ class LeaderboardScreen(Screen):
 # -------------------------------------------------------- preparar a sessão
 
 
-class AutoLapOptions:
+class FontOptions:
+    """A linha «Tamanho da letra» das configurações de sessão, com pré-visualização imediata.
+
+    Escolher na lista grava a opção `ui_font_pct` e põe a escala já em vigor: a pré-visualização
+    (quatro valores de exemplo) refaz-se logo e a sessão que se vai começar nasce com a letra
+    nova. Os outros ecrãs já abertos usam-na quando forem reabertos (ou em Definições → Ecrã e
+    idioma, que os refaz)."""
+
+    def font_items(self) -> list[Item]:
+        o = opt_mod.BY_KEY["ui_font_pct"]
+        vals = list(range(int(o.lo), int(o.hi) + 1, int(o.step)))
+        cur = int(opt_mod.get(self.app.db, "ui_font_pct"))
+        return [Item(tr("Tamanho da letra", "Font size"), value=f"{cur} %",
+                     detail=tr("Enter abre a lista · ←/→ muda · vê-se já em baixo; fica gravado",
+                               "Enter opens the list · ←/→ changes · shown below at once; "
+                               "it is saved"),
+                     data="font",
+                     dropdown=Dropdown([f"{v} %" for v in vals],
+                                       vals.index(cur) if cur in vals else vals.index(100),
+                                       lambda k, vs=vals: self.set_font(vs[k])))]
+
+    def font_key(self, symbol: int, item) -> bool:
+        """←/→ na linha do tamanho da letra."""
+        if item is None or item.data != "font" or symbol not in (key.LEFT, key.RIGHT):
+            return False
+        o = opt_mod.BY_KEY["ui_font_pct"]
+        cur = int(opt_mod.get(self.app.db, "ui_font_pct"))
+        self.set_font(int(opt_mod.stepped(o, cur, 1 if symbol == key.RIGHT else -1)))
+        return True
+
+    def set_font(self, pct: int) -> None:
+        from perennia.gfx import compat
+        self.app.db.set("ui_font_pct", int(pct))
+        compat.FONT_PCT = int(opt_mod.get(self.app.db, "ui_font_pct"))
+        prev = getattr(self, "_font_preview", None)
+        if prev is not None:
+            prev.rebuild()
+        self.enter()
+
+    def font_draw(self) -> None:
+        """A pré-visualização, no canto de baixo à esquerda da janela."""
+        from perennia.ui.widgets import FontPreview
+        if getattr(self, "_font_preview", None) is None:
+            self._font_preview = FontPreview()
+        p = getattr(self, "popup", None)
+        if p is not None:
+            self._font_preview.layout(p.x + 28, p.y + 48, min(p.w * 0.52, 520), 56.0)
+        else:                                # ecrã inteiro: em baixo à esquerda
+            self._font_preview.layout(48, 72, 520, 56.0)
+        self._font_preview.draw()
+
+
+class AutoLapOptions(FontOptions):
     """Duas linhas antes de começar qualquer treino: auto lap (desligado por
     omissão) e, se ligado, de quanto em quanto tempo ou distância."""
 
@@ -1333,6 +1387,7 @@ class StartOptions(AutoLapOptions, Screen):
                               detail=tr("←/→ ±0,5 · na sessão: + / −", "←/→ ±0.5 · in session: + / −"),
                               data="speed"))
         items += self.autolap_items()
+        items += self.font_items()
         for ln in self.lines:
             items.append(Item(ln, enabled=False))
         self.chrome.set(self.title_text, tr("Prepara a sessão", "Get the session ready"),
@@ -1348,10 +1403,16 @@ class StartOptions(AutoLapOptions, Screen):
         self.options["pool_m"] = opts[(i + step) % len(opts)]
         self.enter()
 
+    def draw(self) -> None:
+        super().draw()
+        self.font_draw()
+
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if self.autolap_key(symbol):
             return True
         item = self.list.selected
+        if self.font_key(symbol, item):
+            return True
         if item is not None and symbol in (key.LEFT, key.RIGHT):
             step = 1 if symbol == key.RIGHT else -1
             if item.data == "pool":
@@ -2541,7 +2602,7 @@ class SettingsScreen(Screen):
                "@pmc_head", "pmc_synced"),
               ("difficulty", "lookahead", "auto_pause", "connection", "auto_connect"),
               ("@sports",),
-              ("theme", "units", "language", "render", "display", "msaa"),
+              ("theme", "font", "units", "language", "render", "display", "msaa"),
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
               ("@shortcuts",),
               ("@sounds",),
@@ -2555,6 +2616,12 @@ class SettingsScreen(Screen):
     # ligações externas, o modo do ecrã…).
     SESSION_TABS = (1, 2, 3, 5, 6)             # índices de `GROUPS`
     SESSION_ROWS = {1: ("lookahead",), 3: ("theme", "units", "language")}
+    FONT_STEP = 5                  # ←/→ no tamanho da letra
+
+    def _font_pct(self) -> int:
+        """O tamanho da letra em vista (o do rascunho, se estiver a ser mexido)."""
+        return int(opt_mod.coerce(opt_mod.BY_KEY["ui_font_pct"], self.get(
+            "ui_font_pct", opt_mod.BY_KEY["ui_font_pct"].default)))
 
     def __init__(self, app: "App", session=None):
         # (antes do `super().__init__`, que já pede os nomes dos separadores)
@@ -2586,6 +2653,24 @@ class SettingsScreen(Screen):
     SECTION_NAMES = {"metrics": ("Métricas de sessão disponíveis", "Available session metrics"),
                      "layout": ("Disposição do ecrã de sessão", "Session screen layout"),
                      "limits": ("Sessões Não ERG", "Non-ERG sessions")}
+
+    def _pick_chart_metrics(self, sport: str) -> None:
+        """Escolhe as métricas do gráfico ao vivo (só as do desporto); fica gravado logo."""
+        from perennia.core import live_chart as lc
+        from perennia.ui.pickers import MultiChoicePopup
+        top = int(opt_mod.get(self.app.db, "live_chart_max_series"))
+
+        def done(sel: list[str]) -> None:
+            if len(sel) > top:
+                self.app.message(tr("O gráfico mostra no máximo {n} métricas (Definições → "
+                                    "Avançado).", "The chart shows at most {n} metrics "
+                                    "(Settings → Advanced).", n=top))
+            lc.save(self.app.db, sport, sel)
+            self.enter()
+        self.app.push(MultiChoicePopup(
+            self.app, tr("Gráfico ao vivo · {s}", "Live chart · {s}", s=sport_name(sport)),
+            [(k, lc.label(sport, k)) for k in lc.keys(sport)], lc.choice(self.app.db, sport),
+            done, min_one=True))
 
     def sections(self) -> list[str]:
         """As secções do desporto: o ginásio não tem aparelhos Não ERG."""
@@ -2694,15 +2779,17 @@ class SettingsScreen(Screen):
             d = draft["display"]
             a.set_display(bool(d["fullscreen"]), d.get("w"), d.get("h"))
         a.message(tr("Definições guardadas", "Settings saved"))
-        if "theme" in draft:
-            a.set_theme(draft["theme"])      # volta a construir os ecrãs com as cores novas
+        if "theme" in draft or "ui_font_pct" in draft:
+            # volta a construir os ecrãs com as cores e a letra novas
+            from perennia.gfx import theme as _tm
+            a.set_theme(draft.get("theme") or str(db.get("theme", _tm.DEFAULT)))
             return
         if a.current is self:
             self.enter()
 
     def cancel(self) -> None:
         """Volta aos valores gravados."""
-        previewing = "theme" in self.draft
+        previewing = "theme" in self.draft or "ui_font_pct" in self.draft
         self.draft.clear()
         self._orig.clear()
         self.ath = self.app.db.athlete()
@@ -2714,7 +2801,7 @@ class SettingsScreen(Screen):
 
     def discard(self) -> None:
         """Sair sem guardar: se o tema estava em pré-visualização, repõe-se."""
-        if "theme" in self.draft:
+        if "theme" in self.draft or "ui_font_pct" in self.draft:
             self.draft.clear()
             self._orig.clear()
             self._preview_theme()
@@ -2728,7 +2815,9 @@ class SettingsScreen(Screen):
     def _preview_theme(self) -> None:
         """Mostra já o tema escolhido (ou o gravado), sem o gravar."""
         from perennia.gfx import theme as theme_mod
+        from perennia.gfx import compat
         want = self.get("theme", None) or theme_mod.DEFAULT
+        compat.FONT_PCT = self._font_pct()      # a letra também se vê antes de guardar
         self.app.set_theme(want, persist=False, carry=self)
 
     # -------------------------------------------------------------- linhas
@@ -2907,6 +2996,12 @@ class SettingsScreen(Screen):
                           detail=tr("←/→ vê-se logo · Guardar fixa-o · Ardósia para pouca luz",
                                     "←/→ shows it now · Save keeps it · Slate for low light"),
                           data="theme"),
+            "font": Item(tr("Tamanho da letra", "Font size"), value=f"{self._font_pct()} %",
+                         detail=tr("←/→ vê-se logo · Enter abre a lista · 100 % é o de origem; "
+                                   "nas sessões também se muda ao configurá-las",
+                                   "←/→ shows it now · Enter opens the list · 100 % is the "
+                                   "default; also changeable when setting up a session"),
+                         data="font"),
             "layouts": Item(tr("Ecrã da sessão, por desporto", "Session screen, per sport"),
                             detail=tr("Enter abre · um separador por desporto; arrasta as métricas",
                                       "Enter opens · one tab per sport; drag the metrics"),
@@ -3021,6 +3116,21 @@ class SettingsScreen(Screen):
                           detail=tr("Enter abre · arrasta caixas, voltas, gráficos e tabelas",
                                     "Enter opens · drag boxes, laps, charts and tables"),
                           action=lambda: a.push(_arrangement().ArrangementEditor(a, sport)))]
+            from perennia.core import live_chart as lc
+            if sport in lc.CATALOG:
+                chosen = lc.choice(a.db, sport)
+                rows.append(Item(tr("Gráfico ao vivo: métricas", "Live chart: metrics"),
+                                 value=", ".join(tr(*lc.CATALOG[sport][k][:2])
+                                                 for k in chosen),
+                                 detail=tr("Enter escolhe até {n} métricas deste desporto; cada "
+                                           "linha tem a sua escala · o gráfico põe-se no ecrã "
+                                           "em «Disposição dos painéis»",
+                                           "Enter picks up to {n} of this sport's metrics; each "
+                                           "line has its own scale · place the chart on screen "
+                                           "in “Panel layout”",
+                                           n=int(opt_mod.get(a.db, "live_chart_max_series"))),
+                                 action=lambda: self._pick_chart_metrics(sport),
+                                 data="live_chart"))
         else:
             lim = self._limits()
             if sport == "cycling":
@@ -3308,6 +3418,19 @@ class SettingsScreen(Screen):
             self.app.push(ChoicePopup(self.app, item.label, [theme_mod.name(k) for k in keys],
                                       keys.index(cur) if cur in keys else 0, pick_theme))
             return True
+        if d == "font":
+            from perennia.ui.pickers import ChoicePopup
+            o = opt_mod.BY_KEY["ui_font_pct"]
+            vals = list(range(int(o.lo), int(o.hi) + 1, int(o.step)))
+            cur = self._font_pct()
+
+            def pick_font(k: int) -> None:
+                self.put("ui_font_pct", vals[k])
+                self._preview_theme()
+            self.app.push(ChoicePopup(self.app, item.label, [f"{v} %" for v in vals],
+                                      vals.index(cur) if cur in vals else vals.index(100),
+                                      pick_font))
+            return True
         from perennia.ui.pickers import open_choices
         if d in self.CHOICE_ROWS:
             return open_choices(self, item, lambda s=1, f=d: self._adjust(f, s))
@@ -3463,6 +3586,12 @@ class SettingsScreen(Screen):
             from perennia.gfx import theme as theme_mod
             self._cycle("theme", list(theme_mod.names()), step, theme_mod.DEFAULT)
             self._preview_theme()               # vê-se logo; grava-se com Guardar
+            return
+        if field == "font":
+            o = opt_mod.BY_KEY["ui_font_pct"]
+            self.put("ui_font_pct", opt_mod.stepped(o, self._font_pct(), unit * self.FONT_STEP
+                                                    // int(o.step)))
+            self._preview_theme()               # o texto novo vê-se logo; grava-se com Guardar
             return
         elif field.startswith("opt:"):
             _options_ui().adjust(self, field[4:], step)
@@ -4951,7 +5080,8 @@ class App:
     def _topbar_texts(self) -> None:
         self.topbar.set_texts(tr("Dispositivos", "Devices"), tr("Definições", "Settings"),
                               tr("Desligar", "Power off"),
-                              tr("Backups e Sincronização", "Backups and Sync"))
+                              tr("Backups e Sincronização", "Backups and Sync"),
+                              tr("Glossário", "Glossary"))
 
     @property
     def in_session(self) -> bool:
@@ -5000,6 +5130,19 @@ class App:
             scr.pause_for_menu()            # a sessão fica em pausa enquanto o menu está aberto
         self.push(DeviceScreen(self))
 
+    def open_glossary(self) -> None:
+        """O botão «Glossário» da faixa do topo (fora das sessões)."""
+        if self.in_session:
+            self.message(tr("O glossário não está disponível durante uma sessão de treino.",
+                            "The glossary is not available during a workout."))
+            return
+        from perennia.ui.glossary_screens import GlossaryScreen
+        if isinstance(self.current, GlossaryScreen):
+            return
+        while self.current is not None and self.current.MODAL:
+            self.pop()
+        self.push(GlossaryScreen(self))
+
     def open_settings(self) -> None:
         if isinstance(self.current, SettingsScreen):
             return
@@ -5041,11 +5184,13 @@ class App:
             return
         if isinstance(self.current, ConfirmScreen):
             return
+        # as duas opções lado a lado, sem «Voltar» (Esc e clicar fora são o «Não»)
         self.push(ConfirmScreen(self, tr("Sair da Perennia?", "Quit Perennia?"),
                                 tr("Os aparelhos são desligados.",
                                    "Devices will be disconnected."),
-                                [(tr("Sim, sair", "Yes, quit"), self.quit),
-                                 (tr("Não", "No"), self.pop)], default=1))
+                                [(tr("Não", "No"), self.pop),
+                                 (tr("Sim, sair", "Yes, quit"), self.quit)], default=0,
+                                buttons=True, cancel=self.pop))
 
     def _check_devices(self) -> None:
         """Avisa sempre que um aparelho se desliga (em qualquer ecrã)."""
@@ -5068,6 +5213,7 @@ class App:
         busy = self.in_session
         self.topbar.set_enabled("settings", True)        # numa sessão abre só o que se pode mexer
         self.topbar.set_enabled("backups", not busy)
+        self.topbar.set_enabled("glossary", not busy)
         self.topbar.set_enabled("quit", not busy)
 
     def on_device_event(self, kind: str, data: dict) -> None:
@@ -5227,6 +5373,9 @@ class App:
         if symbol == key.F8:
             self.open_settings()
             return True
+        if symbol == key.F9:
+            self.open_glossary()
+            return True
         if symbol == key.Q and modifiers & key.MOD_CTRL:
             self.ask_quit()
             return True
@@ -5274,8 +5423,46 @@ class App:
             return bool(screen.on_text(text))
         return False
 
+    # Os botões laterais do rato (a pyglet chama-lhes MOUSE4 «recuar» e MOUSE5 «avançar»; se a
+    # versão instalada não tem os nomes, são o 8 e o 16, que é o que ela usa).
+    MOUSE_BACK = getattr(_mouse, "MOUSE4", 8)
+    MOUSE_FORWARD = getattr(_mouse, "MOUSE5", 16)
+
+    def side_button(self, button: int) -> str | None:
+        """«back» ou «forward» se `button` é um botão lateral do rato."""
+        if button == self.MOUSE_BACK:
+            return "back"
+        if button == self.MOUSE_FORWARD:
+            return "forward"
+        return None
+
+    def go_back(self) -> bool:
+        """«Voltar atrás» com o rato: faz o mesmo que Esc no ecrã em vista. Não mexe nas sessões
+        em curso nem na contagem (um toque sem querer não pode pausar nada), nem no ecrã
+        inicial (não pergunta se quer sair)."""
+        screen = self.current
+        if screen is None or len(self.stack) < 2:
+            return False
+        if screen.IN_SESSION and not screen.MODAL:
+            return False
+        if screen.counting or getattr(screen, "capturing", None):
+            return False
+        if screen.search_active:
+            return bool(screen.search_key(key.ESCAPE, 0))
+        return bool(screen.on_key(key.ESCAPE, 0))
+
     def _on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
+        side = self.side_button(button)
+        if side is not None:                  # o botão lateral nunca conta como um clique
+            use = opt_mod.get(self.db, "mouse_back_button") and side == "back"
+            use = use or (opt_mod.get(self.db, "mouse_forward_button") and side == "forward")
+            if use:
+                self.go_back()
+            return
         which = self.topbar.hit(x, y)
+        if which == "glossary":
+            self.open_glossary()
+            return
         if which == "devices":
             self.open_devices()
             return

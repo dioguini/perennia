@@ -16,7 +16,7 @@ from perennia.core import laps_session as ls
 from perennia.core import strength as st
 from perennia.core.i18n import t, tr
 from perennia.core.units import hms
-from perennia.ui.app import PopupMixin, Screen, SportHub, StartOptions
+from perennia.ui.app import FontOptions, PopupMixin, Screen, SportHub, StartOptions
 from perennia.ui.sport_screens import (EditScreen, LapSessionScreen, StrengthPreview,
                                    StrengthSessionDetail, StrengthSessionScreen,
                                    StrengthWorkoutEditor)
@@ -123,7 +123,7 @@ class ModalityPicker(Screen):
                              for m in gym.modalities()])
 
 
-class GymSessionSetup(PopupMixin, Screen):
+class GymSessionSetup(PopupMixin, FontOptions, Screen):
     """«Configurar sessão de treino» do ginásio: só os aparelhos (a FC, por exemplo) — o
     auto lap está lá, mas bloqueado: faz-se sozinho a cada bloco do treino."""
 
@@ -147,12 +147,22 @@ class GymSessionSetup(PopupMixin, Screen):
                  Item(tr("Auto lap", "Auto lap"), value=tr("a cada bloco", "every block"),
                       detail=tr("o auto lap é feito a cada bloco do treino e não se pode mudar",
                                 "auto lap is made at every block of the workout and cannot be "
-                                "changed"), enabled=False),
-                 Item(tr("Cancelar", "Cancel"), button=True, action=a.pop),
-                 Item(tr("Começar", "Start"), button=True, primary=True, action=self._start)]
+                                "changed"), enabled=False)]
+        items += self.font_items()
+        items += [Item(tr("Cancelar", "Cancel"), button=True, action=a.pop),
+                  Item(tr("Começar", "Start"), button=True, primary=True, action=self._start)]
         self.chrome.set(tr("Configurar sessão de treino", "Set up the training session"),
                         wk.get("name") or "", "")
         self.list.set_items(items, keep_index=True)
+
+    def draw(self) -> None:
+        super().draw()
+        self.font_draw()
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        if self.font_key(symbol, self.list.selected):
+            return True
+        return super().on_key(symbol, modifiers)
 
     def _start(self) -> None:
         a = self.app

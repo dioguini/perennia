@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .db import Database, now_iso
+from .i18n import tr
 
 KINDS = ("bool", "number", "scale", "text", "choice", "time")
 GROUPS = ("sleep", "body", "recovery", "food", "mind", "activity", "other")
@@ -67,6 +68,49 @@ DEFAULT_METRICS: tuple[tuple, ...] = (
     ("body_temp", "Temperatura corporal", "number", "°C", "body", None),
 )
 
+# A «Fonte» de um indicador: de onde vem o valor. (chave, PT, EN). Vazia = qualquer uma (a
+# última a gravar ganha). Cada valor guarda também a origem com que foi gravado (`daily_values
+# .source`: manual, garmin, hrv4training, csv…).
+SOURCES: tuple[tuple[str, str, str], ...] = (
+    ("", "Qualquer (automática)", "Any (automatic)"),
+    ("manual", "Manual", "Manual"),
+    ("garmin", "GarminDB (Garmin)", "GarminDB (Garmin)"),
+    ("hrv4training", "HRV4Training", "HRV4Training"),
+    ("csv", "Ficheiro CSV", "CSV file"),
+    ("device", "Balança / aparelho", "Scale / device"),
+    ("lab", "Análises clínicas", "Lab tests"),
+    ("other", "Outra", "Other"),
+)
+# a fonte dos indicadores de origem; os que mais do que uma fonte preenche ficam «qualquer»
+DEFAULT_SOURCES = {"steps": "garmin", "hrv_score": "hrv4training", "rhr": "", "hrv_rmssd": "",
+                   "sleep_hours": "", "weight": ""}
+
+
+def source_keys() -> list[str]:
+    return [k for k, _pt, _en in SOURCES]
+
+
+def source_name(key: str | None) -> str:
+    """O nome da fonte («GarminDB (Garmin)»); uma chave desconhecida mostra-se tal como está."""
+    for k, pt, en in SOURCES:
+        if k == (key or ""):
+            return tr(pt, en)
+    return str(key)
+
+
+def default_source(key: str | None) -> str:
+    """A fonte de um indicador novo: a dos de origem; `g_*` e `h4t_*` são os que os
+    importadores criam; o resto escreve-se à mão."""
+    key = key or ""
+    if key in DEFAULT_SOURCES:
+        return DEFAULT_SOURCES[key]
+    if key.startswith("g_"):
+        return "garmin"
+    if key.startswith("h4t_"):
+        return "hrv4training"
+    return "manual"
+
+
 # Nomes de colunas que se reconhecem nos ficheiros importados → chave da métrica.
 ALIASES = {
     "hrv_rmssd": ("rmssd", "hrv", "hrv (rmssd)", "hrv_rmssd", "lastnightavg", "weeklyavg_hrv"),
@@ -98,7 +142,8 @@ def ensure(db: Database) -> None:
       choices   TEXT,
       active    INTEGER NOT NULL DEFAULT 1,
       sort      INTEGER NOT NULL DEFAULT 0,
-      custom    INTEGER NOT NULL DEFAULT 0
+      custom    INTEGER NOT NULL DEFAULT 0,
+      source    TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS daily_values (
       day        TEXT NOT NULL,
@@ -136,6 +181,14 @@ def ensure(db: Database) -> None:
     );
     CREATE INDEX IF NOT EXISTS ix_lab_results ON lab_results(marker);
     """)
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(metric_defs)")}
+    if "source" not in cols:                     # bases anteriores à «Fonte»
+        db.conn.execute("ALTER TABLE metric_defs ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+        for r in db.conn.execute("SELECT id, key, custom FROM metric_defs").fetchall():
+            db.conn.execute("UPDATE metric_defs SET source = ? WHERE id = ?",
+                            (default_source(r["key"]) if not r["custom"] or
+                             str(r["key"]).startswith(("g_", "h4t_")) else "manual", r["id"]))
+        db.conn.commit()
 
 
 def seed(db: Database) -> None:
@@ -144,9 +197,10 @@ def seed(db: Database) -> None:
         return
     for i, (k, n, kind, unit, grp, choices) in enumerate(DEFAULT_METRICS):
         db.conn.execute(
-            "INSERT OR IGNORE INTO metric_defs(key, name, kind, unit, grp, choices, sort)"
-            " VALUES (?,?,?,?,?,?,?)",
-            (k, n, kind, unit, grp, json.dumps(choices) if choices else None, i))
+            "INSERT OR IGNORE INTO metric_defs(key, name, kind, unit, grp, choices, sort, source)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (k, n, kind, unit, grp, json.dumps(choices) if choices else None, i,
+             default_source(k)))
     db.conn.commit()
     db.set("health_seeded", True)
 
@@ -188,10 +242,14 @@ def metric_by_key(db: Database, key: str) -> dict | None:
 
 def save_metric(db: Database, metric_id: int | None, *, name: str, kind: str, unit: str = "",
                 group: str = "other", choices: list[str] | None = None,
-                key: str | None = None) -> int:
+                key: str | None = None, source: str | None = None) -> int:
+    """Cria ou atualiza um indicador. `source` é a «Fonte» (uma das `SOURCES`); sem ela, um
+    indicador novo fica com a fonte que lhe corresponde e um existente mantém a que tem."""
     ensure(db)
     if kind not in KINDS:
         raise ValueError(f"tipo desconhecido: {kind}")
+    if source is not None and source not in source_keys():
+        raise ValueError(f"fonte desconhecida: {source}")
     name = name.strip() or "Métrica"
     ch = json.dumps(choices) if choices else None
     if metric_id is None:
@@ -199,12 +257,16 @@ def save_metric(db: Database, metric_id: int | None, *, name: str, kind: str, un
                                ).fetchone()["s"]
         key = key or _slug(name, db)
         cur = db.conn.execute(
-            "INSERT INTO metric_defs(key, name, kind, unit, grp, choices, sort, custom)"
-            " VALUES (?,?,?,?,?,?,?,1)", (key, name, kind, unit, group, ch, sort))
+            "INSERT INTO metric_defs(key, name, kind, unit, grp, choices, sort, custom, source)"
+            " VALUES (?,?,?,?,?,?,?,1,?)",
+            (key, name, kind, unit, group, ch, sort,
+             default_source(key) if source is None else source))
         db.conn.commit()
         return int(cur.lastrowid)
     db.conn.execute("UPDATE metric_defs SET name=?, kind=?, unit=?, grp=?, choices=?"
                     " WHERE id = ?", (name, kind, unit, group, ch, metric_id))
+    if source is not None:
+        db.conn.execute("UPDATE metric_defs SET source = ? WHERE id = ?", (source, metric_id))
     db.conn.commit()
     return metric_id
 
@@ -272,6 +334,34 @@ def set_value(db: Database, day: date | str, metric_id: int, value: Any = None, 
             " source=excluded.source, updated_at=excluded.updated_at",
             (day_key(day), metric_id, num, txt, notes, source, now_iso()))
     db.conn.commit()
+
+
+def accepts(db: Database, metric_id: int, day: date | str, source: str) -> bool:
+    """Uma importação da origem `source` pode gravar este valor? Sim se a «Fonte» do indicador
+    é essa (ou «qualquer»), ou se o dia ainda não tem valor, ou se o valor que lá está já foi
+    gravado por essa mesma origem. Senão, o que lá está (à mão ou de outra fonte) fica como
+    está. Desliga-se na opção «health_respect_source»."""
+    if not db.get("health_respect_source", True):
+        return True
+    r = db.conn.execute("SELECT source FROM metric_defs WHERE id = ?", (metric_id,)).fetchone()
+    fonte = (r["source"] if r else "") or ""
+    if fonte in ("", source):
+        return True
+    cur = db.conn.execute("SELECT source FROM daily_values WHERE day = ? AND metric_id = ?",
+                          (day_key(day), metric_id)).fetchone()
+    return cur is None or cur["source"] == source
+
+
+def import_value(db: Database, day: date | str, metric_id: int, value: Any, source: str,
+                 report: dict | None = None) -> bool:
+    """O que as importações usam em vez de `set_value`: respeita a «Fonte» do indicador (ver
+    `accepts`). Devolve se gravou; o que ficou de fora conta-se em `report["kept"]`."""
+    if not accepts(db, metric_id, day, source):
+        if report is not None:
+            report["kept"] = report.get("kept", 0) + 1
+        return False
+    set_value(db, day, metric_id, value, source=source)
+    return True
 
 
 def set_note(db: Database, day: date | str, metric_id: int, notes: str | None) -> None:
@@ -517,7 +607,7 @@ def _import_rows(db: Database, rows: Iterable[dict], source: str, create_unknown
                  scale: dict[str, float] | None = None) -> dict:
     """Linhas {coluna: valor} com uma coluna de data → valores diários."""
     seed(db)
-    report = {"days": set(), "values": 0, "created": [], "ignored": set()}
+    report = {"days": set(), "values": 0, "created": [], "ignored": set(), "kept": 0}
     cache: dict[str, int | None] = {}
     for row in rows:
         day = None
@@ -539,7 +629,7 @@ def _import_rows(db: Database, rows: Iterable[dict], source: str, create_unknown
                 m = metric_by_key(db, key) if key else None
                 if m is None and create_unknown:
                     mid = save_metric(db, None, name=f"{col} ({source})", kind="number",
-                                      group="other")
+                                      group="other", source=source)
                     report["created"].append(col)
                     cache[col] = mid
                 else:
@@ -552,9 +642,9 @@ def _import_rows(db: Database, rows: Iterable[dict], source: str, create_unknown
             key = metric(db, mid)["key"]
             if scale and key in scale:
                 num = num * scale[key]
-            set_value(db, day, mid, num, source=source)
-            report["days"].add(day)
-            report["values"] += 1
+            if import_value(db, day, mid, num, source, report):
+                report["days"].add(day)
+                report["values"] += 1
     report["days"] = len(report["days"])
     report["ignored"] = sorted(report["ignored"])
     return report

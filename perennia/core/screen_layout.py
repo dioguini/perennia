@@ -40,6 +40,8 @@ PANELS: dict[str, dict[str, tuple]] = {
                     "the gradient coming up", (6, 13, 12, 2), (6, 1)),
         "strip": ("Rota completa", "Whole route", "onde estás na rota", "where you are",
                   (0, 15, 24, 1), (8, 1)),
+        "chart": ("Gráfico ao vivo", "Live chart", "potência, FC… ao longo da sessão",
+                  "power, HR… through the session", None, (6, 3)),
     },
     "rowing": {
         "metrics": ("Quadrados de métricas", "Metric tiles", "12 campos por página (V muda)",

@@ -25,6 +25,7 @@ SHORTCUTS = (
         ("F2", "Resumo com contexto (agente)", "Summary with context (agent)"),
         ("F4", "Dispositivos", "Devices"),
         ("F8", "Definições", "Settings"),
+        ("F9", "Glossário", "Glossary"),
         ("F11", "Ecrã inteiro", "Full screen"),
         ("Ctrl+Q", "Sair da Perennia", "Quit Perennia"),
     )),

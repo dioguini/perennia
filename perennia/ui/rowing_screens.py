@@ -18,6 +18,7 @@ from perennia.ui.app import BOARD_W, Screen, SportHub, StartOptions
 from perennia.ui.challenge_screens import train_items
 from perennia.ui.session_flow import FinishFlow
 from perennia.ui.session_radar import RadarSide
+from perennia.gfx.compat import scale_factor
 from perennia.ui.session_panels import OFF, ArrangedPanels
 from perennia.ui.sport_screens import EditScreen, LiveEditPopup
 from perennia.ui.brief import BriefScreen as _BriefBase
@@ -44,6 +45,15 @@ def field_names(db) -> list[str]:
     """As métricas do ecrã, pela ordem: o número é o escolhido nas Definições."""
     v = [x for x in (db.get("row_fields") or []) if x in FIELDS]
     return v or list(DEFAULT_FIELDS)
+
+
+def speed_text(mps: float | None, units: str = "metric") -> str:
+    """A velocidade em km/h (ou mph, se as unidades forem imperiais); «—» sem dado."""
+    if not mps:
+        return "—"
+    if units == "imperial":
+        return f"{mps * 2.236936:.1f} mph"
+    return f"{mps * 3.6:.1f} km/h"
 
 
 def field_value(e: rw.RowEngine, name: str) -> str:
@@ -78,6 +88,10 @@ def field_value(e: rw.RowEngine, name: str) -> str:
         return hms(e.t)
     if name == "strokes":
         return str(e.strokes)
+    if name in ("speed", "avg_speed", "max_speed"):
+        pace = {"speed": e.pace_s, "avg_speed": e.avg_pace_s, "max_speed": e._best_pace}[name]
+        return speed_text(500.0 / pace if pace else None, getattr(e.db, "get", lambda *_: "")(
+            "units", "metric"))
     if name == "hr":
         return f"{e.hr_bpm}" if e.hr_bpm else "—"
     if name == "avg_hr":
@@ -318,8 +332,11 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
                                multiline=True, width=400)
         self.toast_label = make_label("", font_size=15, bold=True, color=GOOD,
                                       anchor_y="top", batch=b)
-        self.track = pyglet.shapes.Rectangle(0, 0, 10, 8, color=P().panel2, batch=b)
-        self.bar = pyglet.shapes.Rectangle(0, 0, 0, 8, color=ACCENT[:3], batch=b)
+        from perennia.core import block_bar as _bb
+        from perennia.ui.widgets import BlockBar
+        self.block_bar = BlockBar(batch=b)             # amarelo, vermelho e preto no fim do bloco
+        self.block_cfg = _bb.Config.from_db(app.db)
+        self.no_colors = _bb.Config(enabled=False)
         self.clock = CountdownBadge(app.window, batch=b)   # só os últimos segundos de um bloco
         self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
         self.chrome.title.font_size = 18
@@ -363,12 +380,11 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
             self.toast_label.x, self.toast_label.y = sx + min(420, sw * 0.55), sy + sh
             self.plan.x, self.plan.y = sx, sy + sh - 30
             self.plan.width = int(sw)
-            self.track.x, self.track.y, self.track.width = sx, sy + 4, sw
-            self.bar.x, self.bar.y = sx, sy + 4
+            self.block_bar.place(sx, sy + 4, sw)
             self._bar_w = sw
         else:
             self.status.x = self.toast_label.x = self.plan.x = OFF
-            self.track.x = self.bar.x = OFF
+            self.block_bar.place(OFF, OFF, 10)
             self._bar_w = 10
         self.list.y = -1000                                 # a lista fica escondida
         self.clock.layout()
@@ -484,7 +500,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
             val.text = field_value(e, name)
             val.color = _zone_ink(e.hr_zone) if name == "zone" and e.hr_zone else TEXT
             size = getattr(self, "_val_size", 24)
-            while size > 12 and len(val.text) * size * 0.66 > bg.width - 20:
+            while size > 12 and len(val.text) * size * scale_factor() * 0.66 > bg.width - 20:
                 size -= 2
             val.font_size = size
         st = {"waiting": tr("REMA PARA COMEÇAR", "ROW TO START"),
@@ -493,7 +509,9 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
               "running": "", "finished": ""}[e.status]
         self.status.text = st or self._plan_title()
         self.plan.text = self._plan_text()
-        self.bar.width = self._bar_w * self._progress()
+        # as cores de aviso só valem nos blocos de um treino (não nos jogos nem nos testes)
+        self.block_bar.cfg = self.block_cfg if e.workout is not None else self.no_colors
+        self.block_bar.set(self._progress())
         if self.toast and time.monotonic() > self._toast_until:
             self.toast = ""
         self.toast_label.text = self.toast
@@ -503,7 +521,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
         self.laps_panel.update(time.monotonic())
         if e.started:
-            self.arr_sample(dt, e.power_w, e.spm, getattr(e, "hr_zone_s", None))
+            self.arr_sample(dt, e, getattr(e, "hr_zone_s", None))
 
     def _plan_title(self) -> str:
         e = self.engine
@@ -588,6 +606,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
             msg = data["cue"]
         if kind == "lap" and hasattr(self, "laps_panel"):
             self.laps_panel.pulse(time.monotonic())
+            self.arr_lap_mark()                       # um traço ao alto no gráfico ao vivo
         if msg:
             self.toast = msg
             self._toast_until = time.monotonic() + 3.0
@@ -732,7 +751,13 @@ class RowSummaryScreen(RadarSide, Screen):
             add(tr("Potência média", "Avg power"), f"{r['avg_power_w']:.0f} W",
                 f"NP {r['np_w']:.0f} W · máx {r.get('max_power_w') or 0} W" if r.get("np_w")
                 else "")
-        add(tr("Remadas", "Strokes"), str(r.get("strokes") or 0),
+        secs = r.get("moving_s") or 0
+        avg_mps = (r.get("distance_m") or 0) / secs if secs else None
+        best = r.get("best_pace_s")
+        add(tr("Velocidade média", "Avg speed"), speed_text(avg_mps, self.app.units),
+            tr("máxima {v}", "max {v}", v=speed_text(500.0 / best if best else None,
+                                                    self.app.units)))
+        add(tr("Total de remadas", "Total strokes"), str(r.get("strokes") or 0),
             f"{r['avg_spm']:.1f} spm" if r.get("avg_spm") else "")
         if r.get("avg_hr"):
             add(tr("FC média", "Avg HR"), f"{r['avg_hr']:.0f} bpm", f"máx {r.get('max_hr')}")
@@ -1153,7 +1178,11 @@ class RowHistory(Screen):
             items.append(Item(f"{str(s['started_at'])[:16].replace('T', ' ')}  {_pretty(s['name'])}",
                               value=_m(s["distance_m"]),
                               detail=f"{hms(s['moving_s'] or 0)} · "
-                                     f"{pace_text(s['avg_pace_s'])} /500 m"
+                                     f"{pace_text(s['avg_pace_s'])} /500 m · "
+                                     + speed_text(500.0 / s["avg_pace_s"]
+                                                  if s["avg_pace_s"] else None, a.units)
+                                     + (f" · {s['strokes']} " + tr("remadas", "strokes")
+                                        if s.get("strokes") else "")
                                      + (f" · {s['avg_power_w']:.0f} W" if s["avg_power_w"] else "")
                                      + (f" · {s['avg_hr']:.0f} bpm" if s["avg_hr"] else ""),
                               action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid))))
