@@ -525,11 +525,17 @@ class SportHub(Screen):
     SPORT = "cycling"
     # O construtor de treinos já não é um separador: abre-se com «+ Novo treino»
     # na Lista de treinos (e com «Editar» na ficha de cada treino).
-    TAB_KEYS = ("train", "library", "history", "stats")
+    # «Perfil»: como te posicionas neste desporto (tipo de ciclista, perfil de força…).
+    TAB_KEYS = ("train", "library", "history", "profile", "stats")
 
     def tab_labels(self) -> list[str]:
         return [tr("Treinar", "Train"), tr("Lista de treinos", "Workouts"),
-                tr("Histórico", "History"), tr("Estatísticas", "Statistics")]
+                tr("Histórico", "History"), tr("Perfil", "Profile"),
+                tr("Estatísticas", "Statistics")]
+
+    def items_profile(self) -> list[Item]:
+        from perennia.ui.profile_screens import profile_items
+        return profile_items(self.app, self.SPORT)
 
     def new_workout_item(self) -> Item:
         """«+ Novo treino»: abre o construtor (o do ginásio pergunta a modalidade)."""
@@ -605,6 +611,7 @@ class SportHub(Screen):
             if self.tabs is not None:
                 self.tabs.select(0)
         key_ = self.TAB_KEYS[self.tab % len(self.TAB_KEYS)]
+        self.list.detail_below = key_ == "profile"       # o perfil tem textos compridos
         items = self.items_for(key_)
         if key_ == "library":
             items = items + [self.new_workout_item()]

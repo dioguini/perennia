@@ -1176,6 +1176,166 @@ resumo do fim da sessão.
 Teclas: ↑↓ escolhem o exercício, **Enter** abre o histórico dele, **F** o
 feedback e **S** a lista das séries.
 
+### Perfil por desporto (separador «Perfil»)
+
+Cada desporto tem agora um separador **Perfil** (entre Histórico e Estatísticas): como te
+posicionas **nesse desporto**. As capacidades para a vida (aeróbia, força, VO2máx, mobilidade,
+estabilidade…) **continuam no menu Longevidade**; a última linha do Perfil leva-te lá.
+
+**Ciclismo — que tipo de ciclista és.** A Perennia vai buscar os teus melhores esforços dos
+últimos 180 dias em **5 s** (sprint), **1 min** (anaeróbio), **5 min** (VO2máx) e ao **limiar**
+(95 % dos melhores 20 min, ou a FTP do perfil se for maior), divide pelo teu peso e põe cada
+um numa escala de **0 a 100** entre «sem treino» e «classe mundial» (uma aproximação da tabela
+de perfil de potência de Coggan; há a tabela de homens e a de mulheres). O ponto forte dá o
+tipo:
+
+| Tipo | Quando |
+|---|---|
+| **Sprinter** | os 5 s destacam-se |
+| **Puncheur** | o ponto forte são os esforços de 1 a 5 minutos |
+| **Trepador** | o ponto forte é o limiar e pesas até 68 kg |
+| **Rolador / contrarrelogista** | o ponto forte é o limiar e pesas mais |
+| **Completo** | a melhor e a pior durações diferem menos de 8 pontos |
+
+O ecrã mostra os W/kg, os W, a data e a sessão de cada duração, o ponto mais fraco e **o que
+treinar** para o subir. Uma duração sem esforço máximo aparece «por medir» (precisas de medidor
+de potência); com menos de duas durações curtas medidas, o tipo fica «por definir».
+
+**Ginásio — o teu perfil de força.** Oito capacidades, cada uma de 0 a 100 (100 = «bom nível»,
+que defines nas opções):
+
+| Capacidade | O que mede | O que conta do treino |
+|---|---|---|
+| **Força máxima** | 1RM estimada a dividir pelo peso: agachamento (1,5×), peso morto (2×), supino (1,25×), press (0,75×), remada (1×) | séries com carga por semana |
+| **Força relativa** | máximo de elevações (12), flexões (40), fundos (15) | séries com o peso do corpo |
+| **Força de mãos** | suspensão na barra (90 s), farmer's carry (o teu peso nas duas mãos) | séries de suspensões, transportes, gripper, pinça, punhos |
+| **Tendões** | (sem teste) | séries das modalidades Tendões e Isométrico |
+| **Explosividade** | (sem teste aqui; os de salto estão na Longevidade) | séries de pliometria, swings, cleans e snatches |
+| **Mobilidade** | (sem teste) | minutos de mobilidade por semana |
+| **Tronco e estabilidade** | prancha (120 s) | séries de tronco |
+| **Condicionamento** | (sem teste) | minutos de HIIT, cardio e circuitos no ginásio |
+
+Onde há medição, a nota é 60 % o que mediste e 40 % o que treinas nas últimas 8 semanas; onde
+não há, é só o treino. **Com sessões registadas, uma capacidade que não treinas vale 0** (é uma
+deficiência); sem sessões nenhumas, aparece «sem dados». O ecrã diz **onde tens mais
+deficiências** (abaixo de 50), avisa de **desequilíbrios** (puxas pouco face ao que empurras;
+as pernas levam pouco trabalho) e, para cada deficiência, o que fazer — com o **plano de X
+semanas** que a trata: Enter abre o plano.
+
+**Remo, corrida e natação — velocidade contra resistência.** Compara a velocidade média da tua
+melhor sessão curta (< 20 min) com a da melhor longa: se perdes pouco (≥ 92 %), o teu perfil é
+de resistência; se perdes muito (≤ 82 %), é de velocidade. São sessões inteiras, não esforços
+máximos: é uma leitura aproximada.
+
+Todos os níveis de referência, as janelas e os limiares estão em Definições → Avançado →
+**Perfil por desporto**.
+
+### Planos de treino de X semanas (Ginásio)
+
+**Ginásio → Lista de treinos → «Planos de X semanas»** (a primeira linha). Um plano junta
+treinos específicos num calendário de várias semanas; a Perennia traz **31 planos** e
+deixa-te importar os teus.
+
+**Começar um plano.** Enter num plano abre a ficha: a descrição, a duração, o **material** (e o
+que não tens no Inventário), os **exercícios novos** que seriam criados, as semanas e cada
+sessão com as séries e as cargas. **«Começar este plano»** pergunta:
+
+- **Início** (calendário) e os **dias da semana** (lista; «Outros dias…» deixa escolher
+  exatamente os que o plano pede);
+- nos planos de **progressão linear** (StrongLifts, Starting Strength, GZCLP, Madcow), a
+  **carga inicial** de cada exercício — sugerida pela percentagem que o plano indica da tua 1RM
+  estimada, ou 20 kg (a barra) se ainda não houver histórico.
+
+Ao confirmar, a Perennia **cria os exercícios que faltam**, cria o treino de cada sessão (com as
+séries, as repetições e as cargas daquela semana) e **põe-os todos no calendário**. Daí para a
+frente é só **fazer a sessão do dia**: abre-se pelo Calendário, pela linha **«Plano em curso:
+próxima sessão»** no separador Treinar do ginásio, ou pela ficha do plano em curso. Os treinos
+de um plano não enchem a Lista de treinos.
+
+**O plano em curso** (Planos de X semanas → Em curso): o progresso, todas as sessões por semana
+(✓ feita, ▶ hoje, ! em atraso) e os botões:
+
+- **Fazer a próxima sessão**;
+- **Recalcular cargas** — novas cargas para o que falta (falhaste, estiveste parado, ou a
+  progressão ficou curta); **«Baixar tudo 10 %»** faz a descarga clássica. Só as sessões por
+  fazer são refeitas;
+- **Adiar o que falta (7 dias)** — empurra as sessões por fazer, também no calendário;
+- **Terminar plano** — as sessões por fazer saem do calendário; o que fizeste fica no histórico.
+
+As cargas em **% da 1RM** (5/3/1, Texas Method, Smolov Jr…) calculam-se no momento de cada
+sessão a partir da tua 1RM estimada; as de progressão linear ficam fixadas quando começas (e
+quando recalculas). Uma sessão conta como feita quando a terminas, em qualquer dia.
+
+**Os planos que vêm com a Perennia:**
+
+| Categoria | Plano | Semanas | Dias/sem. | Nível | Origem |
+|---|---|---|---|---|---|
+| Força | **5/3/1 de Wendler (ciclo de 4 dias)** | 4 | 4 | Intermédio | 5/3/1 (Jim Wendler) |
+| Força | **Força de base (corpo inteiro)** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Força | **Madcow 5×5** | 9 | 3 | Intermédio | Madcow 5×5 (a partir do 5×5 de Bill Starr) |
+| Força | **Rotina russa de agachamento (6 semanas)** | 6 | 3 | Intermédio | Russian Squat Routine |
+| Força | **Smolov Jr (supino, 3 semanas)** | 3 | 4 | Intermédio | Smolov Jr |
+| Força | **Starting Strength (progressão linear)** | 12 | 3 | Iniciante | Método Starting Strength (Rippetoe) |
+| Força | **StrongLifts 5×5** | 12 | 3 | Iniciante | Método StrongLifts 5×5 (Mehdi) |
+| Força | **Texas Method (6 semanas)** | 6 | 3 | Intermédio | Texas Method (Rippetoe / Pendlay) |
+| Powerlifting | **GZCLP (progressão linear)** | 12 | 4 | Iniciante | GZCLP (Cody Lefever) |
+| Powerlifting | **Korte 3×3** | 8 | 3 | Intermédio | Korte 3×3 (Stephan Korte) |
+| Powerlifting | **Powerlifting linear (iniciação à competição)** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Hipertrofia | **5/3/1 Boring But Big** | 4 | 4 | Intermédio | 5/3/1 Boring But Big (Jim Wendler) |
+| Hipertrofia | **German Volume Training (10 × 10)** | 6 | 3 | Intermédio | German Volume Training |
+| Hipertrofia | **Push / Pull / Legs (6 dias)** | 8 | 6 | Intermédio | Divisão Push/Pull/Legs |
+| Hipertrofia | **Upper / Lower (4 dias)** | 8 | 4 | Intermédio | Divisão Upper/Lower |
+| Strongman | **Força com sandbag** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Strongman | **Transportes com carga** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Força de mãos | **Bloco de força de mãos** | 8 | 3 | Intermédio | plano de base da Perennia |
+| Força de mãos | **Força de mãos com pouco material** | 4 | 2 | Iniciante | plano de base da Perennia |
+| Longevidade | **Bases do decatlo do centenário** | 12 | 4 | Intermédio | plano de base da Perennia |
+| Longevidade | **Big 3 de McGill + força** | 6 | 3 | Iniciante | Big 3 (Stuart McGill) |
+| Longevidade | **Easy Strength** | 8 | 5 | Iniciante | Easy Strength (Dan John / Pavel) |
+| Longevidade | **Greasing the Groove** | 4 | 7 | Intermédio | Greasing the Groove (Pavel Tsatsouline) |
+| Longevidade | **Manutenção minimalista (2× por semana)** | 8 | 2 | Iniciante | plano de base da Perennia |
+| Longevidade | **Simple & Sinister** | 6 | 6 | Iniciante | Simple & Sinister (Pavel Tsatsouline) |
+| Forma geral | **Corpo inteiro 3× (manutenção)** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Forma geral | **Em casa só com halteres** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Condicionamento | **Complexos de kettlebell** | 6 | 4 | Intermédio | plano de base da Perennia |
+| Condicionamento | **Condicionamento só com o corpo** | 4 | 4 | Iniciante | plano de base da Perennia |
+| Desempenho atlético | **Progressão de pliometria** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Glúteos | **Bloco de glúteos** | 8 | 4 | Intermédio | plano de base da Perennia |
+
+**De onde vêm.** A lista e as categorias seguem o catálogo de programas da Capazity
+(capazity.ai/programs), que tem 199 programas. **Não foram todos traduzidos, nem copiados de
+lá:** essa página só mostra a primeira semana dos programas gratuitos e nada dos pagos. Os
+planos acima são **versões gerais de métodos publicados** (as séries, repetições e percentagens
+dos métodos originais) e planos de base desenhados para a Perennia. Ficaram de fora o
+halterofilismo olímpico, os programas «de autor» e os de gravidez. Qualquer outro plano entra
+pelo formato abaixo.
+
+**Importar um plano (o formato Perennia).** Um plano é um ficheiro JSON com o nome a acabar em
+`.perennia-plan.json`. **«Ficheiro modelo»** (em Planos de X semanas) grava na pasta `planos`
+dos dados um **plano-modelo** que funciona e usa quase tudo o que o formato tem, e o
+**`FORMATO-DO-PLANO.md`** com a descrição campo a campo e os passos para traduzir um plano que
+já exista (os dois estão também em `packaging/planos/`). **«Exportar (.json)»** na ficha de
+qualquer plano dá-te um ponto de partida real. **«Importar plano…»** procura os ficheiros na
+pasta `workouts` ao lado da aplicação, em Transferências, em Documentos e na pasta `planos`.
+Um ficheiro que não obedeça ao formato é **recusado com o campo e a razão**, e nada entra. Só
+se lê JSON (um plano não pode trazer código) e há limite de tamanho.
+
+Pela linha de comandos:
+
+```bash
+python main.py --plano-modelo                       # grava o modelo e o FORMATO-DO-PLANO.md
+python main.py --plano-importar o-meu.perennia-plan.json
+python main.py --plano-exportar lista               # as chaves dos planos
+python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
+```
+
+**Material e exercícios novos.** O Inventário de artigos ganhou os tipos **prensa de pernas,
+trenó, barra hexagonal, gripper, pegas grossas, rolo de punho e roda abdominal**. Os exercícios
+que um plano pede e ainda não existem (power clean, push press, peso morto sumo, good morning,
+chin-ups, curl martelo, roda abdominal, curl-up de McGill, bird dog, gripper, pinça de discos,
+rolo de punho, suitcase carry, empurrar trenó, pogo jumps…) **são criados quando começas o
+plano**, com o grupo, o material e a modalidade certos.
+
 ### Estatísticas por exercício (Ginásio)
 
 Em **Ginásio → Estatísticas → Estatísticas por exercício**. Também se chega
@@ -1375,6 +1535,42 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Força: ritmo acima do possível (`coach_reps_per_min_max`) | 15 a 120 rep/min | 45 rep/min |  |
 | **Dados e backups** | | | |
 | Backup: tamanho máximo ao repor (`backup_restore_max_mb`) | 64 a 1.04858e+06 MB | 4096 MB | um backup que, descomprimido, passe disto é recusado (defesa contra ficheiros feitos para encher o disco) |
+| **Planos de treino (ginásio)** | | | |
+| Carga inicial por omissão (`plan_default_start_kg`) | 0 a 200 kg | 20 kg | a carga sugerida ao começar um plano quando ainda não há histórico do exercício (20 kg = a barra vazia) |
+| Arredondar as cargas a (`plan_round_kg`) | 0.5 a 10 kg | 2.5 kg | o salto mais pequeno que os teus discos permitem |
+| Descanso por omissão (`plan_default_rest_s`) | 15 a 600 s | 120 s | quando o plano não diz o descanso de um exercício |
+| «Adiar o que falta»: dias (`plan_shift_days`) | 1 a 28 d | 7 d |  |
+| «Baixar tudo»: percentagem (`plan_deload_pct`) | 2.5 a 50 % | 10 % | quanto o botão de Recalcular cargas tira a todas as progressões |
+| Importar plano: tamanho máximo (`plan_import_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de plano maior do que isto é recusado |
+| **Perfil por desporto** | | | |
+| Janela dos melhores valores (`profile_days`) | 30 a 730 d | 180 d | os melhores esforços (potência, 1RM, tempos) contam-se neste período |
+| Janela do treino recente (`profile_recent_weeks`) | 2 a 26 | 8 | as séries por semana de cada capacidade contam-se nestas semanas |
+| Tabela de referência (`profile_reference`) | homens, mulheres | homens | a tabela de potência por duração com que o ciclismo te compara |
+| Perfil «completo»: diferença máxima (`profile_flat_spread`) | 2 a 30 | 8 | se a melhor e a pior duração diferirem menos do que isto (em 100), és um ciclista completo |
+| Trepador: peso até (`profile_climber_max_kg`) | 45 a 90 kg | 68 kg | com o limiar como ponto forte: abaixo deste peso és trepador, acima és rolador / contrarrelogista |
+| Capacidade fraca abaixo de (`profile_weak_score`) | 10 a 90 | 50 |  |
+| Agachamento: bom nível (`profile_squat_bw`) | 0.5 a 3.5 × peso | 1.5 × peso | a 1RM estimada a dividir pelo teu peso que vale 100 pontos |
+| Peso morto: bom nível (`profile_deadlift_bw`) | 0.5 a 4 × peso | 2 × peso |  |
+| Supino: bom nível (`profile_bench_bw`) | 0.3 a 3 × peso | 1.25 × peso |  |
+| Press militar: bom nível (`profile_press_bw`) | 0.2 a 2 × peso | 0.75 × peso |  |
+| Remada: bom nível (`profile_row_bw`) | 0.3 a 2.5 × peso | 1 × peso |  |
+| Elevações: bom nível (`profile_pullups`) | 1 a 50 rep. | 12 rep. |  |
+| Flexões: bom nível (`profile_pushups`) | 5 a 150 rep. | 40 rep. |  |
+| Fundos: bom nível (`profile_dips`) | 1 a 60 rep. | 15 rep. |  |
+| Suspensão na barra: bom nível (`profile_hang_s`) | 15 a 300 s | 90 s |  |
+| Farmer's carry: bom nível (`profile_carry_bw`) | 0.2 a 2.5 × peso | 1 × peso | a carga total nas duas mãos a dividir pelo teu peso |
+| Prancha: bom nível (`profile_plank_s`) | 20 a 600 s | 120 s |  |
+| Mãos: séries por semana (`profile_grip_sets`) | 1 a 40 | 6 | as séries semanais que valem 100 pontos de treino desta capacidade |
+| Tendões: séries por semana (`profile_tendon_sets`) | 1 a 40 | 8 |  |
+| Explosividade: séries por semana (`profile_power_sets`) | 1 a 40 | 8 |  |
+| Mobilidade: minutos por semana (`profile_mobility_min`) | 5 a 300 min | 40 min |  |
+| Tronco: séries por semana (`profile_core_sets`) | 1 a 40 | 8 |  |
+| Força: séries pesadas por semana (`profile_strength_sets`) | 2 a 80 | 20 | séries de exercícios de força com carga, por semana |
+| Condicionamento: minutos por semana (`profile_conditioning_min`) | 5 a 300 min | 30 min |  |
+| Peso do que mediste na nota (`profile_measured_weight_pct`) | 0 a 100 % | 60 % | numa capacidade com medição: esta parte vem do que mediste, o resto do que treinas |
+| Desequilíbrio entre padrões abaixo de (`profile_balance_pct`) | 20 a 95 % | 60 % | avisa quando as séries de puxar (ou de empurrar) ficam abaixo desta parte das do padrão oposto |
+| Perfil de resistência a partir de (`profile_endurance_keep_pct`) | 70 a 100 % | 92 % | remo, corrida e natação: a velocidade da melhor sessão longa em % da curta |
+| Perfil de velocidade até (`profile_speed_keep_pct`) | 50 a 95 % | 82 % |  |
 
 Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
 Nenhuma guarda segredos.
@@ -2175,7 +2371,7 @@ Copia-o para uma pen ou para a nuvem.
 | Rotas | os .gpx: pontos, perfil, subidas |
 | Segmentos | os da Perennia e os do Strava |
 | Treinos | as listas de treinos de todos os desportos (com definição, objetivos, planos de voltas e as cópias das sessões) |
-| Ginásio e exercícios | exercícios, treinos de força e as suas estruturas |
+| Ginásio e exercícios | exercícios, treinos de força e as suas estruturas, **os planos de X semanas que importaste e os planos em curso** (as sessões no calendário vão com o Calendário) |
 | Inventário de artigos | bicicletas, sapatilhas, peças, com data e preço de compra |
 | Histórico de sessões | todas as sessões, com amostras, voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, TrainingPeaks, com a TSS) — e os `.fit` |
 | Análises e feedback | o feedback e a análise de cada sessão, picos e curvas de potência |
@@ -2298,6 +2494,15 @@ e o decimal das Definições, se não os deres; grava na pasta `exports`, ou em 
 ```bash
 python main.py --adhoc-exportar sessions --destino ~/Documentos --nome minhas-sessoes --separador ";"
 python main.py --adhoc-exportar daily --vista "Peso por mês"
+```
+
+**Planos de X semanas** (o ficheiro modelo, importar, exportar; ver «Planos de treino de X
+semanas»):
+
+```bash
+python main.py --plano-modelo
+python main.py --plano-importar o-meu.perennia-plan.json
+python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
 ```
 
 ### Rotas (menu do ecrã inicial)
@@ -2679,6 +2884,9 @@ minuto. Tens de pedalar para não ser apanhado.
 - Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
   sempre em variáveis de ambiente.
 
+- **Importar um plano de X semanas:** só JSON (dados, nunca código), com limite de tamanho, e
+  validado campo a campo antes de entrar; o material e a modalidade que o ficheiro não conheça
+  são ignorados; os nomes que traz só entram na base por consultas com parâmetros.
 - **Treinador e Assistente de saúde:** a chave de um agente online vem **só** de uma variável de
   ambiente (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERENNIA_AI_API_KEY`);
   nenhuma chamada a LLM está ativa nesta versão; o pedido que seria enviado vê-se inteiro antes.
@@ -2864,7 +3072,7 @@ uma vez.
 `build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
 dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 
-**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; a ronda 16 só junta ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma):
+**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; as rondas 16 e 17 só juntam ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma):
 
 | Como abres a Perennia | O que fazer |
 |---|---|
@@ -2950,6 +3158,23 @@ O que a ronda 8 acrescentou (tudo automático ao abrir):
 Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
+
+**A ronda 17 cria 3 tabelas novas — sozinha** (**não tens de fazer nada** na base local; podes
+fazer um backup antes). Nenhuma tabela antiga muda de colunas:
+
+| O quê | Como fica |
+|---|---|
+| tabela `programs` | os planos de X semanas que importaste (o plano inteiro, em JSON) |
+| tabela `program_runs` | os planos em curso e terminados (início, dias da semana, cargas, e uma cópia do plano) |
+| tabela `program_days` | cada sessão de um plano em curso: a data, o treino e a entrada do calendário |
+| `strength_workouts.hidden = 2` | marca os treinos que pertencem a um plano em curso (não aparecem na Lista de treinos; a coluna já existia) |
+| `exercises`, `exercise_equipment`, `exercise_modalities` | ganham os exercícios que um plano pede, quando o começas |
+| `training_plan` | ganha uma linha por sessão do plano |
+| as opções novas de Definições → Avançado | uma definição por opção, só criada quando a mudas |
+
+O **perfil por desporto não guarda nada**: calcula-se na hora a partir das sessões. As tabelas
+criam-se com `CREATE TABLE IF NOT EXISTS` em `programs.ensure`. Os backups levam-nas com
+**Ginásio e exercícios**.
 
 **A ronda 16 cria 4 tabelas novas — sozinha, na primeira vez que são precisas** (**não tens de
 fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nenhuma tabela
@@ -3156,7 +3381,22 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1094 testes a passar).
+**Verificado com testes automáticos nesta versão** (1146 testes a passar).
+
+*Novidades da ronda 17 (testes novos em `tests/test_round17.py`):* os **planos de treino de X
+semanas** — o formato (validação com o sítio do erro, valores por semana, séries diferentes,
+progressão linear com rampas, superséries e circuitos), os 31 planos de origem, o
+ficheiro modelo e a sua cópia em `packaging/planos/`, importar/exportar (interface e linha de
+comandos), começar (datas nos dias escolhidos, exercícios e material criados, cargas), o plano em
+curso (feito/próxima, recalcular cargas, adiar, terminar, concluir) e o backup; e o **perfil por
+desporto** — tipo de ciclista (sprinter, puncheur, trepador, rolador, completo), perfil de força
+(as oito capacidades, deficiências, desequilíbrios, ligação aos planos) e velocidade contra
+resistência no remo, corrida e natação; o separador **Perfil** em todos os desportos; e as
+opções do Avançado, que são agora 120. **Os planos são versões gerais dos métodos, escritas a
+partir do que está publicado e não conferidas com as fontes originais nesta sessão; as escalas
+do perfil (a tabela de potência e os «bons níveis» de força) são aproximações minhas, não
+validadas por um treinador.** A progressão linear não se adapta sozinha a uma sessão falhada:
+usa «Recalcular cargas». Sem hardware real, sem Windows/macOS.
 
 *Novidades da ronda 16 (testes novos em `tests/test_round16.py`):* a **pressão arterial** com
 várias medições por dia e por período (média de cada período, média diária nas duas formas,

@@ -105,6 +105,14 @@ def main() -> int:
                         help="com --adhoc-exportar: ; , | ou tab (por omissão, o das Definições)")
     parser.add_argument("--decimal", default=None,
                         help="com --adhoc-exportar: . ou , (por omissão, o das Definições)")
+    parser.add_argument("--plano-modelo", nargs="?", const="", default=None, metavar="PASTA",
+                        help="grava o ficheiro modelo de um plano de X semanas e a descrição do "
+                             "formato (por omissão na pasta «planos» dos dados) e sai")
+    parser.add_argument("--plano-importar", default=None, metavar="FICHEIRO",
+                        help="importa um plano de X semanas (*.perennia-plan.json) e sai")
+    parser.add_argument("--plano-exportar", default=None, metavar="CHAVE",
+                        help="exporta um plano da biblioteca para .json e sai («lista» mostra "
+                             "as chaves); com --destino escolhe a pasta")
     parser.add_argument("--testar-hr-ant", nargs="?", const=30.0, default=None, type=float,
                         metavar="SEGUNDOS",
                         help="testa só a FC por ANT+ (cinta ou relógio a transmitir) e sai: abre "
@@ -127,6 +135,8 @@ def main() -> int:
         return csv_cli(args)
     if args.adhoc_exportar:
         return adhoc_cli(args)
+    if args.plano_modelo is not None or args.plano_importar or args.plano_exportar:
+        return plan_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -204,6 +214,49 @@ def adhoc_cli(args) -> int:
         db.close()
     print(f"{path}  ({n} linhas)")
     return 0
+
+
+def plan_cli(args) -> int:
+    """Planos de X semanas pela linha de comandos: o ficheiro modelo, importar e exportar."""
+    from perennia.core import programs
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    folder = Path(args.destino) if args.destino else Path(data_dir) / "planos"
+    if args.plano_modelo is not None:
+        if args.plano_modelo:
+            folder = Path(args.plano_modelo)
+        try:
+            for p in programs.write_template(folder):
+                print(p)
+        except OSError as e:
+            print(f"Erro: {e}", file=sys.stderr)
+            return 2
+        return 0
+    db = Database(database_path(data_dir))
+    try:
+        if args.plano_importar:
+            key = programs.import_file(db, args.plano_importar)
+            plan = programs.get(db, key)
+            print(f"Plano importado: {plan['name']} ({plan['weeks']} semanas, "
+                  f"{programs.total_sessions(plan)} sessões) — chave {key}")
+            return 0
+        if args.plano_exportar == "lista":
+            for p in programs.library(db):
+                print(f"{p['key']:28} {p['name']}")
+            return 0
+        plan = programs.get(db, args.plano_exportar)
+        if plan is None:
+            print("Plano desconhecido: " + args.plano_exportar
+                  + "\nVê as chaves com: --plano-exportar lista", file=sys.stderr)
+            return 2
+        print(programs.export_file(plan, folder))
+        return 0
+    except (programs.PlanError, OSError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 2
+    finally:
+        db.close()
 
 
 def import_cli(args) -> int:

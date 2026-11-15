@@ -563,9 +563,14 @@ def workouts(db: Database, mod: str | None = None) -> list[dict]:
 def save_plan(db: Database, wid: str | None, name: str, description: str | None,
               items: Sequence[dict], mod: str = "strength", hidden: bool = False) -> str:
     ensure(db)
+    was = db.conn.execute("SELECT hidden FROM strength_workouts WHERE id = ?",
+                          (wid,)).fetchone() if wid else None
     wid = st.save_workout(db, wid, name, description, items)
+    flag = int(hidden)
+    if was is not None and was["hidden"] == 2 and not hidden:
+        flag = 2                  # o treino de um plano de X semanas continua a ser do plano
     db.conn.execute("UPDATE strength_workouts SET modality = ?, hidden = ? WHERE id = ?",
-                    (mod, int(hidden), wid))
+                    (mod, flag, wid))
     db.conn.commit()
     return wid
 
