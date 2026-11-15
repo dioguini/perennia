@@ -1585,7 +1585,7 @@ class TestHomeScreen(GuiCase):
         self.pick("Corrida")
         hub = self.screen()
         self.assertEqual(hub.tab_labels(), ["Treinar", "Lista de treinos", "Histórico",
-                                            "Estatísticas"])
+                                            "Perfil", "Estatísticas"])
         b = hub.back_button.bg
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         self.assertIsInstance(self.screen(), app_mod.HomeScreen)

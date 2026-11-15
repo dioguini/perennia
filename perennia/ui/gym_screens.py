@@ -35,16 +35,20 @@ class GymHub(SportHub):
         from perennia.ui.session_setup import ask_start
         a = self.app
         # os Exercícios e o Inventário de artigos estão no menu principal
-        return train_items(a, "gym", Item(
+        items = train_items(a, "gym", Item(
             tr("Sessão de treino", "Training session"),
             detail=", ".join(m.name for m in gym.modalities()),
             action=lambda: ask_start(a, "gym", self)))
+        from perennia.ui.program_screens import next_item
+        nxt = next_item(a)                    # a próxima sessão do plano de X semanas em curso
+        return ([nxt] if nxt is not None else []) + items
 
     def items_library(self) -> list[Item]:
         a = self.app
         from perennia.ui.workout_import import import_item
         # «+ Carregar do computador»: um treino de força criado noutro sítio (TrainingPeaks…)
-        items = [import_item(a, "gym", on_done=lambda wid: self.enter())]
+        from perennia.ui.program_screens import plans_item
+        items = [plans_item(a), import_item(a, "gym", on_done=lambda wid: self.enter())]
         for m in gym.modalities():
             ws = gym.workouts(a.db, m.key) if not m.laps else []
             ps = ls.plans(a.db, "conditioning") if m.laps else []

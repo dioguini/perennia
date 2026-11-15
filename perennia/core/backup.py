@@ -159,11 +159,14 @@ COMPONENTS: tuple[Component, ...] = (
                       "endurance_workouts", "endurance_steps", "workout_meta",
                       "workout_goals", "lap_plans", "workout_types")),
     Component("ginasio", "Ginásio e exercícios", "Gym and exercises",
-              "exercícios, treinos de força e as suas estruturas",
-              "exercises, strength workouts and their structures",
+              "exercícios, treinos de força e as suas estruturas, os planos de X semanas que "
+              "importaste e os planos em curso",
+              "exercises, strength workouts and their structures, the multi-week plans you "
+              "imported and the plans in progress",
               tables=("exercises", "exercise_equipment", "exercise_modalities",
                       "strength_workouts", "strength_workout_items", "strength_structures",
-                      "muscle_groups", "muscle_subgroups", "gym_disciplines")),
+                      "muscle_groups", "muscle_subgroups", "gym_disciplines", "programs",
+                      "program_runs", "program_days")),
     Component("inventario", "Inventário de artigos", "Equipment inventory",
               "bicicletas, sapatilhas, peças, o seu uso e a data e o preço de compra",
               "bikes, shoes, parts, their use and purchase date and price",
@@ -236,7 +239,7 @@ ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "ga
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
                   "muscles", "strength_builder", "tags", "workout_meta", "bp", "health_tabs",
-                  "coach")
+                  "coach", "programs")
 
 
 def prepare(db) -> None:
