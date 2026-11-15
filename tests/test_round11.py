@@ -48,7 +48,7 @@ class TestHealthCsv(tg.GuiCase):
     def test_template_has_the_perennia_fields(self):
         cols = hcsv.columns(self.app.db)
         self.assertEqual(cols[0], "data")
-        self.assertEqual(cols[-1], "nota")
+        self.assertEqual(cols[-2:], ["nota", "fonte"])
         names = {m["name"] for m in health.metrics(self.app.db)}
         self.assertTrue(names <= set(cols))
         text = hcsv.template(self.app.db)
@@ -234,14 +234,15 @@ class TestHomeCalendar(tg.GuiCase):
 
     def test_a_day_popup_with_note_diary_and_plan(self):
         home = self.home()
-        day = date.today() + timedelta(days=1)
+        day = date.today()                        # hoje: tem diário (um dia futuro não tem)
         home.open_day(day)
         pop = self.screen()
         self.assertIsInstance(pop, dp.DayPopup)
         buttons = [i.label for i in pop.list.items if i.button]
         self.assertEqual(buttons[0], "Nota do dia")
         self.assertTrue(buttons[1].startswith("Diário de saúde"))
-        self.assertEqual(buttons[2], "+ Planear treino")
+        self.assertIn("+ Planear treino", buttons)
+        self.assertIn("+ Planear evento", buttons)
         self.pick("Diário de saúde")
         from perennia.ui.health_screens import DailyLogScreen
         self.assertIsInstance(self.screen(), DailyLogScreen)
@@ -290,7 +291,10 @@ class TestHomeCalendar(tg.GuiCase):
         for d in (date.today(), date.today() + timedelta(days=5)):
             home.open_day(d)
             buttons = [i.label for i in self.screen().list.items if i.button]
-            self.assertEqual(buttons[2], "+ Planear treino")
+            self.assertIn("+ Planear treino", buttons)
+            self.assertIn("+ Planear evento", buttons)
+            self.assertEqual(any(b.startswith("Diário de saúde") for b in buttons),
+                             d == date.today())          # o diário só até hoje
             self.press(key.ESCAPE)
 
     def test_plan_it_refuses_the_past(self):

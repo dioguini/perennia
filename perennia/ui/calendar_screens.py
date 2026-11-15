@@ -30,6 +30,33 @@ def _short_time(s: float) -> str:
     return f"{h}:{m:02d}" if h else f"{m} min"
 
 
+def plan_event(app, day: date) -> None:
+    """«Planear um evento» neste dia: o Treinador faz as perguntas (a rota, a velocidade, a
+    disponibilidade…) e, ao guardar, abre logo o plano que propõe."""
+    from perennia.ui.coach_screens import EventEditor, event_screen
+    from perennia.ui.pickers import ChoicePopup
+    kinds = ["endurance", "strength"]
+
+    def pick(k: int) -> None:
+        ed = EventEditor(app, None, kinds[k])
+        ed.v["day"] = day.isoformat()
+        ed.on_saved = lambda eid: app.push(event_screen(app, eid))
+        app.push(ed)
+    app.push(ChoicePopup(app, tr("Planear um evento", "Plan an event"),
+                         [tr("Resistência: uma volta, uma prova (com rota .gpx)",
+                             "Endurance: a ride, a race (with a .gpx route)"),
+                          tr("Força: flexões, elevações, peso morto…",
+                             "Strength: push-ups, pull-ups, deadlift…")], 0, pick))
+
+
+def event_item(app, day: date, button: bool = False) -> Item:
+    return Item(tr("+ Planear evento", "+ Plan an event") if button else
+                tr("+ Planear um evento neste dia", "+ Plan an event on this day"),
+                detail=tr("o Treinador faz as perguntas e monta o plano até à data",
+                          "the coach asks the questions and builds the plan up to the date"),
+                action=lambda: plan_event(app, day), button=button, data="plan_event")
+
+
 def sport_label(sport: str) -> str:
     return tr("Ginásio", "Gym") if sport == "gym" else sp.name(sport)
 
@@ -412,11 +439,15 @@ class DayScreen(Screen):
                        detail=(note[:90] + ("…" if len(note) > 90 else "")) if note else
                        tr("viagem, doença, como te sentiste…", "travel, illness, how you felt…"),
                        action=self._edit_note),
-                  Item(tr("Diário de saúde deste dia", "Health log for this day"),
-                       value=f"{done_h}/{total_h}",
-                       detail=tr("sono, peso, energia… (o mesmo da Saúde)",
-                                 "sleep, weight, energy… (the same as Health)"),
-                       action=self._open_log)]
+                  ]
+        if self.day <= date.today():              # um dia futuro não tem diário de saúde
+            items.append(Item(tr("Diário de saúde deste dia", "Health log for this day"),
+                              value=f"{done_h}/{total_h}",
+                              detail=tr("sono, peso, energia… (o mesmo da Saúde)",
+                                        "sleep, weight, energy… (the same as Health)"),
+                              action=self._open_log))
+        if self.day >= date.today():              # hoje e depois: um evento, com o Treinador
+            items.append(event_item(a, self.day))
         wd = cv.weekday_name(self.day.weekday())
         self.chrome.set(f"{wd}, {self.day.day} {cv.month_name(self.day.month)} {self.day.year}",
                         tr("Feitas: {a} · planeadas: {b}", "Done: {a} · planned: {b}",
@@ -434,6 +465,10 @@ class DayScreen(Screen):
             lambda text: health.set_day_note(self.app.db, self.day, text)))
 
     def _open_log(self) -> None:
+        if self.day > date.today():
+            self.app.message(tr("O diário de saúde só se preenche até hoje.",
+                                "The health log can only be filled in up to today."))
+            return
         from perennia.ui.health_screens import DailyLogScreen
         self.app.push(DailyLogScreen(self.app, self.day))
 
@@ -453,21 +488,25 @@ class DayScreen(Screen):
             a.push(SessionAnalysis(a, "strength", e.id))
 
     def _open_plan(self, e: cv.Entry) -> None:
+        """A ficha do treino planeado. Num dia futuro vê-se o treino, mas o botão de configurar a
+        sessão não aparece: não se começa hoje o que está agendado para depois."""
         a = self.app
         if not e.workout_id:
             return
         if e.sport == "cycling":
             from perennia.ui.brief import CyclingBrief
-            a.push(CyclingBrief(a, e.workout_id))
+            scr = CyclingBrief(a, e.workout_id)
         elif e.sport == "rowing":
             from perennia.ui.rowing_screens import RowWorkoutPreview
-            a.push(RowWorkoutPreview(a, e.workout_id))
+            scr = RowWorkoutPreview(a, e.workout_id)
         elif e.sport in ("running", "swimming"):
             from perennia.ui.endurance_screens import EndurancePreview
-            a.push(EndurancePreview(a, e.sport, e.workout_id))
+            scr = EndurancePreview(a, e.sport, e.workout_id)
         else:
             from perennia.ui.sport_screens import StrengthPreview
-            a.push(StrengthPreview(a, e.workout_id))
+            scr = StrengthPreview(a, e.workout_id)
+        scr.planned_day = e.day
+        a.push(scr)
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected

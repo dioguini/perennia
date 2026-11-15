@@ -1,5 +1,5 @@
 """Sincronização por CSV: artigos, exercícios, grupos/subgrupos musculares, disciplinas,
-testes de aptidão e os tipos de material.
+testes de aptidão, o glossário e os tipos de material.
 
 Para cada conjunto há um **modelo** (.csv com o cabeçalho e uma linha de exemplo),
 a **exportação** do que tens e a **importação** (cria o que falta e atualiza o que já
@@ -15,7 +15,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from . import fitness_tests as ft
-from . import gym, inventory, muscles
+from . import glossary, gym, inventory, muscles
 from .i18n import tr
 
 DELIM = ";"
@@ -124,7 +124,7 @@ def _export_exercises(db) -> list[list]:
                     "tempo" if e["measure"] == "time" else "reps", e["bodyweight"] or 0,
                     "|".join(gym.modality(m).name for m in e["modalities"]),
                     "|".join(inventory.kind_name(k) for k in e["equipment"]),
-                    e.get("description") or ""])
+                    e.get("description") or "", e.get("notes") or ""])
     return out
 
 
@@ -176,7 +176,9 @@ def _import_exercises(db, rows: list[dict]) -> Report:
                 "modalities") or ["strength"], group=group,
             measure="time" if _fold(row.get("medida")) in ("tempo", "time", "s") else "reps",
             bodyweight=bw / 100.0 if bw > 1 else bw, equipment=kit,
-            description=(row.get("descricao") or "").strip() or None, subgroup=sub)
+            description=(row.get("descricao") or "").strip() or None, subgroup=sub,
+            # sem a coluna «notas» no ficheiro, a nota que já existe fica como está
+            notes=(row.get("notas") or "").strip() if "notas" in row else gym.KEEP)
         rep["updated" if old else "created"] += 1
     return rep
 
@@ -286,6 +288,45 @@ def _import_tests(db, rows: list[dict]) -> Report:
     return rep
 
 
+# ---------------------------------------------------------------- glossário
+
+
+def _export_glossary(db) -> list[list]:
+    return [[glossary.tab_name(e["tab"]), e["term"], e["definition"]]
+            for e in sorted(glossary.all_entries(db), key=lambda e: (
+                glossary.tab_keys().index(e["tab"]), _fold(e["term"])))]
+
+
+def _glossary_tab(text: str) -> str | None:
+    from . import glossary_data as gd
+    low = _fold(text)
+    for k, pt, en in gd.TABS:
+        if low in (_fold(k), _fold(pt), _fold(en)):
+            return k
+    return None
+
+
+def _import_glossary(db, rows: list[dict]) -> Report:
+    """Uma linha por termo: separador, termo e definição. Um termo que já existe (pelo nome,
+    de origem ou teu) é atualizado; os outros são criados. Um termo de origem que tinhas apagado
+    volta."""
+    rep = Report()
+    glossary.ensure(db)
+    have = {_fold(e["term"]): e for e in glossary.all_entries(db, include_deleted=True)}
+    for row in rows:
+        term = (row.get("termo") or "").strip()
+        tab = _glossary_tab(row.get("separador") or "")
+        if not term or tab is None:
+            rep["skipped"] += 1
+            continue
+        old = have.get(_fold(term))
+        ref = glossary.save(db, old["ref"] if old else None, term,
+                            (row.get("definicao") or "").strip(), tab)
+        have[_fold(term)] = glossary.get(db, ref)
+        rep["updated" if old else "created"] += 1
+    return rep
+
+
 # --------------------------------------------------------- tipos de material
 
 
@@ -302,9 +343,9 @@ DATASETS: dict[str, Dataset] = {d.key: d for d in (
             "Each row is an item. The type is the equipment kind (see “Equipment kinds”)."),
     Dataset("exercicios", "Exercícios", "Exercises",
             ("nome", "grupo", "subgrupo", "medida", "peso_corpo", "modalidades", "material",
-             "descricao"),
+             "descricao", "notas"),
             ("Prancha lateral", "Core", "Oblíquos", "tempo", 0, "Isométrico|Força",
-             "Tapete", "Aguenta a posição"),
+             "Tapete", "Aguenta a posição", "Cotovelo debaixo do ombro"),
             _export_exercises, _import_exercises,
             "Grupo e subgrupo musculares, modalidades e material por nome (várias com |). "
             "O que não existir é criado.",
@@ -328,6 +369,15 @@ DATASETS: dict[str, Dataset] = {d.key: d for d in (
             "Desporto: ciclismo, remo, corrida, natação ou longevidade. «Melhor»: maior ou menor.",
             "Sport: cycling, rowing, running, swimming or longevity. “Better”: higher or lower "
             "(maior/menor)."),
+    Dataset("glossario", "Glossário", "Glossary",
+            ("separador", "termo", "definicao"),
+            ("Ginásio", "Dropset", "Baixar o peso e continuar a série sem descanso."),
+            _export_glossary, _import_glossary,
+            "Uma linha por termo. Separador: Perennia, Ficheiros e formatos, Conceitos de "
+            "treino, Ginásio, Ciclismo remo e corrida ou Saúde. Um termo que já exista é "
+            "atualizado.",
+            "One row per term. Tab: Perennia, Files and formats, Training concepts, Gym, "
+            "Cycling rowing and running or Health. A term that already exists is updated."),
     Dataset("material", "Tipos de material", "Equipment kinds",
             ("chave", "nome_pt", "nome_en", "grupo"), ("kettlebell", "Kettlebell", "Kettlebell",
                                                       "Pesos livres"),

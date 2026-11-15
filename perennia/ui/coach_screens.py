@@ -333,6 +333,7 @@ class EventEditor(EditPopup):
         super().__init__(app)
         self.event_id = event_id
         self.kind = kind
+        self.on_saved = None            # chamado (com o id) quando se guarda e fecha
         ev = coach.event(app.db, event_id) if event_id else None
         ans = coach.default_answers(app.db, kind)
         if ev:
@@ -559,6 +560,12 @@ class EventEditor(EditPopup):
     def saved_message(self) -> str:
         return tr("Evento guardado: abre-o para ver o plano", "Event saved: open it to see "
                   "the plan")
+
+    def save_exit(self) -> None:
+        super().save_exit()
+        cb, self.on_saved = self.on_saved, None
+        if cb is not None and self.event_id is not None and self not in self.app.stack:
+            cb(self.event_id)                 # o Treinador mostra logo o plano do evento
 
 
 class GoalEditor(EditPopup):

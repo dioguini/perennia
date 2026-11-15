@@ -16,6 +16,7 @@ from perennia.ui.app import Screen, SportHub, StartOptions
 from perennia.ui.brief import BriefScreen, endurance_brief
 from perennia.ui.session_flow import FinishFlow
 from perennia.ui.session_radar import RadarSide
+from perennia.gfx.compat import scale_factor
 from perennia.ui.session_panels import OFF, ArrangedPanels
 from perennia.ui.widgets import (ACCENT, DIM, GOOD, HEADER, HEADER_TEXT, PANEL, TEXT, CountdownBadge,
                              Item, LapPanel)
@@ -323,6 +324,10 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.toast_label = make_label("", font_size=14, bold=True, color=GOOD, anchor_y="top",
                                       batch=b)
         self.laps_panel = LapPanel()        # as voltas: sempre aqui, como no ciclismo
+        from perennia.core import block_bar as _bb
+        from perennia.ui.widgets import BlockBar
+        self.block_bar = BlockBar(batch=b)  # o tempo do bloco; amarelo/vermelho/preto no fim
+        self.block_cfg = _bb.Config.from_db(app.db)
         self.chrome.title.font_size = 18
         # onde fica cada painel: Definições → Ecrã da sessão → Disposição
         self.arr_load(self.engine.sport)
@@ -353,8 +358,10 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             self.status.x, self.status.y = sx, sy + sh
             self.toast_label.x, self.toast_label.y = sx + min(460, sw * 0.55), sy + sh
             self.plan.x, self.plan.y, self.plan.width = sx, sy + sh - 28, int(sw)
+            self.block_bar.place(sx, sy + 4, sw)
         else:
             self.status.x = self.toast_label.x = self.plan.x = OFF
+            self.block_bar.place(OFF, OFF, 10)
         lp = self.arr_rect("laps")
         if lp is not None:
             lx, ly, lw, lh = lp
@@ -480,7 +487,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                 val.color = TEXT
             # o valor tem de caber no quadrado (≈ 0,62 da letra por carácter)
             size = 26
-            while size > 12 and len(v) * size * 0.66 > bg.width - 20:
+            while size > 12 and len(v) * size * scale_factor() * 0.66 > bg.width - 20:
                 size -= 2
             val.font_size = size
         self.refresh_buttons()
@@ -498,6 +505,12 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                         v=self.typing or "_")
         self.status.text = status or self._plan_title()
         self.plan.text = self._plan_text()
+        wk = e.workout
+        if wk is not None and wk.step is not None:         # o tempo do bloco, como no ciclismo
+            self.block_bar.cfg = self.block_cfg
+            self.block_bar.set(wk.progress())
+        else:
+            self.block_bar.hide()
         if self.toast and time.monotonic() > self._toast_until:
             self.toast = ""
         self.toast_label.text = self.toast
@@ -505,8 +518,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.laps_panel.set(title, cells, prev, tr("VOLTAS FEITAS", "LAPS DONE"))
         self.laps_panel.update(time.monotonic())
         if e.started:
-            self.arr_sample(dt, e.hr_bpm, e.speed_kmh if e.sport == "running" else None,
-                            e.hr_zone_s)
+            self.arr_sample(dt, e, e.hr_zone_s)
             self._track_segments()
 
     def _track_segments(self) -> None:
@@ -645,6 +657,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             msg = data["cue"]
         if kind == "lap":
             self.laps_panel.pulse(time.monotonic())
+            self.arr_lap_mark()                       # um traço ao alto no gráfico ao vivo
         if msg:
             self.toast, self._toast_until = msg, time.monotonic() + 3.0
         if kind == "workout_done":

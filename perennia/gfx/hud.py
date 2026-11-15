@@ -344,6 +344,18 @@ class Hud:
         from perennia.core import screen_layout as sl
         self.arrangement = sl.load(db, "cycling") if sl.is_custom(db, "cycling") else None
         self.lookahead = int(db.get("workout_lookahead", 2))
+        # o gráfico ao vivo (só aparece se o puseres no ecrã: Definições → Ecrã da sessão)
+        from perennia.core import live_chart as _lc
+        from perennia.core import options as _opt
+        self._lc = _lc
+        self.live = _lc.LiveSeries("cycling", _lc.choice(db, "cycling"),
+                                   int(_opt.get(db, "live_chart_points")))
+        self.live_chart = None
+        self._chart_rect = None
+        self._chart_due = 0.0
+        from perennia.core import block_bar as _bb
+        self._bb = _bb
+        self.block_cfg = _bb.Config.from_db(db)       # amarelo, vermelho e preto no fim do bloco
 
         self.batch = pyglet.graphics.Batch()
         self.finish_dialog = FinishDialog()           # o diálogo de confirmação, por cima
@@ -833,6 +845,16 @@ class Hud:
         self._profile_marker.width, self._profile_marker.height = 2, qh
         self._profile_geometry = (qx, qy, qw, qh)
         self._build_profile(int(qw))
+        # gráfico ao vivo
+        r = rect("chart")
+        if r is None:
+            self._chart_rect = None
+        elif r != self._chart_rect:
+            from perennia.ui.widgets import Chart
+            x, y, w_, h_ = r
+            self.live_chart = Chart(int(x + 40), int(y + 22), int(w_ - 56), int(h_ - 50))
+            self._chart_rect = r
+            self._chart_due = 2.0                     # refaz já
         # rota completa
         r = rect("strip")
         sx, sy, sw, sh = r if r else (off, off, 200, 30)
@@ -972,6 +994,7 @@ class Hud:
             if data.get("local_pr") and data.get("local_best_s") is not None:
                 self.toast(t("seg.local_pr"), emphasis=True)
         elif kind == "lap":
+            self.live.mark()                 # um traço ao alto no gráfico ao vivo
             if data.get("trigger") in ("manual", "route_loop", "time", "distance"):
                 self.lap_flash_at = now
                 bits = [t("lap.panel", n=data.get("lap_no", 0)), hms(data.get("elapsed_s", 0))]
@@ -1074,6 +1097,7 @@ class Hud:
         self._update_profile(state)
         self._update_strip(state)
         self._update_trace(engine, state, now)
+        self._update_chart(state, now)
 
         self.paused = engine.paused
         self.status = state.status
@@ -1171,6 +1195,26 @@ class Hud:
         g["marker"].width, g["marker"].height = 3, bar_h + 6
         g["marker"].opacity = 255
 
+    # ------------------------------------------------------------ gráfico ao vivo
+
+    def _update_chart(self, state, now: float) -> None:
+        """Uma amostra por segundo das métricas escolhidas; o gráfico refaz-se de 2 em 2 s."""
+        if getattr(state, "status", "") not in ("running",):
+            return
+        if now - getattr(self, "_chart_last", 0.0) < 1.0:
+            return
+        self._chart_last = now
+        self.live.add(self._lc.sample("cycling", state))
+        if self._chart_rect is None or self.live.total % 2:
+            return
+        from perennia.core.units import hms
+        series, marks, total = self.live.plot()
+        n = len(series[0][1]) if series else 0
+        labels = [hms(total * i / max(1, n - 1)) for i in range(n)]
+        self.live_chart.show_lines(tr("Ao vivo", "Live"), series, labels,
+                                   tr("À espera dos dados…", "Waiting for data…"),
+                                   fmt=lambda v: "", markers=marks)
+
     # ----------------------------------------------------------- plano do treino
 
     def _update_plan(self, engine, state) -> None:
@@ -1223,7 +1267,9 @@ class Hud:
         self._plan_bar.opacity = 230
         self._plan_bar.width = max(1.0, (getattr(self, "_plan_w", self.SIDE_W) - 20)
                                    * max(0.0, min(1.0, done)))
-        self._plan_bar.color = (GOOD if compliance == 0 else BAD)[:3]
+        # a cor de origem diz se estás no alvo; no fim do bloco mandam as cores de aviso
+        stage = self._bb.stage(1.0 - done, self.block_cfg)
+        self._plan_bar.color = self._bb.color(stage, GOOD if compliance == 0 else BAD)
 
     def set_brief(self, brief) -> None:
         """O resumo do treino (objetivo e blocos), para mostrar o objetivo do
@@ -1688,6 +1734,8 @@ class Hud:
         self.window.view = Mat4()
         self.batch.draw()
         self.board_panel.draw()
+        if self._chart_rect is not None and self.live_chart is not None:
+            self.live_chart.draw()
         self.pause_dialog.draw()
         self.finish_dialog.draw()
         glEnable(GL_DEPTH_TEST)

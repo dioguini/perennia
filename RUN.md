@@ -232,6 +232,7 @@ As teclas são **as mesmas em todos os desportos** — ciclismo, corrida, nataç
 | **V** | remo: outra página de campos |
 | **F4** | **Dispositivos** — a sessão **fica em pausa** enquanto estiver aberto |
 | **F8** | **Definições** (só algumas; ver abaixo) — a sessão **fica em pausa** |
+| **F9** | **Glossário** (fora das sessões) |
 | **F11** | ecrã inteiro |
 
 **O aviso PAUSA.** Quando a sessão está em pausa (à mão ou por teres aberto um menu), aparece ao centro
@@ -915,7 +916,10 @@ O ecrã da sessão de remo tem agora **duas páginas de 12 quadrados**; a tecla
 - kcal e kcal/h, e carga (TSS);
 - volta atual: tempo, distância, ritmo, e o ritmo da volta anterior;
 - no treino estruturado, o alvo do passo e a diferença para ele;
-- projeção dos 2 km e tempo final previsto.
+- projeção dos 2 km e tempo final previsto;
+- **velocidade**, **velocidade média** e **máxima** (km/h, ou mph nas unidades imperiais) e o
+  **total de remadas** (o ritmo /500 m e o ritmo médio /500 m já existiam). A velocidade e as
+  remadas totais também entram no resumo, no histórico e na análise da sessão.
 
 Escolhe-as em **Remo → Treinar → Campos do ecrã de remo**, uma página por
 separador.
@@ -1431,6 +1435,105 @@ da fonte; com `--vista`, os campos, o período e os filtros dessa vista.
 **Privacidade.** Nada daqui sai do computador, e o agente de IA nunca vê os dados da AdHoc: só vê o
 que o ecrã mostra, e só se o pedires.
 
+### Glossário (botão «Glossário», na barra do topo, ou F9)
+
+O botão **Glossário** fica na faixa do topo, antes de **Dispositivos** (não está disponível durante
+uma sessão). Explica os termos da Perennia e do treino, num separador por tema:
+
+| Separador | O que tem |
+|---|---|
+| **Perennia** | sessão, treino, bloco, barra do bloco, sessão livre, comparação, rota, segmento, subida, volta, plano, calendário, Treinador, evento, inventário, dispositivo, backup, sincronização, Fonte, modo ERG… |
+| **Ficheiros e formatos** | `.gpx`, `.fit`, `.tcx`, `.zwo`, `.erg/.mrc`, `.csv`, modelo, base de dados, SQLite, GarminDB, backup `.zip` |
+| **Conceitos de treino** | FTP, W/kg, NP, IF, TSS, forma/fitness (CTL), fadiga (ATL), frescura (TSB), zonas, RPE, VO2máx, limiar, aquecimento, intervalo, base, afinação, cadência, rampa… |
+| **Ginásio** | série, repetição, descanso, RIR, 1RM, volume, superssérie, circuito, AMRAP, EMOM, tempo, modalidade, grupo muscular, composto/isolamento, programa, descarga, progressão |
+| **Ciclismo, remo e corrida** | potência, ritmo /500 m, ritmo médio, velocidade, remadas totais, voga (SPM), drag, damper, split, inclinação, VAM… |
+| **Saúde** | HRV, rMSSD, FC de repouso, sono, stress, Body Battery, SpO2, pressão arterial, indicador, diário, análises, longevidade |
+
+**Enter** num termo abre-o por inteiro (com **Editar**, **Apagar** e **Fechar**). **+ Novo termo**
+acrescenta um teu ao separador onde estás (separador, termo e definição numa janela grande). A
+**pesquisa** do topo procura no nome **e na definição**, em todos os separadores. Os termos de
+origem podem ser **editados** (a tua versão fica à parte e podes **repor o texto original**) e
+**apagados** (ficam escondidos; **Repor os termos de origem**, no fim da lista, traz tudo de volta;
+os teus não mudam). Os termos de origem estão nos dois idiomas.
+Ficam na tabela `glossary` (só as tuas alterações e os teus termos) e vão no backup, componente
+**Glossário**.
+
+### Aspeto: tamanho da letra
+
+**Definições → Aspeto → Tamanho da letra** (80 a 150 %): muda o texto de toda a aplicação, com
+**pré-visualização imediata** (uma amostra com valores, como os de uma sessão) antes de guardares.
+Na **configuração de cada sessão** (ciclismo, remo, corrida/natação e ginásio) há a mesma linha
+**Tamanho da letra**, com a pré-visualização ao lado; o que escolhes aí fica como a opção geral.
+Os ecrãs que já estavam abertos adotam o novo tamanho quando os voltas a abrir.
+
+### Barra do bloco e cores de aviso
+
+Numa sessão com um **treino carregado** há uma barra horizontal com o tempo do **bloco** atual
+— no **ciclismo**, **remo**, **corrida/natação** e **ginásio**. Quando falta pouco para o fim do
+bloco a barra passa a **amarelo**, depois a **vermelho** e, nos últimos instantes, a **preto**.
+Os limiares (em % do bloco que **falta**) e o interruptor estão em **Definições → Avançado →
+Aspeto…** (`block_bar_*`); por omissão 25 %, 10 % e 3 %, e a Perennia arruma-os sempre pela ordem
+amarelo > vermelho > preto. No **ginásio** só há barra nos exercícios e blocos medidos em
+**tempo** (os de repetições não têm).
+
+### Gráfico ao vivo (configurável)
+
+No ciclismo, remo e corrida/natação, o painel do **gráfico** da sessão mostra as métricas que
+escolheres, **só as do próprio desporto** (potência, FC, cadência e velocidade no ciclismo;
+potência, ritmo /500 m, voga, FC, velocidade e resistência no remo; ritmo, velocidade, FC e declive
+na corrida…). Escolhe-as em **Definições → Disposição → (desporto) → Gráfico ao vivo: métricas**
+(até `live_chart_max_series`). Cada métrica ocupa a sua própria escala (a legenda mostra o valor
+atual). Quando marcas uma **volta** (L, automática ou no fim de um bloco) aparece um **traço
+vertical** no gráfico nesse instante.
+
+### Ciclismo: a comparação com sessões anteriores
+
+A comparação (o «fantasma» de uma sessão tua passada) só existe numa **sessão livre** **e** com
+uma **rota .gpx** escolhida. Com um **treino carregado** (ou um teste, ou um challenge) a janela
+da sessão não oferece comparação.
+
+### Notas nas listas de exercícios e de artigos
+
+**Exercícios** e **Artigos** têm agora o campo **Notas**, um texto maior (Enter abre uma janela
+grande; até `note_max_chars` caracteres) para o que queiras guardar: dicas de execução, ajustes,
+onde comprar… A nota aparece na linha da lista («nota: …»), vai nos backups e nos .csv de
+exportação/importação (coluna `notas`).
+
+### Calendário: dias futuros e eventos
+
+- O **Diário de saúde** só se abre para **hoje e dias passados**: num dia futuro a linha não
+  aparece (é a mesma regra do «Planear treino», que só planeia de hoje para a frente).
+- Em **hoje e dias futuros** há **+ Planear evento**: pergunta o tipo (resistência ou força) e
+  abre logo o **Treinador**, que faz as perguntas e monta o plano até à data escolhida.
+- Um treino **agendado para o futuro** aparece no dia e abre-se a ficha (objetivo, blocos, alvos),
+  mas **sem o botão «Configurar sessão de treino»**: só se começa no próprio dia. O mesmo vale
+  para as sessões dos planos de X semanas.
+
+### Rato: botões laterais, e um controlador Bluetooth
+
+O botão lateral de **recuar** do rato faz o mesmo que **Esc** (volta atrás); o de **avançar**
+também, se ligares `mouse_forward_button`. Ambos se desligam em **Definições → Avançado**. Funciona
+em qualquer ecrã, inclusive nas janelas (e numa sessão pede o mesmo que o Esc).
+
+**Controlar a Perennia à distância (por exemplo projetada numa parede).** A Perennia já se
+controla só com o teclado, por isso serve qualquer **mini teclado ou «apresentador» (clicker)
+Bluetooth**: emparelha-se com o computador como qualquer teclado e a Perennia recebe as teclas.
+Não precisa de código nem de configuração. Os mais úteis:
+
+| Tecla do comando | Faz |
+|---|---|
+| **Página ↓ / Página ↑** (o «seguinte/anterior» dos apresentadores) | linha seguinte / anterior nas listas |
+| **Enter** | abre / ativa |
+| **Esc** | volta (numa sessão, pausa) |
+| **←/→** | muda o valor escolhido |
+| **P**, **L**, **N**, **F10** | pausa, volta, saltar bloco, terminar |
+
+Os atalhos de sessão são reconfiguráveis em **Definições → Atalhos de teclado**. Os comandos com
+poucas teclas (clickers de 2 a 4 botões) chegam para navegar e iniciar sessões; para escrever
+nomes ou valores precisas de um mini teclado com letras. Nas sessões de **remo** e no remo
+Página ↑/↓ continuam a ser **resistência** (como antes). Convém desligar a poupança de energia do
+comando e emparelhá-lo antes de abrir a Perennia.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1459,6 +1562,9 @@ de omissão. Não estão disponíveis durante uma sessão.
 | **Ligações externas** | | | |
 | Strava: porta do retorno local (`strava_redirect_port`) | 1024 a 65535 | 8723 | a porta onde a Perennia espera o regresso do Strava (só nesta máquina) |
 | Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 60 a 21600 s | 3600 s | a sincronização é interrompida se demorar mais do que isto |
+| Garmin: linhas do relato (`garmin_log_lines`) | 4 a 60 | 14 | quantas linhas do que o GarminDB vai dizendo se mostram no ecrã da sincronização |
+| Garmin: tamanho de cada linha do relato (`garmin_log_line_chars`) | 60 a 1000 car. | 300 | as linhas do GarminDB mais compridas são cortadas no ecrã |
+| Saúde: respeitar a Fonte dos indicadores (`health_respect_source`) | ligado / desligado | ligado | uma importação não substitui um valor que já lá está de outra origem quando a Fonte do indicador não é a dela; desligado, a última a gravar ganha |
 | **Análise AdHoc** | | | |
 | CSV: separador de valores (`adhoc_csv_sep`) | ;, ,, Tab, | | ; (ponto e vírgula) | o que se propõe ao exportar (escolhe-se de novo em cada exportação) |
 | CSV: separador decimal (`adhoc_csv_decimal`) | «.» ponto, «,» vírgula | «.» ponto | igual ao separador de valores não pode ser: usa-se o ponto |
@@ -1571,6 +1677,20 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Desequilíbrio entre padrões abaixo de (`profile_balance_pct`) | 20 a 95 % | 60 % | avisa quando as séries de puxar (ou de empurrar) ficam abaixo desta parte das do padrão oposto |
 | Perfil de resistência a partir de (`profile_endurance_keep_pct`) | 70 a 100 % | 92 % | remo, corrida e natação: a velocidade da melhor sessão longa em % da curta |
 | Perfil de velocidade até (`profile_speed_keep_pct`) | 50 a 95 % | 82 % |  |
+
+| **Aspeto, barra de bloco e gráfico ao vivo** | | | |
+| Tamanho da letra (`ui_font_pct`) | 80 a 150 % | 100 % | o tamanho de todo o texto (100 % = o de origem); vê-se logo em Definições → Aspeto e nas sessões |
+| Barra do bloco: avisar com cores (`block_bar_colors`) | ligado / desligado | ligado | a barra do bloco passa a amarelo, vermelho e preto quando o bloco está a acabar |
+| Barra do bloco: amarelo quando falta (`block_bar_yellow_pct`) | 2 a 90 % | 25 % | percentagem do bloco que falta para a barra ficar amarela |
+| Barra do bloco: vermelho quando falta (`block_bar_red_pct`) | 1 a 60 % | 10 % | tem de ser menor do que o do amarelo |
+| Barra do bloco: preto quando falta (`block_bar_black_pct`) | 0 a 30 % | 3 % | os últimos momentos (0 = nunca fica preta); tem de ser menor do que o do vermelho |
+| Gráfico ao vivo: máximo de métricas (`live_chart_max_series`) | 1 a 5 | 3 | quantas linhas o gráfico ao vivo mostra ao mesmo tempo |
+| Gráfico ao vivo: pontos (`live_chart_points`) | 30 a 240 | 90 | em quantos pontos se resume a sessão no gráfico (mais = mais pormenor) |
+| **Notas, glossário e rato** | | | |
+| Notas: tamanho máximo (`note_max_chars`) | 200 a 20000 car. | 4000 | das notas dos exercícios, dos artigos e dos conceitos do glossário |
+| Glossário: tamanho máximo do termo (`glossary_term_chars`) | 20 a 200 car. | 80 | o nome de um termo do glossário não passa disto |
+| Botões laterais do rato voltam atrás (`mouse_back_button`) | ligado / desligado | ligado | o botão de «recuar» do rato faz o mesmo que Esc |
+| Botão «avançar» do rato também volta (`mouse_forward_button`) | ligado / desligado | desligado | liga se o teu rato tem o par trocado |
 
 Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
 Nenhuma guarda segredos.
@@ -2068,6 +2188,20 @@ O cartão **Saúde** tem:
   outros botões de adicionar; sim/não, número, escala 1–5, texto, escolha ou hora), liga e
   desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
+- **Fonte dos indicadores.** Cada indicador tem o campo **Fonte** (em **Métricas → Enter**, numa
+  lista): *Qualquer (automática)*, *Manual*, *GarminDB (Garmin)*, *HRV4Training*, *Ficheiro CSV*,
+  *Balança / aparelho*, *Análises clínicas* ou *Outra*. Mostra-se na lista de métricas e, no
+  **Diário**, por baixo de cada valor («Fonte: GarminDB (Garmin)»; num valor já gravado vale a
+  **origem com que foi gravado**, num dia vazio a Fonte do indicador). Os indicadores de origem
+  vêm com a sua fonte (os passos são do Garmin, a prontidão do HRV4Training, o resto «Manual»
+  ou «Qualquer» quando mais do que uma fonte os dá); os que as importações criam herdam a da
+  origem. **Impacto nas sincronizações:** quando a Fonte do indicador é uma e a importação vem de
+  outra, a importação **não substitui um valor que já lá esteja** de outra origem (preenche só os
+  dias vazios) e o relatório diz quantos ficaram («N mantidos»); com a Fonte *Qualquer*, ou
+  quando a importação é da própria Fonte, grava e substitui como antes. Desliga-se em
+  **Avançado → Ligações externas → Saúde: respeitar a Fonte** (`health_respect_source`). A coluna
+  `fonte` do .csv da Saúde fixa a origem de cada linha. Na base de dados é a coluna
+  `metric_defs.source` (criada sozinha nas bases anteriores) e, por valor, `daily_values.source`.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
 - **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências**,
   **Métricas**, **Pressão arterial**, **Assistente de saúde** e **os que criares** (ver abaixo).
@@ -2257,14 +2391,17 @@ base da Perennia. As opções gravam-se logo. Cada fonte tem o seu separador:
   hora, escolha ou texto) e a `nota` do dia. **Descarregar o modelo (.csv)** dá o cabeçalho e
   uma linha de exemplo; **Exportar o diário (.csv)** dá o que já tens, no mesmo formato.
   Colunas desconhecidas ignoram-se e os valores inválidos contam-se (não param a importação).
+  Há duas colunas extra: `nota` e **`fonte`** (de onde vêm os valores dessa linha: `manual`,
+  `garmin`, `hrv4training`, `csv`, `device`, `lab`, `other`; vazia = `csv`). Ver «Fonte dos
+  indicadores» na Saúde.
   Também por `--csv-modelo saude`, `--csv-exportar saude` e `--importar saude ficheiro.csv`.
 - **HRV4Training (.csv)** — o export da app (Definições → Exportar
   medições). Entra no diário da Saúde.
 - **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
   se quiseres, unidade, mínimo, máximo, laboratório), separador «,» ou «;»,
   datas AAAA-MM-DD ou DD/MM/AAAA. Também serve o Excel das análises.
-- **CSV** — **artigos, exercícios, grupos e subgrupos musculares, disciplinas, testes de
-  aptidão** e os **tipos de material**: para cada conjunto, **Descarregar o modelo
+- **CSV** — **artigos, exercícios (com a coluna `notas`), grupos e subgrupos musculares, disciplinas,
+  testes de aptidão, o glossário** (`separador;termo;definicao`) e os **tipos de material**: para cada conjunto, **Descarregar o modelo
   (.csv)** (o cabeçalho e uma linha de exemplo), **Exportar o que tenho (.csv)** e
   **importar** um .csv preenchido (a Perennia descobre o conjunto pelo cabeçalho; cria o que
   falta e atualiza o que já existe, pelo nome, sem duplicar). Os ficheiros são UTF-8
@@ -2325,6 +2462,33 @@ palavra-passe do Garmin fica só na configuração do GarminDB
    - **Pastas**: a das bases (por omissão `~/HealthData/DBs`) e a da
      configuração (por omissão `~/.GarminDb`; outra pasta vai como `-f`).
    - A linha **Comando** mostra o comando exato que vai correr.
+   - **Requisitos** (✓/✗, com o que fazer em cada ✗): GarminDB instalado, configuração
+     (`GarminConnectConfig.json`), utilizador, palavra-passe, pelo menos um tipo de dados e um
+     passo. **Sincronizar agora** só corre se estiver tudo o que é preciso e, se faltar algo, diz
+     o quê (e fica no relato) em vez de dar um erro do GarminDB.
+   - **O que está a acontecer.** Ao sincronizar, o ecrã mostra os **passos** (✓ feito · ▶ a decorrer
+     · ✗ falhou · – saltado): *verificar os requisitos → escrever o intervalo na configuração (se
+     for o caso) → correr o GarminDB (descarregar → importar → analisar) → importar para a
+     Perennia → concluído*, cada um com o seu pormenor (por exemplo «saúde: 1 240 valores em 31
+     dias · atividades: 12 (3 novas)»), e por baixo as **últimas linhas que o GarminDB vai
+     escrevendo**, ao vivo, como na linha de comandos (quantas: `garmin_log_lines`). Fica visível
+     depois, como «Última sincronização». Quando falha, a Perennia traduz as causas típicas em
+     português: verificação em dois passos (MFA), palavra-passe recusada, demasiados pedidos
+     (esperar ~30 min), configuração em falta, sem rede, sem permissão numa pasta. O GarminDB não
+     fica à espera de que escrevas nada: se pedir um código, falha logo e diz o que fazer.
+   - **Primeira vez? Passo a passo** abre a lista do que fazer num computador novo.
+
+   **Dar a Perennia a um colega — ele consegue sincronizar?** Sim, mas cada pessoa usa **a sua conta
+   Garmin** e o seu GarminDB; nada da tua conta viaja com a aplicação (a palavra-passe nunca é
+   gravada em disco). O colega precisa de: (1) instalar o GarminDB (`pip install garmindb`) no
+   computador dele; (2) em **Definições → Ligações externas → Garmin**, escrever o e-mail da
+   conta (a Perennia cria o `GarminConnectConfig.json` em `~/.GarminDb`); (3) definir a variável de
+   ambiente `PERENNIA_GARMIN_PASSWORD` com a palavra-passe **antes** de abrir a Perennia (ou
+   escrevê-la nas Definições: fica só na memória até fechar); (4) se a conta Garmin tem
+   verificação em dois passos, correr uma vez `garmindb_cli.py --download --latest` numa linha de
+   comandos para introduzir o código; (5) escolher o período e os dados e carregar em
+   **Sincronizar agora**. Sem GarminDB instalado a Perennia só importa o que já estiver nas
+   bases. Se o teu colega já tem o GarminDB a funcionar, basta apontar a «Pasta das bases».
 3. **Sincronizar agora** (o botão principal, ou Ctrl+S) corre o GarminDB e
    importa; **Só importar** lê o que já está nas bases, sem correr o
    GarminDB. Sem o GarminDB instalado, Sincronizar agora também só importa.

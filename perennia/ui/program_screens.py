@@ -76,7 +76,10 @@ def open_session(app, d: dict) -> None:
                        "This session's workout no longer exists."))
         return
     from perennia.ui.sport_screens import StrengthPreview
-    app.push(StrengthPreview(app, d["workout_id"]))
+    scr = StrengthPreview(app, d["workout_id"])
+    if d.get("date") and d["date"] > date.today():     # agendada para depois: só se vê
+        scr.planned_day = d["date"]
+    app.push(scr)
 
 
 # ====================================================================== biblioteca

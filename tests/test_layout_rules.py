@@ -86,9 +86,10 @@ class TestTopBarClock(unittest.TestCase):
         bar.update_clock()
         bar.layout()
         self.assertEqual(bar.clock.text, "sáb 31/10/2026 · 09:05")
-        devices_x = bar.buttons["devices"][0].x
-        self.assertLess(bar.clock.x, devices_x)              # à esquerda do botão
-        self.assertGreater(bar.clock.x, devices_x - 30)
+        first_x = bar.buttons["glossary"][0].x                # o botão mais à esquerda
+        self.assertLess(bar.buttons["glossary"][0].x, bar.buttons["devices"][0].x)
+        self.assertLess(bar.clock.x, first_x)                # à esquerda dos botões
+        self.assertGreater(bar.clock.x, first_x - 30)
 
 
 # =============================================================== a aplicação

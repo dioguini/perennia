@@ -472,6 +472,7 @@ class StrengthSession:
         self.carry_load: dict[int, float | None] = {}
         self.set_start_t = 0.0
         self.rest_until = 0.0
+        self.rest_total = 0.0
         self.hr_bpm: int | None = None
         self.finished = False
         self.events: list[tuple[str, dict]] = []
@@ -721,6 +722,20 @@ class StrengthSession:
             return self.rest_until - self.t
         return 0.0
 
+    def block_progress(self) -> float | None:
+        """Quanto do bloco **de tempo** em curso já passou (0–1), para a barra do ecrã; `None`
+        se o que está a decorrer não é medido em tempo (séries por repetições, treino livre).
+        Valem a série por tempo (prancha, corda…) e o descanso marcado."""
+        if self.paused or self.phase not in (WORK, REST):
+            return None
+        if self.phase == WORK:
+            if not self.timed_set or self.timed_target_s <= 0:
+                return None
+            return max(0.0, min(1.0, (self.t - self.set_start_t) / self.timed_target_s))
+        if self.free or self.rest_total <= 0:
+            return None
+        return max(0.0, min(1.0, 1.0 - (self.rest_until - self.t) / self.rest_total))
+
     @property
     def counting_down(self) -> bool:
         """`phase_seconds` está a contar para trás (descanso ou série por tempo)?"""
@@ -789,7 +804,8 @@ class StrengthSession:
         self.carry_load[self.item_idx] = load
         self._fix_closed = False
         self.phase = REST
-        self.rest_until = self.t + self._rest_after(self.item_idx, set_no - 1)
+        self.rest_total = float(self._rest_after(self.item_idx, set_no - 1))
+        self.rest_until = self.t + self.rest_total
         self._rest_done_sent = False
         self._emit("set_logged", item=self.item_idx, set_no=set_no, reps=reps,
                    load_kg=load, rpe=rpe)
@@ -955,7 +971,7 @@ class StrengthSession:
                 "item_idx": self.item_idx, "extra": {str(k): v for k, v in self.extra.items()},
                 "skipped": sorted(self.skipped), "entry": self.entry,
                 "carry_load": {str(k): v for k, v in self.carry_load.items()},
-                "rest_until": self.rest_until, "hr_zone_s": self.hr_zone_s})
+                "rest_until": self.rest_until, "rest_total": self.rest_total, "hr_zone_s": self.hr_zone_s})
         except Exception:
             pass
 
@@ -967,6 +983,7 @@ class StrengthSession:
         self.skipped = set(int(k) for k in st.get("skipped") or [])
         self.carry_load = {int(k): v for k, v in (st.get("carry_load") or {}).items()}
         self.rest_until = float(st.get("rest_until", 0.0))
+        self.rest_total = float(st.get("rest_total", 0.0))
         rows = self.db.conn.execute(
             "SELECT * FROM strength_sets WHERE session_id = ? ORDER BY id",
             (self.session_id,)).fetchall()

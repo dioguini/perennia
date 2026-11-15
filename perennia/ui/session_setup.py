@@ -453,6 +453,12 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
         return self.app.db.route(self.route_id) if self.route_id else None
 
     @property
+    def comparison_allowed(self) -> bool:
+        """Sessão livre de ciclismo e com uma rota (.gpx) escolhida."""
+        return self.sport == "cycling" and self.kind == "free" and not self.workout_id \
+            and self.route_id is not None
+
+    @property
     def can_start(self) -> bool:
         return not (self.needs_route and self.route_id is None)
 
@@ -584,7 +590,9 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
                     action=self._fetch_strava, enabled=connected and not busy)
 
     def mode_items(self) -> list[Item]:
-        if self.sport != "cycling" or self.kind not in ("free", "workout"):
+        # a comparação com sessões anteriores só existe numa sessão livre com uma rota (.gpx):
+        # um treino carregado segue os seus blocos e não se compara
+        if not self.comparison_allowed:
             return []
         rows = [Item(t("mode.title"),
                      value=t("mode.comparison") if self.comparison else t("mode.alone"),
@@ -665,7 +673,7 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
 
     def enter(self) -> None:
         items = [self.device_item()] + self.route_items() + self.mode_items() \
-            + self.option_items() + self.autolap_items()
+            + self.option_items() + self.autolap_items() + self.font_items()
         foot = tr("←/→ muda · Enter abre · Esc cancela", "←/→ changes · Enter opens · Esc cancels")
         if not self.can_start:
             foot = tr("Falta a rota: carrega um .gpx", "Missing the route: load a .gpx")
@@ -674,10 +682,16 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
 
     # ---------------------------------------------------------------- teclas
 
+    def draw(self) -> None:
+        super().draw()
+        self.font_draw()
+
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if self.autolap_key(symbol):
             return True
         item = self.list.selected
+        if self.font_key(symbol, item):
+            return True
         if item is not None and symbol in (key.LEFT, key.RIGHT) and isinstance(item.data, str):
             step = 1 if symbol == key.RIGHT else -1
             if self.adjust(item.data, step):
@@ -709,6 +723,8 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
             self.ghosts.clear()
             self.strava_skipped = False
         elif field == "mode":
+            if not self.comparison_allowed:
+                return True
             self.comparison = not self.comparison
             if not self.comparison:
                 self.ghosts.clear()
@@ -807,6 +823,9 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
             a.message(tr("Escolhe uma rota ou carrega um .gpx.", "Pick a route or load a .gpx."))
             return
         autolap = dict(self.autolap_cfg())
+        if not self.comparison_allowed:          # nada de fantasmas fora da sessão livre
+            self.comparison = False
+            self.ghosts.clear()
         if self.sport == "cycling":
             a.replace(RideScreen(
                 a, route_id=self.route_id, workout_id=self.workout_id, kind=self.ride_kind(),

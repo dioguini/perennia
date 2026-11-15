@@ -285,6 +285,13 @@ class BriefScreen(Screen):
     SPORT = "cycling"
     START_LABEL = ("Configurar sessão de treino", "Set up the training session")
     CAN_START = True               # a natação não tem sessão de treino
+    planned_day = None             # o dia em que o treino está agendado (se veio do calendário)
+
+    @property
+    def future(self) -> bool:
+        """Está agendado para um dia que ainda não chegou? Então vê-se mas não se começa."""
+        from datetime import date
+        return self.planned_day is not None and self.planned_day > date.today()
 
     def __init__(self, app, wid: str):
         self.wid = wid
@@ -329,14 +336,18 @@ class BriefScreen(Screen):
         items = [Item(tr("Editar", "Edit"), button=True, action=self.edit),
                  Item(tr("Planear", "Plan"), button=True, action=self.plan, data="plan")]
         items.append(Item(tr("Exportar", "Export"), button=True, action=self.export,
-                          primary=not self.CAN_START))
-        if self.CAN_START:
+                          primary=not (self.CAN_START and not self.future)))
+        can_start = self.CAN_START and not self.future
+        if can_start:
             items.append(Item(tr(*self.START_LABEL), action=self.start, button=True,
                               primary=True))
         self.chrome.set(sp.name(self.SPORT) if self.SPORT != "gym" else tr("Ginásio", "Gym"),
                         tr("Objetivo, blocos e alvos antes de começar · Enter configura a sessão",
                            "Goal, blocks and targets before you start · Enter sets up the "
-                           "session") if self.CAN_START else
+                           "session") if can_start else
+                        tr("Agendado para {d}: só se começa nesse dia", "Scheduled for {d}: you "
+                           "can only start it on that day",
+                           d=self.planned_day.strftime("%d/%m/%Y")) if self.future else
                         tr("Objetivo, blocos e alvos do treino", "The workout's goal, blocks "
                            "and targets"), self.footer())
         self.list.set_items(items, keep_index=True)

@@ -36,6 +36,17 @@ def P():
 
 ROW_H = 38
 
+
+def _scale() -> float:
+    from perennia.gfx import compat
+    return compat.scale_factor()
+
+
+def row_height() -> int:
+    """A altura de uma linha das listas: cresce com o tamanho da letra (nunca encolhe)."""
+    from perennia.gfx import compat
+    return int(round(ROW_H * max(1.0, compat.scale_factor())))
+
 # ---------------------------------------------------------- medir o texto
 
 _MEASURE: dict = {}
@@ -47,8 +58,9 @@ def text_px(text: str, size: float, bold: bool = False) -> float:
     real, uma estimativa por excesso, para nunca passar por cima de nada)."""
     if not text:
         return 0.0
+    from perennia.gfx import compat as _compat
     if getattr(pyglet, "version", "") != "0.0-stub":
-        k = (int(size), bool(bold))
+        k = (int(size), bool(bold), _compat.FONT_PCT)
         lab = _MEASURE.get(k)
         if lab is None:
             lab = _MEASURE[k] = make_label("", font_size=int(size), bold=bold)
@@ -56,7 +68,7 @@ def text_px(text: str, size: float, bold: bool = False) -> float:
         w = getattr(lab, "content_width", None)
         if isinstance(w, (int, float)) and w > 0:
             return float(w)
-    return len(text) * size * (0.78 if bold else 0.73)
+    return len(text) * size * _compat.scale_factor() * (0.78 if bold else 0.73)
 
 
 def set_wrap(label, width: float | None) -> None:
@@ -207,7 +219,7 @@ class ListView:
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
         self.visible_rows = visible_rows
-        self.row_h = ROW_H            # a altura de cada linha (o construtor usa menos)
+        self.row_h = row_height()     # a altura de cada linha (o construtor usa menos)
         self.items: list[Item] = []
         self.index = 0
         self.scroll = 0               # primeira linha da página à vista
@@ -251,7 +263,7 @@ class ListView:
 
     def _add_rows(self, n: int) -> None:
         for _ in range(n):
-            highlight = pyglet.shapes.Rectangle(0, 0, self.width, ROW_H - 4,
+            highlight = pyglet.shapes.Rectangle(0, 0, self.width, row_height() - 4,
                                                 color=SELECT, batch=self.batch)
             highlight.opacity = 0
             highlight._bar = pyglet.shapes.Rectangle(0, 0, 3, ROW_H - 4, color=ACCENT[:3],
@@ -766,6 +778,8 @@ class Chart:
     (`select`) — para ver o pormenor numa caixa por cima do gráfico.
     """
 
+    MAX_MARKS = 64            # as voltas que cabem marcadas no gráfico (as mais recentes)
+
     def __init__(self, x: int, y: int, width: int, height: int, max_points: int = 120):
         self.x, self.y, self.width, self.height = x, y, width, height
         self.batch = pyglet.graphics.Batch()
@@ -809,6 +823,11 @@ class Chart:
         self._zero = pyglet.shapes.Rectangle(x, y, width, 1, color=DIM[:3],
                                              batch=self.batch)
         self._zero.opacity = 0
+        # traços ao alto: onde foi marcada uma volta (gráfico ao vivo das sessões)
+        self._marks = [pyglet.shapes.Rectangle(0, 0, 2, 1, color=TEXT[:3], batch=self.batch)
+                       for _ in range(self.MAX_MARKS)]
+        for m in self._marks:
+            m.opacity = 0
         self._place_static()
 
     def _place_static(self) -> None:
@@ -846,9 +865,23 @@ class Chart:
             lab.text = ""
         if hasattr(self, "_zero"):
             self._zero.opacity = 0
+        self.set_marks([])
         self.points = []
         self.selected = None
         self._hide_selection()
+
+    def set_marks(self, fractions) -> None:
+        """Um traço vertical em cada posição (0 = início, 1 = fim do gráfico): as voltas."""
+        marks = getattr(self, "_marks", [])
+        shown = list(fractions or [])[-len(marks):] if marks else []
+        for i, m in enumerate(marks):
+            if i < len(shown):
+                f = max(0.0, min(1.0, shown[i]))
+                m.x, m.y = self.x + self.width * f - 1, self.y
+                m.height = self.height
+                m.opacity = 190
+            else:
+                m.opacity = 0
 
     def _ticks(self, lo: float, hi: float, fmt) -> None:
         for k, lab in enumerate(self._yticks):
@@ -971,7 +1004,7 @@ class Chart:
 
     def show_lines(self, title: str, series: list[tuple[str, list[float], tuple]],
                    labels: list[str] | None = None, empty_text: str = "",
-                   fmt=None) -> None:
+                   fmt=None, markers=None) -> None:
         """Várias séries na mesma escala (fitness, fadiga e forma). `series`:
         [(nome, valores, cor)]. A linha do zero aparece se houver negativos."""
         self._clear()
@@ -1013,6 +1046,7 @@ class Chart:
         if floor < 0 < peak:
             self._zero.x, self._zero.y, self._zero.width = self.x, py(0.0), self.width
             self._zero.opacity = 160
+        self.set_marks(markers)
         self._ticks(floor, floor + span, fmt)
         if labels:
             step = max(1, -(-n // len(self._labels)))
@@ -1160,7 +1194,7 @@ class Chart:
             if not lab.text:
                 continue
             lab.x, lab.y = x, self.y + self.height + 10
-            x -= len(lab.text) * 6.6 + 18
+            x -= len(lab.text) * 6.6 * _scale() + 18
 
     # ------------------------------------------------------------- seleção
 
@@ -1686,6 +1720,84 @@ class MessageBar:
             self.batch.draw()
 
 
+class FontPreview:
+    """A pré-visualização do tamanho da letra (nas configurações de sessão): quatro valores de
+    exemplo, desenhados já com o tamanho escolhido. `rebuild()` volta a criar as etiquetas com
+    a escala em vigor (`compat.FONT_PCT`), por isso o efeito é imediato."""
+
+    SAMPLES = (("POTÊNCIA", "245 W"), ("FC", "152 bpm"), ("RITMO", "2:05 /500 m"),
+               ("TEMPO", "12:34"))
+
+    def __init__(self):
+        self.x = self.y = 0.0
+        self.width, self.height = 400.0, 56.0
+        self.rebuild()
+
+    def rebuild(self) -> None:
+        self.batch = pyglet.graphics.Batch()
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=P().panel2, batch=self.batch)
+        self.cells = []
+        for cap, val in self.SAMPLES:
+            c = make_label(cap, font_size=8, color=DIM, anchor_y="top", batch=self.batch)
+            v = make_label(val, font_size=15, bold=True, color=TEXT, anchor_y="top",
+                           batch=self.batch)
+            self.cells.append((c, v))
+        self.layout(self.x, self.y, self.width, self.height)
+
+    def layout(self, x: float, y: float, width: float, height: float = 56.0) -> None:
+        self.x, self.y, self.width, self.height = x, y, width, height
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y, width, height
+        n = len(self.cells)
+        step = width / n
+        for i, (c, v) in enumerate(self.cells):
+            c.x, c.y = x + 10 + i * step, y + height - 6
+            v.x, v.y = x + 10 + i * step, y + height - 6 - 14 * _scale() - 4
+
+    def draw(self) -> None:
+        self.batch.draw()
+
+
+class BlockBar:
+    """A barra do tempo do bloco: uma pista, o enchimento e — quando o bloco está a acabar —
+    as cores de aviso (amarelo, vermelho, preto; ver `perennia.core.block_bar`). O preto leva
+    um rebordo claro para se ver no tema escuro."""
+
+    def __init__(self, batch=None, height: int = 8, normal=None):
+        from perennia.core import block_bar
+        self._bb = block_bar
+        self.height = height
+        self.normal = tuple((normal or ACCENT)[:3])
+        self.cfg = block_bar.Config()
+        self.stage = block_bar.NORMAL
+        self.x = self.y = 0.0
+        self.width = 10.0
+        self.rim = pyglet.shapes.Rectangle(0, 0, 10, height + 4, color=DIM[:3], batch=batch)
+        self.rim.opacity = 0
+        self.track = pyglet.shapes.Rectangle(0, 0, 10, height, color=P().panel2, batch=batch)
+        self.fill = pyglet.shapes.Rectangle(0, 0, 0, height, color=self.normal, batch=batch)
+
+    def place(self, x: float, y: float, width: float) -> None:
+        self.x, self.y, self.width = x, y, max(10.0, width)
+        for r in (self.track,):
+            r.x, r.y, r.width = x, y, self.width
+        self.fill.x, self.fill.y = x, y
+        self.rim.x, self.rim.y, self.rim.width = x - 2, y - 2, self.width + 4
+
+    def hide(self) -> None:
+        self.track.opacity = self.fill.opacity = self.rim.opacity = 0
+
+    def set(self, done: float, base=None) -> str:
+        """Põe a barra a `done` (0–1) do bloco e devolve a fase de cor."""
+        done = max(0.0, min(1.0, done))
+        self.stage = self._bb.stage(1.0 - done, self.cfg)
+        self.track.opacity = 255
+        self.fill.opacity = 255
+        self.fill.width = max(1.0, self.width * done)
+        self.fill.color = self._bb.color(self.stage, base or self.normal)
+        self.rim.opacity = 255 if self.stage == self._bb.BLACK else 0
+        return self.stage
+
+
 class TopBar:
     """Faixa do topo, sempre à vista: os aparelhos e o estado de cada um, e os
     botões Dispositivos, Definições e Ligar/Desligar (sair)."""
@@ -1713,8 +1825,9 @@ class TopBar:
         self.more = make_label("", font_size=11, color=HEADER_DIM, anchor_y="center",
                                batch=self.batch)
         self.buttons: dict[str, tuple] = {}
-        for key_, icon in (("devices", "devices"), ("backups", "recover"),
-                           ("settings", "gear"), ("quit", "power_button")):
+        for key_, icon in (("glossary", "checklist"), ("devices", "devices"),
+                           ("backups", "recover"), ("settings", "gear"),
+                           ("quit", "power_button")):
             r = pyglet.shapes.Rectangle(0, 0, 10, self.H - 6,
                                         color=_theme.mix(HEADER, (255, 255, 255), 0.13),
                                         batch=self.batch)
@@ -1723,7 +1836,8 @@ class TopBar:
             ic = icons.sprite(icon, 0, 0, 18, batch=self.batch, opacity=235,
                               tint=HEADER_TEXT)
             self.buttons[key_] = (r, lab, ic)
-        self.enabled = {"devices": True, "backups": True, "settings": True, "quit": True}
+        self.enabled = {"glossary": True, "devices": True, "backups": True, "settings": True,
+                        "quit": True}
         self.devices: list[tuple[str, str]] = []
         self._chip_rects: list[tuple[float, float, float]] = []
         # data e hora, ao lado do botão Dispositivos
@@ -1751,10 +1865,10 @@ class TopBar:
         self.clock.text = text
         return True
 
-    def set_texts(self, devices: str, settings: str, quit_: str, backups: str = "Backups"
-                  ) -> None:
+    def set_texts(self, devices: str, settings: str, quit_: str, backups: str = "Backups",
+                  glossary: str = "Glossário") -> None:
         for k, txt in (("devices", devices), ("settings", settings), ("quit", quit_),
-                       ("backups", backups)):
+                       ("backups", backups), ("glossary", glossary)):
             self.buttons[k][1].text = txt
         self._clock_key = None
         self.update_clock()
@@ -1764,7 +1878,7 @@ class TopBar:
         w, h = self.window.width, self.window.height
         self.bg.x, self.bg.y, self.bg.width = 0, h - self.H, w
         x = w - 12
-        for k in ("quit", "settings", "backups", "devices"):
+        for k in ("quit", "settings", "backups", "devices", "glossary"):
             r, lab, ic = self.buttons[k]
             bw = max(64, text_px(lab.text, 11, True) + 42)
             x -= bw
