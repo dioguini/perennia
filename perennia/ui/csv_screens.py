@@ -48,7 +48,7 @@ class CsvDatasetPopup(PopupMixin, Screen):
                                  enabled=False,
                                  detail=tr("põe o .csv em {p}, Transferências ou Documentos",
                                            "put the .csv in {p}, Downloads or Documents",
-                                           p=self.app.data_dir / "imports")))
+                                           p=self.app.folder("imports"))))
         rows.append(Item(tr("Fechar", "Close"), button=True, primary=True, action=self.app.pop))
         self.chrome.set(d.label, d.help, "")
         self.list.set_items(rows, keep_index=True)
@@ -57,9 +57,10 @@ class CsvDatasetPopup(PopupMixin, Screen):
         import os
         from pathlib import Path
         out = []
-        for f in ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
-                  "~/Desktop"):
-            base = self.app.data_dir / "imports" if f == "imports" else Path(os.path.expanduser(f))
+        bases = self.app.folder_list("imports") + [
+            Path(os.path.expanduser(f)) for f in ("~/Downloads", "~/Transferências",
+                                                  "~/Documents", "~/Documentos", "~/Desktop")]
+        for base in bases:
             if base.is_dir():
                 out += sorted(base.glob("*.csv"))[:60]
         return list(dict.fromkeys(out))

@@ -1,6 +1,11 @@
 # O formato de um plano Perennia
 
-Um plano é um ficheiro de texto **JSON** com o nome a acabar em `.perennia-plan.json`.
+Um plano é um ficheiro de texto **JSON** com o nome a acabar em `.perennia-plan.json`
+(o formato completo), **ou uma tabela CSV** com o nome a acabar em `.perennia-plan.csv`
+(a via fácil, feita no Excel/LibreOffice; ver `plano-modelo.perennia-plan.csv`: uma linha por
+exercício de cada sessão, as linhas `# nome: …`, `# semanas: …`, `# rotacao: A,B` no topo, e
+`70|75|80` numa célula para um valor por semana). O CSV não tem séries com valores diferentes
+umas das outras: para isso usa o JSON.
 Põe-no na pasta `workouts` (ao lado da aplicação), em Transferências ou em Documentos, e em
 **Ginásio → Lista de treinos → Planos de X semanas → Importar plano…** escolhe-o. Se alguma
 coisa não obedecer ao formato, a Perennia diz o campo e a razão, e não importa nada.

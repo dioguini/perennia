@@ -8,7 +8,8 @@ from .i18n import tr
 
 KINDS = {"hrv4training": "hrv4training", "analises": "labs", "labs": "labs",
          "trainingpeaks": "trainingpeaks", "tp": "trainingpeaks",
-         "atividade": "upload", "upload": "upload", "csv": "csv", "saude": "saude"}
+         "atividade": "upload", "upload": "upload", "csv": "csv", "saude": "saude",
+         "historico": "historico", "strava": "historico", "garmin": "historico"}
 
 
 def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
@@ -43,11 +44,20 @@ def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
         rep = dict(r, dataset=key)
         text = f"{csv_sync.DATASETS[key].label}: {r.text()}"
     elif kind == "trainingpeaks":
-        from . import tp_import
+        from . import history_etl, tp_import
         rep = tp_import.import_csv(db, path)
         text = tr("{n} atividades · {s} só planeadas (ignoradas)",
                   "{n} activities · {s} only planned (skipped)",
                   n=rep["activities"], s=rep["skipped"])
+        etl = history_etl.auto_apply(db, [r[0] for r in db.conn.execute(
+            "SELECT id FROM synced_activities WHERE source = 'trainingpeaks'")])
+        if etl:
+            rep["etl"] = etl
+            text += "\n" + (etl["error"] if etl.get("error") else history_etl.report_text(etl))
+    elif kind == "historico":
+        from . import history_etl
+        rep = history_etl.import_history(db, path)
+        text = history_etl.import_text(rep)
     else:
         raise ValueError(f"tipo desconhecido: {kind}")
     return rep, text

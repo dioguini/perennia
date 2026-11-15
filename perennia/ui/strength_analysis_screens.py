@@ -246,6 +246,10 @@ class StrengthAnalysisScreen(Screen):
                 sub.append(tr("antes {v}", "before {v}", v=_kg(e["prev_e1rm"])))
         if e["time_s"]:
             sub.append(tr("{t} no exercício", "{t} on exercise", t=hms(e["time_s"])))
+        from perennia.core import complexes
+        if complexes.is_complex(self.app.db, e["exercise_id"]):    # os exercícios do complexo
+            sub.insert(0, tr("Complexo: ", "Complex: ")
+                       + complexes.components_text(self.app.db, e["exercise_id"]))
         self.d_sub.text = " · ".join(sub)
         self.d_sub.x, self.d_sub.y = dx + 12, y_top - 26
         dcols = [0, 0.11, 0.40, 0.65, 0.77, 0.90]
@@ -367,21 +371,24 @@ class StrengthAnalysisScreen(Screen):
             self.back_button.draw()
 
 
-# ================================================ treino livre: acrescentar o que faltou
+# ================================================ corrigir as séries feitas
 
 
 class FreeSetsScreen(Screen):
-    """As séries de uma sessão de **treino livre** (e só dessas): Enter abre uma série para
-    acrescentar ou corrigir as repetições, a carga e o RPE que ficaram por marcar. Nos outros
-    treinos, o treino é que manda e as séries não se editam depois."""
+    """As séries de uma sessão (livre, de um treino carregado ou de um plano): Enter abre uma
+    série para corrigir as repetições (ou os segundos), a carga e o RPE. O que o plano pedia e
+    o que foi registado na hora ficam guardados ao lado, para se ver se o objetivo foi cumprido.
+    Serve depois da sessão e durante ela (`session`)."""
 
-    def __init__(self, app, sid: str):
+    def __init__(self, app, sid: str, session=None):
         super().__init__(app)
         self.sid = sid
+        self.session = session
 
     def enter(self) -> None:
         a = self.app
         from perennia.core import strength as st
+        st._ensure_set_columns(a.db)
         rows = a.db.conn.execute(
             "SELECT s.*, e.name AS ex_name, e.measure AS measure FROM strength_sets s"
             " JOIN exercises e ON e.id = s.exercise_id WHERE s.session_id = ? ORDER BY s.id",
@@ -390,60 +397,80 @@ class FreeSetsScreen(Screen):
         for n, r in enumerate(rows, 1):
             secs = max(0, (r["end_t_s"] or 0) - (r["start_t_s"] or 0))
             unit = " s" if r["measure"] == "time" else ""
-            reps = f"{r['reps']}{unit} " + tr("rep.", "reps") if r["reps"] else \
-                tr("sem repetições", "no reps")
-            items.append(Item(f"{n}. {r['ex_name']}",
-                              value=reps + (f" · {r['load_kg']:g} kg" if r["load_kg"] else ""),
-                              detail=tr("durou {t}", "took {t}", t=hms(secs))
+            reps = f"{r['reps']}{unit} " + (tr("rep.", "reps") if not unit else "") if r["reps"] \
+                else tr("sem repetições", "no reps")
+            plan = ""
+            if r["planned_reps"]:
+                plan = tr("previsto {r}{u}", "planned {r}{u}", r=r["planned_reps"],
+                          u=unit.strip() and " s")
+                if r["planned_load_kg"]:
+                    plan += f" × {r['planned_load_kg']:g} kg"
+                plan += " · "
+            mark = " ✎" if r["edited_at"] else ""
+            items.append(Item(f"{n}. {r['ex_name']}{mark}",
+                              value=reps.strip() + (f" · {r['load_kg']:g} kg" if r["load_kg"]
+                                                    else ""),
+                              detail=plan + tr("durou {t}", "took {t}", t=hms(secs))
                               + (f" · RPE {r['rpe']:g}" if r["rpe"] else "")
                               + " · " + tr("Enter edita", "Enter edits"),
                               action=lambda sid=r["id"]: self._edit(sid), data=("set", r["id"])))
         if not items:
-            items = [Item(tr("Esta sessão não tem séries", "This session has no sets"),
+            items = [Item(tr("Esta sessão ainda não tem séries", "This session has no sets yet"),
                           enabled=False)]
-        free = st.is_free_session(a.db, self.sid)
-        self.chrome.set(tr("Séries do treino livre", "Free workout sets"),
-                        tr("Acrescenta o que ficou em falta: só nos treinos livres",
-                           "Add what was missing: free workouts only") if free else
-                        tr("Só os treinos livres se editam depois", "Only free workouts can "
-                           "be edited afterwards"), self.footer())
+        self.chrome.set(tr("Séries da sessão", "Session sets"),
+                        tr("Corrige o que fizeste: o plano e o registo original ficam guardados "
+                           "(✎ = corrigida)", "Fix what you did: the plan and the original record "
+                           "are kept (✎ = edited)"), self.footer())
         self.list.set_items(items, keep_index=True)
 
     def _edit(self, set_id: int) -> None:
-        self.app.push(FreeSetEditor(self.app, set_id, self.enter))
+        self.app.push(FreeSetEditor(self.app, set_id, self.enter, session=self.session))
 
 
 from perennia.ui.sport_screens import EditPopup  # noqa: E402
 
 
 class FreeSetEditor(EditPopup):
-    """Repetições, carga e RPE de uma série de um treino livre."""
+    """Repetições (ou segundos), carga e RPE de uma série, com o previsto e o registado na hora."""
 
     W = 640
 
-    def __init__(self, app, set_id: int, then=None):
+    def __init__(self, app, set_id: int, then=None, session=None):
         super().__init__(app)
+        from perennia.core import strength as st
         self.set_id = set_id
         self.then = then
-        r = app.db.conn.execute(
-            "SELECT s.*, e.name AS ex_name FROM strength_sets s JOIN exercises e ON"
-            " e.id = s.exercise_id WHERE s.id = ?", (set_id,)).fetchone()
-        self.name = r["ex_name"]
-        self.reps = int(r["reps"] or 0)
-        self.load = r["load_kg"]
-        self.rpe = r["rpe"]
+        self.session = session
+        o = st.set_original(app.db, set_id) or {}
+        self.orig = o
+        self.name = o.get("exercise", "")
+        self.timed = o.get("measure") == "time"
+        self.reps = int(o.get("reps") or 0)
+        self.load = o.get("load_kg")
+        self.rpe = o.get("rpe")
 
     def title(self) -> str:
         return tr("Editar série", "Edit set")
 
     def subtitle(self) -> str:
-        return self.name
+        o, u = self.orig, " s" if self.timed else ""
+        bits = []
+        if o.get("planned_reps"):
+            load = f" × {o['planned_load_kg']:g} kg" if o.get("planned_load_kg") else ""
+            bits.append(tr("previsto {r}{u}{l}", "planned {r}{u}{l}", r=o["planned_reps"], u=u,
+                           l=load))
+        if o.get("edited"):
+            load = f" × {o['logged_load_kg']:g} kg" if o.get("logged_load_kg") else ""
+            bits.append(tr("registado na hora {r}{u}{l}", "recorded at the time {r}{u}{l}",
+                           r=o["logged_reps"], u=u, l=load))
+        return " · ".join([self.name] + bits)
 
     def state(self):
         return (self.reps, self.load, self.rpe)
 
     def rows(self) -> list[Item]:
-        return [Item(tr("Repetições", "Reps"), value=str(self.reps), data="num:reps",
+        return [Item(tr("Segundos", "Seconds") if self.timed else tr("Repetições", "Reps"),
+                     value=str(self.reps), data="num:reps",
                      detail=tr("escreve o número · ←/→ ±1", "type the number · ←/→ ±1")),
                 Item(tr("Carga", "Load"), value=f"{self.load:g} kg" if self.load else "—",
                      data="num:load"),
@@ -467,11 +494,14 @@ class FreeSetEditor(EditPopup):
 
     def commit(self) -> bool:
         from perennia.core import strength as st
-        ok = st.edit_free_set(self.app.db, self.set_id, reps=self.reps, load_kg=self.load,
-                              rpe=self.rpe)
+        if self.session is not None:
+            ok = self.session.edit_done_set(self.set_id, reps=self.reps, load_kg=self.load,
+                                            rpe=self.rpe)
+        else:
+            ok = st.edit_set(self.app.db, self.set_id, reps=self.reps, load_kg=self.load,
+                             rpe=self.rpe)
         if not ok:
-            self.app.message(tr("Só se editam as séries de treinos livres.",
-                                "Only free workout sets can be edited."))
+            self.app.message(tr("Esta série já não existe.", "This set no longer exists."))
             return False
         if self.then:
             self.then()

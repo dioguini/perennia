@@ -593,8 +593,12 @@ def delete_plan(db: Database, key: str) -> None:
 
 
 def read_file(path: Path | str, max_kb: int | None = None) -> dict:
-    """Lê e valida um ficheiro de plano. Só JSON; com limite de tamanho."""
+    """Lê e valida um ficheiro de plano: JSON (o formato completo) ou CSV (a via fácil, ver
+    `plan_csv`); com limite de tamanho."""
     path = Path(path)
+    if path.name.lower().endswith(".csv"):
+        from . import plan_csv
+        return plan_csv.read_file(path, int(max_kb or 512))
     limit = (max_kb or 512) * 1024
     try:
         size = path.stat().st_size
@@ -642,8 +646,8 @@ def export_file(plan: dict, folder: Path | str) -> Path:
 
 
 def write_template(folder: Path | str) -> list[Path]:
-    """Escreve o ficheiro modelo (um plano pequeno, comentado no .md ao lado) e a descrição
-    do formato na pasta. Não substitui ficheiros que já existam."""
+    """Escreve o ficheiro modelo (um plano pequeno, em JSON e em CSV, comentado no .md ao lado)
+    e a descrição do formato na pasta. Não substitui ficheiros que já existam."""
     from . import program_library
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
@@ -655,6 +659,8 @@ def write_template(folder: Path | str) -> list[Path]:
     if not doc.exists():
         doc.write_text(program_library.FORMAT_DOC, encoding="utf-8")
     out.append(doc)
+    from . import plan_csv
+    out.append(plan_csv.write_template(folder))        # a via fácil: o mesmo modelo em CSV
     return out
 
 
@@ -671,7 +677,8 @@ def scan(folders: list[str] | None = None) -> list[Path]:
         base = Path(os.path.expanduser(folder))
         if base.is_dir():
             found.extend(sorted(p for p in base.iterdir()
-                                if p.is_file() and p.name.lower().endswith(EXT))[:PER_FOLDER])
+                                if p.is_file() and p.name.lower().endswith(
+                                    (EXT, ".perennia-plan.csv")))[:PER_FOLDER])
     return found
 
 

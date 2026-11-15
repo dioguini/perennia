@@ -112,6 +112,7 @@ class TestTreadmillDistance(Base):
 
     def test_session_sets_and_locks_the_block_speed(self):
         wid = self._workout()
+        self.db.set("block_edit_enabled", False)        # sem poder alterar o bloco, fica preso
         e = en.EnduranceEngine(self.db, self.db.athlete(), "running", workout_id=wid,
                                out_dir=self.tmp)
         e.start()

@@ -22,7 +22,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from . import inventory, muscles
+from . import gym_catalog, inventory, muscles
 from . import strength as st
 from .db import Database, new_id, now_iso
 from .i18n import tr
@@ -319,6 +319,7 @@ register(Modality("conditioning", "Conditioning", "Conditioning", "stopwatch",
                   laps=True))
 
 SEED_EXERCISES.append(("Natação (piscina)", "cardio", "full", "cardio", 0.0, "time", ()))
+gym_catalog.register()                  # o catálogo alargado (mais exercícios; treinos de origem)
 
 
 # ================================================================ tabelas
@@ -417,6 +418,11 @@ def ensure(db: Database) -> None:
                 db.conn.execute(f"ALTER TABLE {table} ADD COLUMN {c} {decl}")
     db.conn.commit()
     seed(db)
+    gym_catalog.seed_workouts(db)
+    if not getattr(db, "_complexes_busy", False):    # os complexos e os treinos que os usam
+        from . import complexes
+        complexes.ensure(db)
+        gym_catalog.seed_workouts(db, with_complexes=True)
 
 
 def seed(db: Database) -> None:

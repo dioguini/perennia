@@ -704,8 +704,10 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
                 mark = "✓ "
             else:
                 mark = "   "
+            comps = s.complex_text.get(ex.exercise_id)
+            base = "" if s.free else self._target_text(ex)
             rows.append(Item(f"{mark}{lab}{ex.name}", value=value,
-                             detail="" if s.free else self._target_text(ex),
+                             detail=(base + " · " if base and comps else base) + (comps or ""),
                              cols=self._cols_of(i, shown),
                              action=lambda k=i: self._start_exercise(k), data=("ex", i)))
             if i in s.skipped or (s.free and rest_of != i):
@@ -749,10 +751,22 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
                      data="action"),
                 Item(tr("+ Série", "+ Set"), button=True, action=self._add_set),
                 Item(tr("Saltar", "Skip"), button=True, action=self._skip),
+                Item(tr("Séries", "Sets"), button=True, action=self._edit_sets),
                 Item(tr("Retomar", "Resume") if s.paused else tr("Pausa", "Pause"),
                      button=True, action=self._flow_toggle_pause),
                 Item(tr("Terminar", "Finish"), button=True, danger=True,
                      action=self.ask_finish)]
+
+    def _edit_sets(self) -> None:
+        """Corrigir as repetições (ou os segundos) de qualquer série já feita nesta sessão. O
+        plano e o que foi registado na hora ficam guardados."""
+        from perennia.ui.strength_analysis_screens import FreeSetsScreen
+        s = self.session
+        if not s.sets:
+            self.app.message(tr("Ainda não há séries feitas", "No sets done yet"))
+            return
+        s.flush()
+        self.app.push(FreeSetsScreen(self.app, s.session_id, session=s))
 
     def enter(self) -> None:
         s = self.session
@@ -1123,6 +1137,9 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
         nxt = s.item_idx if shown != s.item_idx else s.next_item()
         goal = self._exercise_goal(s.item_idx)
         lines = [tr("Objetivo: ", "Goal: ") + goal] if goal else []
+        comps = s.complex_text.get(s.items[s.item_idx].exercise_id)
+        if comps:                                    # um complexo: os exercícios que o compõem
+            lines.insert(0, tr("Complexo: ", "Complex: ") + comps)
         if nxt is not None and nxt != shown and s.remaining(nxt) > 0:
             n_it = s.items[nxt]
             lines.append(f"{t('str.up_next')}: {n_it.name} — {n_it.target_text()}")
@@ -2474,7 +2491,8 @@ class ExportScreen(Screen):
         self.workout_id = workout_id
 
     def folder(self) -> Path:
-        return self.app.data_dir / "exports"
+        from perennia.core import folders
+        return folders.resolve(self.app.db, self.app.data_dir, "exports")
 
     def enter(self) -> None:
         a = self.app

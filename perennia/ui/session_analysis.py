@@ -298,10 +298,8 @@ class SessionAnalysis(RadarSide, Screen):
                 items = [Item(tr("Análise detalhada (séries, 1RM)", "Detailed analysis (sets, "
                                  "1RM)"), button=True, primary=True,
                               action=lambda: a.push(_strength_detail(a, self.sid)))]
-                from perennia.core import strength as st_core
-                if st_core.is_free_session(a.db, self.sid):      # só os treinos livres
-                    items.insert(0, Item(tr("Editar séries", "Edit sets"), button=True,
-                                         action=lambda: a.push(_free_sets(a, self.sid))))
+                items.insert(0, Item(tr("Editar séries", "Edit sets"), button=True,
+                                     action=lambda: a.push(_free_sets(a, self.sid))))
             else:
                 rows = rv.block_compliance(a.db, s)
                 if rows:
@@ -337,7 +335,9 @@ class SessionAnalysis(RadarSide, Screen):
                 comp = e["compliance"]
                 mark = "" if comp is None else ("✓ " if comp >= 0.95 else
                                                 "~ " if comp >= 0.7 else "✗ ")
-                rows.append([e["name"], f"{e['done_sets']} / {e['planned_sets'] or '—'}",
+                rows.append([("↷ " if e.get("skipped") else "")
+                             + e["name"] + (" ✎" if e.get("edited_sets") else ""),
+                             f"{e['done_sets']} / {e['planned_sets'] or '—'}",
                              f"{e['done_reps']} / {e['planned_reps'] or '—'}",
                              f"{e['volume']:.0f} kg" if e["volume"] else "—",
                              (mark + f"{comp * 100:.0f} %") if comp is not None else "—"])
@@ -348,13 +348,15 @@ class SessionAnalysis(RadarSide, Screen):
         rows = rv.block_compliance(a.db, self.sess)
         cols = [tr("Bloco", "Block"), tr("Alvo", "Target"), tr("Feito (média)", "Done (avg)"),
                 tr("FC média", "Avg HR"), tr("No alvo", "On target"),
-                tr("Resultado", "Result")]
+                tr("Resultado", "Result"), tr("Alterações e saltos", "Changes and skips")]
         out = []
         for r in rows:
             out.append([f"{r['i'] + 1}. {r['name']} ({hms(r['seconds'])})", r["target"],
                         r["avg_text"], f"{r['avg_hr']:.0f}" if r["avg_hr"] else "—",
                         f"{r['in_target'] * 100:.0f} %" if r["in_target"] is not None else "—",
-                        rv.verdict_text(r["verdict"])])
+                        rv.verdict_text(r["verdict"]),
+                        " · ".join(n.split(" · ", 1)[1] if " · " in n else n
+                                   for n in r.get("notes", [])) or "—"])
         self.table.set(cols, out, tr("Cada bloco: cumprido ou não", "Each block: done or not"),
                        empty=tr("Sessão livre: sem blocos de treino para comparar.",
                                 "Free session: no workout blocks to compare."))

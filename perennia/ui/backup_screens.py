@@ -31,7 +31,8 @@ SEARCH = ("~/Downloads", "~/Transferências", "~/Documents", "~/Documentos", "~/
 
 
 def backups_dir(app) -> Path:
-    return Path(app.data_dir) / "backups"
+    from perennia.core import folders
+    return folders.resolve(app.db, app.data_dir, "backups")
 
 
 def search_folders(app) -> list[Path]:

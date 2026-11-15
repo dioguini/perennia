@@ -7,6 +7,7 @@ as amostras de segundo a segundo em % do limiar e o treino prescrito.
 """
 from __future__ import annotations
 
+from . import block_log
 from . import feedback as fbm
 from . import intensity as it
 from .i18n import tr
@@ -123,6 +124,7 @@ def block_compliance(db, sess: fbm.Session) -> list[dict]:
     vals = [(t, p, h) for t, p, _raw, h in sess.samples]
     end_t = max((t for t, *_ in vals), default=0)
     out = []
+    logged = block_log.by_step(db, sess.id, sess.sport)
     for i, (b, (a, z)) in enumerate(zip(brief.raw_blocks, wins)):
         inside = [(p, h) for t, p, h in vals if a <= t < z]
         pcts = [p for p, _h in inside if p is not None]
@@ -161,6 +163,10 @@ def block_compliance(db, sess: fbm.Session) -> list[dict]:
             else:
                 row["verdict"] = ("ok" if frac >= DONE else "partial" if frac >= PARTIAL
                                   else "miss")
+        row["notes"] = [block_log.describe(e) for e in logged.get(i, [])]
+        row["skipped_by_user"] = any(e["kind"] == block_log.SKIP for e in logged.get(i, []))
+        if row["skipped_by_user"] and row["verdict"] in ("ok", "partial", "miss", "short"):
+            row["verdict"] = "short"            # saltado a meio: não foi acabado
         if avg is not None:
             row["avg_text"] = ctx.text(mode, avg) if mode == "power" else ctx.short(mode, avg)
         else:

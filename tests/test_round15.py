@@ -941,6 +941,8 @@ class TestAdvancedSettings(tg.GuiCase):
         scr = self.open_advanced()
         labels = {i.label for i in scr.list.items}
         for o in options.OPTIONS:
+            if o.group == "paths":              # as pastas têm o seu separador (Definições → Pastas)
+                continue
             self.assertIn(o.label, labels, o.key)
 
     def test_arrows_change_and_save_applies_to_the_code(self):

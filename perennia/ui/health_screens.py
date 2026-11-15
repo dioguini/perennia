@@ -1257,14 +1257,14 @@ class ImportScreen(Screen):
         self.patterns = patterns or self.PATTERNS
 
     def folders(self) -> list[Path]:
-        out = [self.app.data_dir / "imports"]
+        out = list(self.app.folder_list("imports"))
         for f in self.FOLDERS:
             out.append(Path(os.path.expanduser(f)))
         return out
 
     def enter(self) -> None:
         a = self.app
-        (a.data_dir / "imports").mkdir(parents=True, exist_ok=True)
+        a.folder("imports", create=True)
         found: list[Path] = []
         for folder in dict.fromkeys(self.folders()):
             if folder.is_dir():
@@ -1289,7 +1289,7 @@ class ImportScreen(Screen):
         if len(rows) == n_fixed:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
                              detail=tr("Põe os ficheiros em {p}", "Put the files in {p}",
-                                       p=a.data_dir / "imports")))
+                                       p=a.folder("imports"))))
         rows += [
             Item(tr("Como exportar do HRV4Training", "How to export from HRV4Training"),
                  detail=tr("Na app: exportar as medições (CSV) para o Google Drive; descarrega "

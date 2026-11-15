@@ -64,6 +64,7 @@ GROUPS: dict[str, tuple[str, str]] = {
     "profile": ("Perfil por desporto", "Sport profile"),
     "display": ("Aspeto, barra de bloco e gráfico ao vivo", "Look, block bar and live chart"),
     "notes": ("Notas, glossário e rato", "Notes, glossary and mouse"),
+    "paths": ("Pastas", "Folders"),
 }
 
 
@@ -163,8 +164,8 @@ OPTIONS: tuple[Opt, ...] = (
     _o("adhoc_csv_bom", "adhoc", "CSV: UTF-8 com BOM", "CSV: UTF-8 with BOM", BOOL, True,
        hint_pt="o Excel abre bem os acentos", hint_en="Excel opens accents correctly"),
     _o("adhoc_export_dir", "adhoc", "CSV: pasta das exportações", "CSV: export folder", TEXT, "",
-       hint_pt="vazio = a pasta «exports» dentro da pasta de dados",
-       hint_en="empty = the «exports» folder inside the data folder"),
+       hint_pt="vazio = a pasta das exportações (Definições → Pastas)",
+       hint_en="empty = the exports folder (Settings → Folders)"),
     _o("adhoc_max_categories", "adhoc", "Gráfico: categorias no eixo X", "Chart: X axis categories",
        INT, 15, lo=2, hi=120, step=1,
        hint_pt="as categorias a mais ficam agrupadas em «Outros»",
@@ -410,6 +411,86 @@ OPTIONS: tuple[Opt, ...] = (
        "Import plan: maximum size", INT, 512, lo=16, hi=8192, step=16, unit="kB",
        hint_pt="um ficheiro de plano maior do que isto é recusado",
        hint_en="a plan file larger than this is refused"),
+    # ------------------------------------------------------------ desempenho da base de dados
+    _o("db_fast_writes", "data", "Base de dados: gravações rápidas", "Database: fast writes",
+       BOOL, True,
+       hint_pt="«synchronous=NORMAL» (com WAL é seguro contra falhas da aplicação; só uma "
+               "quebra de energia pode perder os últimos segundos). Desligado = FULL",
+       hint_en="'synchronous=NORMAL' (safe against app crashes with WAL; only a power cut can "
+               "lose the last seconds). Off = FULL"),
+    _o("db_cache_mb", "data", "Base de dados: cache", "Database: cache", INT, 16, lo=2, hi=512,
+       step=2, unit="MB",
+       hint_pt="memória que o SQLite usa para páginas lidas (mais = menos leituras do disco)",
+       hint_en="memory SQLite uses for pages read (more = fewer disk reads)"),
+    # ------------------------------------------------------------ histórico de outras apps
+    _o("etl_auto_apply", "workouts", "Histórico: aplicar regras ao importar",
+       "History: apply rules on import", BOOL, True,
+       hint_pt="depois de importar o histórico (TrainingPeaks, Strava, Garmin Connect) aplicam-se "
+               "as regras de normalização às atividades novas",
+       hint_en="after importing history (TrainingPeaks, Strava, Garmin Connect) the "
+               "normalisation rules are applied to the new activities"),
+    _o("etl_use_defaults", "workouts", "Histórico: regras de arranque",
+       "History: starter rules", BOOL, True,
+       hint_pt="sem ficheiro de regras, usam-se as de arranque (strengthening → Ginásio · Força, "
+               "etc.)",
+       hint_en="with no rules file, the starter rules are used (strengthening → Gym · Strength, "
+               "etc.)"),
+    _o("etl_rules_file", "workouts", "Histórico: ficheiro de regras",
+       "History: rules file", TEXT, "",
+       hint_pt="JSON ou CSV com as regras · vazio = «regras-historico.json» na pasta das "
+               "importações",
+       hint_en="JSON or CSV with the rules · empty = 'regras-historico.json' in the imports "
+               "folder"),
+    _o("etl_rules_max_kb", "workouts", "Histórico: tamanho máximo das regras",
+       "History: maximum rules size", INT, 512, lo=16, hi=8192, step=16, unit="kB",
+       hint_pt="um ficheiro de regras maior do que isto é recusado",
+       hint_en="a rules file larger than this is refused"),
+    # ------------------------------------------------------------ sincronizar por Wi-Fi
+    _o("sync_port", "data", "Sincronização Wi-Fi: porta", "Wi-Fi sync: port", INT, 8765,
+       lo=1024, hi=65535, step=1,
+       hint_pt="a porta TCP em que o destino escuta (a mesma nos dois lados)",
+       hint_en="the TCP port the receiver listens on (the same on both sides)"),
+    _o("sync_pin_digits", "data", "Sincronização Wi-Fi: dígitos do PIN",
+       "Wi-Fi sync: PIN digits", INT, 8, lo=6, hi=12, step=1,
+       hint_pt="o PIN do destino é aleatório, de uso único; mais dígitos = mais seguro",
+       hint_en="the receiver's PIN is random and single-use; more digits = safer"),
+    _o("sync_pin_ttl_s", "data", "Sincronização Wi-Fi: validade do PIN",
+       "Wi-Fi sync: PIN validity", INT, 300, lo=30, hi=3600, step=30, unit="s",
+       hint_pt="o destino fecha sozinho passado este tempo",
+       hint_en="the receiver closes by itself after this time"),
+    _o("sync_max_attempts", "data", "Sincronização Wi-Fi: tentativas de PIN",
+       "Wi-Fi sync: PIN attempts", INT, 3, lo=1, hi=10, step=1,
+       hint_pt="depois de tantos PIN errados o destino fecha",
+       hint_en="after this many wrong PINs the receiver closes"),
+    _o("sync_timeout_s", "data", "Sincronização Wi-Fi: tempo limite",
+       "Wi-Fi sync: timeout", INT, 30, lo=5, hi=600, step=5, unit="s",
+       hint_pt="quanto se espera por uma resposta antes de desistir",
+       hint_en="how long to wait for a reply before giving up"),
+    _o("sync_max_mb", "data", "Sincronização Wi-Fi: tamanho máximo",
+       "Wi-Fi sync: maximum size", INT, 1024, lo=16, hi=16384, step=16, unit="MB",
+       hint_pt="o pacote maior do que isto não se envia nem se recebe",
+       hint_en="a package larger than this is neither sent nor received"),
+    _o("sync_lan_only", "data", "Sincronização Wi-Fi: só rede local",
+       "Wi-Fi sync: local network only", BOOL, True,
+       hint_pt="recusa endereços que não sejam da rede local (192.168…, 10…, 172.16…)",
+       hint_en="refuses addresses that are not on the local network (192.168…, 10…, 172.16…)"),
+    _o("sync_kdf_iterations", "data", "Sincronização Wi-Fi: custo do PIN",
+       "Wi-Fi sync: PIN cost", INT, 200000, lo=10000, hi=2000000, step=10000,
+       hint_pt="iterações do PBKDF2 que tornam lento adivinhar o PIN (igual nos dois lados)",
+       hint_en="PBKDF2 iterations that make guessing the PIN slow (the same on both sides)"),
+    _o("sync_mode", "data", "Sincronização Wi-Fi: modo", "Wi-Fi sync: mode", CHOICE, "merge",
+       choices=(("merge", "Juntar (acrescenta o que é novo)", "Merge (adds what is new)"),
+                ("replace", "Substituir (o destino fica igual à fonte)",
+                 "Replace (the receiver becomes a copy of the source)")),
+       hint_pt="como o destino repõe o que recebe",
+       hint_en="how the receiver restores what it gets"),
+    _o("sync_components", "data", "Sincronização Wi-Fi: componentes",
+       "Wi-Fi sync: components", TEXT, "",
+       hint_pt="chaves das componentes separadas por vírgulas (ex.: sessoes,saude) · vazio = "
+               "todos os dados (sem definições, atalhos, ecrã, aparelhos, ficheiros nem "
+               "credenciais)",
+       hint_en="component keys separated by commas (e.g. sessoes,saude) · empty = all data "
+               "(no settings, shortcuts, screen, devices, files or credentials)"),
     # ------------------------------------------------------------ perfil por desporto
     _o("profile_days", "profile", "Janela dos melhores valores", "Window for best values",
        INT, 180, lo=30, hi=730, step=10, unit="d",
@@ -528,6 +609,38 @@ OPTIONS: tuple[Opt, ...] = (
        lo=30, hi=240, step=10,
        hint_pt="em quantos pontos se resume a sessão no gráfico (mais = mais pormenor)",
        hint_en="how many points the session is reduced to in the chart (more = more detail)"),
+    _o("block_edit_enabled", "sessions", "Alterar o bloco durante a sessão",
+       "Change the block during the session", BOOL, True,
+       hint_pt="deixa mudar a potência (ERG), a resistência (remo) ou a velocidade e inclinação "
+               "(passadeira) a meio de um bloco; o plano fica guardado para comparar",
+       hint_en="lets you change power (ERG), resistance (rowing) or speed and incline "
+               "(treadmill) mid-block; the plan is kept to compare"),
+    _o("block_change_scope", "sessions", "Alteração do bloco vale para", "A block change lasts for",
+       CHOICE, "block",
+       choices=(("block", "só esse bloco (volta ao plano no seguinte)",
+                 "that block only (back to the plan in the next one)"),
+                ("session", "até ao fim da sessão", "until the end of the session")),
+       hint_pt="a alteração não salta o bloco: só acaba quando termina ou carregas em Saltar",
+       hint_en="a change does not skip the block: it ends when it finishes or you press Skip"),
+    _o("path_exports", "paths", "Pasta das exportações", "Exports folder", TEXT, "",
+       hint_pt="treinos, planos e CSV que exportas · vazio = «exports» na pasta de dados",
+       hint_en="workouts, plans and CSV you export · empty = «exports» in the data folder"),
+    _o("path_imports", "paths", "Pasta das importações", "Imports folder", TEXT, "",
+       hint_pt="onde se procuram ficheiros a importar (a de sempre também conta) · vazio = "
+               "«imports» na pasta de dados",
+       hint_en="where to look for files to import (the usual one still counts) · empty = "
+               "«imports» in the data folder"),
+    _o("path_backups", "paths", "Pasta dos backups", "Backups folder", TEXT, "",
+       hint_pt="onde se gravam e procuram os backups · vazio = «backups» na pasta de dados",
+       hint_en="where backups are saved and looked for · empty = «backups» in the data folder"),
+    _o("path_workouts", "paths", "Pasta dos treinos e planos", "Workouts and plans folder", TEXT,
+       "", hint_pt="onde se guardam e procuram treinos e planos em ficheiro · vazio = «workouts» "
+                   "na pasta de dados (e ao lado da aplicação, para procurar)",
+       hint_en="where workout and plan files are saved and looked for · empty = «workouts» "
+               "next to the app"),
+    _o("path_gpx", "paths", "Pasta das rotas (.gpx)", "Routes folder (.gpx)", TEXT, "",
+       hint_pt="onde se procuram rotas · vazio = «gpx» ao lado da aplicação",
+       hint_en="where routes are looked for · empty = «gpx» next to the app"),
     _o("note_max_chars", "notes", "Notas: tamanho máximo", "Notes: maximum length", INT, 4000,
        lo=200, hi=20000, step=200, unit="car.",
        hint_pt="das notas dos exercícios, dos artigos e dos conceitos do glossário",
@@ -638,6 +751,19 @@ def shown(opt: Opt, value: Any) -> str:
 
 def apply(db) -> None:
     """Põe os valores nas constantes dos módulos (arranque e depois de guardar as Definições)."""
+    try:                                   # a base de dados: gravações mais rápidas, cache maior
+        conn = db.conn
+        conn.execute("PRAGMA synchronous=" + ("NORMAL" if get(db, "db_fast_writes") else "FULL"))
+        conn.execute(f"PRAGMA cache_size=-{int(get(db, 'db_cache_mb')) * 1024}")
+        conn.execute("PRAGMA temp_store=MEMORY")
+    except Exception:
+        pass
+    try:                                   # as pastas escolhidas (Definições → Pastas)
+        from .. import paths
+        for name in ("workouts", "gpx", "imports", "backups"):
+            paths.set_configured(name, get(db, "path_" + name))
+    except Exception:
+        pass
     for opt in OPTIONS:
         if not opt.binds:
             continue

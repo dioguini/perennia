@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-from . import fit, naming, physics
+from . import block_log, fit, naming, physics
 from .boards import Board, LiveBoards
 from .chase import Chase
 from .climbs import signs_for
@@ -399,6 +399,7 @@ class RideEngine:
         self._loop_start_t = 0.0
         self._best_loop_s: float | None = None
         self._workout_done = False
+        self._changed_step: int | None = None   # bloco com a potência alterada (block_log)
 
         # modo fuga
         self.chase: Chase | None = None
@@ -764,6 +765,15 @@ class RideEngine:
                 self._workout_done = True
                 self._emit("workout_done")
             changed = self.workout.observe(self._t, r.power_w, r.hr_bpm, r.cadence_rpm)
+            if (changed is not None and self._changed_step is not None
+                    and changed != self._changed_step and self.state.intensity != 1.0
+                    and block_log.scope(self.db) == "block"):
+                self.state.intensity = 1.0               # a alteração valia só para o bloco
+                self.workout.intensity = 1.0
+                self._changed_step = None
+                self._last_target_sent = None
+                self.state.target_power_w = self.workout.target_watts(self._t)
+                self._emit("resistance", mode="erg", value=1.0)
             if changed is not None and changed > 0:
                 self.lap("workout_step")         # treino estruturado: uma volta por bloco
             if changed is not None:
@@ -1216,6 +1226,11 @@ class RideEngine:
         """Salta o passo do treino em curso. False se a sessão não tem passos."""
         if self.workout is None or self._workout_done or not self.started:
             return False
+        found = self.workout.step_at(self._t)
+        if found is not None:                     # o que já estava feito do bloco que se salta
+            idx, step, progress = found
+            block_log.safely(block_log.record_skip, self.db, "cycling", self.ride_id, idx,
+                             step.duration_s, step.duration_s * progress, "s", self._t)
         moved = self.workout.skip_step(self._t)
         if moved is None:
             return False
@@ -1255,6 +1270,7 @@ class RideEngine:
                                                       + steps * self.INTENSITY_STEP)), 2)
             self.workout.intensity = self.state.intensity
             self._last_target_sent = None
+            self._note_block_change()
             self._emit("resistance", mode="erg", value=self.state.intensity)
             return "erg"
         self.difficulty = round(max(0.0, min(1.5, self.difficulty
@@ -1263,6 +1279,23 @@ class RideEngine:
         self._last_grade_sent = None
         self._emit("resistance", mode="sim", value=self.difficulty)
         return "sim"
+
+    def _note_block_change(self) -> None:
+        """A potência do bloco em curso mudou (±%): guarda o alvo do plano e o de agora.
+        O bloco não salta; com `block_change_scope` = bloco, volta ao plano no seguinte."""
+        if self.workout is None:
+            return
+        found = self.workout.step_at(self._t)
+        if found is None:
+            return
+        idx, step, progress = found
+        planned = step.watts(progress, self.athlete.ftp_w)
+        if planned is None:
+            return
+        self._changed_step = idx
+        block_log.safely(block_log.record_change, self.db, "cycling", self.ride_id, idx,
+                         "target_w", float(round(planned)),
+                         float(round(planned * self.state.intensity)), self._t)
 
     def current_lap(self) -> dict:
         """A volta em curso, ao vivo: o que o painel das voltas mostra."""

@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-from . import naming, physics
+from . import block_log, naming, physics
 from .db import Athlete, Database, new_id, now_iso
 
 # --------------------------------------------------------------- exercícios
@@ -141,6 +141,7 @@ def seed(db: Database) -> None:
                  "rest_s": rest} for e, s, r, ld, rpe, rest in items if e in by_name])
         db.set("strength_seeded", True)
     _ensure_measure_column(db)
+    _ensure_set_columns(db)
 
 
 def _ensure_measure_column(db: Database) -> None:
@@ -376,23 +377,71 @@ def is_free_session(db: Database, session_id: str) -> bool:
     return bool(r and r["mode"] == FREE_MODE)
 
 
-def edit_free_set(db: Database, set_id: int, *, reps: int | None = None,
-                  load_kg: float | None = None, rpe: float | None = None) -> bool:
-    """Acrescenta ou corrige, depois da sessão, o que ficou em falta numa série de um treino
-    **livre** (repetições, carga, RPE). Só os treinos livres: nos outros, o treino é que manda.
-    Devolve False se a série não é de uma sessão livre."""
-    r = db.conn.execute("SELECT session_id FROM strength_sets WHERE id = ?", (set_id,)).fetchone()
-    if r is None or not is_free_session(db, r["session_id"]):
+def _ensure_set_columns(db: Database) -> None:
+    """`logged_*`: o que foi registado na hora, antes de qualquer correção (o plano fica em
+    `planned_*`); `edited_at`: quando foi corrigida pela primeira vez."""
+    if getattr(db, "_strength_set_cols", False):
+        return
+    cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(strength_sets)")}
+    for name, decl in (("logged_reps", "INTEGER"), ("logged_load_kg", "REAL"),
+                       ("edited_at", "TEXT")):
+        if name not in cols:
+            db.conn.execute(f"ALTER TABLE strength_sets ADD COLUMN {name} {decl}")
+    db.conn.commit()
+    try:
+        db._strength_set_cols = True
+    except Exception:
+        pass
+
+
+def edit_set(db: Database, set_id: int, *, reps: int | None = None,
+             load_kg: float | None = None, rpe: float | None = None) -> bool:
+    """Corrige as repetições (ou os segundos), a carga e o RPE de uma série, em **qualquer**
+    sessão: livre, de um treino carregado ou de um plano. O original fica guardado: o que o
+    plano pedia (`planned_*`) nunca muda, e o que foi registado na hora fica em `logged_*`
+    na primeira correção — assim vê-se se o objetivo foi cumprido e o que foi corrigido.
+    Devolve False se a série não existe."""
+    _ensure_set_columns(db)
+    r = db.conn.execute("SELECT * FROM strength_sets WHERE id = ?", (set_id,)).fetchone()
+    if r is None:
         return False
+    if r["logged_reps"] is None and r["edited_at"] is None:
+        db.conn.execute("UPDATE strength_sets SET logged_reps = ?, logged_load_kg = ?,"
+                        " edited_at = ? WHERE id = ?", (r["reps"], r["load_kg"], now_iso(), set_id))
     if reps is not None:
         db.conn.execute("UPDATE strength_sets SET reps = ? WHERE id = ?",
                         (max(0, int(reps)), set_id))
-    db.conn.execute("UPDATE strength_sets SET load_kg = ?, rpe = ? WHERE id = ?",
+    db.conn.execute("UPDATE strength_sets SET load_kg = ?, rpe = ?, edited_at = ? WHERE id = ?",
                     (None if not load_kg or load_kg <= 0 else round(float(load_kg), 2),
-                     None if not rpe or rpe <= 0 else max(1.0, min(10.0, float(rpe))), set_id))
+                     None if not rpe or rpe <= 0 else max(1.0, min(10.0, float(rpe))),
+                     now_iso(), set_id))
     db.conn.commit()
+    from . import complexes
+    complexes.log_parts(db, set_id)
     _refresh_totals(db, r["session_id"])
     return True
+
+
+def edit_free_set(db: Database, set_id: int, **kw) -> bool:
+    """Compatibilidade: antes só se editavam os treinos livres; agora `edit_set` serve todos."""
+    return edit_set(db, set_id, **kw)
+
+
+def set_original(db: Database, set_id: int) -> dict | None:
+    """O original de uma série ao lado do que ficou: previsto (plano), registado na hora e
+    atual (depois das correções)."""
+    _ensure_set_columns(db)
+    r = db.conn.execute("SELECT s.*, e.measure AS measure, e.name AS ex_name FROM strength_sets s"
+                        " JOIN exercises e ON e.id = s.exercise_id WHERE s.id = ?",
+                        (set_id,)).fetchone()
+    if r is None:
+        return None
+    edited = r["edited_at"] is not None
+    return {"id": r["id"], "exercise": r["ex_name"], "measure": r["measure"],
+            "planned_reps": r["planned_reps"], "planned_load_kg": r["planned_load_kg"],
+            "logged_reps": r["logged_reps"] if r["logged_reps"] is not None else r["reps"],
+            "logged_load_kg": (r["logged_load_kg"] if edited else r["load_kg"]),
+            "reps": r["reps"], "load_kg": r["load_kg"], "rpe": r["rpe"], "edited": edited}
 
 
 def _refresh_totals(db: Database, session_id: str) -> None:
@@ -437,6 +486,9 @@ class StrengthSession:
         wk = workout(db, workout_id) or {"name": "Força", "id": workout_id}
         self.workout_name = wk["name"]
         self.items = workout_items(db, workout_id)
+        from . import complexes             # os complexos do treino e os seus exercícios
+        self.complex_text: dict[int, str] = complexes.components_map(
+            db, [i.exercise_id for i in self.items])
         if not self.items:
             raise ValueError("o treino não tem exercícios")
         # treino feito no construtor por blocos: ordem das séries (supersets,
@@ -798,6 +850,9 @@ class StrengthSession:
             (self.session_id, self.item_idx, it.exercise_id, set_no, reps, load, rpe,
              int(self.set_start_t), int(self.t), avg, mx, plan_reps, plan_load))
         self.db.conn.commit()
+        if it.exercise_id in self.complex_text:      # um complexo: guarda o que fez em cada exercício
+            from . import complexes
+            complexes.log_parts(self.db, int(cur.lastrowid))
         logged = LoggedSet(int(cur.lastrowid), self.item_idx, it.exercise_id, set_no, reps,
                            load, rpe, int(self.set_start_t), int(self.t), avg, mx)
         self.sets.append(logged)
@@ -846,6 +901,22 @@ class StrengthSession:
         else:
             self.entry[name] = value
 
+    def edit_done_set(self, set_id: int, *, reps: int | None = None,
+                      load_kg: float | None = None, rpe: float | None = None) -> bool:
+        """Corrige uma série já feita nesta sessão (não só a última). O plano fica como estava
+        e o que foi registado na hora fica guardado (ver `edit_set`)."""
+        if not edit_set(self.db, set_id, reps=reps, load_kg=load_kg, rpe=rpe):
+            return False
+        for x in self.sets:
+            if x.id == set_id:
+                row = self.db.conn.execute("SELECT reps, load_kg, rpe FROM strength_sets"
+                                           " WHERE id = ?", (set_id,)).fetchone()
+                x.reps, x.load_kg, x.rpe = int(row["reps"] or 0), row["load_kg"], row["rpe"]
+                if x.item_idx == self.item_idx and self.editing_last and x is self.sets[-1]:
+                    self.carry_load[x.item_idx] = x.load_kg
+        self.checkpoint()
+        return True
+
     def adjust(self, name: str, steps: int) -> None:
         cur = self.field_value(name)
         if name == "reps":
@@ -887,6 +958,7 @@ class StrengthSession:
         """
         self._cancel_set()
         gone = self.item_idx
+        self._log_skip(gone)
         self.skipped.add(gone)
         nxt = self.next_item()
         if nxt is None:
@@ -901,6 +973,15 @@ class StrengthSession:
             self._prefill()
         self.checkpoint()
         return gone, nxt
+
+    def _log_skip(self, idx: int) -> None:
+        """Guarda quantas séries do exercício estavam feitas quando foi saltado (as séries
+        em si já ficaram gravadas): assim vê-se depois se o bloco foi cumprido."""
+        if self.free or idx in self.skipped:
+            return
+        block_log.safely(block_log.record_skip, self.db, "strength", self.session_id, idx,
+                         float(self.planned_sets(idx)), float(self.done_sets(idx)), "sets",
+                         self.t)
 
     def _cancel_set(self) -> None:
         """Deixa cair a série em curso, sem a gravar (o exercício vai ser saltado)."""
@@ -932,7 +1013,9 @@ class StrengthSession:
         first = self.item_idx
         for idx in range(len(self.items)):
             if self.block_of(idx) == bi and self.done_sets(idx) < self.planned_sets(idx):
+                self._log_skip(idx)
                 self.skipped.add(idx)
+        self._log_skip(first)
         self.skipped.add(first)
         nxt = self.next_item()
         if nxt is None:
@@ -1182,6 +1265,26 @@ def exercise_progress(db: Database, exercise_id: int) -> list[dict]:
             est = e1rm((r["load_kg"] or 0.0) + bw * body, r["reps"], r["rpe"])
             if est and (o["best_e1rm"] is None or est > o["best_e1rm"]):
                 o["best_e1rm"] = est
+    for o in out.values():
+        o.setdefault("in_complexes", 0)
+    # o que fez dentro de complexos conta para a evolução do exercício (ex.: o Press num
+    # complexo de kettlebell), mesmo nas sessões em que não o fez à parte
+    try:
+        parts = db.conn.execute(
+            "SELECT ss.id AS sid, ss.started_at AS day, SUM(p.reps) AS reps"
+            " FROM strength_set_parts p JOIN strength_sets s ON s.id = p.set_id"
+            " JOIN strength_sessions ss ON ss.id = s.session_id"
+            " WHERE ss.status = 'completed' AND p.exercise_id = ? GROUP BY ss.id",
+            (exercise_id,)).fetchall()
+    except Exception:
+        parts = []
+    for r in parts:
+        if r["sid"] not in out:
+            out[r["sid"]] = {"date": str(r["day"])[:10], "best_e1rm": None, "max_load": None,
+                             "volume": 0.0, "sets": 0, "reps": 0, "in_complexes": 0}
+            order.append(r["sid"])
+        out[r["sid"]]["in_complexes"] = int(r["reps"] or 0)
+    order.sort(key=lambda k: out[k]["date"])
     return [out[k] for k in order]
 
 

@@ -1,0 +1,15 @@
+# nome: O meu plano (modelo CSV)
+# categoria: strength
+# nivel: beginner
+# semanas: 4
+# dias_por_semana: 3
+# dias_da_semana: 1,3,5
+# rotacao: A,B
+# descricao: Duas sessões que alternam; sobe 2,5 kg de cada vez.
+sessao;nome_sessao;exercicio;grupo;series;reps;descanso_s;carga_kg;pct1rm;adiciona_kg;por;nota
+A;Treino A;Agachamento com barra;legs;5;5;180;;;2.5;session;
+A;Treino A;Supino com barra;chest;5;5;180;;;2.5;session;
+A;Treino A;Remada com barra;back;5;5;120;;;2.5;session;
+B;Treino B;Agachamento com barra;legs;5;5;180;;;2.5;session;
+B;Treino B;Press militar;shoulders;5;5;180;;;2.5;session;
+B;Treino B;Peso morto;hips;1;5;180;;;5;session;

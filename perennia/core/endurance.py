@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from . import naming, physics
+from . import block_log, naming, physics
 from . import strength as st
 from .db import Athlete, Database, new_id, now_iso
 from .i18n import tr
@@ -398,6 +398,7 @@ class EnduranceEngine:
         self.block_speeds: list[float | None] = []
         self.block_inclines: list[float | None] = []
         self.speed_locked = False
+        self._applying_block = False      # a passadeira está a receber o valor do plano do bloco
         self.treadmill = None             # a passadeira (real ou simulada), se estiver ligada
         self.incline_pct = 0.0
         if workout_id:
@@ -489,6 +490,7 @@ class EnduranceEngine:
         self.speed_kmh = max(0.0, min(top, round(kmh, 1)))
         if self.treadmill is not None:
             self.treadmill.set_speed(self.speed_kmh if not self.paused else 0.0)
+        self._note_block_change("speed_kmh", self.block_speeds, self.speed_kmh)
 
     def set_incline(self, pct: float) -> None:
         """A inclinação a pôr na passadeira (a de um bloco, a da rota ou a que escolhes na
@@ -501,11 +503,31 @@ class EnduranceEngine:
         self.incline_pct = max(0.0, min(top, round(float(pct), 1)))
         if self.treadmill is not None:
             self.treadmill.set_incline(self.incline_pct)
+        self._note_block_change("incline_pct", self.block_inclines, self.incline_pct)
+
+    def _note_block_change(self, field: str, planned: list, value: float) -> None:
+        """Mudaste a velocidade ou a inclinação a meio de um bloco: o plano fica guardado ao
+        lado do que fizeste. O bloco não salta."""
+        if (self._applying_block or self.workout is None or self.workout.done
+                or not self.started):
+            return
+        idx = self.workout.idx
+        if not (0 <= idx < len(planned)) or planned[idx] is None:
+            return
+        block_log.safely(block_log.record_change, self.db, self.sport, self.session_id, idx,
+                         field, float(planned[idx]), float(value), self.t)
 
     def skip_step(self) -> bool:
         """Salta o bloco (passo do treino) em curso. False se não houver."""
         if self.workout is None or self.workout.done or not self.started:
             return False
+        step = self.workout.step
+        if step is not None:                       # o que já estava feito do bloco saltado
+            by_time = step.dur_type == "time"
+            block_log.safely(block_log.record_skip, self.db, self.sport, self.session_id,
+                             self.workout.idx, float(step.dur_value),
+                             float(self.workout.step_t if by_time else self.workout.step_m),
+                             "s" if by_time else "m", self.t)
         for kind, data in self.workout.skip():
             self._workout_event(kind, data)
         self.checkpoint()
@@ -591,12 +613,16 @@ class EnduranceEngine:
         """Num treino manual de passadeira, a velocidade é a do bloco: põe-se
         sozinha e fica presa (a distância conta por ela)."""
         v = self.block_speeds[idx] if 0 <= idx < len(self.block_speeds) else None
-        self.speed_locked = bool(v)
-        if v:
-            self.set_speed(float(v))
-        inc = self.block_inclines[idx] if 0 <= idx < len(self.block_inclines) else None
-        if inc is not None:
-            self.set_incline(float(inc))
+        self.speed_locked = bool(v) and not block_log.can_edit(self.db)
+        self._applying_block = True
+        try:
+            if v:
+                self.set_speed(float(v))
+            inc = self.block_inclines[idx] if 0 <= idx < len(self.block_inclines) else None
+            if inc is not None:
+                self.set_incline(float(inc))
+        finally:
+            self._applying_block = False
 
     def _sample(self) -> None:
         hr = self.hr_bpm

@@ -231,7 +231,7 @@ class TestFiles(CoreCase):
         pg.write_template(folder)
         (folder / "treino.json").write_text("{}", "utf-8")
         self.assertEqual([p.name for p in pg.scan([str(folder)])],
-                         ["plano-modelo.perennia-plan.json"])
+                         ["plano-modelo.perennia-plan.csv", "plano-modelo.perennia-plan.json"])
         self.assertEqual([p.name for p in si.scan([str(folder)])], ["treino.json"])
 
     def test_command_line(self):
@@ -802,7 +802,7 @@ class TestPlansUI(tg.GuiCase):
         bad.write_text('{"format": "perennia-plan"}', "utf-8")
         self.app.push(ps.ProgramFilePopup(self.app, folders=[str(folder)]))
         pop = self.screen()
-        self.assertEqual(len(pop.files), 2)
+        self.assertEqual(len(pop.files), 3)                         # + o modelo em CSV
         pop.pick(bad)
         self.assertIs(self.screen(), pop)                           # recusado: fica na lista
         self.assertEqual([p for p in pg.library(self.app.db) if p["origin"] == "imported"], [])

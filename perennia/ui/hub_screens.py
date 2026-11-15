@@ -6,9 +6,10 @@ from datetime import date, timedelta
 
 from pyglet.window import key
 
-from perennia.core import gym, inventory, muscles
+from perennia.core import complexes, gym, inventory, muscles
 from perennia.core.i18n import t, tr
 from perennia.ui.app import Screen
+from perennia.ui.complex_screens import ComplexEditor
 from perennia.ui.sport_screens import EditPopup, EditScreen
 from perennia.ui.widgets import Item
 
@@ -392,6 +393,8 @@ class ExerciseInventory(Screen):
                       action=self._toggle, top=True),
                  Item(tr("+ Novo exercício", "+ New exercise"),
                       action=lambda: a.push(ExerciseEditor(a, None, mod)), top=True),
+                 Item(tr("+ Novo complexo", "+ New complex"), top=True,
+                      action=lambda: a.push(ComplexEditor(a, None, mod))),
                  Item(tr("+ Nova disciplina", "+ New discipline"),
                       action=self._new_discipline, top=True)]
         if gym.is_custom(mod):
@@ -412,8 +415,11 @@ class ExerciseInventory(Screen):
                                      k=", ".join(inventory.kind_name(k) for k in missing))
             if e.get("notes"):
                 detail += " · " + tr("nota: ", "note: ") + _excerpt(e["notes"], 50)
+            if e.get("complex"):
+                detail = tr("complexo: ", "complex: ") + complexes.components_text(a.db, e["id"])
             act = (lambda ex=e: self._picked(ex)) if self.pick else \
-                (lambda eid=e["id"]: a.push(ExerciseEditor(a, eid, mod)))
+                (lambda eid=e["id"], cx=bool(e.get("complex")): a.push(
+                    ComplexEditor(a, eid, mod) if cx else ExerciseEditor(a, eid, mod)))
             items.append(Item(e["name"], value="✓" if self.pick else "", detail=detail,
                               action=act, data=("exercise", e["id"])))
         title = tr("Escolhe o exercício", "Pick the exercise") if self.pick else \
