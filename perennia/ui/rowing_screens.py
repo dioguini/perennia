@@ -955,8 +955,8 @@ class RowWorkoutEditor(EditScreen):
                           "meters": s.dur_value if s.dur_type == "distance" else None,
                           "lo_w": rng[0] if rng else None, "hi_w": rng[1] if rng else None,
                           "intensity": s.kind, "notes": s.cue})
-        folder = self.app.data_dir / "workouts"
-        folder.mkdir(parents=True, exist_ok=True)
+        from perennia.core import folders
+        folder = folders.ensure_dir(self.app.db, self.app.data_dir, "workouts")
         from perennia.core import naming
         path = folder / f"remo_{naming.clean(self.name) or 'treino'}.fit"
         try:

@@ -78,7 +78,8 @@ class SyncPanel:
 
     SOURCES = (("garmindb", "GarminDB"), ("hrv4training", "HRV4Training"),
                ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"),
-               ("upload", "Upload manual"), ("csv", "CSV"), ("saude", "Saúde"))
+               ("historico", "Histórico"), ("upload", "Upload manual"), ("csv", "CSV"),
+               ("saude", "Saúde"), ("wifi", "Wi-Fi"))
     FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
                     "~/Desktop")
 
@@ -128,11 +129,13 @@ class SyncPanel:
     def files(self, patterns: tuple) -> list:
         import os
         from pathlib import Path
-        imports = self.app.data_dir / "imports"
-        imports.mkdir(parents=True, exist_ok=True)
+        self.app.folder("imports", create=True)
         out = []
+        bases = []
         for f in self.FILE_FOLDERS:
-            base = imports if f == "imports" else Path(os.path.expanduser(f))
+            bases += self.app.folder_list("imports") if f == "imports" else \
+                [Path(os.path.expanduser(f))]
+        for base in bases:
             if base.is_dir():
                 for pat in patterns:
                     out += sorted(base.glob(pat))[:40]
@@ -148,7 +151,7 @@ class SyncPanel:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
                              detail=tr("põe o ficheiro em {p}, Transferências ou Documentos",
                                        "put the file in {p}, Downloads or Documents",
-                                       p=self.app.data_dir / "imports")))
+                                       p=self.app.folder("imports"))))
         rows += [Item(tr("Como exportar", "How to export"), header=True),
                  Item(tr(*how), enabled=False)]
         if self.last_report and self.last_report.get("_kind") == kind:
@@ -198,6 +201,83 @@ class SyncPanel:
              "and fatigue)."),
             check=_is_tp)
 
+    def items_wifi(self) -> list[Item]:
+        """Sincronizar com outra Perennia na mesma rede (PC ↔ Raspberry Pi…)."""
+        from perennia.core import lan_sync as ls
+        from perennia.ui.lan_sync_screens import LanReceiveScreen, LanSendScreen
+        a = self.app
+        return [
+            Item(tr("Destino — esta Perennia recebe", "Destination — this Perennia receives"),
+                 header=True),
+            Item(tr("Receber de outra Perennia", "Receive from another Perennia"),
+                 detail=tr("mostra o endereço e um PIN de uso único; fecha sozinho",
+                           "shows the address and a single-use PIN; closes by itself"),
+                 action=lambda: a.push(LanReceiveScreen(a))),
+            Item(tr("Fonte — esta Perennia envia", "Source — this Perennia sends"),
+                 header=True),
+            Item(tr("Enviar para outra Perennia", "Send to another Perennia"),
+                 detail=tr("precisas do endereço e do PIN que o destino mostra",
+                           "you need the address and PIN the receiver shows"),
+                 action=lambda: a.push(LanSendScreen(a))),
+            Item(tr("Como funciona", "How it works"), header=True),
+            Item(tr("Cifrado e com PIN; só rede local; nunca envia credenciais ({m})",
+                    "Encrypted and PIN-protected; local network only; never sends credentials "
+                    "({m})", m=tr("juntar" if ls.mode_of(a.db) == "merge" else "substituir",
+                                  "merge" if ls.mode_of(a.db) == "merge" else "replace")),
+                 enabled=False,
+                 detail=tr("opções em Definições → Avançado → Dados e backups",
+                           "options in Settings → Advanced → Data and backups"))]
+
+    def items_historico(self) -> list[Item]:
+        """O histórico de outras apps (TrainingPeaks, Strava, Garmin Connect) e as regras que o
+        normalizam para os desportos, tipos de treino e etiquetas da Perennia."""
+        from perennia.core import history_etl as he
+        rows = self._file_items(
+            "historico", ("*.csv",),
+            ("TrainingPeaks: Calendário → Exportar → Workouts (CSV). Strava: Definições → A "
+             "minha conta → Descarregar ou eliminar a conta → «activities.csv». Garmin "
+             "Connect: Atividades → Exportar CSV. As atividades que as regras não conhecem "
+             "aparecem no relatório «sem regra».",
+             "TrainingPeaks: Calendar → Export → Workouts (CSV). Strava: Settings → My "
+             "Account → Download or delete → 'activities.csv'. Garmin Connect: Activities → "
+             "Export CSV. Activities the rules do not know appear in the 'no rule' report."),
+            check=lambda p: _is_tp(p) or he.looks_like(p) is not None)
+        rows += [Item(tr("Regras de normalização", "Normalisation rules"), header=True),
+                 Item(tr("Ver o que as regras mudariam", "Preview what the rules would change"),
+                      detail=tr("não grava nada", "saves nothing"),
+                      action=lambda: self.normalize(False)),
+                 Item(tr("Aplicar as regras ao histórico", "Apply the rules to the history"),
+                      detail=tr("passa tudo para os desportos, tipos e etiquetas da Perennia",
+                                "moves everything to Perennia's sports, types and tags"),
+                      action=lambda: self.normalize(True)),
+                 Item(tr("Criar ficheiro de regras para editar", "Create a rules file to edit"),
+                      value=he.rules_path(self.app.db).name,
+                      detail=str(he.rules_path(self.app.db).parent),
+                      action=self.rules_template)]
+        return rows
+
+    def normalize(self, apply: bool) -> None:
+        from perennia.core import history_etl as he
+        try:
+            rep = he.normalize(self.app.db, dry_run=not apply)
+        except he.RulesError as e:
+            self.app.message(f"{t('common.error')}: {e}")
+            return
+        self.app.message(he.report_text(rep))
+        self.screen.enter()
+
+    def rules_template(self) -> None:
+        from perennia.core import history_etl as he
+        try:
+            path = he.write_template(self.app.folder("imports", create=True))
+        except OSError as e:
+            self.app.message(f"{t('common.error')}: {e}")
+            return
+        self.app.message(tr("Regras de arranque gravadas em {p}. Edita-as e usa «Aplicar»; "
+                            "o ficheiro «regras-historico.json» é o que se usa.",
+                            "Starter rules saved to {p}. Edit them and use 'Apply'; the file "
+                            "'regras-historico.json' is the one used.", p=path))
+
     def items_csv(self) -> list[Item]:
         """Artigos, exercícios, grupos musculares… por .csv: modelo, exportação e importação."""
         from perennia.core import csv_sync as cs
@@ -225,7 +305,7 @@ class SyncPanel:
                              detail=tr("descarrega um modelo, preenche-o e põe-no em {p}, "
                                        "Transferências ou Documentos",
                                        "download a template, fill it in and put it in {p}, "
-                                       "Downloads or Documents", p=self.app.data_dir / "imports")))
+                                       "Downloads or Documents", p=self.app.folder("imports"))))
         if self.last_report and self.last_report.get("_kind") == "csv":
             rows.insert(0, Item(tr("Último CSV", "Last CSV"),
                                 value=self.last_report.get("_text", ""), enabled=False))
@@ -274,7 +354,7 @@ class SyncPanel:
                                        "{p}, Transferências ou Documentos",
                                        "download the template, fill in the dates and put the "
                                        ".csv in {p}, Downloads or Documents",
-                                       p=self.app.data_dir / "imports")))
+                                       p=self.app.folder("imports"))))
         rows += [Item(tr("Como funciona", "How it works"), header=True),
                  Item(tr("A primeira coluna é a data (AAAA-MM-DD ou DD/MM/AAAA); cada outra é uma "
                          "métrica do diário com o nome que tem na Perennia — número (7,5), sim/não, "
@@ -327,7 +407,7 @@ class SyncPanel:
                              detail=tr("põe o ficheiro em {p}, Transferências ou Documentos, ou "
                                        "arrasta-o para a janela",
                                        "put the file in {p}, Downloads or Documents, or drag it "
-                                       "onto the window", p=self.app.data_dir / "imports")))
+                                       "onto the window", p=self.app.folder("imports"))))
         rows += [Item(tr("Como funciona", "How it works"), header=True),
                  Item(tr("Escolhe um ficheiro .fit (ou .tcx) do teu computador — ou arrasta-o "
                          "para a janela. A Perennia lê-o e mostra o nome, o desporto, o tempo, a "

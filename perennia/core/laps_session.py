@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import naming, physics
+from . import block_log, naming, physics
 from . import strength as st
 from .db import Athlete, Database, new_id, now_iso
 
@@ -609,6 +609,8 @@ class LapSession:
         it = self.next_planned
         if it is None:
             return None
+        block_log.safely(block_log.record_skip, self.db, "strength", self.session_id,
+                         self.plan_idx, float(it.get("seconds") or 0), 0.0, "s", self.t)
         self.plan_idx += 1
         self.checkpoint()
         return it

@@ -78,8 +78,10 @@ def main() -> int:
                         help="repõe um backup e sai (antes guarda o que tens agora)")
     parser.add_argument("--componentes", default=None,
                         help="só estas componentes, separadas por vírgulas (ex.: rotas,sessoes)")
-    parser.add_argument("--modo", default="substituir", choices=("substituir", "juntar"),
-                        help="na reposição: substituir (cópia exata) ou juntar (acrescenta)")
+    parser.add_argument("--modo", default=None, choices=("substituir", "juntar"),
+                        help="na reposição: substituir (cópia exata, o de omissão) ou juntar "
+                             "(acrescenta); na sincronização Wi-Fi o de omissão é o das "
+                             "Definições")
     parser.add_argument("--credenciais", action="store_true",
                         help="no backup, incluir as credenciais (Strava)")
     parser.add_argument("--importar", nargs=2, default=None, metavar=("TIPO", "FICHEIRO"),
@@ -88,6 +90,27 @@ def main() -> int:
                              "(um .fit ou .tcx, guardado no desporto respetivo) ou csv (artigos, "
                              "exercícios, grupos musculares… — descobre o conjunto pelo "
                              "cabeçalho) ou saude (o .csv do diário de saúde por data)")
+    parser.add_argument("--historico-normalizar", action="store_true",
+                        help="aplica as regras de normalização ao histórico já importado "
+                             "(TrainingPeaks, Strava, Garmin…): mostra o que mudaria; com "
+                             "--aplicar grava; com --regras usa esse ficheiro (JSON/CSV)")
+    parser.add_argument("--aplicar", action="store_true",
+                        help="com --historico-normalizar: grava as alterações (sem isto, só "
+                             "mostra)")
+    parser.add_argument("--regras", default=None, metavar="FICHEIRO",
+                        help="ficheiro de regras de normalização (JSON ou CSV)")
+    parser.add_argument("--historico-regras", nargs="?", const="", default=None,
+                        metavar="PASTA",
+                        help="grava o ficheiro de regras de arranque para editares e sai")
+    parser.add_argument("--sync-receber", action="store_true",
+                        help="sincronização Wi-Fi, lado DESTINO: escuta, mostra o endereço e um "
+                             "PIN de uso único, recebe e repõe (com backup de segurança)")
+    parser.add_argument("--sync-enviar", default=None, metavar="ENDERECO",
+                        help="sincronização Wi-Fi, lado FONTE: envia os dados para o destino "
+                             "nesse endereço. O PIN vem da variável PERENNIA_SYNC_PIN ou é "
+                             "pedido (nunca como argumento); usa --componentes e --modo")
+    parser.add_argument("--porta", type=int, default=None,
+                        help="porta da sincronização Wi-Fi (por omissão a das Definições)")
     parser.add_argument("--csv-modelo", default=None, metavar="CONJUNTO",
                         help="grava o modelo .csv de um conjunto (artigos, exercicios, grupos, "
                              "disciplinas, testes, material) e sai")
@@ -131,6 +154,10 @@ def main() -> int:
         return 0 if res["valid"] else 1
     if args.importar:
         return import_cli(args)
+    if args.sync_receber or args.sync_enviar:
+        return sync_cli(args)
+    if args.historico_normalizar or args.historico_regras is not None:
+        return history_cli(args)
     if args.csv_modelo or args.csv_exportar:
         return csv_cli(args)
     if args.adhoc_exportar:
@@ -267,7 +294,8 @@ def import_cli(args) -> int:
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
-              "trainingpeaks, atividade, csv, saude", file=sys.stderr)
+              "trainingpeaks, historico (TrainingPeaks, Strava ou Garmin Connect), "
+              "atividade, csv, saude", file=sys.stderr)
         return 2
     if not Path(path).is_file():
         print(f"Erro: não encontro {path}", file=sys.stderr)
@@ -282,6 +310,74 @@ def import_cli(args) -> int:
         db.close()
     print(text)
     return 0
+
+
+def sync_cli(args) -> int:
+    """Sincronização Wi-Fi entre duas Perennia, sem abrir a janela."""
+    import getpass
+    import os as _os
+    from perennia.core import backup, lan_sync
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    db = Database(database_path(data_dir))
+    keys = [k.strip() for k in args.componentes.split(",") if k.strip()] \
+        if args.componentes else None
+    try:
+        if args.sync_receber:
+            rx = lan_sync.Receiver(db, data_dir, pin=_os.environ.get("PERENNIA_SYNC_PIN") or None,
+                                   port=args.porta)
+            port = rx.open()
+            addrs = ", ".join(lan_sync.local_addresses()) or "?"
+            print(f"Destino à espera em {addrs} porta {port} (válido {int(rx.ttl)} s).")
+            if not _os.environ.get("PERENNIA_SYNC_PIN"):
+                print(f"PIN (de uso único): {rx.pin}")
+            print("Na outra máquina: python main.py --sync-enviar ENDERECO (o PIN vai na "
+                  "variável PERENNIA_SYNC_PIN ou é pedido).")
+            if not rx.wait():
+                print("Nada recebido: " + (rx.message or "terminado"), file=sys.stderr)
+                return 1
+            rep = rx.apply(lambda n: print(f"  {n}…"))
+            print(lan_sync.report_text(rep))
+            return 0
+        pin = _os.environ.get("PERENNIA_SYNC_PIN") or getpass.getpass("PIN do destino: ")
+        mode = {"substituir": "replace", "juntar": "merge"}.get(args.modo)
+        rep = lan_sync.send(db, data_dir, args.sync_enviar, pin, args.porta, keys, mode,
+                            lambda n: print("  " + n))
+        print(f"Enviado: {rep['bytes'] / 1048576:.1f} MB · componentes {', '.join(rep['keys'])}"
+              f" · modo {rep['mode']}")
+        return 0
+    except (lan_sync.SyncError, backup.BackupError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+
+
+def history_cli(args) -> int:
+    """Regras de normalização do histórico importado (sem abrir a janela)."""
+    from perennia.core import folders, history_etl
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    db = Database(database_path(data_dir))
+    try:
+        if args.historico_regras is not None:
+            folder = args.historico_regras or str(folders.ensure_dir(db, data_dir, "imports"))
+            print("Ficheiro de regras gravado: " + str(history_etl.write_template(folder)))
+            return 0
+        try:
+            rules = history_etl.load_rules(args.regras) if args.regras else None
+            rep = history_etl.normalize(db, rules, dry_run=not args.aplicar)
+        except (history_etl.RulesError, OSError) as e:
+            print(f"Erro: {e}", file=sys.stderr)
+            return 1
+        print(history_etl.report_text(rep))
+        if rep["dry_run"] and rep["changed"]:
+            print("(só uma simulação: junta --aplicar para gravar)")
+        return 0
+    finally:
+        db.close()
 
 
 def backup_cli(args) -> int:

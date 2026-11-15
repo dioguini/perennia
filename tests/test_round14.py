@@ -339,7 +339,7 @@ class TestSettingsDuringASession(SessionCase):
 
     def test_outside_a_session_all_the_tabs_are_there(self):
         self.pick("Definições")
-        self.assertEqual(len(self.screen().tab_labels()), 8)
+        self.assertEqual(len(self.screen().tab_labels()), 9)      # + Pastas (ronda 19)
         self.assertIsNone(self.screen().session)
 
 

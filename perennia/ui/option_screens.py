@@ -29,6 +29,8 @@ def items(screen) -> list[Item]:
     out: list[Item] = []
     on, off = tr("ligado", "on"), tr("desligado", "off")
     for group in opt_mod.GROUPS:
+        if group == "paths":                    # tem o seu separador (Definições → Pastas)
+            continue
         out.append(Item(opt_mod.group_name(group), header=True))
         for opt in (o for o in opt_mod.OPTIONS if o.group == group):
             value = value_of(screen, opt)
@@ -57,6 +59,32 @@ def items(screen) -> list[Item]:
                                     labels, cur,
                                     lambda k, o=opt, ks=keys: screen.put(o.key, ks[k]),
                                     title=opt.label)))
+    return out
+
+
+def path_items(screen) -> list[Item]:
+    """O separador «Pastas»: uma linha por pasta, com a que está mesmo a ser usada e se serve."""
+    from perennia.core import folders
+    out = [Item(tr("Onde ficam os ficheiros", "Where files go"), header=True)]
+    for key in folders.KEYS:
+        opt = opt_mod.BY_KEY[folders.OPTION[key]]
+        text = str(value_of(screen, opt))
+        ok, why = folders.check(text)
+        used = (folders.expand_text(text) if text and ok else
+                str(folders.default(screen.app.data_dir, key)))
+        status = ("" if ok else "⚠ ") + why
+        out.append(Item(folders.name(key), value=text + "▏",
+                        detail=f"{opt.hint} · " + tr("em uso: {p}", "in use: {p}", p=used)
+                        + " · " + status,
+                        data=TEXT_PREFIX + opt.key, indent=1))
+    out.append(Item(tr("Dica", "Tip"), header=True))
+    out.append(Item(tr("Podes usar ~ (a tua pasta) e variáveis, por exemplo ~/Dropbox/Perennia.",
+                       "You can use ~ (your home folder) and variables, e.g. ~/Dropbox/Perennia."),
+                    enabled=False))
+    out.append(Item(tr("As alterações só valem depois de Guardar. Os ficheiros que já tens não são "
+                       "movidos: copia-os tu para a pasta nova.",
+                       "Changes apply after Save. Existing files are not moved: copy them to the "
+                       "new folder yourself."), enabled=False))
     return out
 
 

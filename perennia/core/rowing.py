@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import naming, physics
+from . import block_log, naming, physics
 from . import strength as st
 from .boards import Board, Row
 from .db import Athlete, Database, new_id, now_iso
@@ -964,7 +964,15 @@ class RowEngine:
         return level
 
     def adjust_resistance(self, steps: int) -> int:
-        return self.set_resistance((self.resistance or self._want_level or 5) + steps)
+        """+/− a meio da sessão. Num bloco com resistência no plano, a alteração fica guardada
+        ao lado do plano (o bloco não salta)."""
+        level = self.set_resistance((self.resistance or self._want_level or 5) + steps)
+        w = self.workout
+        if w is not None and not w.done and self.started and w.step is not None \
+                and w.step.resistance is not None and block_log.can_edit(self.db):
+            block_log.safely(block_log.record_change, self.db, "rowing", self.session_id,
+                             w.idx, "resistance", float(w.step.resistance), float(level), self.t)
+        return level
 
     # --------------------------------------------------------------- voltas
 
@@ -1040,6 +1048,13 @@ class RowEngine:
         """Salta o passo (bloco) do treino em curso. False se não houver."""
         if self.workout is None or self.workout.done or not self.started:
             return False
+        step = self.workout.step
+        if step is not None:                       # o que já estava feito do bloco saltado
+            by_time = step.dur_type == "time"
+            block_log.safely(block_log.record_skip, self.db, "rowing", self.session_id,
+                             self.workout.idx, float(step.dur_value),
+                             float(self.workout.step_t if by_time else self.workout.step_m),
+                             "s" if by_time else "m", self.t)
         for kind, data in self.workout.skip():
             self.events.append((kind, data))
             if kind == "step_end":

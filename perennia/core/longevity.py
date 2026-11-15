@@ -25,6 +25,7 @@ que há (no mínimo 7), para quem começou ontem não ficar a zero em 20 anos.
 """
 from __future__ import annotations
 
+import functools
 import json
 import math
 import unicodedata
@@ -105,7 +106,10 @@ class Dose:
     mins: dict = field(default_factory=dict)
 
 
+@functools.lru_cache(maxsize=4096)
 def _fold(text: str) -> str:
+    """Sem acentos nem maiúsculas. Com cache: era chamada dezenas de milhares de vezes por cada
+    cálculo da Longevidade, sempre com os mesmos nomes de testes."""
     s = unicodedata.normalize("NFKD", text or "")
     return "".join(c for c in s if not unicodedata.combining(c)).casefold()
 

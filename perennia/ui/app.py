@@ -2606,6 +2606,7 @@ class SettingsScreen(Screen):
               ("strava", "@garmin_head", "garmin_user", "garmin_password", "garmin_cfg"),
               ("@shortcuts",),
               ("@sounds",),
+              ("@paths",),
               ("@options",))
     ATH_FIELDS = ("name", "birth_year", "weight_kg", "ftp_w", "lthr")
 
@@ -2689,6 +2690,7 @@ class SettingsScreen(Screen):
                  tr("Ligações Externas", "External connections"),
                  tr("Atalhos de teclado", "Keyboard shortcuts"),
                  tr("Configurações sonoras", "Sound settings"),
+                 tr("Pastas", "Folders"),
                  tr("Avançado", "Advanced")]
         return [names[i] for i in self._tab_ids]
 
@@ -3062,6 +3064,11 @@ class SettingsScreen(Screen):
             items = sound_screens.sound_items(self)
             foot = tr("←/→ muda · Enter edita · Del apaga a regra · Ctrl+S guardar",
                       "←/→ changes · Enter edits · Del deletes the rule · Ctrl+S save")
+        elif group == ("@paths",):
+            from perennia.ui import option_screens
+            items = option_screens.path_items(self)
+            foot = tr("Escreve o caminho · vazio = a pasta de sempre · Ctrl+S guardar",
+                      "Type the path · empty = the usual folder · Ctrl+S save")
         elif group == ("@options",):
             from perennia.ui import option_screens
             items = option_screens.items(self)
@@ -4653,6 +4660,11 @@ class App:
         opt_mod.apply(self.db)                     # as opções afináveis (Definições → Avançado)
         aborted = self.db.purge_incomplete()
         try:
+            from perennia.core import indexes
+            indexes.ensure(self.db)                # índices de leitura (o histórico cresce)
+        except Exception:
+            pass
+        try:
             from perennia.core import session_workouts
             session_workouts.purge(self.db)        # cópias de treinos sem sessão
             from perennia.core import segments as seg_mod
@@ -5004,6 +5016,20 @@ class App:
         from perennia.core import cues
         return cues.CueTracker(cues.rules(self.db), self.beeper.beep,
                                on=cues.enabled(self.db), long_at_end=cues.end_beep(self.db))
+
+    def folder(self, key: str, create: bool = False) -> Path:
+        """A pasta de `exports`, `imports`, `backups` ou `workouts` (Definições → Pastas).
+        Com `create`, cria-a (se não der, usa a de sempre)."""
+        from perennia.core import folders
+        if create:
+            return folders.ensure_dir(self.db, self.data_dir, key)
+        return folders.resolve(self.db, self.data_dir, key)
+
+    def folder_list(self, key: str) -> list[Path]:
+        """A pasta escolhida e a de sempre (sem repetir): onde procurar ficheiros."""
+        from perennia.core import folders
+        out = [folders.resolve(self.db, self.data_dir, key), folders.default(self.data_dir, key)]
+        return list(dict.fromkeys(out))
 
     def message(self, text: str) -> None:
         self._message = text

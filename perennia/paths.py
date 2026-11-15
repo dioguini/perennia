@@ -32,9 +32,22 @@ def resource(*parts: str) -> Path:
     return base.joinpath(*parts)
 
 
+# As pastas escolhidas em Definições → Pastas (as opções `path_*` põem-nas aqui ao arrancar e
+# depois de guardar). Vazio = só as de sempre.
+CONFIGURED: dict[str, str] = {"workouts": "", "gpx": "", "imports": "", "backups": ""}
+
+
+def set_configured(name: str, value) -> None:
+    CONFIGURED[name] = str(value or "").strip()
+
+
 def user_folder(name: str) -> list[Path]:
-    """`gpx/` ou `workouts/`: ao lado da aplicação e na pasta atual."""
-    out = [app_dir() / name, Path.cwd() / name]
+    """`gpx/`, `workouts/`, `imports/` ou `backups/`: primeiro a pasta escolhida nas Definições
+    (se houver), depois ao lado da aplicação e na pasta atual."""
+    import os
+    mine = CONFIGURED.get(name, "")
+    out = ([Path(os.path.expandvars(os.path.expanduser(mine)))] if mine else []) + \
+        [app_dir() / name, Path.cwd() / name]
     seen, unique = set(), []
     for p in out:
         key = str(p.resolve()) if p.exists() else str(p)

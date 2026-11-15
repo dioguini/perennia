@@ -50,6 +50,16 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 19** — **Alterar e saltar blocos** durante a sessão (ERG, remo, corrida, ginásio) com o
+  **original sempre guardado** para comparar e o que foi feito no bloco saltado; **corrigir as
+  repetições, a carga ou os segundos** de qualquer série (planeada ou livre, a decorrer ou
+  terminada) sem perder o plano; **complexos de kettlebell** (exercícios feitos de exercícios, com
+  evolução por exercício); **~340 exercícios e 25 treinos de força** de origem; **Definições →
+  Pastas** (exportações, importações, backups, treinos, GPX); **planos de X semanas em CSV** além
+  do JSON; **histórico de outras apps** (TrainingPeaks, Strava, Garmin Connect) normalizado por
+  **regras** (`--importar historico`, `--historico-normalizar`); **sincronização por Wi-Fi** entre
+  duas Perennia (`--sync-receber` / `--sync-enviar`, TLS + PIN de uso único, só rede local);
+  **desempenho**: índices na base, cache e gravações mais rápidas. Ver o RUN.md.
 - **Ronda 18** — **Glossário** (botão na barra do topo, antes de Dispositivos, ou F9): os termos da
   Perennia, dos ficheiros (.gpx, .fit…), do treino (forma, fadiga, série…) e da saúde, por separadores,
   com adicionar, editar, apagar e repor. **Tamanho da letra** configurável (Definições e janelas de
@@ -121,7 +131,8 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   repor é arrastar o ficheiro para a janela (substituir ou juntar), com um
   backup automático antes; e a **Sincronização** (GarminDB, HRV4Training, Análises, TrainingPeaks,
   Upload manual, CSV e Saúde). Abre-se no botão **Backups e Sincronização** da barra do topo.
-  Também por `--backup` / `--restore`, e as importações por `--importar`.
+  Também por `--backup` / `--restore`, e as importações por `--importar`. Sincronização Wi-Fi entre duas Perennia no separador **Wi-Fi**
+  (ou `--sync-receber` / `--sync-enviar`).
 - Mostra em tempo real distância, falta, declive, declives médios a 500 m /
   1 / 3 / 5 / 10 km, potência, balanço esquerda/direita, zonas, torque,
   cadência, cardio, carga, velocidades e médias — e **o perfil que vem a
@@ -412,6 +423,14 @@ perennia/core/           lógica — sem interface, sem rádio, inteiramente tes
   program_library.py os planos que vêm com a aplicação e o ficheiro modelo
   profile.py         perfil por desporto: tipo de ciclista, perfil de força
   health_tabs.py     separadores da Saúde criados por ti, com notas
+  block_log.py       blocos alterados e saltados, com o original e o feito
+  complexes.py       complexos de kettlebell: exercícios feitos de exercícios, evolução
+  gym_catalog.py     os exercícios e treinos de força que vêm com a aplicação (catálogo)
+  folders.py         as pastas configuráveis (exportações, importações, backups, treinos, GPX)
+  plan_csv.py        planos de X semanas em CSV (a via fácil, além do JSON)
+  history_etl.py     histórico de outras apps: importar e normalizar com regras
+  lan_sync.py        sincronizar duas Perennia pelo Wi-Fi (fonte → destino, TLS + PIN)
+  indexes.py         índices de leitura da base de dados (desempenho)
   options.py         registo único das opções afináveis (Definições → Avançado)
   adhoc.py           AdHoc Analysis: fontes, filtros, agregação, gráfico, .csv
   safexml.py         leitura de XML de fora sem DTD nem entidades

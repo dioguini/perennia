@@ -164,7 +164,7 @@ COMPONENTS: tuple[Component, ...] = (
               "importaste e os planos em curso",
               "exercises, strength workouts and their structures, the multi-week plans you "
               "imported and the plans in progress",
-              tables=("exercises", "exercise_equipment", "exercise_modalities",
+              tables=("exercises", "exercise_equipment", "exercise_modalities", "exercise_complex_parts",
                       "strength_workouts", "strength_workout_items", "strength_structures",
                       "muscle_groups", "muscle_subgroups", "gym_disciplines", "programs",
                       "program_runs", "program_days")),
@@ -185,7 +185,8 @@ COMPONENTS: tuple[Component, ...] = (
                       "endurance_sessions", "endurance_samples", "endurance_laps",
                       "strength_sessions", "strength_sets", "strength_laps", "strength_hr",
                       "session_workouts", "segment_efforts", "strava_efforts",
-                      "synced_activities", "session_tags", "tag_catalog"),
+                      "synced_activities", "session_tags", "tag_catalog", "block_events",
+                      "strength_set_parts"),
               folders=("rides", "rowing", "endurance", "strength")),
     Component("analises", "Análises e feedback", "Analyses and feedback",
               "o feedback de cada sessão e a sua análise, picos e curvas de potência",
@@ -244,7 +245,7 @@ ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "ga
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
                   "muscles", "strength_builder", "tags", "workout_meta", "bp", "health_tabs",
-                  "coach", "programs", "glossary")
+                  "coach", "programs", "glossary", "block_log", "complexes", "indexes")
 
 
 def prepare(db) -> None:
@@ -550,7 +551,8 @@ def _int_pk(db, t: str) -> str | None:
 def safety_backup(db, data_dir: Path) -> dict:
     """O que tens agora, antes de repor (com credenciais: é para ficar cá)."""
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return export(db, data_dir, Path(data_dir) / "backups" /
+    from . import folders
+    return export(db, data_dir, folders.resolve(db, data_dir, "backups") /
                   f"perennia-antes-de-repor_{stamp}.zip", keys=list(BY_KEY),
                   include_secrets=True)
 
@@ -836,7 +838,8 @@ def _after(db) -> None:
 
 def cli_export(db, data_dir: Path, out: str | None, keys: list[str] | None,
                secrets: bool) -> int:
-    dest = Path(out) if out else Path(data_dir) / "backups"
+    from . import folders
+    dest = Path(out) if out else folders.resolve(db, data_dir, "backups")
     m = export(db, data_dir, dest, keys, include_secrets=secrets,
                progress=lambda n: print(f"  {n}…"))
     print(f"Backup feito: {m['path']} ({m['bytes'] / 1024:.0f} KB)")

@@ -13,5 +13,9 @@ libusb-package>=1.0.26 ; platform_system != "Linux"
 # Importar o Excel das análises clínicas (.xlsx). Opcional.
 openpyxl>=3.1
 
+# Sincronização por Wi-Fi entre duas Perennia: cria o certificado do destino. Opcional: sem isto
+# usa-se o programa «openssl», se existir.
+cryptography>=42
+
 # GarminDB (opcional, à parte): descarrega os teus dados do Garmin Connect.
 # pip install garmindb   — e configura ~/.GarminDb/GarminConnectConfig.json

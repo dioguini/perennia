@@ -267,7 +267,8 @@ def scan(folders: list[str] | None = None) -> list[Path]:
             # (um «*.perennia-plan.json» é um plano de X semanas, não um treino)
             found.extend(sorted(p for p in base.iterdir()
                                 if p.is_file() and p.suffix.lower() in EXTS
-                                and not p.name.lower().endswith(".perennia-plan.json")
+                                and not p.name.lower().endswith((".perennia-plan.json",
+                                                                 ".perennia-plan.csv"))
                                 and not p.name.upper().startswith("FORMATO-DO-PLANO")
                                 )[:PER_FOLDER])
     return found

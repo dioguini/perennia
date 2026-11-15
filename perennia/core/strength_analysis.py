@@ -12,6 +12,7 @@ feito (repetições, carga, RPE, quanto tempo durou, FC).
 """
 from __future__ import annotations
 
+from . import block_log
 from . import strength as st
 from . import strength_builder as sb
 from .i18n import tr
@@ -58,6 +59,8 @@ def session(db, session_id: str) -> dict | None:
     plan, labels = _planned(db, s.get("workout_id"), items)
     body = s.get("weight_at_session_kg") or db.athlete().weight_kg
     ex_rows: list[dict] = []
+    skipped = {e["step_idx"] for e in block_log.events(db, session_id, "strength")
+               if e["kind"] == block_log.SKIP}
     by_item: dict[int, list[dict]] = {}
     for x in sets:
         by_item.setdefault(x["item_idx"] if x["item_idx"] is not None else -1, []).append(x)
@@ -115,6 +118,7 @@ def session(db, session_id: str) -> dict | None:
             span = done[-1]["end_t_s"] - done[0]["start_t_s"]
         ex_rows.append({
             "label": labels[idx] if 0 <= idx < len(labels) else "+", "item_idx": idx,
+            "skipped": idx in skipped, "edited_sets": sum(1 for x in done if x.get("edited_at")),
             "exercise_id": ex_id, "name": name, "measure": measure,
             "planned_sets": len(planned), "done_sets": len(done),
             "planned_reps": p_reps, "done_reps": d_reps,

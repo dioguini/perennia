@@ -426,7 +426,9 @@ class TestGymWithoutLongevity(tg.GuiCase):
 
 class TestStrengthSessionScreen(tg.GuiCase):
     def open_session(self, free: bool = False):
-        wid = gym.workouts(self.app.db, "strength")[0]["id"]
+        # (sempre o treino de origem de 1 série por exercício; a ronda 19 trouxe muitos mais)
+        wid = next(w["id"] for w in gym.workouts(self.app.db, "strength")
+                   if w["name"] == "Força e equilíbrio")
         scr = ss.StrengthSessionScreen(self.app, wid, free=free)
         self.app.push(scr)
         return scr
@@ -436,7 +438,7 @@ class TestStrengthSessionScreen(tg.GuiCase):
         self.assertTrue(scr.session.started)                  # sem contagem (0 s): já a decorrer
         self.assertEqual(scr.session.phase, st.WORK)
         buttons = [i.label for i in scr.list.items if i.button]
-        self.assertEqual(buttons, ["Lap", "+ Série", "Saltar", "Pausa", "Terminar"])
+        self.assertEqual(buttons, ["Lap", "+ Série", "Saltar", "Séries", "Pausa", "Terminar"])
         self.assertFalse([i for i in scr.list.items if "Começar série" in i.label])
 
     def test_the_countdown_runs_first_then_the_set_starts(self):
@@ -978,8 +980,9 @@ class TestFreeWorkoutEditAfterwards(tg.GuiCase):
         tot = db.conn.execute("SELECT total_reps, volume_kg FROM strength_sessions WHERE id = ?",
                               (sid,)).fetchone()
         self.assertEqual((tot["total_reps"], tot["volume_kg"]), (15, 300.0))
-        # um treino planeado não se edita depois
-        plan = st.StrengthSession(db, db.athlete(), gym.workouts(db, "strength")[0]["id"],
+        # um treino planeado também se corrige (ronda 19), com o plano e o original guardados
+        plan = st.StrengthSession(db, db.athlete(), next(
+            w["id"] for w in gym.workouts(db, "strength") if w["name"] == "Força e equilíbrio"),
                                   out_dir=Path(self.tmp) / "str")
         plan.action()
         plan.update(10.0)
@@ -989,7 +992,12 @@ class TestFreeWorkoutEditAfterwards(tg.GuiCase):
         self.assertFalse(st.is_free_session(db, pid))
         psets = db.conn.execute("SELECT id FROM strength_sets WHERE session_id = ?",
                                 (pid,)).fetchall()
-        self.assertFalse(st.edit_free_set(db, psets[0]["id"], reps=99))
+        self.assertTrue(st.edit_free_set(db, psets[0]["id"], reps=99))
+        row = db.conn.execute("SELECT reps, planned_reps, logged_reps FROM strength_sets WHERE id"
+                              " = ?", (psets[0]["id"],)).fetchone()
+        self.assertEqual(row["reps"], 99)
+        self.assertIsNotNone(row["planned_reps"])               # o que o plano pedia fica
+        self.assertIsNotNone(row["logged_reps"])                # e o que se registou na hora
 
     def test_the_analysis_has_an_edit_button_for_free_sessions(self):
         from perennia.ui import session_analysis as sa_ui

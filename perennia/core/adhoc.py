@@ -762,7 +762,8 @@ def export_dir(db: Database, data_dir: Path | None) -> Path:
     custom = str(option(db, "adhoc_export_dir") or "").strip()
     if custom:
         return Path(custom).expanduser()
-    return (Path(data_dir) if data_dir else Path.cwd()) / "exports"
+    from . import folders
+    return folders.resolve(db, data_dir if data_dir else Path.cwd(), "exports")
 
 
 def unique_path(folder: Path, filename: str) -> Path:

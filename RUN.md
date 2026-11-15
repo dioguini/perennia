@@ -1534,6 +1534,110 @@ nomes ou valores precisas de um mini teclado com letras. Nas sessões de **remo*
 Página ↑/↓ continuam a ser **resistência** (como antes). Convém desligar a poupança de energia do
 comando e emparelhá-lo antes de abrir a Perennia.
 
+### Ronda 19: blocos, séries, complexos, pastas, histórico e Wi-Fi
+
+**Alterar ou saltar um bloco (todos os desportos).** Durante uma sessão por blocos podes **alterar**
+o bloco em curso: em ERG a intensidade (as teclas de resistência), no remo a resistência, na corrida
+a velocidade e a inclinação. Alterar **não salta** o bloco: ele só acaba quando termina ou quando
+carregas em **Saltar**. O valor do plano fica sempre guardado ao lado do que fizeste (tabela
+`block_events`, um registo por bloco e campo: o **primeiro** valor é o original, o último o atual,
+e quantas alterações houve). **Saltar** regista quanto do bloco foi feito (tempo, metros ou séries)
+face ao previsto. Isto aparece na **Análise da sessão** (coluna «Alterações e saltos» e «↷» nas
+séries saltadas). Opções: `block_edit_enabled` (desligada, a velocidade da passadeira fica presa à
+do bloco, como antes) e `block_change_scope` (a alteração vale só para o bloco em curso, ou até ao
+fim da sessão).
+
+**Corrida e remo.** Com o aparelho a mandar (passadeira FTMS, remo com resistência), a Perennia
+**aplica sozinha** a velocidade, a inclinação e a resistência do bloco; o que mudares à mão fica
+registado como alteração. Sem controlo do aparelho, só **regista** o que ele mede.
+
+**Corrigir uma série (ginásio).** Em **qualquer** sessão (treino carregado ou livre, a decorrer ou
+já terminada) corrige as repetições, a carga, o RPE ou os **segundos** cumpridos: botão **Séries** na
+sessão e **Editar séries** na análise. O que estava **planeado** (`planned_*`) e o que registaste
+**na hora** (`logged_*`) ficam guardados; a série corrigida marca-se com ✎ e a análise compara com o
+objetivo para se ver se foi cumprido.
+
+**Complexos de kettlebell.** Um complexo é um exercício feito de outros exercícios (Ginásio →
+Exercícios → **+ Novo complexo**): escolhes os exercícios, as repetições por ronda e a ordem. Vêm 6
+clássicos de origem. Num treino, o complexo entra como **um** exercício (as «repetições» são as
+rondas); durante a sessão vês os exercícios que o compõem e, ao corrigires as rondas, refazem-se as
+repetições de cada um (`strength_set_parts`). A **evolução** conta o exercício dentro e fora de
+complexos (`complexes.component_progress`) e a do complexo (rondas, carga, volume).
+
+**Treinos e exercícios de origem.** O catálogo passou a ter ~340 exercícios e há 25 treinos
+de força prontos (mais 3 que usam complexos). Entram **uma vez** (a definição `gym_catalog_workouts`
+guarda os que já entraram: se apagares um, não volta).
+
+**Definições → Pastas.** Um separador novo para escolher as pastas das **exportações**,
+**importações**, **backups**, **treinos** e **GPX** (opções `path_exports`, `path_imports`,
+`path_backups`, `path_workouts`, `path_gpx`; vazio = a de sempre). Cada linha mostra a pasta que
+está mesmo a ser usada e se está utilizável; uma pasta impossível cai na de sempre. As escolhidas
+**somam-se** às de sempre nas procuras (importações, treinos, GPX). As pastas dos `.fit` das sessões
+ficam na pasta de dados.
+
+**Planos de X semanas: JSON ou CSV.** Além do `.perennia-plan.json` (o formato completo) importa-se
+uma **tabela CSV** (`*.perennia-plan.csv`, feita no Excel/LibreOffice): uma linha por exercício de
+cada sessão, as linhas `# nome: …`, `# semanas: …`, `# rotacao: A,B` no topo, e `70|75|80` numa
+célula para um valor por semana. O botão do modelo grava os dois. Pela linha de comandos:
+`--plano-importar plano.perennia-plan.csv`. O CSV não tem valores diferentes por série (usa o JSON).
+
+**Histórico de outras apps (ETL com regras).** Backups e Sincronização → **Histórico**: importa o
+`.csv` do **TrainingPeaks**, do **Strava** (`activities.csv`) ou do **Garmin Connect** e normaliza-o
+com **regras** (JSON ou CSV) que dizem «quando o tipo for X → desporto Y, tipo de treino Z,
+etiquetas…». As regras correm sozinhas nas atividades novas (`etl_auto_apply`) e podes aplicá-las ao
+histórico já importado (**Ver o que mudaria** e **Aplicar**). O tipo original nunca se perde
+(`source_sport`); o que as regras não cobrem aparece no relatório «sem regra». Sem ficheiro, usam-se
+as regras de arranque (`etl_use_defaults`: «strengthening» → Ginásio · Força, etc.). Linha de
+comandos:
+
+```
+python main.py --historico-regras                       # grava regras-historico.json para editares
+python main.py --importar historico strava.csv          # TrainingPeaks, Strava ou Garmin (pelo cabeçalho)
+python main.py --historico-normalizar                   # só mostra o que mudaria
+python main.py --historico-normalizar --aplicar --regras minhas.json
+```
+
+As regras têm os campos `fonte`, `campo` (`tipo`, `titulo`, `desporto`), `operador` (`igual`,
+`contem`, `comeca`, `regex`), `valor`, e as ações `desporto`, `tipo_treino`, `etiquetas`,
+`remover_etiquetas`, `titulo_novo`, `ignorar`. Aplicam-se por ordem; a última que mandar num campo
+ganha. Os formatos do Strava e do Garmin Connect foram feitos a partir da documentação dos
+ficheiros, **sem testar com exportações reais**: se o cabeçalho for diferente, diz-me.
+
+**Sincronizar duas Perennia pelo Wi-Fi (PC ↔ Raspberry Pi).** Backups e Sincronização → **Wi-Fi**.
+A **fonte** envia, o **destino** recebe, na **mesma rede**:
+
+1. no **destino**: **Receber de outra Perennia** → mostra o endereço, a porta e um **PIN de uso
+   único**;
+2. na **fonte**: **Enviar para outra Perennia** → escreves o endereço e o PIN, escolhes as
+   componentes e o modo → **Enviar**.
+
+Linha de comandos (sem janela, bom para o Raspberry Pi):
+
+```
+python main.py --sync-receber                       # no destino: mostra o endereço e o PIN
+export PERENNIA_SYNC_PIN=12345678                   # na fonte (o PIN nunca vai como argumento)
+python main.py --sync-enviar 192.168.1.20 --componentes sessoes,saude --modo juntar
+```
+
+*Segurança:* canal **TLS** (cifrado, com um certificado que o destino cria na 1.ª vez em
+`<dados>/sync/`); a autenticação é o **PIN** (aleatório, 8 dígitos, de uso único, caduca em 5 min,
+3 tentativas) e inclui a impressão digital do certificado, por isso quem se pusesse no meio falhava;
+só aceita endereços da **rede local** (`sync_lan_only`); nunca envia nem aceita **credenciais**
+(Strava/GarminDB), e as definições **da máquina** (pastas `path_*` e `sync_*`, definições, atalhos,
+ecrã, aparelhos) não se sobrepõem; o destino faz um **backup de segurança** antes de repor.
+*Limites:* «Juntar» acrescenta o que é novo e ignora o que é igual, mas um registo **alterado** na
+fonte chega como novo (duplicado); «Substituir» deixa o destino igual à fonte nas componentes
+enviadas (o que só existia no destino perde-se, com cópia de segurança). Para duas máquinas que
+mudam as duas, usa uma como fonte de verdade. As opções estão em Definições → Avançado → Dados e
+backups (`sync_*`).
+
+**Desempenho (bottlenecks).** O que se mediu e corrigiu: o cálculo da Longevidade chamava dezenas de
+milhares de vezes a normalização de texto por cada cálculo (agora com cache: ~40 % do tempo da
+navegação por esses ecrãs); faltavam **índices** nas tabelas de detalhe lidas por sessão (voltas,
+esforços, resultados) — a Perennia cria-os no arranque (`perennia/core/indexes.py`; não apaga nem
+muda dados); e a base de dados usa agora `synchronous=NORMAL` + cache maior (`db_fast_writes`,
+`db_cache_mb`).
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1648,6 +1752,32 @@ de omissão. Não estão disponíveis durante uma sessão.
 | «Adiar o que falta»: dias (`plan_shift_days`) | 1 a 28 d | 7 d |  |
 | «Baixar tudo»: percentagem (`plan_deload_pct`) | 2.5 a 50 % | 10 % | quanto o botão de Recalcular cargas tira a todas as progressões |
 | Importar plano: tamanho máximo (`plan_import_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de plano maior do que isto é recusado |
+| **Blocos e pastas (ronda 19)** | | | |
+| Alterar o bloco durante a sessão (`block_edit_enabled`) | sim/não | sim | desligada, a velocidade da passadeira fica presa à do bloco |
+| Âmbito da alteração (`block_change_scope`) | bloco / sessão | bloco | a alteração vale só para o bloco em curso ou até ao fim da sessão |
+| Pasta das exportações (`path_exports`) | texto | (vazio) | vazio = «exports» na pasta de dados |
+| Pasta das importações (`path_imports`) | texto | (vazio) | onde se procuram ficheiros a importar |
+| Pasta dos backups (`path_backups`) | texto | (vazio) | onde se gravam e procuram os backups |
+| Pasta dos treinos (`path_workouts`) | texto | (vazio) | onde se procuram treinos e planos |
+| Pasta dos GPX (`path_gpx`) | texto | (vazio) | onde se procuram rotas .gpx |
+| **Histórico de outras apps (ronda 19)** | | | |
+| Aplicar regras ao importar (`etl_auto_apply`) | sim/não | sim | normaliza as atividades novas depois de importar |
+| Regras de arranque (`etl_use_defaults`) | sim/não | sim | sem ficheiro de regras, usam-se as de arranque |
+| Ficheiro de regras (`etl_rules_file`) | texto | (vazio) | vazio = `regras-historico.json` na pasta das importações |
+| Tamanho máximo das regras (`etl_rules_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de regras maior é recusado |
+| **Sincronização Wi-Fi e base de dados (ronda 19)** | | | |
+| Porta (`sync_port`) | 1024 a 65535 | 8765 | a porta TCP do destino |
+| Dígitos do PIN (`sync_pin_digits`) | 6 a 12 | 8 | o PIN do destino é aleatório e de uso único |
+| Validade do PIN (`sync_pin_ttl_s`) | 30 a 3600 s | 300 s | o destino fecha sozinho |
+| Tentativas de PIN (`sync_max_attempts`) | 1 a 10 | 3 | depois de tantos PIN errados o destino fecha |
+| Tempo limite (`sync_timeout_s`) | 5 a 600 s | 30 s | quanto se espera por uma resposta |
+| Tamanho máximo (`sync_max_mb`) | 16 a 16384 MB | 1024 MB | um pacote maior não se envia nem se recebe |
+| Só rede local (`sync_lan_only`) | sim/não | sim | recusa endereços fora da rede local |
+| Custo do PIN (`sync_kdf_iterations`) | 10000 a 2000000 | 200000 | iterações do PBKDF2 (igual nos dois lados) |
+| Modo (`sync_mode`) | juntar / substituir | juntar | como o destino repõe o que recebe |
+| Componentes (`sync_components`) | texto | (vazio) | vazio = todos os dados (sem definições, ecrã, atalhos, aparelhos, ficheiros nem credenciais) |
+| Gravações rápidas (`db_fast_writes`) | sim/não | sim | `synchronous=NORMAL` com WAL |
+| Cache da base de dados (`db_cache_mb`) | 2 a 512 MB | 16 MB | memória do SQLite para páginas lidas |
 | **Perfil por desporto** | | | |
 | Janela dos melhores valores (`profile_days`) | 30 a 730 d | 180 d | os melhores esforços (potência, 1RM, tempos) contam-se neste período |
 | Janela do treino recente (`profile_recent_weeks`) | 2 a 26 | 8 | as séries por semana de cada capacidade contam-se nestas semanas |
@@ -3048,6 +3178,15 @@ minuto. Tens de pedalar para não ser apanhado.
 - Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
   sempre em variáveis de ambiente.
 
+- **Sincronização Wi-Fi (ronda 19):** TLS + PIN de uso único (aleatório, caduca, 3 tentativas)
+  ligado à impressão digital do certificado; só rede local; nunca envia credenciais; o PIN vem de
+  `PERENNIA_SYNC_PIN` ou é pedido — **nunca como argumento** (ficaria no histórico da shell);
+  a chave privada do certificado (`<dados>/sync/key.pem`) só o teu utilizador a lê (0600). O destino
+  abre uma porta enquanto espera: fecha sozinho ao fim de 5 minutos. Se a tua rede não for de
+  confiança, não uses a sincronização nela.
+- **Planos CSV e regras do histórico:** são dados (nunca código), com limite de tamanho, validados
+  campo a campo; as expressões regulares das regras são verificadas antes de usar.
+
 - **Importar um plano de X semanas:** só JSON (dados, nunca código), com limite de tamanho, e
   validado campo a campo antes de entrar; o material e a modalidade que o ficheiro não conheça
   são ignorados; os nomes que traz só entram na base por consultas com parâmetros.
@@ -3236,7 +3375,7 @@ uma vez.
 `build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
 dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 
-**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; as rondas 16 e 17 só juntam ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma):
+**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; as rondas 16 a 19 só juntam ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma; a ronda 19 acrescenta `cryptography` ao `requirements.txt`, ver abaixo):
 
 | Como abres a Perennia | O que fazer |
 |---|---|
@@ -3246,7 +3385,10 @@ dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 | Mac / Linux | `./build.sh` |
 
 Os dados **ficam**: a pasta e a base são migradas sozinhas na primeira abertura (ver o topo deste
-guia). O `.venv` não muda (o `requirements.txt` é o mesmo).
+guia). **Ronda 19:** corre `python -m pip install -r requirements.txt` uma vez (entra a biblioteca
+`cryptography`, que cria o certificado da sincronização Wi-Fi; sem ela a Perennia usa o programa
+`openssl`, se existir). Quem usa a app construída tem de a **refazer** (`build.sh` /
+`build_windows.bat`) para levar o módulo novo, e depois `criar_atalho_windows.bat`.
 
 ### Mac, Linux, Raspberry Pi
 
@@ -3322,6 +3464,25 @@ O que a ronda 8 acrescentou (tudo automático ao abrir):
 Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
+
+**A ronda 19 cria 3 tabelas e 4 colunas — sozinha, na primeira vez que são precisas** (**não tens de
+fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nada é apagado:
+
+| O quê | Como fica |
+|---|---|
+| tabela `block_events` | blocos alterados e saltados, com o original e o feito (por sessão, bloco e campo) |
+| tabela `exercise_complex_parts` | os exercícios de cada complexo, por ordem, com as repetições por ronda |
+| tabela `strength_set_parts` | o que se fez em cada exercício do complexo, por série |
+| colunas `strength_sets.logged_reps`, `logged_load_kg`, `edited_at` | o que registaste na hora, quando depois corriges a série (`planned_*` já existia) |
+| coluna `exercises.complex` | 1 nos complexos |
+| índices `ix_perf_*` | só aceleram leituras (`indexes.py`); criam-se no arranque |
+| definições novas (`gym_catalog_workouts`, `complex_seed_version`, `sync_last_host` e as opções novas) | só se criam quando são precisas |
+| exercícios e treinos de origem novos | entram uma vez, sem mexer nos teus |
+| `synced_activities` / `session_tags` | o histórico importado e normalizado usa as tabelas que já existiam |
+
+Os **backups** levam tudo (`block_events` e `strength_set_parts` em **Histórico de sessões**,
+`exercise_complex_parts` em **Ginásio e exercícios**); um backup feito antes da ronda 19 repõe-se
+na mesma. A pasta `<dados>/sync/` (certificado e pacotes temporários) **não** entra nos backups.
 
 **A ronda 17 cria 3 tabelas novas — sozinha** (**não tens de fazer nada** na base local; podes
 fazer um backup antes). Nenhuma tabela antiga muda de colunas:
