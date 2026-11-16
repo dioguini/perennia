@@ -1,8 +1,9 @@
 """Strava: autorização (OAuth) e os pedidos que a Perennia usa.
 
 Só leitura e só dos teus dados: os segmentos que cruzam uma rota
-(`/segments/explore`) e, de cada um, o teu recorde pessoal
-(`/segments/{id}` → `athlete_segment_stats`). A classificação completa
+(`/segments/explore`), os teus favoritos (`/segments/starred`), um segmento por ID e, de cada um,
+o teu recorde pessoal (`/segments/{id}` → `athlete_segment_stats`) e, com subscrição Strava, os
+teus esforços (`/segment_efforts`). A classificação completa
 (top 15) deixou de estar disponível na API do Strava em 2020.
 
 Pelo acordo da API do Strava, estes dados não podem ir para sistemas de IA:
@@ -34,14 +35,16 @@ AUTH_URL = "https://www.strava.com/oauth/authorize"
 TOKEN_URL = "https://www.strava.com/oauth/token"
 API = "https://www.strava.com/api/v3"
 REDIRECT_PORT = 8723
-SCOPE = "read,activity:read"
+SCOPE = "read,read_all,activity:read"      # read_all: o teu PR e os segmentos privados
 # Em vez de gravar as chaves na base de dados, podem vir do ambiente (não ficam em disco):
 ENV_CLIENT_ID = "PERENNIA_STRAVA_CLIENT_ID"
 ENV_CLIENT_SECRET = "PERENNIA_STRAVA_CLIENT_SECRET"
 
 
 class StravaError(RuntimeError):
-    pass
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status               # o código HTTP do Strava, quando o houve
 
 
 def default_http(method: str, url: str, params: dict | None = None,
@@ -113,12 +116,27 @@ class StravaClient:
 
     # ------------------------------------------------------------ chaves
 
-    def exchange(self, code: str) -> dict:
+    @property
+    def scope(self) -> str:
+        """As permissões que o Strava deu na última autorização («» se não se sabe)."""
+        return str(self.tokens.get("scope") or "")
+
+    @property
+    def needs_reauth(self) -> bool:
+        """Ligado, mas sem a permissão `read_all` (o PR e os esforços podem faltar): autorizar
+        de novo resolve."""
+        return self.connected and "read_all" not in self.scope.replace("%2C", ",").split(",")
+
+    def exchange(self, code: str, scope: str | None = None) -> dict:
         status, body = self.http("POST", TOKEN_URL, {
             "client_id": self.client_id, "client_secret": self.client_secret,
             "code": code, "grant_type": "authorization_code"})
         if status != 200 or not body or "access_token" not in body:
             raise StravaError(f"o Strava recusou a autorização ({status})")
+        if scope:
+            cur = self.tokens
+            cur["scope"] = scope
+            self.db.set("strava_tokens", cur)
         self._save_tokens(body)
         return body
 
@@ -148,21 +166,38 @@ class StravaClient:
         status, body = self.http("GET", API + path, params,
                                  {"Authorization": f"Bearer {self.access_token()}"})
         if status == 429:
-            raise StravaError("limite de pedidos do Strava atingido; tenta daqui a 15 min")
+            raise StravaError("limite de pedidos do Strava atingido; tenta daqui a 15 min", 429)
         if status != 200:
-            raise StravaError(f"pedido ao Strava falhou ({status})")
+            raise StravaError(f"pedido ao Strava falhou ({status})", status)
         return body
 
     # ---------------------------------------------------------- segmentos
 
     def explore(self, bounds: tuple[float, float, float, float],
                 activity: str = "riding") -> list[dict]:
-        body = self.get("/segments/explore", {
-            "bounds": ",".join(f"{v:.6f}" for v in bounds), "activity_type": activity})
+        try:
+            body = self.get("/segments/explore", {
+                "bounds": ",".join(f"{v:.6f}" for v in bounds), "activity_type": activity})
+        except StravaError as e:
+            if e.status in (401, 403):
+                raise StravaError(
+                    f"{e} — a tua app do Strava pode não ter acesso à pesquisa por rota; "
+                    "importa os segmentos por ID ou pelos favoritos (menu Segmentos)",
+                    e.status) from e
+            raise
         return list((body or {}).get("segments") or [])
 
     def segment(self, segment_id: int) -> dict:
         return self.get(f"/segments/{int(segment_id)}") or {}
+
+    def starred(self, page: int = 1, per_page: int = 200) -> list[dict]:
+        """Os segmentos que marcaste com ⭐ no Strava (resumos)."""
+        return list(self.get("/segments/starred", {"page": page, "per_page": per_page}) or [])
+
+    def efforts(self, segment_id: int, page: int = 1, per_page: int = 200) -> list[dict]:
+        """Os teus esforços num segmento (precisa de subscrição Strava)."""
+        return list(self.get("/segment_efforts", {
+            "segment_id": int(segment_id), "page": page, "per_page": per_page}) or [])
 
 
 def authorize_interactive(client: StravaClient, open_browser: Callable = webbrowser.open,
@@ -187,6 +222,7 @@ def authorize_interactive(client: StravaClient, open_browser: Callable = webbrow
                 self.send_error(400, "state invalido")
                 return
             result["code"] = (q.get("code") or [None])[0]
+            result["scope"] = (q.get("scope") or [""])[0]
             result["error"] = (q.get("error") or [None])[0]
             ok = bool(result["code"])
             self.send_response(200)
@@ -212,5 +248,5 @@ def authorize_interactive(client: StravaClient, open_browser: Callable = webbrow
         server.server_close()
     if not result.get("code"):
         return False
-    client.exchange(result["code"])
+    client.exchange(result["code"], result.get("scope") or None)
     return True

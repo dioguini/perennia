@@ -26,7 +26,9 @@ from .db import Database, now_iso
 from .i18n import t
 from .units import delta, hms
 
-MATCH_RADIUS_M = 45.0
+MATCH_RADIUS_M = 45.0                   # as opções `strava_*` (Definições → Ligações) mudam estas
+PATH_RADIUS_M = 40.0                    # desvio máximo da rota ao traçado do segmento
+PATH_FRACTION_PCT = 85                  # % do traçado do segmento que a rota tem de seguir
 TILE_M = 3000.0
 MAX_TILES = 30
 MAX_DETAILS = 40
@@ -56,6 +58,42 @@ def ensure(db: Database) -> None:
       segment_id INTEGER NOT NULL,
       elapsed_s  INTEGER NOT NULL,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS strava_library (
+      segment_id    INTEGER PRIMARY KEY,
+      name          TEXT NOT NULL,
+      activity_type TEXT,
+      distance_m    REAL,
+      avg_grade     REAL,
+      max_grade     REAL,
+      elev_gain_m   REAL,
+      climb_cat     INTEGER,
+      start_lat     REAL,
+      start_lon     REAL,
+      end_lat       REAL,
+      end_lon       REAL,
+      polyline      TEXT,
+      city          TEXT,
+      country       TEXT,
+      private       INTEGER NOT NULL DEFAULT 0,
+      starred       INTEGER NOT NULL DEFAULT 0,
+      pr_s          INTEGER,
+      pr_date       TEXT,
+      effort_count  INTEGER,
+      kom           TEXT,
+      origin        TEXT,                    -- id | starred | route
+      fetched_at    TEXT,
+      efforts_at    TEXT
+    );
+    CREATE TABLE IF NOT EXISTS strava_library_efforts (
+      effort_id   INTEGER PRIMARY KEY,
+      segment_id  INTEGER NOT NULL,
+      start_date  TEXT,
+      elapsed_s   INTEGER NOT NULL,
+      moving_s    INTEGER,
+      avg_watts   REAL,
+      avg_hr      REAL,
+      activity_id INTEGER
     );
     CREATE TABLE IF NOT EXISTS perennia_segments (
       id         INTEGER PRIMARY KEY,
@@ -129,8 +167,10 @@ def nearest(points: Sequence, lat: float, lon: float, after_m: float = -1.0
     return best
 
 
-def tiles(points: Sequence, size_m: float = TILE_M) -> list[tuple[float, float, float, float]]:
+def tiles(points: Sequence, size_m: float | None = None
+          ) -> list[tuple[float, float, float, float]]:
     """Janelas (sw_lat, sw_lng, ne_lat, ne_lng) ao longo da rota."""
+    size_m = size_m or TILE_M
     out = []
     chunk: list = []
     start = points[0].dist_m if points else 0.0
@@ -151,8 +191,62 @@ def tiles(points: Sequence, size_m: float = TILE_M) -> list[tuple[float, float, 
     return boxes[:MAX_TILES]
 
 
+def decode_polyline(text: str | None) -> list[tuple[float, float]]:
+    """O traçado codificado do Strava (Google «encoded polyline», 5 casas) → [(lat, lon)]."""
+    out: list[tuple[float, float]] = []
+    if not text:
+        return out
+    i, lat, lon = 0, 0, 0
+    try:
+        while i < len(text):
+            vals = []
+            for _ in range(2):
+                shift = result = 0
+                while True:
+                    b = ord(text[i]) - 63
+                    i += 1
+                    result |= (b & 0x1F) << shift
+                    shift += 5
+                    if b < 0x20:
+                        break
+                vals.append(~(result >> 1) if result & 1 else result >> 1)
+            lat += vals[0]
+            lon += vals[1]
+            out.append((lat / 1e5, lon / 1e5))
+    except (IndexError, TypeError):
+        return out
+    return out
+
+
+def follows(points: Sequence, a_m: float, b_m: float, path: Sequence[tuple[float, float]]
+            ) -> bool:
+    """A rota entre a_m e b_m segue o traçado do segmento? (≥ PATH_FRACTION_PCT % dos pontos do
+    traçado têm um ponto da rota a PATH_RADIUS_M ou menos — e a ordem é a do percurso.)"""
+    if len(path) < 3:
+        return True                       # sem traçado que chegue: valem o início e o fim
+    seg_pts = [p for p in points if a_m - PATH_RADIUS_M <= p.dist_m <= b_m + PATH_RADIUS_M]
+    if not seg_pts:
+        return False
+    step = max(1, len(path) // 40)         # no máximo ~40 pontos do traçado
+    sample = list(path[::step])
+    if sample[-1] != path[-1]:
+        sample.append(path[-1])
+    ok = 0
+    last_d = -1.0
+    ordered = True
+    for lat, lon in sample:
+        best = min(seg_pts, key=lambda p: _m(p.lat, p.lon, lat, lon))
+        if _m(best.lat, best.lon, lat, lon) <= PATH_RADIUS_M:
+            ok += 1
+            if best.dist_m + PATH_RADIUS_M < last_d:
+                ordered = False
+            last_d = max(last_d, best.dist_m)
+    return ordered and ok * 100 >= PATH_FRACTION_PCT * len(sample)
+
+
 def match(points: Sequence, seg: dict) -> tuple[float, float] | None:
-    """Início e fim do segmento na rota, se a rota o percorre no mesmo sentido."""
+    """Início e fim do segmento na rota, se a rota o percorre no mesmo sentido (e, havendo o
+    traçado do segmento, se o segue de facto)."""
     s, e = seg.get("start_latlng"), seg.get("end_latlng")
     if not s or not e:
         return None
@@ -166,6 +260,10 @@ def match(points: Sequence, seg: dict) -> tuple[float, float] | None:
     dist = seg.get("distance") or length
     if length <= 0 or not (0.75 * dist <= length <= 1.3 * dist):
         return None
+    path = decode_polyline(seg.get("polyline") or seg.get("points")
+                           or (seg.get("map") or {}).get("polyline"))
+    if path and not follows(points, a[0], b[0], path):
+        return None
     return a[0], b[0]
 
 
@@ -173,7 +271,9 @@ def match(points: Sequence, seg: dict) -> tuple[float, float] | None:
 
 
 def fetch_for_route(db: Database, client, route_id: str, progress=None) -> dict:
-    """Vai ao Strava buscar os segmentos da rota e os teus PR; guarda-os."""
+    """Vai ao Strava buscar os segmentos da rota e os teus PR; guarda-os (e, com a opção
+    `strava_library_autosave`, também na biblioteca, para uma próxima vez sem internet)."""
+    from . import options, strava_library
     ensure(db)
     points = db.route_points(route_id)
     if not points:
@@ -193,8 +293,10 @@ def fetch_for_route(db: Database, client, route_id: str, progress=None) -> dict:
     matched.sort(key=lambda x: x[2][0])
     db.conn.execute("DELETE FROM strava_segments WHERE route_id = ?", (route_id,))
     details = 0
+    autosave = bool(options.get(db, "strava_library_autosave"))
     for sid, seg, (a, b) in matched:
         pr_s = pr_date = count = kom = None
+        det = None
         if details < MAX_DETAILS:
             try:
                 det = client.segment(sid)
@@ -205,6 +307,11 @@ def fetch_for_route(db: Database, client, route_id: str, progress=None) -> dict:
                 count = stats.get("effort_count")
                 kom = (det.get("xoms") or {}).get("kom")
             except Exception:
+                det = None
+        if autosave:
+            try:
+                strava_library.save(db, {**seg, **det} if det else seg, "route")
+            except Exception:
                 pass
         db.conn.execute(
             "INSERT OR REPLACE INTO strava_segments(route_id, segment_id, name, distance_m,"
@@ -214,12 +321,16 @@ def fetch_for_route(db: Database, client, route_id: str, progress=None) -> dict:
              seg.get("avg_grade"), seg.get("climb_category"), a, b, pr_s, pr_date, count, kom,
              now_iso()))
     db.conn.commit()
-    return {"explored": len(found), "matched": len(matched), "tiles": len(boxes)}
+    linked = strava_library.link_route(db, route_id)["linked"]   # + os da biblioteca (offline)
+    return {"explored": len(found), "matched": len(matched), "tiles": len(boxes),
+            "linked": linked}
 
 
 STRAVA_BEST = ("SELECT MIN(x) FROM (SELECT MIN(elapsed_s) AS x FROM strava_efforts e"
                " WHERE e.segment_id = s.segment_id UNION ALL SELECT MIN(elapsed_s) FROM"
-               " segment_efforts f WHERE f.source = 'strava' AND f.segment_id = s.segment_id)")
+               " segment_efforts f WHERE f.source = 'strava' AND f.segment_id = s.segment_id"
+               " UNION ALL SELECT MIN(elapsed_s) FROM strava_library_efforts g"
+               " WHERE g.segment_id = s.segment_id)")
 
 
 def load(db: Database, route_id: str | None, sources: tuple = ("strava", "perennia")
@@ -357,6 +468,11 @@ def efforts(db: Database, source: str, segment_id: int) -> list[dict]:
         rows += [dict(r) for r in db.conn.execute(
             "SELECT elapsed_s, created_at, 'cycling' AS sport, 'ride' AS kind,"
             " ride_id AS session_id FROM strava_efforts WHERE segment_id = ?", (segment_id,))]
+        rows += [dict(r) for r in db.conn.execute(      # os esforços importados do Strava
+            "SELECT g.elapsed_s, g.start_date AS created_at, COALESCE(CASE WHEN l.activity_type"
+            " LIKE '%run%' THEN 'running' END, 'cycling') AS sport, 'strava' AS kind,"
+            " NULL AS session_id FROM strava_library_efforts g LEFT JOIN strava_library l ON"
+            " l.segment_id = g.segment_id WHERE g.segment_id = ?", (segment_id,))]
     rows.sort(key=lambda r: r["elapsed_s"])
     return rows
 

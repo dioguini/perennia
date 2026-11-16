@@ -773,6 +773,11 @@ class Database:
               c.avg_grade_pct, c.max_grade_pct, c.category, c.score) for c in climbs],
         )
         self.conn.commit()
+        try:                       # os segmentos do Strava que a biblioteca já tem (sem rede)
+            from . import strava_library
+            strava_library.auto_link(self, rid)
+        except Exception:
+            pass
         return rid
 
     def routes(self) -> list[sqlite3.Row]:
