@@ -691,8 +691,9 @@ def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
     # o garmindb.log fica na pasta de onde se corre: a dos dados do GarminDB
     try:
         with password_for_run(db):
-            return _run(build_command(cli, opts, config_dir(db)), runner, timeout,
-                        db_dir(db).parent, log)
+            cmd = build_command(cli, opts, config_dir(db))
+            cmd[:1] = importers.launcher(cli)
+            return _run(cmd, runner, timeout, db_dir(db).parent, log)
     except PasswordMissing as e:
         return False, str(e)
 
@@ -706,7 +707,7 @@ def maintenance(db: Database, action: str, runner: Callable | None = None,
     if cli is None:
         return False, "GarminDB não encontrado (pip install garmindb)"
     flag = {"backup": "--backup", "rebuild": "--rebuild_db"}[action]
-    cmd = [cli]
+    cmd = importers.launcher(cli)
     if config_dir(db) != CONFIG_DIR_DEFAULT:
         cmd += ["-f", str(config_dir(db))]
     try:
@@ -887,6 +888,15 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
     report: dict = {"since": since, "until": until, "values": 0, "days": 0,
                     "activities": 0, "new_activities": 0, "tables": [], "kept": 0}
     folder = Path(folder) if folder else db_dir(db)
+    if not (folder / "garmin.db").exists() and not (folder / "garmin_activities.db").exists():
+        # antes dizia «0 valores, 0 atividades» como se tivesse corrido bem
+        raise FileNotFoundError(tr(
+            "o GarminDB ainda não criou as bases em {d} (garmin.db). Instala-o com «python -m pip "
+            "install garmindb», faz «Sincronizar agora» com «descarregar» e «importar» ligados, "
+            "ou muda a pasta das bases se estão noutro sítio",
+            "GarminDB has not created its databases in {d} yet (garmin.db). Install it with "
+            "'python -m pip install garmindb', run 'Sync now' with 'download' and 'import' on, "
+            "or change the databases folder if they are elsewhere", d=folder))
     tables = tuple(HEALTH_TABLES[k] for k in opts.stats if k in HEALTH_TABLES)
     if tables:
         if (folder / "garmin.db").exists():

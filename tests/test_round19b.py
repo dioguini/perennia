@@ -331,6 +331,35 @@ class TestLanSync(unittest.TestCase):
         self.assertEqual(rx.status, "closed")
 
 
+class TestGarminDiscovery(Tmp):
+    def test_cli_is_found_next_to_this_python_and_run_with_it(self):
+        from perennia.core import importers, garmin_sync as gs
+        scripts = self.tmp / "venv" / "Scripts"
+        scripts.mkdir(parents=True)
+        cli = scripts / "garmindb_cli.py"
+        cli.write_text("print('x')\n")
+        orig = importers.cli_search_dirs
+        importers.cli_search_dirs = lambda: [str(scripts)]
+        import shutil as sh
+        orig_which, sh.which = sh.which, lambda *a, **k: None
+        try:
+            self.assertEqual(importers.garmindb_cli(), str(cli))
+            self.assertEqual(importers.launcher(str(cli)), [sys.executable, str(cli)])
+            self.assertEqual(importers.launcher("/usr/bin/garmindb_cli"),
+                             ["/usr/bin/garmindb_cli"])
+        finally:
+            importers.cli_search_dirs = orig
+            sh.which = orig_which
+
+    def test_sync_without_the_databases_is_an_error_not_zero_records(self):
+        from perennia.core import garmin_sync as gs
+        self.db.set("garmindb_dir", str(self.tmp / "vazio"))
+        ok, msg, rep = gs.sync(self.db, gs.Options(), run_source=False)
+        self.assertFalse(ok)
+        self.assertIn("garmin.db", msg)
+        self.assertIsNone(rep)
+
+
 # ================================================================== interface
 
 
