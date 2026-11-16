@@ -658,8 +658,6 @@ class SyncPanel:
         db, o, runner = self.app.db, self.opts, self.runner
         if not gs.status(db)["cli"]:
             # sem o GarminDB instalado, importa-se o que já lá estiver
-            self.app.message(tr("GarminDB não instalado: importo só o que já está nas bases.",
-                                "GarminDB not installed: importing what is already there."))
             self.import_only()
             return
         bad = gs.blocking_problems(gs.preflight(db, o))
@@ -691,6 +689,22 @@ class SyncPanel:
             ok, msg, rep = gs.sync(db, o, run_source=False, log=self.log)
         except Exception as e:
             ok, msg, rep = False, str(e), None
+        if not gs.status(db)["cli"]:
+            from perennia.core import importers
+            hint = tr(
+                "Não encontrei o programa do GarminDB (procurei no PATH e em {d}), por isso não "
+                "descarreguei nada do Garmin. Instala-o no mesmo ambiente da Perennia: «python "
+                "-m pip install garmindb».",
+                "Could not find the GarminDB program (looked in PATH and in {d}), so nothing was "
+                "downloaded from Garmin. Install it in the same environment as Perennia: "
+                "'python -m pip install garmindb'.",
+                d=", ".join(importers.cli_search_dirs()[:2]) or "—")
+            if ok:
+                self.app.message(hint)
+                self.last_report = rep
+                self.screen.enter()
+                return
+            msg = hint + " " + (msg or "")
         self._done(ok, msg, rep)
 
     def ask_maintenance(self, action: str) -> None:

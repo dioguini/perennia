@@ -26,6 +26,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
@@ -302,8 +303,47 @@ def garmindb_status(db: Database) -> dict:
             "last_import": db.get("garmindb_last_import")}
 
 
+def cli_search_dirs() -> list[str]:
+    """Onde procurar o programa do GarminDB além do PATH: a pasta de scripts do Python que
+    está a correr a Perennia (o `.venv`) e a do utilizador. Uma app aberta por um atalho quase
+    nunca tem o `.venv` no PATH, e foi isso que fazia o GarminDB «não existir»."""
+    import sysconfig
+    dirs: list[str] = []
+    exe = Path(sys.executable).resolve().parent if sys.executable else None
+    for d in (exe, exe / "Scripts" if exe else None, exe / "bin" if exe else None):
+        if d is not None:
+            dirs.append(str(d))
+    for scheme in (None, "posix_user", "nt_user"):
+        try:
+            dirs.append(sysconfig.get_path("scripts", scheme) if scheme else
+                        sysconfig.get_path("scripts"))
+        except (KeyError, ValueError):
+            continue
+    return [d for d in dict.fromkeys(dirs) if d and Path(d).is_dir()]
+
+
 def garmindb_cli() -> str | None:
-    return shutil.which("garmindb_cli.py") or shutil.which("garmindb_cli")
+    """O caminho do `garmindb_cli.py` (no PATH ou na pasta de scripts deste Python)."""
+    names = ("garmindb_cli.py", "garmindb_cli", "garmindb_cli.exe")
+    for n in names[:2]:
+        found = shutil.which(n)
+        if found:
+            return found
+    for d in cli_search_dirs():
+        for n in names:
+            p = Path(d) / n
+            if p.is_file():
+                return str(p)
+    return None
+
+
+def launcher(cli: str) -> list[str]:
+    """Como se corre esse programa: um `.py` corre-se com o **mesmo Python** da Perennia (no
+    Windows não se executa um .py diretamente, e assim usa-se o ambiente onde o GarminDB foi
+    instalado); o resto corre-se tal como está."""
+    if str(cli).lower().endswith(".py") and Path(cli).is_file():
+        return [sys.executable, str(cli)]
+    return [str(cli)]
 
 
 def run_garmindb(timeout: float = 1800.0, runner: Callable | None = None) -> tuple[bool, str]:
@@ -312,7 +352,7 @@ def run_garmindb(timeout: float = 1800.0, runner: Callable | None = None) -> tup
     cli = garmindb_cli()
     if cli is None:
         return False, "GarminDB não encontrado (pip install garmindb)"
-    cmd = [cli, "--all", "--download", "--import", "--analyze", "--latest"]
+    cmd = launcher(cli) + ["--all", "--download", "--import", "--analyze", "--latest"]
     run = runner or subprocess.run
     try:
         res = run(cmd, capture_output=True, text=True, timeout=timeout)
