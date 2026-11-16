@@ -50,6 +50,12 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 21** — **Biblioteca de segmentos do Strava**: importa segmentos por **ID ou ligação**, pelos
+  **favoritos ⭐**, ou pela pesquisa de uma rota (que se mantém, para rotas noutros países), com o
+  traçado, o teu PR e (com subscrição Strava) **todos os teus esforços**. Ficam neste computador e
+  **ligam-se sozinhos a cada rota .gpx sem internet**, seguindo o traçado do segmento. Menu
+  Segmentos → Biblioteca. Onze opções novas (Avançado → Ligações) e um erro de estabilidade
+  corrigido nos trabalhos do Strava. Ver o RUN.md.
 - **Ronda 20** — **Métricas de saúde**: adicionar, editar, **descontinuar** (o histórico fica) e
   apagar; perguntas **«se sim, onde?»** que só aparecem quando outra tem essa resposta; filtro por
   grupo no diário; **catálogo de 63 perguntas** (refeições, digestão, sono, rotina, recuperação)

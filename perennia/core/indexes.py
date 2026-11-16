@@ -25,6 +25,8 @@ INDEXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("segment_efforts", ("session_id",)),
     ("segment_efforts", ("segment_id",)),
     ("perennia_segments", ("route_id",)),
+    ("strava_segments", ("segment_id",)),
+    ("strava_library_efforts", ("segment_id",)),
     ("lab_results", ("report_id",)),
     ("lab_results", ("parameter_id",)),
     ("exercise_complex_parts", ("exercise_id",)),

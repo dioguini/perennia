@@ -159,8 +159,11 @@ COMPONENTS: tuple[Component, ...] = (
               "os .gpx: pontos, perfil e subidas", "the .gpx: points, profile and climbs",
               tables=("routes", "route_points", "climbs")),
     Component("segmentos", "Segmentos", "Segments",
-              "os da Perennia e os do Strava", "Perennia's and Strava's",
-              tables=("perennia_segments", "strava_segments")),
+              "os da Perennia, os do Strava e a biblioteca de segmentos do Strava (com os teus "
+              "esforços importados)",
+              "Perennia's, Strava's and the Strava segment library (with your imported efforts)",
+              tables=("perennia_segments", "strava_segments", "strava_library",
+                      "strava_library_efforts")),
     Component("treinos", "Treinos", "Workouts",
               "listas de treinos de todos os desportos, definição, objetivos e planos de "
               "voltas (também as cópias das sessões)",

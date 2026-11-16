@@ -1707,6 +1707,73 @@ usam sempre parâmetros SQL. *Setas → lista pendente:* o diário e o editor de
 pendentes (grupo, tipo, fonte, depende de, resposta); as restantes setas que ficam são listas curtas
 (esforço 1–10, intervalos) ou datas (têm calendário). *Valores no código:* as 3 opções novas abaixo.
 
+### Ronda 21: a biblioteca de segmentos do Strava (para usares sem internet)
+
+**Duas maneiras de trazer segmentos, que se completam.**
+1. **Pesquisa por rota** (como antes, e mantém-se): na ficha da rota (ou na janela da sessão) →
+   **Segmentos do Strava → Atualizar do Strava**. Serve para uma rota nova em qualquer parte do
+   mundo, sem teres favoritos lá. Agora tudo o que a pesquisa encontra **fica também na
+   biblioteca**.
+2. **Biblioteca** (menu **Segmentos → separador Biblioteca**): os segmentos ficam guardados **neste
+   computador**, com o traçado, o teu PR e (com subscrição Strava) todos os teus esforços.
+
+**Importar para a biblioteca** (precisa de internet, uma vez): Segmentos → **Importar do Strava**
+(botão em cima, à direita, em qualquer separador).
+- **IDs ou ligações:** escreve ou cola (**Ctrl+V**; **Del** limpa) um ou vários —
+  `https://www.strava.com/segments/12345`, `67890`… separados por espaços, vírgulas ou linhas.
+  Diz quantos reconheceu.
+- **Importar os meus favoritos ⭐:** os segmentos que marcaste com ⭐ no Strava.
+- **Atualizar a biblioteca:** renova o PR e os esforços dos que já lá estão.
+- O que entra de cada segmento: nome, distância, inclinação (média e máxima), subida, categoria, cidade,
+  o **traçado**, o teu **PR** (e a data), o nº de esforços, o KOM e, se tiveres **subscrição Strava**,
+  **todos os teus esforços** (data, tempo, watts). Sem subscrição só entra o PR (o relatório diz-o).
+- **Limites:** o Strava aceita ~100 pedidos a cada 15 min; cada segmento custa 1 (2 com esforços), por
+  isso entram no máximo `strava_import_batch` (30) por vez; o que sobrar fica no campo, para
+  voltares a carregar em Importar. Se o Strava travar (429) diz quanto falta.
+- Precisa da permissão **read_all** (o teu PR): se em Definições → Strava aparecer «Permissões:
+  autoriza de novo», carrega em «Autorizar no browser» outra vez (uma só vez).
+
+**Usar offline.** Ao **importar um .gpx** (menu Rotas), a Perennia cruza a biblioteca com a rota **sem
+rede** e liga os segmentos que a rota percorre **no mesmo sentido e seguindo o traçado** (não basta
+começar e acabar perto: um desvio de centenas de metros não liga). Depois é como sempre: placa de
+entrada, comparação com o PR e tempo final. Também há:
+- **Ligar da biblioteca (sem internet)** na ficha de «Segmentos do Strava» da rota;
+- **Ligar às minhas rotas** no separador Biblioteca (todas as rotas de uma vez), útil depois de
+  importares segmentos novos.
+O **melhor tempo** de um segmento passa a ser o melhor entre os teus esforços do Strava
+importados e os que fazes na Perennia (os do Strava aparecem na lista de tempos do segmento, com a data).
+
+**A Biblioteca.** Lista (A–Z) com o PR, a distância, a inclinação, a cidade, quantos esforços e a
+quantas rotas está ligado (⭐ = favorito). Enter abre a ficha (números, rotas ligadas, esforços,
+**Atualizar do Strava**, **Ligar às minhas rotas**, **Tirar da biblioteca**); **Del** tira
+(com confirmação: perdem-se os esforços importados e as ligações, **os teus tempos da Perennia ficam**).
+
+**Se a pesquisa por rota falhar com «403».** A documentação do Strava diz que a pesquisa por rota
+(`/segments/explore`) pode estar limitada a apps com «Extended Access». Nesse caso a Perennia diz-te
+para importares por ID ou pelos favoritos (que não têm essa limitação). Isto não foi testado com a tua
+conta.
+
+**Opções novas** (Definições → Avançado → Ligações; ver a tabela das opções):
+`strava_auto_link`, `strava_library_autosave`, `strava_import_batch`, `strava_import_efforts`,
+`strava_efforts_max` e as que antes estavam no código: `strava_match_radius_m` (45 m),
+`strava_path_radius_m` (40 m), `strava_path_fraction` (85 %), `strava_tile_m`, `strava_max_tiles`,
+`strava_max_details`.
+
+**Base de dados (tudo local, SQLite).** Nada a fazer: ao abrir, a Perennia cria as tabelas
+`strava_library` (um segmento por linha, com o traçado) e `strava_library_efforts` (os esforços
+importados) e dois índices. O backup da componente **Segmentos** leva a biblioteca toda (com os
+esforços); `strava_tokens` (o acesso ao Strava) continua de fora, como as credenciais.
+
+**Revisões desta ronda.** *Segurança:* as chaves do Strava continuam só em ambiente
+(`PERENNIA_STRAVA_CLIENT_ID/SECRET`) ou na base local (nunca no código nem em argumentos); o IDs/ligações
+que escreves passam por uma expressão que só aceita números (não se usa como URL nem como SQL); o
+traçado é descodificado com limites (lixo não rebenta); nada do Strava vai para o agente de IA.
+*Erro corrigido (bottleneck/estabilidade):* os trabalhos do Strava corriam numa thread com **a mesma
+ligação à base de dados que o ecrã**, o que podia **fazer a SQLite estoirar** (vi-o nos testes); agora
+cada trabalho abre **a sua própria ligação** (`strava_job`), também na pesquisa por rota e na sessão.
+*Setas → lista pendente:* a ficha e a importação não usam setas para escolher valores (só botões e
+um campo de texto). *Valores no código:* as 6 constantes da pesquisa/ligação passaram a opções.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1734,6 +1801,17 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Rotas GPX: distância entre pontos (`gpx_resample_step_m`) | 1 a 50 m | 5 m | as rotas importadas são reamostradas a esta distância (vale para as novas) |
 | **Ligações externas** | | | |
 | Strava: porta do retorno local (`strava_redirect_port`) | 1024 a 65535 | 8723 | a porta onde a Perennia espera o regresso do Strava (só nesta máquina) |
+| Strava: tolerância ao ligar um segmento à rota (`strava_match_radius_m`) | 10 a 150 m | 45 m | o início e o fim do segmento têm de estar a esta distância da rota |
+| Strava: tolerância ao traçado do segmento (`strava_path_radius_m`) | 10 a 150 m | 40 m | a rota tem de seguir o traçado do segmento com este desvio no máximo |
+| Strava: parte do traçado que tem de coincidir (`strava_path_fraction`) | 50 a 100 % | 85 % | evita ligar um segmento que só começa e acaba perto da rota |
+| Strava: tamanho de cada janela de pesquisa (`strava_tile_m`) | 500 a 10000 m | 3000 m | a pesquisa por rota divide-a em janelas deste comprimento |
+| Strava: janelas de pesquisa por rota, máximo (`strava_max_tiles`) | 3 a 100 | 30 | cada janela é um pedido ao Strava (limite ~100 a cada 15 min) |
+| Strava: segmentos com PR por pesquisa, máximo (`strava_max_details`) | 5 a 90 | 40 | cada um é mais um pedido (o teu PR e o traçado) |
+| Strava: ligar a biblioteca ao importar uma rota (`strava_auto_link`) | sim / não | sim | ao importar um .gpx, os segmentos da biblioteca que a rota percorre ligam-se sozinhos (sem internet) |
+| Strava: guardar na biblioteca o que a pesquisa achar (`strava_library_autosave`) | sim / não | sim | o que «Atualizar do Strava» (por rota) encontra fica na biblioteca |
+| Strava: segmentos por importação, máximo (`strava_import_batch`) | 5 a 80 | 30 | o resto fica para a importação seguinte |
+| Strava: importar os meus esforços (`strava_import_efforts`) | sim / não | sim | precisa de subscrição Strava; sem ela só entra o PR |
+| Strava: esforços por segmento, máximo (`strava_efforts_max`) | 20 a 1000 | 200 | cada 200 é um pedido ao Strava |
 | Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 60 a 21600 s | 3600 s | a sincronização é interrompida se demorar mais do que isto |
 | Garmin: linhas do relato (`garmin_log_lines`) | 4 a 60 | 14 | quantas linhas do que o GarminDB vai dizendo se mostram no ecrã da sincronização |
 | Garmin: tamanho de cada linha do relato (`garmin_log_line_chars`) | 60 a 1000 car. | 300 | as linhas do GarminDB mais compridas são cortadas no ecrã |
@@ -2983,7 +3061,8 @@ trainer simulado. Serve todos os desportos, para testar sem cinta.
 2. Em **Definições → Strava** escreve o **Client ID** e o **Client Secret**
    (ficam só neste computador) e escolhe **Autorizar no browser**. Aceita na
    página do Strava; a janela diz "Strava ligado" e podes fechá-la.
-3. Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
+3. (Ver também a «Ronda 21»: a **biblioteca** de segmentos, por ID ou favoritos, que funciona sem
+   internet.) Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
    (**Rotas → a rota → Segmentos do Strava → Atualizar do Strava**): a Perennia procura os segmentos ao longo da rota, fica com os
    que a rota percorre no mesmo sentido, e vai buscar o teu **PR** e o número
    de esforços de cada um.
@@ -3463,7 +3542,9 @@ guia). **Ronda 19:** corre `python -m pip install -r requirements.txt` uma vez (
 `openssl`, se existir). Quem usa a app construída tem de a **refazer** (`build.sh` /
 `build_windows.bat`) para levar o módulo novo, e depois `criar_atalho_windows.bat`. **Ronda 20:** sem pacotes novos; quem usa a app construída
 refaz do mesmo modo para levar os módulos novos (`health_catalog`, `day_feedback`); a versão do
-projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código novo.
+projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código novo. **Ronda 21:** sem pacotes novos; quem usa a app
+construída refaz do mesmo modo (módulo novo `strava_library`). **Autoriza o Strava outra vez uma
+vez** (Definições → Strava → «Autorizar no browser») para a Perennia ter a permissão `read_all`.
 
 ### Mac, Linux, Raspberry Pi
 

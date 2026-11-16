@@ -14,6 +14,9 @@ e os segmentos do Strava dessa rota, o modo da sessão (sozinho ou contra as
 tuas sessões anteriores), o ERG nos treinos ERG, as opções do Challenge
 (duração, bots) e o auto lap. A qualidade do 3D está nas Definições.
 
+**Segmentos da biblioteca.** Os segmentos do Strava que importaste (menu Segmentos → Biblioteca) e
+que a rota percorre ligam-se sozinhos ao importar o .gpx, e funcionam sem internet.
+
 **Strava sem internet.** Se a procura dos segmentos falhar, aparece um aviso
 («não foi possível ligar ao Strava») e escolhes: prosseguir sem os segmentos
 ou cancelar a sessão.
@@ -367,9 +370,11 @@ class RoutePickerPopup(PopupMixin, Screen):
 def strava_warning(app, on_proceed, on_cancel, error: str = "") -> ConfirmScreen:
     """O aviso quando o Strava não responde (sem internet, por exemplo)."""
     sub = tr("Sem internet, ou o Strava não respondeu{e}. Podes prosseguir sem os segmentos "
-             "(a sessão corre igual) ou cancelar a sessão.",
+             "(a sessão corre igual; os segmentos da biblioteca já ligados a esta rota ficam) "
+             "ou cancelar a sessão.",
              "No internet, or Strava did not answer{e}. You can go on without the segments "
-             "(the session runs the same) or cancel the session.",
+             "(the session runs the same; library segments already linked to this route stay) "
+             "or cancel the session.",
              e=f" ({error[:60]})" if error else "")
     return ConfirmScreen(app, tr("Não foi possível ligar ao Strava", "Could not connect to Strava"),
                          sub, [(tr("Cancelar a sessão", "Cancel the session"), on_cancel),
@@ -574,6 +579,9 @@ class SessionSetup(PopupMixin, AutoLapOptions, Screen):
             detail = " · ".join(s.name for s in segs[:3]) + (" …" if len(segs) > 3 else "")
             if connected:
                 detail += tr(" · Enter atualiza", " · Enter refreshes")
+            else:
+                detail += tr(" · da biblioteca, funcionam sem internet",
+                             " · from the library, they work offline")
         elif self.strava_skipped:
             value, detail = tr("sem ligação", "no connection"), tr(
                 "segue sem segmentos · Enter tenta outra vez", "going without segments · "
