@@ -1638,6 +1638,75 @@ esforços, resultados) — a Perennia cria-os no arranque (`perennia/core/indexe
 muda dados); e a base de dados usa agora `synchronous=NORMAL` + cache maior (`db_fast_writes`,
 `db_cache_mb`).
 
+### Ronda 20: métricas de saúde (adicionar, editar, descontinuar), perguntas «se sim, onde?» e feedback do treino
+
+**Onde se gerem as métricas.** Saúde → separador **Métricas** (era já aí; agora está completo):
+- **+ Nova métrica** (sim/não, número, escala 1–5, texto, escolha com opções, hora), **Enter**
+  edita, **A** *descontinua/reativa*, ←/→ muda a ordem. **Mostrar** filtra por grupo (Sono, Corpo,
+  Recuperação, Alimentação, **Digestão**, Mente, Atividade, **Dia e rotina**, Outras).
+- **Descontinuar** = deixa de se perguntar a partir de hoje, **o histórico fica** (os dias em que
+  tem valor continuam a mostrá-la e a entrar nas tendências); aparece em «Descontinuadas (n)» com
+  a data, e **Reativar** (A outra vez) traz-a de volta. **Apagar (com o histórico)** — no editor —
+  apaga também os valores (pede confirmação; não se desfaz).
+- **Importar / exportar .csv** (botão em baixo): o conjunto **«metricas»** — para as ~30 novas
+  que vais juntar: uma linha por pergunta (`metrica;tipo;unidade;grupo;opcoes;depende_de;resposta;
+  fonte;ativa`). Já existe (pelo nome)? atualiza; senão cria; «ativa» = não descontinua. As
+  dependências ligam-se no fim, por isso podem apontar para linhas do mesmo ficheiro. Um
+  tipo que mude numa métrica **que já tem valores** não é aplicado (o relatório diz-o).
+  Também está em Backups e Sincronização → CSV.
+
+**Perguntas «se sim, onde?».** No editor de uma métrica, **Depende de** (outra pergunta) e
+**Resposta que a ativa** (sim/não, ou uma das opções, ou «qualquer resposta»). A pergunta só
+aparece no diário quando a outra tem essa resposta (marcada com **↳**): «Como eram as fezes?» só
+depois de «Fiz cocó? = sim»; «Se não, onde estive?» quando «Passei o dia em casa? = não». Pode
+depender de **várias** (qualquer uma serve: «Qual a carne?» depende de «Carne branca» *ou*
+«Carne vermelha»). Uma pergunta que já tem resposta nesse dia **não desaparece** se mudares a
+principal. A completude do dia (n/total) só conta as perguntas que se aplicam.
+
+**O diário com muitas perguntas.** Linha **Mostrar** (todos os grupos ou um só), as escolhas
+abrem como **lista pendente** (Enter) e ←/→ continua a passar à seguinte.
+
+**Catálogo que vem com a Perennia** (63 perguntas, criadas **uma só vez**; se já tens uma com o
+mesmo nome ou chave, ignora; as que apagares ou descontinuares **não voltam**; desliga em
+Definições → Avançado → Saúde → «Saúde: acrescentar as métricas do catálogo»):
+- *Alimentação:* tipo de almoço/jantar (vegan, carnívoro, peixe, outro); tipo de refeição (fast food,
+  caseiro, pré-feita, congelada, outro); o que lanchei; almoço iniciou à hora normal (12h30–13h00);
+  jantar iniciou à hora normal (20h00–**20h45**); almoço/jantar fora de casa → **onde** (escritório,
+  casa dos pais, amigos, sogros, restaurante, outro); álcool, carne branca, carne vermelha, peixe
+  branco, peixe gorduroso, sobremesa e legumes ao almoço e ao jantar (→ *qual a carne*, *qual o
+  peixe*); doces ao lanche (→ *que doces*); refeição pesada (pequeno-almoço, almoço, lanche, jantar);
+  café e descafeinado ao pequeno-almoço, almoço e jantar.
+- *Digestão:* fiz cocó? → como eram as fezes (duras, normais, moles, líquidas), dificuldade em
+  evacuar, cor (clara, normal, escura).
+- *Sono:* os filhos deram descanso; levantei-me para fazer xixi; insónias; li antes de deitar;
+  telemóvel antes de deitar; stress ao adormecer; nasal strips; muito tempo na cama ao acordar.
+- *Dia e rotina:* passei o dia em casa? (→ onde, se não); dia de férias; dia produtivo; viagem;
+  atividade sexual; sintomas de alergia.
+- *Recuperação:* rotina de mobilidade diária; alongamentos; libertação miofascial.
+O que já existia (doces ao almoço/jantar, comer fora, álcool, café…) **não é duplicado**.
+*Nota:* «jantar na hora normal (20h00–2h45)» foi lido como **20h00–20h45**; o intervalo faz parte
+do **nome** da pergunta — muda-o no editor se for outro.
+
+**Feedback do treino do dia anterior.** No topo do Diário, «Treino anterior»: por cada sessão
+(qualquer desporto) concluída no(s) dia(s) antes do diário, o nome, o **veredito** da análise
+offline (a mesma do fim da sessão, usando o teu feedback se o deste), e — se a sessão foi
+exigente ou há dores — uma nota para a recuperação de hoje (sono, hidratação, proteína). Enter
+mostra o texto completo. Opções: ligar/desligar e quantos dias (Definições → Avançado → Saúde).
+
+**Base de dados (tudo local, SQLite).** Nada a fazer: ao abrir, a Perennia acrescenta sozinha à
+tabela `metric_defs` as colunas `parent_key`, `parent_value` e `discontinued_on`, e guarda em
+`settings` a marca `health_catalog_seeded` (as chaves do catálogo já criadas). O **backup** da
+componente *Saúde* leva as colunas novas e as duas marcas de «já criei as métricas»
+(`health_seeded`, `health_catalog_seeded` passaram de *Definições* para *Saúde*, para um restauro
+de Saúde não ressuscitar o que apagaste). Backups antigos restauram-se sem problema.
+
+**Revisões desta ronda.** *Segurança:* `.claude/` (e `.env*`, `*.pem`, `*.key`) no `.gitignore`;
+nenhuma palavra-passe escrita no código/scripts (Garmin: `PERENNIA_GARMIN_PASSWORD`; Wi-Fi:
+`PERENNIA_SYNC_PIN`, nunca como argumento); nenhum `shell=True`; o CSV de métricas e o catálogo
+usam sempre parâmetros SQL. *Setas → lista pendente:* o diário e o editor de métricas usam listas
+pendentes (grupo, tipo, fonte, depende de, resposta); as restantes setas que ficam são listas curtas
+(esforço 1–10, intervalos) ou datas (têm calendário). *Valores no código:* as 3 opções novas abaixo.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1707,6 +1776,9 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Peso: variação que merece aviso (`health_weight_change_pct`) | 0.5 a 10 % | 2 % | diferença entre a média recente e a de base |
 | Assistente de saúde: dias mínimos de registo (`health_min_days`) | 1 a 14 d | 3 d | com menos dias do que isto no período, não tira conclusões sobre a métrica |
 | Dias seguidos de treino que pedem descanso (`health_streak_rest_days`) | 3 a 30 d | 10 d |  |
+| Diário: feedback do treino de ontem (`health_day_feedback`) | sim / não | sim | no topo do diário, o resumo (e a análise offline) das sessões dos dias anteriores |
+| Diário: dias de treino a resumir (`health_feedback_days`) | 1 a 7 d | 1 d | 1 = só o dia anterior ao do diário |
+| Saúde: acrescentar as métricas do catálogo (`health_catalog_seed`) | sim / não | sim | na primeira abertura cria as perguntas de alimentação, digestão, sono e rotina (uma só vez) |
 | **Treinador e Assistente de saúde** | | | |
 | Treinador: aconselhamento (`advisor_coach_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) | as regras funcionam já, sem rede; o LLM local e o agente online ficam preparados (mostram o pedido e os tokens, sem enviar) |
 | Assistente de saúde: aconselhamento (`advisor_health_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) |  |
@@ -2314,7 +2386,8 @@ O cartão **Saúde** tem:
   a confeção, "comi doces ao almoço?", "comi doces ao jantar?", "comi fora?",
   proteína, álcool, cafés, água e hora de deitar. Cada métrica tem uma
   **nota** (tecla **N**) e o dia tem uma nota livre.
-- **Métricas do diário:** cria as tuas com **+ Nova métrica** (em baixo, à direita, como os
+- **Métricas do diário** (ver «Ronda 20» acima: descontinuar, apagar, perguntas «se sim, onde?»,
+  catálogo e CSV): cria as tuas com **+ Nova métrica** (em baixo, à direita, como os
   outros botões de adicionar; sim/não, número, escala 1–5, texto, escolha ou hora), liga e
   desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
@@ -3388,7 +3461,9 @@ Os dados **ficam**: a pasta e a base são migradas sozinhas na primeira abertura
 guia). **Ronda 19:** corre `python -m pip install -r requirements.txt` uma vez (entra a biblioteca
 `cryptography`, que cria o certificado da sincronização Wi-Fi; sem ela a Perennia usa o programa
 `openssl`, se existir). Quem usa a app construída tem de a **refazer** (`build.sh` /
-`build_windows.bat`) para levar o módulo novo, e depois `criar_atalho_windows.bat`.
+`build_windows.bat`) para levar o módulo novo, e depois `criar_atalho_windows.bat`. **Ronda 20:** sem pacotes novos; quem usa a app construída
+refaz do mesmo modo para levar os módulos novos (`health_catalog`, `day_feedback`); a versão do
+projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código novo.
 
 ### Mac, Linux, Raspberry Pi
 

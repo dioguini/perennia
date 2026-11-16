@@ -31,7 +31,18 @@ from .db import Database, now_iso
 from .i18n import tr
 
 KINDS = ("bool", "number", "scale", "text", "choice", "time")
-GROUPS = ("sleep", "body", "recovery", "food", "mind", "activity", "other")
+GROUPS = ("sleep", "body", "recovery", "food", "digestion", "mind", "activity", "routine",
+          "other")
+
+# nomes (pt, en) dos grupos e dos tipos — para os ecrãs e para o CSV das métricas
+GROUP_NAMES = {"sleep": ("Sono", "Sleep"), "body": ("Corpo", "Body"),
+               "recovery": ("Recuperação", "Recovery"), "food": ("Alimentação", "Food"),
+               "digestion": ("Digestão", "Digestion"), "mind": ("Mente", "Mind"),
+               "activity": ("Atividade", "Activity"), "routine": ("Dia e rotina", "Day & routine"),
+               "other": ("Outras", "Other")}
+KIND_NAMES = {"bool": ("sim/não", "yes/no"), "number": ("número", "number"),
+              "scale": ("escala 1–5", "scale 1–5"), "text": ("texto", "text"),
+              "choice": ("escolha", "choice"), "time": ("hora", "time")}
 
 # (chave, nome, tipo, unidade, grupo, escolhas)
 DEFAULT_METRICS: tuple[tuple, ...] = (
@@ -182,6 +193,10 @@ def ensure(db: Database) -> None:
     CREATE INDEX IF NOT EXISTS ix_lab_results ON lab_results(marker);
     """)
     cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(metric_defs)")}
+    for col, ddl in (("parent_key", "TEXT"), ("parent_value", "TEXT"),
+                     ("discontinued_on", "TEXT")):
+        if col not in cols:                      # ronda 20: «se sim, onde?» e descontinuar
+            db.conn.execute(f"ALTER TABLE metric_defs ADD COLUMN {col} {ddl}")
     if "source" not in cols:                     # bases anteriores à «Fonte»
         db.conn.execute("ALTER TABLE metric_defs ADD COLUMN source TEXT NOT NULL DEFAULT ''")
         for r in db.conn.execute("SELECT id, key, custom FROM metric_defs").fetchall():
@@ -203,6 +218,8 @@ def seed(db: Database) -> None:
              default_source(k)))
     db.conn.commit()
     db.set("health_seeded", True)
+    from . import health_catalog
+    health_catalog.seed(db)
 
 
 # ------------------------------------------------------------ métricas
@@ -242,7 +259,8 @@ def metric_by_key(db: Database, key: str) -> dict | None:
 
 def save_metric(db: Database, metric_id: int | None, *, name: str, kind: str, unit: str = "",
                 group: str = "other", choices: list[str] | None = None,
-                key: str | None = None, source: str | None = None) -> int:
+                key: str | None = None, source: str | None = None,
+                parent: str | None = None, parent_value: str | None = None) -> int:
     """Cria ou atualiza um indicador. `source` é a «Fonte» (uma das `SOURCES`); sem ela, um
     indicador novo fica com a fonte que lhe corresponde e um existente mantém a que tem."""
     ensure(db)
@@ -252,23 +270,39 @@ def save_metric(db: Database, metric_id: int | None, *, name: str, kind: str, un
         raise ValueError(f"fonte desconhecida: {source}")
     name = name.strip() or "Métrica"
     ch = json.dumps(choices) if choices else None
+    parent = _clean_parent(db, parent, metric_id)
+    parent_value = (parent_value or "").strip() or None if parent else None
     if metric_id is None:
         sort = db.conn.execute("SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM metric_defs"
                                ).fetchone()["s"]
         key = key or _slug(name, db)
         cur = db.conn.execute(
-            "INSERT INTO metric_defs(key, name, kind, unit, grp, choices, sort, custom, source)"
-            " VALUES (?,?,?,?,?,?,?,1,?)",
+            "INSERT INTO metric_defs(key, name, kind, unit, grp, choices, sort, custom, source,"
+            " parent_key, parent_value) VALUES (?,?,?,?,?,?,?,1,?,?,?)",
             (key, name, kind, unit, group, ch, sort,
-             default_source(key) if source is None else source))
+             default_source(key) if source is None else source, parent, parent_value))
         db.conn.commit()
         return int(cur.lastrowid)
-    db.conn.execute("UPDATE metric_defs SET name=?, kind=?, unit=?, grp=?, choices=?"
-                    " WHERE id = ?", (name, kind, unit, group, ch, metric_id))
+    db.conn.execute("UPDATE metric_defs SET name=?, kind=?, unit=?, grp=?, choices=?,"
+                    " parent_key=?, parent_value=? WHERE id = ?",
+                    (name, kind, unit, group, ch, parent, parent_value, metric_id))
     if source is not None:
         db.conn.execute("UPDATE metric_defs SET source = ? WHERE id = ?", (source, metric_id))
     db.conn.commit()
     return metric_id
+
+
+def _clean_parent(db: Database, parent: str | None, metric_id: int | None) -> str | None:
+    """A(s) chave(s) da pergunta de que esta depende («a|b» = qualquer uma). Só ficam as que
+    existem e que não são a própria métrica (evita ciclos óbvios)."""
+    keys = [k.strip() for k in str(parent or "").replace(",", "|").split("|") if k.strip()]
+    own = None
+    if metric_id is not None:
+        r = db.conn.execute("SELECT key FROM metric_defs WHERE id = ?", (metric_id,)).fetchone()
+        own = r["key"] if r else None
+    ok = [k for k in dict.fromkeys(keys) if k != own and db.conn.execute(
+        "SELECT 1 FROM metric_defs WHERE key = ?", (k,)).fetchone()]
+    return "|".join(ok) or None
 
 
 def _slug(name: str, db: Database) -> str:
@@ -281,8 +315,86 @@ def _slug(name: str, db: Database) -> str:
 
 
 def set_active(db: Database, metric_id: int, active: bool) -> None:
-    db.conn.execute("UPDATE metric_defs SET active = ? WHERE id = ?", (int(active), metric_id))
+    db.conn.execute("UPDATE metric_defs SET active = ?, discontinued_on = CASE WHEN ? THEN NULL"
+                    " ELSE COALESCE(discontinued_on, ?) END WHERE id = ?",
+                    (int(active), int(active), date.today().isoformat(), metric_id))
     db.conn.commit()
+
+
+def discontinue(db: Database, metric_id: int) -> None:
+    """Descontinuar: deixa de aparecer no diário a partir de hoje, mas o histórico fica (os
+    dias em que tem valor continuam a mostrá-la e a entrar nas tendências)."""
+    set_active(db, metric_id, False)
+
+
+def reactivate(db: Database, metric_id: int) -> None:
+    set_active(db, metric_id, True)
+
+
+def delete_metric(db: Database, metric_id: int) -> int:
+    """Apaga a métrica **e todos os valores dela** (não se desfaz). Devolve quantos valores
+    apagou. Quem dependia dela fica sem dependência."""
+    ensure(db)
+    r = db.conn.execute("SELECT key FROM metric_defs WHERE id = ?", (metric_id,)).fetchone()
+    if r is None:
+        return 0
+    n = db.conn.execute("SELECT COUNT(*) FROM daily_values WHERE metric_id = ?",
+                        (metric_id,)).fetchone()[0]
+    db.conn.execute("DELETE FROM daily_values WHERE metric_id = ?", (metric_id,))
+    for c in db.conn.execute("SELECT id, parent_key FROM metric_defs WHERE parent_key LIKE ?",
+                             (f"%{r['key']}%",)).fetchall():
+        rest = [k for k in str(c["parent_key"]).split("|") if k != r["key"]]
+        db.conn.execute("UPDATE metric_defs SET parent_key = ?, parent_value = CASE WHEN ?"
+                        " THEN parent_value END WHERE id = ?",
+                        ("|".join(rest) or None, int(bool(rest)), c["id"]))
+    db.conn.execute("DELETE FROM metric_defs WHERE id = ?", (metric_id,))
+    db.conn.commit()
+    return n
+
+
+def applies(m: dict, by_key: dict, vals: dict) -> bool:
+    """A pergunta aplica-se neste dia? Sem dependência, sim. Com «se sim, …»: só quando a
+    pergunta de que depende (qualquer uma das indicadas) tem a resposta que se espera — «sim»
+    numa pergunta sim/não, ou o `parent_value` (uma opção, ou 0 para «não»); sem
+    `parent_value`, qualquer resposta que não seja «não»/vazia."""
+    parents = [k for k in str(m.get("parent_key") or "").split("|") if k]
+    if not parents:
+        return True
+    want = (m.get("parent_value") or "").strip()
+    for k in parents:
+        p = by_key.get(k)
+        v = vals.get(p["id"]) if p else None
+        if v is None or v["value"] in (None, ""):
+            continue
+        val = v["value"]
+        if want:
+            if p["kind"] == "bool":
+                if (float(val) >= 0.5) == (want.lower() in ("1", "sim", "yes", "true")):
+                    return True
+            elif str(val).strip().lower() == want.lower():
+                return True
+        elif p["kind"] == "bool":
+            if float(val) >= 0.5:
+                return True
+        else:
+            return True
+    return False
+
+
+def day_metrics(db: Database, day: date | str) -> list[dict]:
+    """O que se pergunta neste dia: as métricas ativas (e as descontinuadas que têm valor
+    nesse dia), sem as que dependem de uma resposta que não foi dada."""
+    ms = metrics(db, include_inactive=True)
+    vals = values_for(db, day)
+    by_key = {m["key"]: m for m in ms}
+    out = []
+    for m in ms:
+        if not m["active"] and m["id"] not in vals:
+            continue
+        if m["id"] not in vals and not applies(m, by_key, vals):
+            continue
+        out.append(m)
+    return out
 
 
 def move_metric(db: Database, metric_id: int, step: int) -> None:
@@ -421,8 +533,8 @@ def fmt(m: dict, value: Any) -> str:
 
 def completeness(db: Database, day: date | str) -> tuple[int, int]:
     """(preenchidas, ativas) para o dia — o ecrã inicial mostra-o."""
-    ms = metrics(db)
     vals = values_for(db, day)
+    ms = [m for m in day_metrics(db, day) if m["active"]]
     return sum(1 for m in ms if m["id"] in vals), len(ms)
 
 

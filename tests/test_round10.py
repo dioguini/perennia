@@ -581,7 +581,7 @@ class TestExercises(tg.GuiCase):
 class TestCsv(tg.GuiCase):
     def test_every_dataset_has_template_and_export(self):
         self.assertEqual(list(cs.DATASETS), ["artigos", "exercicios", "grupos", "disciplinas",
-                                             "testes", "glossario", "material"])
+                                             "testes", "glossario", "metricas", "material"])
         for key, d in cs.DATASETS.items():
             tpl = cs.template(key)
             self.assertEqual(tpl.splitlines()[0].split(";"), list(d.columns))

@@ -109,8 +109,18 @@ def _is_ligacao(k: str) -> bool:
         any(w in k.lower() for w in SECRET_WORDS)
 
 
+HEALTH_SETTINGS = ("health_seeded", "health_catalog_seeded")   # vão com as métricas (Saúde)
+
+
+def _is_saude(k: str) -> bool:
+    """As marcas «já criei as métricas de origem / do catálogo»: viajam com as métricas, para
+    um restauro de Saúde não voltar a criar as que apagaste ou descontinuaste."""
+    return k in HEALTH_SETTINGS
+
+
 def _is_definicao(k: str) -> bool:
-    return not (_is_atalho(k) or _is_ecra(k) or _is_ligacao(k) or k in SKIP_SETTINGS)
+    return not (_is_atalho(k) or _is_ecra(k) or _is_ligacao(k) or _is_saude(k)
+                or k in SKIP_SETTINGS)
 
 
 COMPONENTS: tuple[Component, ...] = (
@@ -205,7 +215,8 @@ COMPONENTS: tuple[Component, ...] = (
               "reports with the doctor's comments, blood pressure readings and the tabs you "
               "created (with their notes)",
               tables=("metric_defs", "daily_values", "lab_parameters", "lab_reports",
-                      "lab_results", "bp_readings", "health_tabs", "health_tab_notes")),
+                      "lab_results", "bp_readings", "health_tabs", "health_tab_notes"),
+              settings=_is_saude),
     Component("calendario", "Calendário", "Calendar",
               "treinos planeados, notas do dia e os eventos do Treinador (com as respostas)",
               "planned workouts, day notes and the coach's events (with the answers)",
