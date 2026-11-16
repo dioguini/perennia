@@ -508,14 +508,47 @@ class DailyLogScreen(EditScreen):
     def __init__(self, app, day: date):
         super().__init__(app)
         self.day = day
+        self.group_filter = ""              # «» = todos os grupos
+
+    def _groups(self) -> list[str]:
+        """Os grupos que têm perguntas (por ordem), para o filtro do diário."""
+        seen: list[str] = []
+        for m in health.metrics(self.app.db):
+            if m["grp"] not in seen:
+                seen.append(m["grp"])
+        return seen
 
     def enter(self) -> None:
         db = self.app.db
         health.seed(db)
         vals = health.values_for(db, self.day)
         rows = [Item(tr("Dia", "Day"), value=day_label(self.day), data="cyc:day")]
+        groups = self._groups()
+        if self.group_filter not in groups:
+            self.group_filter = ""
+        if len(groups) > 1:
+            rows.append(Item(tr("Mostrar", "Show"), value=group_name(self.group_filter)
+                             if self.group_filter else tr("todos os grupos", "all groups"),
+                             dropdown=Dropdown(
+                                 [tr("Todos os grupos", "All groups")] +
+                                 [group_name(g) for g in groups],
+                                 groups.index(self.group_filter) + 1 if self.group_filter else 0,
+                                 self._pick_group, title=tr("Mostrar", "Show"))))
+        from perennia.core import day_feedback
+        done_s = day_feedback.for_day(db, self.day)
+        if done_s:
+            rows.append(Item("— " + tr("Treino anterior", "Previous training") + " —",
+                             enabled=False))
+            for f in done_s:
+                text = f["text"] + (" " + f["hint"] if f["hint"] else "")
+                rows.append(Item(f"{f['title'] or f['sport']} · {f['day'][8:]}/{f['day'][5:7]}",
+                                 value=f["verdict"] or "—", detail=text,
+                                 action=lambda t=text, v=f["verdict"]: self.app.message(
+                                     (v + " — " if v else "") + t)))
         group = None
-        for m in health.metrics(db):
+        for m in health.day_metrics(db, self.day):
+            if self.group_filter and m["grp"] != self.group_filter:
+                continue
             if m["grp"] != group:
                 group = m["grp"]
                 rows.append(Item(f"— {group_name(group)} —", enabled=False))
@@ -535,7 +568,10 @@ class DailyLogScreen(EditScreen):
             kind = m["kind"]
             data = (f"cyc:m{m['id']}" if kind in ("bool", "choice") else
                     f"text:m{m['id']}" if kind in ("text", "time") else f"num:m{m['id']}")
-            rows.append(Item(m["name"], value=value, detail=detail, data=data))
+            if not m["active"]:
+                detail = (tr("descontinuada", "discontinued") + (" · " + detail if detail else ""))
+            label = ("   ↳ " if m.get("parent_key") else "") + m["name"]
+            rows.append(Item(label, value=value, detail=detail, data=data))
         note = health.day_note(db, self.day)
         rows.append(Item(tr("Nota do dia", "Day note"), value=_excerpt(note, 50) or "—",
                          action=self._edit_day_note))
@@ -547,6 +583,10 @@ class DailyLogScreen(EditScreen):
 
     def _metric(self, field: str) -> dict | None:
         return health.metric(self.app.db, int(field[1:])) if field.startswith("m") else None
+
+    def _pick_group(self, i: int) -> None:
+        groups = self._groups()
+        self.group_filter = groups[i - 1] if 0 < i <= len(groups) else ""
 
     def cycle(self, field: str, step: int) -> None:
         if field == "day":
@@ -644,10 +684,8 @@ class DailyLogScreen(EditScreen):
 
 
 def group_name(g: str) -> str:
-    return {"sleep": tr("Sono", "Sleep"), "body": tr("Corpo", "Body"),
-            "recovery": tr("Recuperação", "Recovery"), "food": tr("Alimentação", "Food"),
-            "mind": tr("Mente", "Mind"), "activity": tr("Atividade", "Activity"),
-            "other": tr("Outras", "Other")}.get(g, g)
+    pt_en = health.GROUP_NAMES.get(g)
+    return tr(*pt_en) if pt_en else g
 
 
 class TextEditScreen(GoalPopup):
@@ -660,32 +698,86 @@ class TextEditScreen(GoalPopup):
 
 
 class MetricsManager(Screen):
-    """As métricas do diário. Enter edita; A liga/desliga; ←/→ muda a ordem."""
+    """As métricas do diário: adicionar, editar, **descontinuar** (deixa de se perguntar mas o
+    histórico fica) e apagar. Enter edita; A descontinua/reativa; ←/→ muda a ordem. «Mostrar»
+    filtra por grupo; as perguntas que dependem de outra (↳) dizem de qual."""
+
+    def __init__(self, app, *args, **kw):
+        super().__init__(app, *args, **kw)
+        self.group_filter = ""
+
+    def _row(self, m: dict, by_key: dict) -> Item:
+        a = self.app
+        dep = ""
+        if m.get("parent_key"):
+            names = [by_key[k]["name"] for k in m["parent_key"].split("|") if k in by_key]
+            want = m.get("parent_value") or ""
+            if by_key.get(m["parent_key"].split("|")[0], {}).get("kind") == "bool":
+                want = tr("sim", "yes") if want in ("1", "") else tr("não", "no")
+            dep = " · " + tr("só se «{p}» = {v}", "only if “{p}” = {v}",
+                             p=" / ".join(names), v=want or tr("respondida", "answered"))
+        det = (group_name(m["grp"]) + " · " + tr("Fonte", "Source") + ": " +
+               health.source_name(m.get("source")) + dep)
+        if not m["active"] and m.get("discontinued_on"):
+            det += " · " + tr("descontinuada em {d}", "discontinued on {d}",
+                              d=m["discontinued_on"])
+        return Item(("   ↳ " if m.get("parent_key") else "") + m["name"],
+                    value=kind_name(m["kind"]) + (f" · {m['unit']}" if m["unit"] else ""),
+                    detail=det, action=lambda mid=m["id"]: a.push(MetricEditor(a, mid)),
+                    data=("metric", m["id"], m["active"]))
 
     def enter(self) -> None:
         a = self.app
-        rows = []
-        for m in health.metrics(a.db, include_inactive=True):
-            rows.append(Item(("✓ " if m["active"] else "✗ ") + m["name"],
-                             value=kind_name(m["kind"]) + (f" · {m['unit']}" if m["unit"] else ""),
-                             detail=group_name(m["grp"]) + " · " + tr("Fonte", "Source") + ": " +
-                             health.source_name(m.get("source")),
-                             action=lambda mid=m["id"]: a.push(MetricEditor(a, mid)),
-                             data=("metric", m["id"], m["active"])))
-        n = len(rows)
+        health.seed(a.db)
+        allm = health.metrics(a.db, include_inactive=True)
+        by_key = {m["key"]: m for m in allm}
+        groups = [g for g in health.GROUPS if any(m["grp"] == g for m in allm)]
+        groups += [g for g in dict.fromkeys(m["grp"] for m in allm) if g not in groups]
+        if self.group_filter not in groups:
+            self.group_filter = ""
+        shown = [m for m in allm if not self.group_filter or m["grp"] == self.group_filter]
+        on = [m for m in shown if m["active"]]
+        off = [m for m in shown if not m["active"]]
+        rows = [Item(tr("Mostrar", "Show"), value=group_name(self.group_filter)
+                     if self.group_filter else tr("todos os grupos", "all groups"),
+                     dropdown=Dropdown([tr("Todos os grupos", "All groups")] +
+                                       [group_name(g) for g in groups],
+                                       groups.index(self.group_filter) + 1
+                                       if self.group_filter else 0, self._pick_group,
+                                       title=tr("Mostrar", "Show")))]
+        rows += [self._row(m, by_key) for m in on]
+        if off:
+            rows.append(Item("— " + tr("Descontinuadas ({n})", "Discontinued ({n})", n=len(off))
+                             + " —", enabled=False))
+            rows += [self._row(m, by_key) for m in off]
         rows.append(Item(tr("+ Nova métrica", "+ New metric"), button=True, primary=True,
                          action=lambda: a.push(MetricEditor(a, None))))
-        self.chrome.set(tr("Métricas do diário", "Log metrics"), f"{n}",
-                        tr("Enter editar · A ligar/desligar · ←/→ ordem · Esc voltar",
-                           "Enter edit · A on/off · ←/→ order · Esc back"))
+        rows.append(Item(tr("Importar / exportar .csv", "Import / export .csv"), button=True,
+                         action=self._csv))
+        self.chrome.set(tr("Métricas do diário", "Log metrics"),
+                        tr("{a} ativas · {d} descontinuadas", "{a} active · {d} discontinued",
+                           a=sum(1 for m in allm if m["active"]),
+                           d=sum(1 for m in allm if not m["active"])),
+                        tr("Enter editar · A descontinuar/reativar · ←/→ ordem · Esc voltar",
+                           "Enter edit · A discontinue/reactivate · ←/→ order · Esc back"))
         self.list.set_items(rows, keep_index=True)
+
+    def _pick_group(self, i: int) -> None:
+        allm = health.metrics(self.app.db, include_inactive=True)
+        groups = [g for g in health.GROUPS if any(m["grp"] == g for m in allm)]
+        groups += [g for g in dict.fromkeys(m["grp"] for m in allm) if g not in groups]
+        self.group_filter = groups[i - 1] if 0 < i <= len(groups) else ""
+
+    def _csv(self) -> None:
+        from perennia.ui.csv_screens import CsvDatasetPopup
+        self.app.push(CsvDatasetPopup(self.app, "metricas"))
 
     def on_key(self, symbol: int, modifiers: int) -> bool:
         item = self.list.selected
         if item is not None and isinstance(item.data, tuple):
             _, mid, active = item.data
             if symbol == key.A:
-                health.set_active(self.app.db, mid, not active)
+                (health.discontinue if active else health.reactivate)(self.app.db, mid)
                 self.enter()
                 return True
             if symbol in (key.LEFT, key.RIGHT):
@@ -697,13 +789,13 @@ class MetricsManager(Screen):
 
 
 def kind_name(k: str) -> str:
-    return {"bool": tr("sim/não", "yes/no"), "number": tr("número", "number"),
-            "scale": tr("escala 1–5", "scale 1–5"), "text": tr("texto", "text"),
-            "choice": tr("escolha", "choice"), "time": tr("hora", "time")}.get(k, k)
+    pt_en = health.KIND_NAMES.get(k)
+    return tr(*pt_en) if pt_en else k
 
 
 class MetricEditor(EditPopup):
-    """Uma métrica do diário, numa janela."""
+    """Uma métrica do diário, numa janela. «Depende de» + «Resposta que a ativa» fazem uma
+    pergunta do género «se sim, onde?»: só aparece no diário quando a outra tem essa resposta."""
 
     def __init__(self, app, metric_id: int | None):
         super().__init__(app)
@@ -716,10 +808,12 @@ class MetricEditor(EditPopup):
         self.choices = ", ".join(m["choices"]) if m and m["choices"] else ""
         self.active = bool(m["active"]) if m else True
         self.source = (m or {}).get("source", "manual") if m else "manual"
+        self.parent = (m or {}).get("parent_key") or ""
+        self.parent_value = (m or {}).get("parent_value") or ""
 
     def state(self):
         return (self.name, self.kind, self.unit, self.group, self.choices, self.active,
-                self.source)
+                self.source, self.parent, self.parent_value)
 
     def title(self) -> str:
         return tr("Métrica", "Metric") if self.metric_id else tr("Nova métrica", "New metric")
@@ -727,8 +821,35 @@ class MetricEditor(EditPopup):
     def subtitle(self) -> str:
         return self.name
 
+    def _candidates(self) -> list[dict]:
+        """As perguntas de que esta pode depender: todas menos ela própria e as que já
+        dependem dela (evita ciclos)."""
+        db = self.app.db
+        own = health.metric(db, self.metric_id) if self.metric_id else None
+        out = []
+        for m in health.metrics(db, include_inactive=True):
+            if own and (m["id"] == own["id"] or own["key"] in
+                        str(m.get("parent_key") or "").split("|")):
+                continue
+            out.append(m)
+        return out
+
+    def _answers(self) -> list[tuple[str, str]]:
+        """(valor guardado, texto) das respostas que ativam, conforme a pergunta de que depende."""
+        p = health.metric_by_key(self.app.db, self.parent.split("|")[0]) if self.parent else None
+        if p is None:
+            return []
+        if p["kind"] == "bool":
+            return [("1", tr("sim", "yes")), ("0", tr("não", "no"))]
+        if p["kind"] == "choice":
+            return [("", tr("qualquer resposta", "any answer"))] + \
+                   [(c, c) for c in p["choices"]]
+        return [("", tr("qualquer resposta", "any answer"))]
+
     def rows(self) -> list[Item]:
         kinds, groups, sources = list(health.KINDS), list(health.GROUPS), health.source_keys()
+        if self.group not in groups:
+            groups.append(self.group)
         rows = [Item(tr("Nome", "Name"), value=self.name or "—", data="text:name"),
                 Item(tr("Tipo", "Type"), value=kind_name(self.kind),
                      dropdown=Dropdown([kind_name(k) for k in kinds], kinds.index(self.kind),
@@ -751,13 +872,74 @@ class MetricEditor(EditPopup):
         if self.kind == "choice":
             rows.append(Item(tr("Opções (separadas por vírgulas)", "Options (comma separated)"),
                              value=self.choices or "—", data="text:choices"))
+        cands = self._candidates()
+        by_key = {m["key"]: m for m in cands}
+        names = [tr("— nenhuma (pergunta sempre) —", "— none (always asked) —")] + \
+                [m["name"] for m in cands]
+        first = self.parent.split("|")[0] if self.parent else ""
+        cur = 1 + [m["key"] for m in cands].index(first) if first in by_key else 0
+        shown = " / ".join(by_key[k]["name"] for k in self.parent.split("|") if k in by_key)
+        rows.append(Item(tr("Depende de", "Depends on"), value=shown or tr("nenhuma", "none"),
+                         dropdown=Dropdown(names, cur, self._pick_parent,
+                                           title=tr("Depende de", "Depends on")),
+                         detail=tr("«se sim, onde?»: esta pergunta só aparece quando a outra "
+                                   "tem a resposta indicada", "“if yes, where?”: this question "
+                                   "only shows when the other one has the given answer")))
+        answers = self._answers()
+        if answers:
+            idx = next((i for i, (v, _t) in enumerate(answers) if v == self.parent_value), 0)
+            rows.append(Item(tr("Resposta que a ativa", "Answer that shows it"),
+                             value=answers[idx][1],
+                             dropdown=Dropdown([t_ for _v, t_ in answers], idx,
+                                               lambda i, a=answers: self._pick(
+                                                   "parent_value", a[i][0]),
+                                               title=tr("Resposta que a ativa",
+                                                        "Answer that shows it"))))
         rows += [Item(tr("Ativa", "Active"), value=tr("sim", "yes") if self.active
                       else tr("não", "no"), data="cyc:active")]
+        if self.metric_id:
+            if self.active:
+                rows.append(Item(tr("Descontinuar", "Discontinue"), button=True,
+                                 action=self._discontinue,
+                                 detail=tr("deixa de se perguntar; o histórico fica",
+                                           "no longer asked; history stays")))
+            rows.append(Item(tr("Apagar (com o histórico)", "Delete (with history)"),
+                             button=True, action=self._delete))
         return rows
 
     def _pick(self, field: str, value: str) -> None:
         setattr(self, field, value)
         self.enter()
+
+    def _pick_parent(self, i: int) -> None:
+        cands = self._candidates()
+        self.parent = cands[i - 1]["key"] if 0 < i <= len(cands) else ""
+        self.parent_value = self._answers()[0][0] if self._answers() else ""
+        if self.parent and self.parent_value == "" and \
+                health.metric_by_key(self.app.db, self.parent)["kind"] == "bool":
+            self.parent_value = "1"
+
+    def _discontinue(self) -> None:
+        if not self.metric_id:
+            return
+        health.discontinue(self.app.db, self.metric_id)
+        self.app.message(tr("Descontinuada: o histórico fica.", "Discontinued: history is kept."))
+        self.app.pop(force=True)
+
+    def _delete(self) -> None:
+        db, mid = self.app.db, self.metric_id
+        n = db.conn.execute("SELECT COUNT(*) FROM daily_values WHERE metric_id = ?",
+                            (mid,)).fetchone()[0]
+
+        def gone() -> None:
+            health.delete_metric(db, mid)
+            self.app.pop(force=True)
+        self.app.confirm(tr("Apagar «{n}»?", "Delete “{n}”?", n=self.name),
+                         tr("Apaga também os {v} valores já registados. Não dá para desfazer "
+                            "(descontinuar mantém o histórico).",
+                            "Also deletes the {v} recorded values. This cannot be undone "
+                            "(discontinuing keeps the history).", v=n),
+                         gone, yes=tr("Apagar", "Delete"))
 
     def cycle(self, field: str, step: int) -> None:
         if field == "active":
@@ -776,9 +958,14 @@ class MetricEditor(EditPopup):
             self.app.message(tr("Dá um nome à métrica.", "Give the metric a name."))
             return False
         choices = [c.strip() for c in self.choices.split(",") if c.strip()]
-        self.metric_id = health.save_metric(self.app.db, self.metric_id, name=self.name,
-                                            kind=self.kind, unit=self.unit, group=self.group,
-                                            choices=choices or None, source=self.source)
+        if self.kind == "choice" and not choices:
+            self.app.message(tr("Uma métrica de escolha precisa de opções.",
+                                "A choice metric needs options."))
+            return False
+        self.metric_id = health.save_metric(
+            self.app.db, self.metric_id, name=self.name, kind=self.kind, unit=self.unit,
+            group=self.group, choices=choices or None, source=self.source,
+            parent=self.parent or None, parent_value=self.parent_value or None)
         health.set_active(self.app.db, self.metric_id, self.active)
         return True
 

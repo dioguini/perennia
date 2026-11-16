@@ -269,6 +269,20 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="with fewer days than this in the window, it draws no conclusion on the metric"),
     _o("health_streak_rest_days", "health", "Dias seguidos de treino que pedem descanso",
        "Training days in a row that call for rest", INT, 10, lo=3, hi=30, step=1, unit="d"),
+    _o("health_day_feedback", "health", "Diário: feedback do treino de ontem",
+       "Log: feedback on yesterday's training", BOOL, True,
+       hint_pt="no topo do diário, um resumo (e a análise offline) das sessões dos dias "
+               "anteriores", hint_en="at the top of the log, a summary (and the offline "
+               "analysis) of the previous days' sessions"),
+    _o("health_feedback_days", "health", "Diário: dias de treino a resumir",
+       "Log: days of training to summarise", INT, 1, lo=1, hi=7, step=1, unit="d",
+       hint_pt="1 = só o dia anterior ao do diário", hint_en="1 = only the day before the log's"),
+    _o("health_catalog_seed", "health", "Saúde: acrescentar as métricas do catálogo",
+       "Health: add the catalogue metrics", BOOL, True,
+       hint_pt="na primeira abertura cria as perguntas de alimentação, digestão, sono e rotina "
+               "(uma só vez; as apagadas ou descontinuadas não voltam)",
+       hint_en="on first open creates the food, digestion, sleep and routine questions (once; "
+               "deleted or discontinued ones do not come back)"),
     # ------------------------------------------------------------ treinador e assistente
     _o("advisor_coach_mode", "coach", "Treinador: aconselhamento", "Coach: advice from",
        CHOICE, "rules", choices=(("rules", "Regras da Perennia (offline, já funciona)", "Perennia rules (offline, works now)"), ("local", "LLM local (offline, por ligar)", "Local LLM (offline, not connected yet)"), ("online", "Agente online (por ligar)", "Online agent (not connected yet)")),

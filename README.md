@@ -50,6 +50,11 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 20** — **Métricas de saúde**: adicionar, editar, **descontinuar** (o histórico fica) e
+  apagar; perguntas **«se sim, onde?»** que só aparecem quando outra tem essa resposta; filtro por
+  grupo no diário; **catálogo de 63 perguntas** (refeições, digestão, sono, rotina, recuperação)
+  criado uma só vez e sem duplicar; **importação em massa por CSV** («metricas»); **feedback do
+  treino do dia anterior** no topo do diário. Três opções novas (Avançado → Saúde). Ver o RUN.md.
 - **Ronda 19** — **Alterar e saltar blocos** durante a sessão (ERG, remo, corrida, ginásio) com o
   **original sempre guardado** para comparar e o que foi feito no bloco saltado; **corrigir as
   repetições, a carga ou os segundos** de qualquer série (planeada ou livre, a decorrer ou

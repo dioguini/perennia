@@ -1,5 +1,5 @@
 """Sincronização por CSV: artigos, exercícios, grupos/subgrupos musculares, disciplinas,
-testes de aptidão, o glossário e os tipos de material.
+testes de aptidão, o glossário, as métricas de saúde e os tipos de material.
 
 Para cada conjunto há um **modelo** (.csv com o cabeçalho e uma linha de exemplo),
 a **exportação** do que tens e a **importação** (cria o que falta e atualiza o que já
@@ -327,6 +327,89 @@ def _import_glossary(db, rows: list[dict]) -> Report:
     return rep
 
 
+# ------------------------------------------------------------------ métricas de saúde
+
+
+def _export_metrics(db) -> list[list]:
+    from . import health
+    health.seed(db)
+    ms = health.metrics(db, include_inactive=True)
+    out = []
+    for m in ms:
+        out.append([m["name"], health.KIND_NAMES[m["kind"]][0], m["unit"] or "",
+                    health.GROUP_NAMES.get(m["grp"], (m["grp"],))[0],
+                    "|".join(m["choices"] or []), (m.get("parent_key") or ""),
+                    m.get("parent_value") or "", m.get("source") or "manual",
+                    "sim" if m["active"] else "não"])
+    return out
+
+
+def _by_label(names: dict, text: str) -> str | None:
+    low = _fold(text)
+    for k, labels in names.items():
+        if low == _fold(k) or low in (_fold(x) for x in labels):
+            return k
+    return None
+
+
+def _import_metrics(db, rows: list[dict]) -> Report:
+    """Uma linha por métrica: nome, tipo, unidade, grupo, opções (com |), «depende_de» (o nome
+    ou a chave de outra métrica; várias com |) e «resposta» (a que a ativa: sim/não ou uma
+    opção), fonte e «ativa». Existente (pelo nome ou pela chave) → atualiza; senão cria. As
+    dependências ligam-se no fim, por isso podem apontar para linhas do mesmo ficheiro."""
+    from . import health
+    health.seed(db)
+    rep = Report()
+    pending: list[tuple[int, str, str, str]] = []
+    for row in rows:
+        name = (row.get("metrica") or "").strip()
+        if not name:
+            rep["skipped"] += 1
+            continue
+        kind = _by_label(health.KIND_NAMES, row.get("tipo") or "") or "bool"
+        group = _by_label(health.GROUP_NAMES, row.get("grupo") or "") or "other"
+        choices = _list(row.get("opcoes"))
+        src = _fold(row.get("fonte"))
+        src = src if src in health.source_keys() and src else None
+        old = next((m for m in health.metrics(db, include_inactive=True)
+                    if _fold(m["name"]) == _fold(name) or m["key"] == _fold(name)), None)
+        if kind == "choice" and not choices:
+            rep["errors"].append(tr("«{n}»: falta a lista de opções", "“{n}”: no options",
+                                    n=name))
+            rep["skipped"] += 1
+            continue
+        if old and old["kind"] != kind and db.conn.execute(
+                "SELECT 1 FROM daily_values WHERE metric_id = ?", (old["id"],)).fetchone():
+            rep["errors"].append(tr("«{n}»: já tem valores, o tipo mantém-se",
+                                    "“{n}”: already has values, type kept", n=name))
+            kind, choices = old["kind"], old["choices"] or choices
+        mid = health.save_metric(
+            db, old["id"] if old else None, name=name, kind=kind,
+            unit=(row.get("unidade") or "").strip(), group=group,
+            choices=choices if kind == "choice" else None, source=src,
+            parent=(old or {}).get("parent_key"), parent_value=(old or {}).get("parent_value"))
+        active = _fold(row.get("ativa")) not in ("nao", "n", "no", "0", "false")
+        if row.get("ativa", "").strip():
+            (health.reactivate if active else health.discontinue)(db, mid)
+        pending.append((mid, row.get("depende_de") or "", row.get("resposta") or "", kind))
+        rep["updated" if old else "created"] += 1
+    by_name = {_fold(m["name"]): m["key"] for m in health.metrics(db, include_inactive=True)}
+    for mid, dep, answer, _kind in pending:
+        if not dep.strip():
+            continue
+        keys = [by_name.get(_fold(x), x) for x in str(dep).replace(",", "|").split("|")
+                if x.strip()]
+        m = health.metric(db, mid)
+        ans = answer.strip()
+        first = health.metric_by_key(db, keys[0]) if keys else None
+        if first is not None and first["kind"] == "bool" and ans:
+            ans = "1" if _fold(ans) in ("sim", "s", "yes", "1", "true") else "0"
+        health.save_metric(db, mid, name=m["name"], kind=m["kind"], unit=m["unit"] or "",
+                           group=m["grp"], choices=m["choices"] or None,
+                           parent="|".join(keys), parent_value=ans)
+    return rep
+
+
 # --------------------------------------------------------- tipos de material
 
 
@@ -378,6 +461,20 @@ DATASETS: dict[str, Dataset] = {d.key: d for d in (
             "atualizado.",
             "One row per term. Tab: Perennia, Files and formats, Training concepts, Gym, "
             "Cycling rowing and running or Health. A term that already exists is updated."),
+    Dataset("metricas", "Métricas de saúde", "Health metrics",
+            ("metrica", "tipo", "unidade", "grupo", "opcoes", "depende_de", "resposta", "fonte",
+             "ativa"),
+            ("Fiz cocó?", "sim/não", "", "Digestão", "", "", "", "manual", "sim"),
+            _export_metrics, _import_metrics,
+            "Uma linha por pergunta do diário. Tipo: sim/não, número, escala, texto, escolha "
+            "ou hora; opções (para «escolha») separadas por |. «depende_de» (o nome de outra "
+            "métrica) e «resposta» (sim/não ou uma opção) fazem a pergunta só aparecer quando "
+            "essa resposta foi dada (ex.: «Como eram as fezes?» depende de «Fiz cocó?» = sim). "
+            "«ativa» = não descontinua (o histórico fica). Já existe? atualiza.",
+            "One row per diary question. Type: yes/no, number, scale, text, choice or time; "
+            "options (for “choice”) separated by |. “depende_de” (another metric's name) and "
+            "“resposta” (yes/no or an option) show the question only when that answer was given. "
+            "“ativa” = no discontinues it (history is kept). Already exists? It is updated."),
     Dataset("material", "Tipos de material", "Equipment kinds",
             ("chave", "nome_pt", "nome_en", "grupo"), ("kettlebell", "Kettlebell", "Kettlebell",
                                                       "Pesos livres"),
@@ -459,6 +556,8 @@ def detect(text: str) -> str | None:
             need = {"desporto", "nome"}
         if key == "disciplinas":
             need = {"nome"}
+        if key == "metricas":
+            need = {"metrica"}
         if need <= set(cols):
             s = len(set(cols) & set(d.columns))
             if s > score:
