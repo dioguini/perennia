@@ -597,6 +597,12 @@ class RideEngine:
         from . import games
         ranked = not self.recovered
         self.game_result = games.save_result(self.db, self.ride_id, g, ranked=ranked)
+        from . import segments as _segments
+        seg = self.game_result.get("segment") or {}
+        if seg.get("virtual") and self.game_result.get("completed") and seg.get("id") is not None:
+            # segmento da biblioteca jogado sem rota: o tempo conta como esforço dele (PR local)
+            _segments.save_effort(self.db, self.ride_id, seg["id"],
+                                  round(self.game_result["elapsed_s"]), source="strava")
         self._emit("game_saved", **self.game_result)
         self.lap("game")
 
@@ -1392,7 +1398,7 @@ class RideEngine:
                 p = self.route.point_at(m % self.route.total_m)
                 return p.lat, p.lon, p.ele_m
         from . import tags as tags_mod
-        has_route = bool(self.route_id)
+        has_route = bool(self.route_id) or self.route is not None
         tag_info = tags_mod.resolve(
             self.db, "cycling", self.ride_id, getattr(self, "tags_chosen", None),
             workout_id=self.workout_id, has_route=has_route,

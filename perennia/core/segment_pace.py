@@ -46,6 +46,8 @@ GRADE_REF_PCT = 4.0        # diferença de inclinação que dá a variação tod
 HARD_PCT = 95.0            # a partir daqui (% da capacidade) o alvo é «duro»
 TOL_PCT = 1.0              # o Pace conta como cumprido dentro desta % do alvo
 REPLAN = True              # recalcular o que falta quando há atraso
+VIRTUAL_TAIL_M = 500.0     # estrada depois do fim, nos segmentos sem rota (o percurso é só o segmento)
+MIN_SEGMENT_M = 100.0      # segmentos mais curtos que isto não se jogam
 
 # Precisão interna (não são preferências): passo da simulação, célula do perfil e
 # limites da procura de watts.
@@ -226,6 +228,8 @@ class Planner:
         self.curve = curve or capacity_curve(self.ftp, None)
         self.lead_in_m = LEAD_IN_M if lead_in_m is None else lead_in_m
         self.sections = sections or build_sections(route, self.start_m, self.end_m)
+        if not self.sections:
+            raise ValueError(tr("O segmento é demasiado curto.", "The segment is too short."))
         self.shape = shape_factors(self.sections)
         self._merge_short()
 
@@ -426,14 +430,13 @@ def target_choices(mode: str, seg) -> list[tuple[str, str]]:
     return out
 
 
-def planner_for(db, athlete, route_id: str, seg, best: dict | None = None,
+def planner_for(db, athlete, points, seg, best: dict | None = None,
                 lead_in_m: float | None = None) -> Planner:
     from .route_index import RouteIndex
-    pts = db.route_points(route_id)
-    if not pts:
-        raise ValueError("rota sem pontos")
+    if not points:
+        raise ValueError(tr("O percurso não tem pontos.", "The course has no points."))
     curve = capacity_curve(athlete.ftp_w, best)
-    return Planner(RouteIndex(pts), seg.start_m, seg.end_m, athlete.total_mass_kg, athlete.cda,
+    return Planner(RouteIndex(points), seg.start_m, seg.end_m, athlete.total_mass_kg, athlete.cda,
                    athlete.crr, athlete.ftp_w, curve, lead_in_m=lead_in_m)
 
 
@@ -513,10 +516,162 @@ def parse_target(mode: str, kind: str, text: str) -> float | None:
     return None
 
 
-def segments_of(db, route_id: str | None) -> list:
-    """Segmentos da rota que dão para jogar (com comprimento)."""
+# ------------------------------------------------- o catálogo e o percurso
+
+
+@dataclass
+class Entry:
+    """Um segmento que se pode jogar. Se está numa rota, joga-se nela (com a altimetria real);
+    se não (um segmento da biblioteca do Strava sem rota ligada), a Perennia monta um percurso só
+    com o segmento (`virtual_route`)."""
+    group: str                        # "perennia" | "strava"
+    segment: object
+    route_id: str | None = None
+    route_name: str = ""
+    row: dict | None = None           # a linha da biblioteca (percursos virtuais)
+
+    @property
+    def virtual(self) -> bool:
+        return self.route_id is None
+
+    @property
+    def key(self) -> str:
+        return self.segment.key
+
+
+def catalog(db) -> list[Entry]:
+    """Todos os segmentos jogáveis: os da Perennia e os do Strava (nas rotas e na biblioteca),
+    cada um uma vez. Por grupo e A–Z."""
     from . import segments as seg_mod
-    return [s for s in seg_mod.load(db, route_id) if s.length_m >= 100.0] if route_id else []
+    from . import strava_library as lib
+    seg_mod.ensure(db)
+    names = {r["id"]: r["name"] for r in db.routes()}
+    out: list[Entry] = []
+    for sgm in seg_mod.perennia_segments(db):
+        if sgm.length_m >= MIN_SEGMENT_M:
+            out.append(Entry("perennia", sgm, sgm.route_id, names.get(sgm.route_id, "")))
+    seen: set[int] = set()
+    for rid, rname in names.items():
+        for sgm in seg_mod.load(db, rid, sources=("strava",)):
+            if sgm.id not in seen and sgm.length_m >= MIN_SEGMENT_M:
+                seen.add(sgm.id)
+                out.append(Entry("strava", sgm, rid, rname))
+    for row in lib.library(db):
+        if row["segment_id"] not in seen and (row.get("distance_m") or 0) >= MIN_SEGMENT_M:
+            out.append(Entry("strava", library_segment(db, row), None, "", row))
+    out.sort(key=lambda e: (e.group, e.segment.name.lower()))
+    return out
+
+
+def library_segment(db, row: dict):
+    """Um segmento da biblioteca como `Segment` (sem rota): com o PR e o melhor tempo."""
+    from . import segments as seg_mod
+    dist = float(row.get("distance_m") or 0.0)
+    grade = row.get("avg_grade")
+    if grade is None and dist > 0:
+        grade = (row.get("elev_gain_m") or 0.0) / dist * 100.0
+    best = [e["elapsed_s"] for e in seg_mod.efforts(db, "strava", row["segment_id"])]
+    return seg_mod.Segment(row["segment_id"], row["name"], 0.0, dist, dist, grade, row.get("pr_s"),
+                           row.get("pr_date"), row.get("effort_count"), row.get("kom"),
+                           min(best) if best else None, "strava", None, row.get("elev_gain_m"))
+
+
+def virtual_route(row: dict, lead_m: float, tail_m: float):
+    """Um percurso feito só com o segmento da biblioteca: o traçado dele, com a inclinação média
+    (a biblioteca não guarda a altimetria ponto a ponto), mais a entrada antes e a estrada depois.
+    Devolve (pontos, início do segmento, fim) em metros do percurso."""
+    import math
+
+    from . import gpx
+    from . import segments as seg_mod
+    path = seg_mod.decode_polyline(row.get("polyline"))
+    dist = float(row.get("distance_m") or 0.0)
+    if len(path) < 2:
+        a = (row.get("start_lat"), row.get("start_lon"))
+        b = (row.get("end_lat"), row.get("end_lon"))
+        path = [a, b] if None not in a + b and a != b else []
+    if len(path) < 2:                                  # sem coordenadas: uma reta para norte
+        path = [(40.0, -8.0), (40.0 + max(dist, 100.0) / 111320.0, -8.0)]
+    cum = [0.0]
+    for p, q in zip(path, path[1:]):
+        cum.append(cum[-1] + seg_mod._m(p[0], p[1], q[0], q[1]))
+    length = cum[-1] if cum[-1] >= 50.0 else max(dist, 100.0)
+
+    def unit(p, q):
+        cos = math.cos(math.radians(p[0]))
+        dx, dy = (q[1] - p[1]) * cos * 111320.0, (q[0] - p[0]) * 111320.0
+        n = math.hypot(dx, dy) or 1.0
+        return dx / n, dy / n
+
+    lead_m, tail_m = max(0.0, float(lead_m)), max(0.0, float(tail_m))
+    step = 25.0
+    pts: list[tuple[float, float]] = []                  # (lat, lon) com a distância ao lado
+    ds: list[float] = []
+    ux, uy = unit(path[0], path[1])
+    n = int(math.ceil(lead_m / step))
+    for k in range(n, 0, -1):
+        d = lead_m * k / n
+        pts.append((path[0][0] - uy * d / 111320.0,
+                    path[0][1] - ux * d / (111320.0 * math.cos(math.radians(path[0][0])))))
+        ds.append(lead_m - d)
+    for p, c in zip(path, cum):
+        pts.append(p)
+        ds.append(lead_m + c)
+    ux, uy = unit(path[-2], path[-1])
+    n = int(math.ceil(tail_m / step))
+    for k in range(1, n + 1):
+        d = tail_m * k / n
+        pts.append((path[-1][0] + uy * d / 111320.0,
+                    path[-1][1] + ux * d / (111320.0 * math.cos(math.radians(path[-1][0])))))
+        ds.append(lead_m + cum[-1] + d)
+    grade = row.get("avg_grade")
+    if grade is None and dist > 0:
+        grade = (row.get("elev_gain_m") or 0.0) / dist * 100.0
+    grade = float(grade or 0.0)
+    total = ds[-1]
+    base = 50.0 + max(0.0, -grade / 100.0 * total)
+    raw = [(lat, lon, base + grade / 100.0 * d) for (lat, lon), d in zip(pts, ds)]
+    points = gpx.resample(raw)
+    k = points[-1].dist_m / total if total > 0 else 1.0      # a projeção do .gpx mede quase igual
+    return points, lead_m * k, (lead_m + length) * k
+
+
+def resolve(db, entry: Entry, lead_in_m: float):
+    """(pontos do percurso, segmento com início/fim nesse percurso) de uma entrada do catálogo."""
+    if not entry.virtual:
+        return db.route_points(entry.route_id), entry.segment
+    import dataclasses
+    pts, a, b = virtual_route(entry.row, lead_in_m, VIRTUAL_TAIL_M)
+    return pts, dataclasses.replace(entry.segment, start_m=a, end_m=b)
+
+
+def resolve_spec(db, spec: dict):
+    """O mesmo, a partir do que a preparação escolheu (para o jogo e para o ecrã da sessão)."""
+    from . import segments as seg_mod
+    from . import strava_library as lib
+    key = str(spec.get("segment") or "")
+    lead = float(spec.get("lead_in_m", LEAD_IN_M))
+    if spec.get("route_id"):
+        seg = next((s for s in seg_mod.load(db, spec["route_id"]) if s.key == key), None)
+        if seg is None:
+            raise ValueError(tr("O segmento já não existe nesta rota.",
+                                "The segment no longer exists on this route."))
+        return db.route_points(spec["route_id"]), seg
+    try:
+        row = lib.get(db, int(key.split(":")[1]))
+    except (IndexError, ValueError):
+        row = None
+    if row is None:
+        raise ValueError(tr("O segmento já não está na biblioteca.",
+                            "The segment is no longer in the library."))
+    return resolve(db, Entry("strava", library_segment(db, row), None, "", row), lead)
+
+
+def spec_points(db, spec: dict | None):
+    """Os pontos do percurso de uma sessão de segmento sem rota; None nos outros casos."""
+    if spec and spec.get("virtual"):
+        return resolve_spec(db, spec)[0]
+    return None
 
 
 # ------------------------------------------------------------------- o jogo
@@ -537,6 +692,7 @@ class SegmentGame(Game):
                  spec: dict | None = None, **kw):
         self.setup_ = setup
         self.spec = dict(spec or {})
+        self.virtual = False
         super().__init__(ftp, weight_kg, **kw)
 
     # ----------------------------------------------------------- preparação
@@ -755,7 +911,8 @@ class SegmentGame(Game):
                 "summary": self.summary_text(), "mode": self.mode,
                 "segment": ({"key": seg.key, "id": seg.id, "source": seg.source,
                              "name": seg.name, "length_m": round(seg.length_m),
-                             "grade": seg.avg_grade, "route_id": self.spec.get("route_id")}
+                             "grade": seg.avg_grade, "route_id": self.spec.get("route_id"),
+                             "virtual": self.virtual}
                             if seg else None),
                 "target": {"kind": self.spec.get("kind"), "label": s.label if s else "",
                            "s": round(self.target_s) if s else None},
@@ -826,20 +983,17 @@ class SegmentKom(SegmentGame):
 
 
 def create(cls, spec: dict, athlete, db, best: dict | None = None, **kw) -> SegmentGame:
-    """Monta o jogo a partir do que o ecrã escolheu (`spec`): rota, segmento e alvo."""
-    from . import segments as seg_mod
-    route_id = spec.get("route_id")
-    seg = next((s for s in seg_mod.load(db, route_id) if s.key == spec.get("segment")), None)
-    if seg is None:
-        raise ValueError(tr("O segmento já não existe nesta rota.",
-                            "The segment no longer exists on this route."))
+    """Monta o jogo a partir do que o ecrã escolheu (`spec`): segmento, percurso e alvo."""
+    points, seg = resolve_spec(db, spec)
     if best is None:
         from . import stats
         best = dict(stats.power_curve(db, days=90))
-    planner = planner_for(db, athlete, route_id, seg, best, spec.get("lead_in_m"))
+    planner = planner_for(db, athlete, points, seg, best, spec.get("lead_in_m"))
     setup = prepare(planner, seg, cls.mode, spec.get("kind") or "", spec.get("value"))
-    return cls(athlete.ftp_w, athlete.weight_kg, setup=setup, spec=spec, best=best,
+    game = cls(athlete.ftp_w, athlete.weight_kg, setup=setup, spec=spec, best=best,
                erg=spec.get("erg"), seed=spec.get("seed", 1), **kw)
+    game.virtual = bool(spec.get("virtual"))
+    return game
 
 
 # --------------------------------------------------------- histórico por segmento

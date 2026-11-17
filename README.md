@@ -57,7 +57,8 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   watts, guia com a diferença em tempo e recálculo se te atrasas. No **KOM** tentas bater **o meu KOM**
   ou **o KOM do segmento**, em esforço máximo com fantasmas. Avisa se o alvo cabe na tua capacidade,
   começa 500 m antes e termina com a **tabela por secção** (plano × real × tempo ganho/perdido) e
-  histórico por segmento. Onze opções novas. Ver o RUN.md.
+  histórico por segmento. A preparação só pede **o segmento** (uma janela com os da Perennia e os do
+  Strava; os da biblioteca sem rota jogam-se num percurso feito com o próprio segmento). Doze opções novas. Ver o RUN.md.
 - **Ronda 21** — **Biblioteca de segmentos do Strava**: importa segmentos por **ID ou ligação**, pelos
   **favoritos ⭐**, ou pela pesquisa de uma rota (que se mantém, para rotas noutros países), com o
   traçado, o teu PR e (com subscrição Strava) **todos os teus esforços**. Ficam neste computador e
