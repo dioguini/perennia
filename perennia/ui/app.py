@@ -1942,6 +1942,9 @@ class SummaryScreen(RadarSide, Screen):
                                       if game.get("rank") and game.get("total") else "")
                               + ("" if game.get("ranked", True) else " · " + t("chase.not_ranked")),
                               enabled=False))
+            if game.get("sections"):                   # Segment Pace / KOM: a tabela por secção
+                from perennia.ui.pace_screens import section_table
+                items += section_table(game)
 
         laps = self.result.get("laps", [])
         if len(laps) > 1:

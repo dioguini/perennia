@@ -50,6 +50,14 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 22** — **Segment Pace** e **Segment KOM** no Challenge: sobre qualquer segmento que já
+  tenhas (subida, plano ou descida; também os da biblioteca, offline). No **Pace** dás um alvo (tempo,
+  o teu melhor + x % ou potência média) e a Perennia calcula, por física, **os watts de cada secção**
+  (mais onde custa mais, a recuperar nas descidas, ± 20 %), com ERG ligado por omissão, **sinal** com os
+  watts, guia com a diferença em tempo e recálculo se te atrasas. No **KOM** tentas bater **o meu KOM**
+  ou **o KOM do segmento**, em esforço máximo com fantasmas. Avisa se o alvo cabe na tua capacidade,
+  começa 500 m antes e termina com a **tabela por secção** (plano × real × tempo ganho/perdido) e
+  histórico por segmento. Onze opções novas. Ver o RUN.md.
 - **Ronda 21** — **Biblioteca de segmentos do Strava**: importa segmentos por **ID ou ligação**, pelos
   **favoritos ⭐**, ou pela pesquisa de uma rota (que se mantém, para rotas noutros países), com o
   traçado, o teu PR e (com subscrição Strava) **todos os teus esforços**. Ficam neste computador e

@@ -109,6 +109,8 @@ class Game:
     durations = (10, 20, 30)
     default_minutes = 20
     higher_is_better = True       # pontuação; na eliminação conta a posição
+    needs_segment = False         # Segment Pace / KOM: precisam de rota e segmento
+    start_m = 0.0                 # onde na rota o motor põe o atleta ao começar
 
     def __init__(self, ftp: int, weight_kg: float = 75.0, *, best: dict | None = None,
                  minutes: int | None = None, bots: int = 4, erg: bool | None = None,
@@ -149,6 +151,14 @@ class Game:
     # para as subclasses
     def setup(self) -> None: ...
     def _tick(self, power: float) -> list[tuple[str, dict]]: return []
+
+    def observe(self, pos_m: float, t_s: float, speed_mps: float) -> list[tuple[str, dict]]:
+        """Chamado a cada frame com a posição na rota (só os jogos de segmento o usam)."""
+        return []
+
+    def guides(self) -> list[tuple[str, float, float]]:
+        """(etiqueta, posição na rota, diferença em s) das guias a mostrar no HUD."""
+        return []
 
     @property
     def title(self) -> str:
@@ -858,6 +868,9 @@ CLASSES = {c.key: c for c in (AdaptiveChallenge, ZoneHero, PowerLadder, Warmup, 
 def create(spec: dict, athlete, db=None, best: dict | None = None) -> Game:
     """Cria o jogo a partir das escolhas do ecrã (`spec`) e do atleta."""
     cls = CLASSES[spec["key"]]
+    if cls.needs_segment:
+        from . import segment_pace
+        return segment_pace.create(cls, spec, athlete, db, best)
     level = 0.9
     zones = None
     if db is not None:
@@ -921,5 +934,15 @@ def leaderboard(db, key: str, limit: int = 10) -> Board:
         label = str(r["created_at"])[:10]
         if r["rank"] and r["total"]:
             label += f" · {r['rank']}.º/{r['total']}"
+        if CLASSES[key].needs_segment:                  # Pace/KOM: de que segmento
+            try:
+                label += " · " + str((json.loads(r["details"] or "{}").get("segment")
+                                      or {}).get("name", ""))
+            except ValueError:
+                pass
         out.append(Row(i + 1, fmt(None, r["score"]), label))
     return Board(t(f"game.{key}"), out, empty=t("board.empty"))
+
+
+# Segment Pace e Segment KOM registam-se aqui (ver `segment_pace`)
+from . import segment_pace as _segment_pace  # noqa: E402,F401
