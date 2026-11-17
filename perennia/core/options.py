@@ -775,6 +775,14 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="on entering a new section, the watts of the remaining ones are recalculated "
                "so you can still hit the target",
        binds=(("perennia.core.segment_pace", "REPLAN"),)),
+    _o("seg_virtual_tail_m", "pace", "Segmentos sem rota: estrada depois do fim",
+       "Segments without a route: road after the end", INT, 500, lo=100, hi=5000, step=100,
+       unit="m",
+       hint_pt="um segmento da biblioteca sem rota ligada joga-se num percurso feito só com ele "
+               "(o traçado, com a inclinação média); isto é a estrada que se acrescenta depois do fim",
+       hint_en="a library segment with no linked route is ridden on a course made of just that "
+               "segment (its path at its average gradient); this is the road added after the end",
+       binds=(("perennia.core.segment_pace", "VIRTUAL_TAIL_M"),)),
     _o("seg_pace_tol_pct", "pace", "Segment Pace: tolerância do alvo",
        "Segment Pace: target tolerance", FLOAT, 1.0, lo=0.1, hi=10.0, step=0.1, unit="%",
        hint_pt="chegar até esta % acima do tempo alvo conta como cumprido",

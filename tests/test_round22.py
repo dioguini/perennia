@@ -25,6 +25,7 @@ from perennia.io.hub import SensorHub  # noqa: E402
 from perennia.io.sim import SimulatedTrainer  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
+tc21 = importlib.import_module("tests.test_round21")
 GPX = Path(__file__).parent / "teste.gpx"
 DT = 0.25
 
@@ -106,6 +107,48 @@ class TestClock(unittest.TestCase):
         self.assertEqual(sp.parse_target("seg_pace", "pr_pct", "+3"), 3.0)
         self.assertEqual(sp.parse_target("seg_pace", "power", "230 W"), 230.0)
         self.assertIsNone(sp.parse_target("seg_pace", "power", "muito"))
+
+
+# ============================================================ percurso virtual
+
+
+class TestVirtualRoute(unittest.TestCase):
+    ROW = {"segment_id": 5, "name": "L", "distance_m": 1500.0, "avg_grade": 6.0,
+           "elev_gain_m": 90.0, "polyline": None, "start_lat": None, "start_lon": None,
+           "end_lat": None, "end_lon": None}
+
+    def test_course_has_lead_segment_and_tail_at_the_average_grade(self):
+        pts, a, b = sp.virtual_route(self.ROW, 500, 400)
+        self.assertAlmostEqual(a, 500, delta=4)
+        self.assertAlmostEqual(b - a, 1500, delta=60)
+        self.assertAlmostEqual(pts[-1].dist_m - b, 400, delta=4)
+        r = RouteIndex(pts)
+        self.assertAlmostEqual((r.ele_at(b) - r.ele_at(a)) / (b - a) * 100, 6.0, delta=0.3)
+        self.assertAlmostEqual(r.grade_at(1000), 6.0, delta=0.6)
+
+    def test_descent_stays_above_zero_and_zero_lead_is_allowed(self):
+        row = dict(self.ROW, avg_grade=-8.0)
+        pts, a, b = sp.virtual_route(row, 0, 300)
+        self.assertEqual(a, 0)
+        self.assertGreater(min(p.ele_m for p in pts), 0)
+        self.assertLess(pts[-1].ele_m, pts[0].ele_m)
+
+    def test_uses_the_polyline_and_falls_back_without_coordinates(self):
+        poly = tc21.encode(tc21.path(0, 1500, lon=0.5))
+        pts, a, b = sp.virtual_route(dict(self.ROW, polyline=poly), 300, 300)
+        self.assertAlmostEqual(b - a, 1500, delta=60)
+        self.assertGreater(len({round(p.lon, 4) for p in pts}) + len({round(p.lat, 3) for p in pts}), 3)
+        pts2, a2, b2 = sp.virtual_route(self.ROW, 300, 300)          # sem traçado nem coordenadas
+        self.assertAlmostEqual(b2 - a2, 1500, delta=60)
+        pts3, *_ = sp.virtual_route(dict(self.ROW, start_lat=40.0, start_lon=-8.0,
+                                         end_lat=40.01, end_lon=-8.0), 300, 300)
+        self.assertGreater(pts3[-1].dist_m, 1500)
+
+    def test_prepare_on_the_virtual_course(self):
+        pts, a, b = sp.virtual_route(self.ROW, 500, 400)
+        pl = sp.Planner(RouteIndex(pts), a, b, 80.0, 0.32, 0.005, 250, lead_in_m=500)
+        p = pl.plan_time(600)
+        self.assertAlmostEqual(p.total_s, 600, delta=1.5)
 
 
 # ================================================================ secções
@@ -308,9 +351,11 @@ class Ride:
         self.trainer = SimulatedTrainer(base_power=base_power, with_hr=True)
         self.hub = SensorHub()
         self.hub.add_source(self.trainer, role="trainer", is_trainer=True)
+        virtual = sp.spec_points(case.db, spec)
         self.engine = RideEngine(
-            case.db, self.athlete, route_id=case.route_id,
-            points=case.db.route_points(case.route_id), climbs=case.db.climbs(case.route_id),
+            case.db, self.athlete, route_id=None if virtual else case.route_id,
+            points=virtual if virtual is not None else case.db.route_points(case.route_id),
+            climbs=[] if virtual is not None else case.db.climbs(case.route_id),
             kind="game", sensors=self.hub, trainer=self.hub, rides_dir=case.tmp / "rides",
             game=self.game)
         self.events = []
@@ -436,6 +481,27 @@ class TestSession(Tmp):
         res = r.engine.game_result
         self.assertGreater(res["sections"][-1]["sign_w"], res["sections"][-1]["plan_w"] - 1)
 
+    def test_library_segment_without_route_is_played_on_its_own_course(self):
+        from perennia.core import strava_library as lib
+        lib.save(self.db, tc21.detail(901, "Climb Lib", 0, 2000, lon=0.5))      # PR de 15:00
+        spec = {"key": "seg_kom", "route_id": None, "virtual": True, "segment": "strava:901",
+                "kind": "my_kom", "seed": 1, "erg": False, "lead_in_m": 500}
+        r = Ride(self, spec, base_power=250)
+        self.assertEqual(r.engine.state.pos_m, 0.0)
+        self.assertIsNone(r.engine.route_id)
+        self.assertAlmostEqual(r.game.setup_.segment.start_m, 500, delta=4)
+        self.assertAlmostEqual(r.game.setup_.segment.end_m, 2500, delta=30)
+        r.run(seconds=2400)
+        self.assertTrue(r.game.finished)
+        res = r.engine.game_result
+        self.assertTrue(res["completed"])
+        self.assertTrue(res["segment"]["virtual"])
+        self.assertEqual(res["segment"]["key"], "strava:901")
+        # o tempo conta como esforço do segmento (a biblioteca passa a ter o melhor tempo teu)
+        self.assertEqual([e["elapsed_s"] for e in sg.efforts(self.db, "strava", 901)],
+                         [round(res["elapsed_s"])])
+        self.assertEqual(len(sp.segment_history(self.db, "strava:901")), 1)
+
     def test_missing_segment_is_a_clear_error(self):
         with self.assertRaises(ValueError):
             games.create({"key": "seg_pace", "route_id": self.route_id,
@@ -463,6 +529,12 @@ class TestScreens(tg.GuiCase):
         sid = sg.save_perennia(self.app.db, None, self.route_id, name, a, b)
         return next(s for s in sg.load(self.app.db, self.route_id) if s.id == sid)
 
+    def library(self, sid=901, name="Climb Lib", **kw):
+        """Um segmento da biblioteca do Strava, longe de qualquer rota (sem rota ligada)."""
+        from perennia.core import strava_library as lib
+        lib.save(self.app.db, tc21.detail(sid, name, 0, 2000, lon=0.5, **kw))
+        return sid
+
     def open_pace(self, which="Segment Pace"):
         self.pick_mode("Challenge")
         self.pick(which)
@@ -482,10 +554,60 @@ class TestScreens(tg.GuiCase):
         menu.list.index = [i.label for i in menu.list.items].index("Segment KOM")
         self.assertEqual(menu.side_board().title, "Segment KOM")
 
+    def test_setup_has_only_the_segment_no_route_autolap_or_font(self):
+        self.seg()
+        scr = self.open_pace()
+        labels = " | ".join(self.labels_of())
+        for gone in ("Rota", "rota", ".gpx", "Voltas", "Auto lap", "auto lap", "Tamanho da letra",
+                     "Strava"):
+            self.assertNotIn(gone, [x for x in self.labels_of()], gone)
+        self.assertNotIn("Tamanho da letra", labels)
+        self.assertNotIn("Auto lap", labels)
+        self.assertEqual(sum(1 for i in scr.list.items if i.data == "seg"), 1)
+        self.assertIsNone(scr.route_id)
+        self.assertFalse(hasattr(scr, "_font_preview") and scr._font_preview is not None)
+        scr.draw()                                         # desenha sem a pré-visualização da letra
+        self.assertIsNone(getattr(scr, "_font_preview", None))
+        self.assertEqual(scr.autolap_cfg(), {"mode": "off", "value": 0})
+
     def test_no_segments_explains_and_blocks_start(self):
         scr = self.open_pace()
         self.assertFalse(scr.can_start)
-        self.assertTrue(any("não tem segmentos" in (i.detail or "") for i in scr.list.items))
+        item = next(i for i in scr.list.items if i.data == "seg")
+        self.assertFalse(item.enabled)
+        self.assertIn("Importar", item.detail)
+        scr._start()                                       # não rebenta: só avisa
+        self.assertIs(self.screen(), scr)
+
+    def test_segment_picker_groups_perennia_and_strava(self):
+        self.seg(name="Minha subida")
+        self.library(name="Do Strava")
+        scr = self.open_pace()
+        self.assertEqual(scr.entry().segment.name, "Minha subida")     # Perennia primeiro
+        item = next(i for i in scr.list.items if i.data == "seg")
+        self.assertIsNone(item.dropdown)
+        item.action()
+        pick = self.screen()
+        labels = [i.label for i in pick.list.items]
+        self.assertEqual(labels[0], "Perennia (1)")
+        self.assertIn("Minha subida  ✓", labels)
+        self.assertIn("Strava (1)", labels)
+        self.assertLess(labels.index("Perennia (1)"), labels.index("Strava (1)"))
+        self.assertTrue(next(i for i in pick.list.items if i.label == "Perennia (1)").header)
+        sel = next(i for i in pick.list.items if i.label == "Do Strava")
+        self.assertIn("biblioteca (sem rota)", sel.detail)
+        sel.action()
+        scr = self.screen()
+        self.assertEqual(scr.entry().segment.name, "Do Strava")
+        self.assertTrue(scr.entry().virtual)
+
+    def test_empty_groups_say_what_to_do(self):
+        self.seg()
+        scr = self.open_pace()
+        next(i for i in scr.list.items if i.data == "seg").action()
+        pick = self.screen()
+        self.assertIn("Strava (0)", [i.label for i in pick.list.items])
+        self.assertTrue(any("Importar do Strava" in i.detail for i in pick.list.items))
 
     def test_pace_setup_rows_defaults_and_start(self):
         seg = self.seg()
@@ -504,15 +626,16 @@ class TestScreens(tg.GuiCase):
         text = " ".join(f"{i.label} {i.value} {i.detail}" for i in scr.list.items)
         for want in ("Tempo previsto", "Potência média", "Cabe em ti", "Secções", "% da FTP"):
             self.assertIn(want, text)
-        seg_item = next(i for i in scr.list.items if i.data == "seg")
-        self.assertIsNotNone(seg_item.dropdown)
-        self.assertEqual(scr.game()["segment"], seg.key)
+        spec = scr.game()
+        self.assertEqual(spec["segment"], seg.key)
+        self.assertEqual(spec["route_id"], self.route_id)
+        self.assertFalse(spec["virtual"])
         scr._start()
         rs = self.screen()
         self.assertEqual(rs.game_spec["kind"], "time")
-        self.assertEqual(rs.game_spec["route_id"], self.route_id)
         self.assertIsInstance(rs.engine.game, sp.SegmentPace)
         self.assertAlmostEqual(rs.engine.state.pos_m, 1000.0, delta=0.01)
+        self.assertEqual(rs.engine.autolap.mode, "off")
 
     def test_pace_with_pr_uses_percent_and_dropdown_of_kinds(self):
         seg = self.seg()
@@ -545,6 +668,7 @@ class TestScreens(tg.GuiCase):
         why = next(i for i in scr.list.items if i.data == "why")
         self.assertIn("tempos teus", why.detail)
         sg.save_effort(self.app.db, None, seg.id, 420, source="perennia", kind="ride")
+        scr.entries = sp.catalog(self.app.db)
         scr.enter()
         scr._ensure_choices()
         self.assertEqual(scr.kind, "my_kom")
@@ -564,6 +688,7 @@ class TestScreens(tg.GuiCase):
              "5:01", "2025-01-01T00:00:00Z"))
         db.conn.commit()
         scr = self.open_pace("Segment KOM")
+        self.assertFalse(scr.entry().virtual)                  # está numa rota: joga-se nela
         item = next(i for i in scr.list.items if i.data == "tgt")
         self.assertEqual(item.dropdown.labels(), ["O meu KOM", "KOM do segmento"])
         item.dropdown.on_pick(1)
@@ -574,6 +699,29 @@ class TestScreens(tg.GuiCase):
         self.assertAlmostEqual(setup.plan.total_s, 301, delta=1)
         self.assertEqual(len(setup.guides), 2)
         self.assertTrue(any(i.data == "note" for i in scr.list.items))   # vento / aspiração
+
+    def test_library_segment_without_route_starts_on_its_own_course(self):
+        self.library(901, "Climb Lib")
+        scr = self.open_pace("Segment KOM")
+        self.assertTrue(scr.entry().virtual)
+        self.assertEqual(scr.kind, "my_kom")                    # o PR de 15:00 da biblioteca
+        self.assertTrue(scr.can_start)
+        self.assertTrue(any(i.data == "virtual" for i in scr.list.items))
+        spec = scr.game()
+        self.assertTrue(spec["virtual"])
+        self.assertIsNone(spec["route_id"])
+        scr._start()
+        rs = self.screen()
+        self.assertIsNone(rs.route_id)
+        g = rs.engine.game
+        self.assertIsInstance(g, sp.SegmentKom)
+        self.assertTrue(g.virtual)
+        self.assertEqual(rs.engine.state.pos_m, 0.0)            # a entrada é o começo do percurso
+        self.assertGreater(rs.engine.route.total_m, 500 + 2000 + 400)
+        for _ in range(8):                                      # desenha com o mundo 3D
+            self.app.hub.tick(0.25)
+            rs.update(0.25)
+            self.app._on_draw()
 
     def test_lead_in_dropdown_and_arrows(self):
         self.seg()

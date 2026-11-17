@@ -1486,6 +1486,15 @@ class RideScreen(Screen):
                    chase_level=cfg.get("chase_level"), resume=cp,
                    game_spec=meta.get("game"), autolap=meta.get("autolap"))
 
+    def _points(self) -> list:
+        """Os pontos do percurso: os da rota ou, num segmento de biblioteca sem rota
+        (Segment Pace/KOM), o percurso montado só com o segmento."""
+        from perennia.core import segment_pace
+        pts = segment_pace.spec_points(self.app.db, self.game_spec)
+        if pts is not None:
+            return pts
+        return self.app.db.route_points(self.route_id) if self.route_id else []
+
     def build_engine(self, sensors=None, trainer=None) -> RideEngine:
         a = self.app
         athlete = a.db.athlete()
@@ -1496,7 +1505,7 @@ class RideScreen(Screen):
             if row is not None:
                 athlete.ftp_w = row["ftp_at_ride_w"] or athlete.ftp_w
                 athlete.weight_kg = row["weight_at_ride_kg"] or athlete.weight_kg
-        points = a.db.route_points(self.route_id) if self.route_id else []
+        points = self._points()
         climbs = a.db.climbs(self.route_id) if self.route_id else []
         runner = None
         if self.ftp_protocol:
@@ -1531,8 +1540,7 @@ class RideScreen(Screen):
         if self.engine is not None:
             return
         a = self.app
-        athlete = a.db.athlete()
-        points = a.db.route_points(self.route_id) if self.route_id else []
+        points = self._points()
         self.engine = self.build_engine(sensors=a.hub, trainer=a.hub)
         self.hud = Hud(a.window, a.db, self.engine.athlete)
         if self.workout_id and not self.ftp_protocol:
@@ -1547,7 +1555,7 @@ class RideScreen(Screen):
         # céu cinzento-azulado, fica para os passeios por uma rota.)
         if points and self.kind != "workout":
             self.world = World(points, a.db.get("render_preset", "low"),
-                               seed=self.route_id or "")
+                               seed=self.route_id or str((self.game_spec or {}).get("segment", "")))
             self.world.setup_gl()
         else:
             self.preparing = False

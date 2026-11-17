@@ -1,19 +1,22 @@
 """Segment Pace e Segment KOM: a janela de preparação do Challenge e a tabela por secção.
 
-A preparação é a mesma janela das outras sessões do Challenge (aparelhos, rota, auto lap)
-com as escolhas do segmento: o segmento (lista pendente), o alvo, o ERG e a entrada.
-Por baixo mostra, **antes de começar**, o que o alvo pede: tempo, potência média, se cabe na
+A preparação tem os aparelhos e, sobretudo, **uma só escolha de segmento** (abre uma janela com
+os da Perennia e os do Strava), o alvo, o ERG e a entrada: sem rota, .gpx, auto lap nem tamanho
+de letra. Por baixo mostra, **antes de começar**, o que o alvo pede: tempo, potência média, se cabe na
 tua capacidade e os watts de cada secção. Corre tudo offline com o que está guardado.
 """
 from __future__ import annotations
 
 import time
 
+from pyglet.window import key
+
 from perennia.core import options as opt_mod
 from perennia.core import segment_pace as sp
 from perennia.core.boards import Board
 from perennia.core.i18n import t, tr
 from perennia.core.units import delta, hms
+from perennia.ui.app import PopupMixin, RideScreen, Screen
 from perennia.ui.session_setup import SessionSetup
 from perennia.ui.sport_screens import EditPopup
 from perennia.ui.widgets import Dropdown, Item
@@ -72,8 +75,66 @@ class ValuePopup(EditPopup):
         self.close()
 
 
+class SegmentPickerPopup(PopupMixin, Screen):
+    """Todos os segmentos que se podem jogar, por grupo: Perennia e Strava. Enter escolhe."""
+
+    W, H = 860, 620
+
+    def __init__(self, app, entries: list, current: str | None, on_pick):
+        super().__init__(app)
+        self.entries, self.current, self.on_pick = entries, current, on_pick
+        self._init_popup()
+
+    @staticmethod
+    def describe(e) -> tuple[str, str]:
+        s = e.segment
+        bits = [f"{s.length_m / 1000:.2f} km"]
+        if s.avg_grade is not None:
+            bits.append(f"{s.avg_grade:+.1f} %")
+        det = []
+        if sp.my_best(s):
+            det.append(tr("o meu melhor {x}", "my best {x}", x=hms(sp.my_best(s))))
+        if sp.kom_seconds(s.kom):
+            det.append(f"KOM {hms(sp.kom_seconds(s.kom))}")
+        det.append(tr("rota {r}", "route {r}", r=e.route_name) if e.route_name
+                   else (tr("biblioteca (sem rota)", "library (no route)")
+                         if e.group == "strava" else ""))
+        return " · ".join(bits), " · ".join(x for x in det if x)
+
+    def enter(self) -> None:
+        items: list[Item] = []
+        for group, title in (("perennia", "Perennia"), ("strava", "Strava")):
+            mine = [e for e in self.entries if e.group == group]
+            items.append(Item(f"{title} ({len(mine)})", header=True))
+            if not mine:
+                items.append(Item(
+                    tr("Nenhum segmento", "No segments"), enabled=False, indent=1,
+                    detail=(tr("cria-os no menu Segmentos, sobre uma rota", "create them in the "
+                               "Segments menu, on a route") if group == "perennia" else
+                            tr("importa-os no menu Segmentos → Importar do Strava",
+                               "import them in Segments → Import from Strava"))))
+            for e in mine:
+                value, detail = self.describe(e)
+                items.append(Item(e.segment.name + ("  ✓" if e.key == self.current else ""),
+                                  value=value, detail=detail, indent=1, data=e.key,
+                                  action=lambda k=e.key: self._choose(k)))
+        self.chrome.set(tr("Escolhe o segmento", "Pick the segment"),
+                        tr("{n} segmentos · Enter escolhe · Esc volta",
+                           "{n} segments · Enter picks · Esc goes back", n=len(self.entries)), "")
+        self.list.set_items(items, keep_index=True)
+        self.list.select_data(self.current)
+
+    def _choose(self, key_: str) -> None:
+        self.app.pop()
+        self.on_pick(key_)
+
+
 class PaceSetup(SessionSetup):
-    """Segment Pace e Segment KOM (Challenge do ciclismo)."""
+    """Segment Pace e Segment KOM (Challenge do ciclismo).
+
+    Sem rota, sem .gpx, sem auto lap e sem tamanho de letra: escolhe-se **o segmento** (uma só
+    linha, que abre a lista dos da Perennia e do Strava) e o alvo. Um segmento que está numa rota
+    joga-se nela; um da biblioteca do Strava sem rota joga-se num percurso feito só com ele."""
 
     def __init__(self, app, game_key: str):
         super().__init__(app, "cycling", kind="game", game_key=game_key)
@@ -83,7 +144,8 @@ class PaceSetup(SessionSetup):
         db = app.db
         self.erg = bool(opt_mod.get(db, "seg_pace_erg")) if self.mode == sp.PACE else False
         self.lead_in = int(sp.LEAD_IN_M)
-        self.seg_key: str | None = None
+        self.entries = sp.catalog(db)
+        self.entry_key: str | None = self.entries[0].key if self.entries else None
         self.kind = "pr_pct" if self.mode == sp.PACE else "my_kom"
         self.value: float | None = 0.0
         self._cache: dict = {}
@@ -93,24 +155,21 @@ class PaceSetup(SessionSetup):
 
     @property
     def needs_route(self) -> bool:
-        return True
+        return False
 
     @property
     def comparison_allowed(self) -> bool:
         return False
 
-    def segments(self) -> list:
-        return sp.segments_of(self.app.db, self.route_id)
+    def entry(self):
+        return next((e for e in self.entries if e.key == self.entry_key), None)
 
     def segment(self):
-        segs = self.segments()
-        return next((s for s in segs if s.key == self.seg_key), None)
+        e = self.entry()
+        return e.segment if e else None
 
     def _ensure_choices(self) -> None:
-        """Mantém o segmento e o alvo válidos quando a rota muda."""
-        segs = self.segments()
-        if self.seg_key not in [s.key for s in segs]:
-            self.seg_key = segs[0].key if segs else None
+        """Mantém o alvo válido para o segmento escolhido."""
         seg = self.segment()
         if seg is None:
             return
@@ -122,76 +181,65 @@ class PaceSetup(SessionSetup):
             self.kind, self.value = "time", None
 
     def prepared(self):
-        """(Setup | None, mensagem de erro | None): o plano do alvo escolhido (em cache)."""
-        seg = self.segment()
-        if seg is None:
-            return None, tr("Esta rota não tem segmentos: procura-os no Strava (em cima) ou "
-                            "cria um no menu Segmentos.",
-                            "This route has no segments: look them up on Strava (above) or "
-                            "create one in the Segments menu.")
+        """(Setup | None, mensagem | None): o plano do alvo escolhido (em cache)."""
+        e = self.entry()
+        if e is None:
+            return None, tr("Ainda não há segmentos: importa-os do Strava (Segmentos → Importar) "
+                            "ou cria um sobre uma rota (Segmentos).",
+                            "There are no segments yet: import them from Strava (Segments → "
+                            "Import) or create one on a route (Segments).")
+        seg = e.segment
         if not sp.target_choices(self.mode, seg):
             return None, tr("Este segmento ainda não tem tempos teus nem KOM: faz primeiro "
                             "uma sessão nele, ou usa o Segment Pace.",
                             "This segment has no times of yours and no KOM yet: ride it first, "
                             "or use Segment Pace.")
-        key = (self.route_id, seg.key, self.mode, self.kind, self.value, self.lead_in,
-               seg.pr_s, seg.local_best_s)
+        key = (e.key, self.mode, self.kind, self.value, self.lead_in, seg.pr_s, seg.local_best_s)
         if key not in self._cache:
             try:
-                a = self.app.db.athlete()
                 from perennia.core import stats
+                pts, rseg = sp.resolve(self.app.db, e, self.lead_in)
                 best = dict(stats.power_curve(self.app.db, days=90))
-                pl = sp.planner_for(self.app.db, a, self.route_id, seg, best, self.lead_in)
-                self._cache = {key: (sp.prepare(pl, seg, self.mode, self.kind, self.value),
+                pl = sp.planner_for(self.app.db, self.app.db.athlete(), pts, rseg, best,
+                                    self.lead_in)
+                self._cache = {key: (sp.prepare(pl, rseg, self.mode, self.kind, self.value),
                                      None)}
-            except ValueError as e:
-                self._cache = {key: (None, str(e))}
+            except ValueError as err:
+                self._cache = {key: (None, str(err))}
+            except Exception as err:               # nunca deixa a janela por abrir
+                self._cache = {key: (None, tr("Não foi possível preparar o segmento: {e}",
+                                              "Could not prepare the segment: {e}",
+                                              e=str(err)[:80]))}
         return self._cache[key]
 
     @property
     def can_start(self) -> bool:
-        return self.route_id is not None and self.prepared()[0] is not None
+        return self.prepared()[0] is not None
+
+    def autolap_cfg(self) -> dict:
+        return {"mode": "off", "value": 0}
 
     # -------------------------------------------------------------- linhas
 
     def title(self) -> str:
         return t(f"game.{self.key}")
 
-    def seg_label(self, s) -> str:
-        bits = [f"{s.length_m / 1000:.2f} km"]
-        if s.avg_grade is not None:
-            bits.append(f"{s.avg_grade:.1f} %")
-        return f"{s.name} · " + " · ".join(bits)
-
     def pace_items(self) -> list[Item]:
-        segs = self.segments()
+        e = self.entry()
         seg = self.segment()
-        rows: list[Item] = []
-        if not segs:
+        if e is None:
             return [Item(tr("Segmento", "Segment"), value=tr("nenhum", "none"),
                          detail=self.prepared()[1] or "", enabled=False, data="seg")]
-        det = []
-        if seg is not None:
-            if sp.my_best(seg):
-                det.append(tr("o meu melhor {x}", "my best {x}", x=hms(sp.my_best(seg))))
-            if sp.kom_seconds(seg.kom):
-                det.append(f"KOM {hms(sp.kom_seconds(seg.kom))}")
-            det.append("Strava" if seg.source == "strava" else "Perennia")
-        rows.append(Item(tr("Segmento", "Segment"), value=seg.name if seg else "—",
-                         detail=" · ".join(det) + tr(" · Enter abre a lista",
-                                                     " · Enter opens the list"),
-                         data="seg",
-                         dropdown=Dropdown([self.seg_label(s) for s in segs],
-                                           next((i for i, s in enumerate(segs)
-                                                 if s.key == self.seg_key), 0),
-                                           self._pick_segment, title=tr("Segmento", "Segment"))))
-        if seg is None:
-            return rows
+        value, detail = SegmentPickerPopup.describe(e)
+        rows = [Item(tr("Segmento", "Segment"), value=seg.name,
+                     detail=f"{'Perennia' if e.group == 'perennia' else 'Strava'} · {value}"
+                            + (" · " + detail if detail else "")
+                            + tr(" · Enter abre a lista", " · Enter opens the list"),
+                     data="seg", action=self._open_picker)]
         kinds = sp.target_choices(self.mode, seg)
         if kinds:
             ks = [k for k, _ in kinds]
-            rows.append(Item(tr("Alvo", "Target"),
-                             value=dict(kinds).get(self.kind, "—"),
+            rows.append(Item(tr("Alvo", "Target"), value=dict(kinds).get(self.kind, "—"),
                              detail=tr("Enter abre a lista · ←/→ muda",
                                        "Enter opens the list · ←/→ changes"), data="tgt",
                              dropdown=Dropdown([n for _, n in kinds],
@@ -221,8 +269,7 @@ class PaceSetup(SessionSetup):
                                            leads.index(self.lead_in)
                                            if self.lead_in in leads else 0,
                                            lambda i, ls=leads: self._pick_lead(ls[i]))))
-        rows += self.summary_items()
-        return rows
+        return rows + self.summary_items()
 
     def _lead_choices(self) -> list[int]:
         return sorted(set(LEAD_CHOICES) | {int(sp.LEAD_IN_M), self.lead_in})
@@ -269,8 +316,14 @@ class PaceSetup(SessionSetup):
         if setup.note:
             rows.append(Item(tr("Nota", "Note"), detail=setup.note, enabled=False,
                              data="note"))
-        seg = self.segment()
-        hist = sp.segment_history(self.app.db, seg.key, self.mode, 3) if seg else []
+        if self.entry() is not None and self.entry().virtual:
+            rows.append(Item(tr("Percurso", "Course"), enabled=False, data="virtual",
+                             detail=tr("este segmento não está numa rota: joga-se num percurso "
+                                       "feito só com ele (o traçado, com a inclinação média)",
+                                       "this segment is not on a route: it is ridden on a course "
+                                       "made of just it (its path at the average gradient)")))
+        hist = sp.segment_history(self.app.db, self.entry_key, self.mode, 3) \
+            if self.entry_key else []
         for h in hist:
             if h["elapsed_s"] is None:
                 continue
@@ -282,11 +335,15 @@ class PaceSetup(SessionSetup):
 
     # ------------------------------------------------------------ escolhas
 
-    def _pick_segment(self, i: int) -> None:
-        segs = self.segments()
-        if 0 <= i < len(segs):
-            self.seg_key = segs[i].key
+    def _open_picker(self) -> None:
+        self.app.push(SegmentPickerPopup(self.app, self.entries, self.entry_key,
+                                         self._pick_segment))
+
+    def _pick_segment(self, key_: str) -> None:
+        if key_ in [e.key for e in self.entries]:
+            self.entry_key = key_
             self._ensure_choices()
+        self.enter()
 
     def _pick_kind(self, kind: str) -> None:
         self.kind = kind
@@ -295,23 +352,6 @@ class PaceSetup(SessionSetup):
 
     def _pick_lead(self, v: int) -> None:
         self.lead_in = int(v)
-
-    def _route_chosen(self, route_id) -> None:
-        super()._route_chosen(route_id)
-        self._ensure_choices()
-        self.enter()
-
-    def _picked(self, route_id: str) -> None:
-        super()._picked(route_id)
-        self._ensure_choices()
-        self.enter()
-
-    def update(self, dt: float) -> None:
-        had = self.job is not None
-        super().update(dt)
-        if had and self.job is None:          # acabou a procura no Strava: há segmentos novos
-            self._ensure_choices()
-            self.enter()
 
     def _edit_value(self) -> None:
         label, hint = self._value_texts()
@@ -326,12 +366,6 @@ class PaceSetup(SessionSetup):
         return True
 
     def adjust(self, field: str, step: int) -> bool:
-        if field == "seg":
-            segs = self.segments()
-            if segs:
-                i = next((k for k, s in enumerate(segs) if s.key == self.seg_key), 0)
-                self._pick_segment((i + step) % len(segs))
-            return True
         if field == "tgt":
             seg = self.segment()
             ks = [k for k, _ in sp.target_choices(self.mode, seg)] if seg else []
@@ -347,31 +381,55 @@ class PaceSetup(SessionSetup):
             i = ls.index(self.lead_in) if self.lead_in in ls else 0
             self._pick_lead(ls[(i + step) % len(ls)])
             return True
-        if field in ("value", "why", "plan_time", "plan_w", "feas", "sections", "note", "hist"):
-            return False
-        return super().adjust(field, step)
+        return False          # o resto abre-se com Enter (nada de rota, auto lap ou letra)
 
     # ------------------------------------------------------------ ecrã
 
     def enter(self) -> None:
-        items = [self.device_item()] + self.route_items() + self.pace_items() \
-            + self.autolap_items() + self.font_items()
+        items = [self.device_item()] + self.pace_items()
         foot = tr("←/→ muda · Enter abre · Esc cancela", "←/→ changes · Enter opens · Esc cancels")
         if not self.can_start:
             foot = tr("Falta o segmento ou o alvo", "The segment or the target is missing")
         self.chrome.set(self.title(), self.subtitle(), foot)
         self.list.set_items(items + self.buttons(), keep_index=True)
 
+    def draw(self) -> None:
+        super(SessionSetup, self).draw()        # sem a pré-visualização da letra
+
+    def on_key(self, symbol: int, modifiers: int) -> bool:
+        item = self.list.selected
+        if item is not None and symbol in (key.LEFT, key.RIGHT) and isinstance(item.data, str):
+            if self.adjust(item.data, 1 if symbol == key.RIGHT else -1):
+                self.enter()
+                return True
+        if symbol == key.ESCAPE:
+            self.app.pop()
+            return True
+        return super(SessionSetup, self).on_key(symbol, modifiers)
+
     def game(self) -> dict:
+        e = self.entry()
         return {"key": self.game_key, "erg": self.erg, "seed": int(time.time()) % 100000,
-                "route_id": self.route_id, "segment": self.seg_key, "kind": self.kind,
-                "value": self.value, "lead_in_m": self.lead_in}
+                "route_id": e.route_id if e else None, "virtual": bool(e and e.virtual),
+                "segment": self.entry_key, "kind": self.kind, "value": self.value,
+                "lead_in_m": self.lead_in}
+
+    def _start(self) -> None:
+        a = self.app
+        setup, err = self.prepared()
+        if setup is None:
+            a.message(err or tr("Escolhe um segmento.", "Pick a segment."))
+            return
+        spec = self.game()
+        a.replace(RideScreen(a, route_id=spec["route_id"], workout_id=None, kind="game",
+                             ghosts=[], erg=self.erg, autolap={"mode": "off", "value": 0},
+                             game_spec=spec))
 
     def side_board(self):
         seg = self.segment()
         if seg is None:
             return Board(self.title(), [], empty=t("board.empty"))
-        return sp.history_board(self.app.db, seg.key, self.mode, seg.name)
+        return sp.history_board(self.app.db, self.entry_key, self.mode, seg.name)
 
 
 def section_table(result: dict) -> list[Item]:

@@ -1777,10 +1777,18 @@ um campo de texto). *Valores no código:* as 6 constantes da pesquisa/ligação 
 ### Ronda 22: Segment Pace e Segment KOM (no Challenge do ciclismo)
 
 Dois jogos novos em **Sessão de treino → Challenge**, para **qualquer segmento que já exista na
-Perennia** — a subir, plano ou a descer: os do Strava (pesquisa por rota ou **biblioteca**, que
-funciona offline) e os que criaste no menu Segmentos. Escolhes a **rota** (como nos outros jogos;
-se for uma rota nova noutro país, «Segmentos do Strava → Atualizar» procura-os na hora) e depois
-o **segmento**, numa **lista pendente**.
+Perennia** — a subir, plano ou a descer.
+
+**A preparação é curta**: os **Aparelhos**, **uma só linha «Segmento»** e o alvo. Não há rota, nem
+.gpx, nem auto lap, nem tamanho de letra. Enter na linha «Segmento» abre **uma janela com todos os
+segmentos, já separados em «Perennia» e «Strava»** (com a distância, a inclinação, o teu melhor tempo,
+o KOM e a rota a que pertencem); Enter escolhe.
+- **Segmento numa rota** (os da Perennia e os do Strava que já estão ligados a uma rota): joga-se
+  nessa rota, com a altimetria real.
+- **Segmento da biblioteca do Strava sem rota ligada**: a Perennia monta **um percurso só com ele** — o
+  traçado do segmento, com a **inclinação média** dele (a biblioteca não guarda a altimetria ponto a
+  ponto), mais a entrada antes e `seg_virtual_tail_m` (500 m) de estrada depois. A preparação avisa
+  («Percurso»). O tempo que fizeres conta como esforço do segmento (PR local) e a sessão fica sem rota.
 
 **Segment Pace — a Perennia conduz o esforço.** Dás um alvo e ela diz-te os watts de cada parte.
 - **Alvo** (lista pendente): **Tempo** (escreves `mm:ss`, ex. `12:30`), **O meu melhor + x %**
@@ -1822,13 +1830,14 @@ preparação vês as últimas sessões nesse segmento e, no menu do Challenge, o
 Terminar antes do fim do segmento grava «não concluído» (sem pontuação).
 
 **Funciona offline.** Tudo o que precisa — o segmento, o traçado, o teu PR e o KOM — vem do que já está
-guardado (biblioteca do Strava ou segmentos da Perennia); só a preparação de segmentos *novos* precisa de internet.
+guardado (biblioteca do Strava ou segmentos da Perennia). Para ter segmentos aqui: Segmentos →
+**Importar do Strava** (por ID ou favoritos) ou cria um sobre uma rota (menu Segmentos).
 
 **Opções novas** (Definições → Avançado → **Segment Pace e Segment KOM**; ver a tabela): `seg_pace_erg`
 (ligado), `seg_lead_in_m` (500 m; também há uma lista na preparação: 0, 250, 500, 1000, 2000 m),
 `seg_pace_variation_pct` (± 20 %), `seg_pace_floor_pct` (50 %), `seg_pace_replan`, `seg_pace_tol_pct`,
 `seg_section_min_m`, `seg_section_max_m`, `seg_section_grade_tol_pct`, `seg_grade_ref_pct`,
-`seg_hard_pct`. Constantes internas de precisão (não são preferências): passo da simulação 0,5 s,
+`seg_hard_pct`, `seg_virtual_tail_m` (500 m). Constantes internas de precisão (não são preferências): passo da simulação 0,5 s,
 célula do perfil 25 m e limites da procura de watts.
 
 **Base de dados (tudo local, SQLite).** **Nada a fazer**: não há tabelas nem colunas novas. Os
@@ -1841,8 +1850,8 @@ opções novas ficam em `settings` e vão no backup com as **Definições**; os 
 secção curta (uma atribuição com índice negativo trocava a secção errada — apanhado pelos testes).
 *Bottlenecks:* o plano resolve-se por bissecção, em milissegundos até a segmentos de 22 km (medi),
 por isso corre na preparação sem travar o ecrã; é guardado em cache enquanto não mudas o alvo.
-*Setas → lista pendente:* o segmento, o alvo, o ERG e a entrada são listas pendentes (as setas
-continuam a funcionar); o tempo/%/watts do alvo escreve-se. *Valores no código:* 11 opções novas.
+*Setas → lista pendente:* o segmento (janela própria), o alvo, o ERG e a entrada são listas (as setas
+continuam a funcionar nas três últimas); o tempo/%/watts do alvo escreve-se. *Valores no código:* 12 opções novas.
 
 ### Definições → Avançado (as opções afináveis)
 
@@ -2053,6 +2062,7 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Secções: mudança de inclinação (`seg_section_grade_tol_pct`) | 0,5 a 6 % | 1,5 % | uma mudança desta ordem abre uma secção nova |
 | Variação: diferença de inclinação de referência (`seg_grade_ref_pct`) | 1 a 12 % | 4 % | uma secção tão afastada da inclinação média leva a variação toda |
 | Viabilidade: «no limite» a partir de (`seg_hard_pct`) | 70 a 100 % da capacidade | 95 % | acima disto o alvo avisa que é no limite |
+| Segmentos sem rota: estrada depois do fim (`seg_virtual_tail_m`) | 100 a 5000 m | 500 m | um segmento da biblioteca sem rota joga-se num percurso só com ele; isto é a estrada acrescentada depois do fim |
 
 Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
 Nenhuma guarda segredos.
