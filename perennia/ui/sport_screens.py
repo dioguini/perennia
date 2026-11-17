@@ -2698,10 +2698,19 @@ class ChallengeMenu(Screen):
         for key_ in games_mod.GAMES[1:]:
             items.append(Item(t(f"game.{key_}"), detail=t(f"game.{key_}.desc"),
                               action=lambda k=key_: a.push(GameSetup(a, k)), data=key_))
+        from perennia.core import segment_pace as sp_mod
+        for key_ in (sp_mod.PACE, sp_mod.KOM):            # Segment Pace e Segment KOM
+            items.append(Item(t(f"game.{key_}"), detail=t(f"game.{key_}.desc"),
+                              action=lambda k=key_: self._open_pace(k), data=key_))
         self.chrome.set(t("menu.challenge"),
                         tr("Tudo à medida da tua FTP e da tua curva de potência",
                            "All scaled to your FTP and power curve"), self.footer())
         self.list.set_items(items, keep_index=True)
+
+
+    def _open_pace(self, key_: str) -> None:
+        from perennia.ui.pace_screens import PaceSetup
+        self.app.push(PaceSetup(self.app, key_))
 
 
 # o Challenge do ciclismo prepara-se na janela da sessão (nome e «como se

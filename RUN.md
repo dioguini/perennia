@@ -1774,6 +1774,76 @@ cada trabalho abre **a sua própria ligação** (`strava_job`), também na pesqu
 *Setas → lista pendente:* a ficha e a importação não usam setas para escolher valores (só botões e
 um campo de texto). *Valores no código:* as 6 constantes da pesquisa/ligação passaram a opções.
 
+### Ronda 22: Segment Pace e Segment KOM (no Challenge do ciclismo)
+
+Dois jogos novos em **Sessão de treino → Challenge**, para **qualquer segmento que já exista na
+Perennia** — a subir, plano ou a descer: os do Strava (pesquisa por rota ou **biblioteca**, que
+funciona offline) e os que criaste no menu Segmentos. Escolhes a **rota** (como nos outros jogos;
+se for uma rota nova noutro país, «Segmentos do Strava → Atualizar» procura-os na hora) e depois
+o **segmento**, numa **lista pendente**.
+
+**Segment Pace — a Perennia conduz o esforço.** Dás um alvo e ela diz-te os watts de cada parte.
+- **Alvo** (lista pendente): **Tempo** (escreves `mm:ss`, ex. `12:30`), **O meu melhor + x %**
+  (`0` iguala o teu melhor; `-2` é 2 % mais depressa; o «melhor» é o menor entre o PR do Strava e o
+  teu melhor tempo aqui) ou **Potência média** (W; a Perennia diz que tempo dá).
+- **Como calcula.** O segmento parte-se em **secções de inclinação parecida** (nunca mais curtas que
+  250 m nem mais longas que 1000 m; nenhuma dura menos de 10 s). Para cada uma calcula os **watts por
+  física** (a tua massa, CdA, Crr e o perfil real da rota) de modo a que a soma dê **o tempo alvo**.
+  **Não é potência igual**: mais nas partes duras, menos nas fáceis e **a recuperar nas descidas**,
+  com a variação limitada a **± 20 %** em torno da média e nunca abaixo de **50 %** dela.
+- **Antes de começar** vês: o tempo previsto, a **potência média** (W, % FTP, W/kg), «**Cabe em ti?**»
+  (✓ possível · ⚠ no limite · ✗ fora do alcance, com a frase «pede X W = Y % da FTP; o teu máximo
+  estimado para esta duração é Z W», a partir da tua curva de potência dos últimos 90 dias) e os
+  **watts de cada secção**. Se nem à potência máxima se chega ao tempo, diz que está fora do alcance.
+- **Na sessão.** Começas **500 m antes** do segmento (a entrada; é opção). No segmento, o painel do
+  centro mostra o **sinal** `▶ 285 W` (os watts da secção em que estás), a secção, a inclinação e o que
+  falta; à direita do ecrã, a **guia** com a diferença em tempo (negativo = à frente). O
+  aviso «Secção 2/6 · 8,1 % · 285 W» aparece ao entrar em cada uma. **ERG ligado por omissão** (o rolo
+  põe os watts); desligado, segues o sinal. **Se te atrasas**, ao entrar numa secção nova os watts das
+  que faltam são **recalculados** (sem pedir mais do que a tua capacidade para o tempo que sobra).
+- **A guia no ecrã.** É uma linha no painel (a diferença em tempo), como os fantasmas das sessões
+  livres — **não há um ciclista desenhado na estrada em 3D** (a Perennia não desenha ciclistas).
+
+**Segment KOM — dá o máximo.** Dois alvos (lista pendente; só aparecem os que existem):
+**O meu KOM** (o melhor entre o PR do Strava e o melhor tempo teu aqui) e **KOM do segmento** (o tempo
+do Strava; só nos segmentos do Strava que o trazem; os segmentos da Perennia só têm o teu melhor).
+Esforço máximo, **sem ERG**, com **fantasmas** dos dois tempos (e a diferença ao vivo) e, por secção,
+o ritmo (watts) que o alvo pede. A tabela e o histórico são como no Pace.
+
+**Aviso honesto.** Os tempos do Strava foram feitos na estrada (vento, aspiração, curvas); aqui a
+física é a do rolo. Por isso, no KOM do segmento, a Perennia mostra **a potência de que precisas aqui**
+para esse tempo, sem fingir que são a mesma coisa. A precisão do plano é a da tua massa, CdA e Crr
+(Perfil) e do perfil de altitude do .gpx.
+
+**No fim** (resumo da sessão): uma linha por secção — **watts reais / watts do plano**, o tempo na
+secção contra o previsto e se **ganhaste ou perdeste** segundos. Fica guardado por segmento: na
+preparação vês as últimas sessões nesse segmento e, no menu do Challenge, o quadro dos melhores
+(tempo, data e segmento). O tempo conta também como esforço do segmento (PR, histórico do segmento).
+Terminar antes do fim do segmento grava «não concluído» (sem pontuação).
+
+**Funciona offline.** Tudo o que precisa — o segmento, o traçado, o teu PR e o KOM — vem do que já está
+guardado (biblioteca do Strava ou segmentos da Perennia); só a preparação de segmentos *novos* precisa de internet.
+
+**Opções novas** (Definições → Avançado → **Segment Pace e Segment KOM**; ver a tabela): `seg_pace_erg`
+(ligado), `seg_lead_in_m` (500 m; também há uma lista na preparação: 0, 250, 500, 1000, 2000 m),
+`seg_pace_variation_pct` (± 20 %), `seg_pace_floor_pct` (50 %), `seg_pace_replan`, `seg_pace_tol_pct`,
+`seg_section_min_m`, `seg_section_max_m`, `seg_section_grade_tol_pct`, `seg_grade_ref_pct`,
+`seg_hard_pct`. Constantes internas de precisão (não são preferências): passo da simulação 0,5 s,
+célula do perfil 25 m e limites da procura de watts.
+
+**Base de dados (tudo local, SQLite).** **Nada a fazer**: não há tabelas nem colunas novas. Os
+resultados vão para `game_results` (a tabela dos jogos do Challenge; o JSON `details` leva o
+segmento, o alvo e a tabela por secção) e os tempos para as tabelas de segmentos de sempre. As
+opções novas ficam em `settings` e vão no backup com as **Definições**; os resultados, com as **Sessões**.
+
+**Revisões desta ronda.** *Segurança:* nada de segredos novos; o texto do alvo só aceita números e
+`mm:ss` (uma expressão fixa, sem `eval`); sem comandos externos. *Erro corrigido:* a junção da última
+secção curta (uma atribuição com índice negativo trocava a secção errada — apanhado pelos testes).
+*Bottlenecks:* o plano resolve-se por bissecção, em milissegundos até a segmentos de 22 km (medi),
+por isso corre na preparação sem travar o ecrã; é guardado em cache enquanto não mudas o alvo.
+*Setas → lista pendente:* o segmento, o alvo, o ERG e a entrada são listas pendentes (as setas
+continuam a funcionar); o tempo/%/watts do alvo escreve-se. *Valores no código:* 11 opções novas.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1971,6 +2041,18 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Glossário: tamanho máximo do termo (`glossary_term_chars`) | 20 a 200 car. | 80 | o nome de um termo do glossário não passa disto |
 | Botões laterais do rato voltam atrás (`mouse_back_button`) | ligado / desligado | ligado | o botão de «recuar» do rato faz o mesmo que Esc |
 | Botão «avançar» do rato também volta (`mouse_forward_button`) | ligado / desligado | desligado | liga se o teu rato tem o par trocado |
+| **Segment Pace e Segment KOM (ronda 22)** | | | |
+| Segment Pace: ERG ligado (`seg_pace_erg`) | ligado / desligado | **ligado** | ligado: o rolo põe os watts da secção; desligado: segues o sinal da guia (vale ao abrir a preparação; mudas em cada sessão) |
+| Entrada antes do segmento (`seg_lead_in_m`) | 0 a 5000 m | **500 m** | a sessão começa tantos metros antes do segmento (0 = parte do início, parado) |
+| Segment Pace: variação dos watts (`seg_pace_variation_pct`) | 0 a 50 % | **± 20 %** | quanto os watts de cada secção se afastam da média; 0 = potência igual |
+| Segment Pace: mínimo (descidas) (`seg_pace_floor_pct`) | 10 a 100 % da média | **50 %** | nenhuma secção pede menos do que isto |
+| Segment Pace: recalcular se te atrasas (`seg_pace_replan`) | ligado / desligado | ligado | ao entrar numa secção nova, recalcula os watts das que faltam |
+| Segment Pace: tolerância do alvo (`seg_pace_tol_pct`) | 0,1 a 10 % | 1 % | chegar até esta % acima do tempo alvo conta como cumprido |
+| Secções: comprimento mínimo (`seg_section_min_m`) | 100 a 2000 m | 250 m | o segmento parte-se em secções de inclinação parecida |
+| Secções: comprimento máximo (`seg_section_max_m`) | 250 a 10000 m | 1000 m | uma secção mais comprida parte-se |
+| Secções: mudança de inclinação (`seg_section_grade_tol_pct`) | 0,5 a 6 % | 1,5 % | uma mudança desta ordem abre uma secção nova |
+| Variação: diferença de inclinação de referência (`seg_grade_ref_pct`) | 1 a 12 % | 4 % | uma secção tão afastada da inclinação média leva a variação toda |
+| Viabilidade: «no limite» a partir de (`seg_hard_pct`) | 70 a 100 % da capacidade | 95 % | acima disto o alvo avisa que é no limite |
 
 Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
 Nenhuma guarda segredos.
@@ -2234,6 +2316,8 @@ No menu do ciclismo, **Challenge** junta:
     se gasta e recupera.
   - **Cabo de guerra:** contra um bot que puxa por ondas; a corda anda com a
     diferença entre a tua % da FTP e a dele.
+  - **Segment Pace** e **Segment KOM** (ronda 22): sobre um segmento da Perennia, com os watts
+    por secção e o ERG (Pace) ou o máximo contra o teu KOM e o do segmento (KOM). Ver a «Ronda 22».
 
 **Nenhum alvo dura menos de 10 segundos**, para o rolo fazer a transição sem
 solavancos. Escolhes a duração, o número de bots e a rota (a estrada é só
@@ -3544,7 +3628,9 @@ guia). **Ronda 19:** corre `python -m pip install -r requirements.txt` uma vez (
 refaz do mesmo modo para levar os módulos novos (`health_catalog`, `day_feedback`); a versão do
 projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código novo. **Ronda 21:** sem pacotes novos; quem usa a app
 construída refaz do mesmo modo (módulo novo `strava_library`). **Autoriza o Strava outra vez uma
-vez** (Definições → Strava → «Autorizar no browser») para a Perennia ter a permissão `read_all`.
+vez** (Definições → Strava → «Autorizar no browser») para a Perennia ter a permissão `read_all`. **Ronda 22:** sem pacotes novos; quem usa a app
+construída refaz do mesmo modo (módulo novo `segment_pace` e o ecrã `pace_screens`), e depois
+`criar_atalho_windows.bat`; a versão do projeto já abre o código novo e o atalho continua a servir.
 
 ### Mac, Linux, Raspberry Pi
 

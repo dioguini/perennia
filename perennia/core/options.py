@@ -65,6 +65,7 @@ GROUPS: dict[str, tuple[str, str]] = {
     "display": ("Aspeto, barra de bloco e gráfico ao vivo", "Look, block bar and live chart"),
     "notes": ("Notas, glossário e rato", "Notes, glossary and mouse"),
     "paths": ("Pastas", "Folders"),
+    "pace": ("Segment Pace e Segment KOM", "Segment Pace and Segment KOM"),
 }
 
 
@@ -740,6 +741,78 @@ OPTIONS: tuple[Opt, ...] = (
        INT, 14, lo=4, hi=60, step=2,
        hint_pt="quantas linhas do que o GarminDB vai dizendo se mostram no ecrã",
        hint_en="how many lines of what GarminDB says are shown on screen"),
+    # ------------------------------------------------------------ segment pace e kom
+    _o("seg_pace_erg", "pace", "Segment Pace: ERG ligado", "Segment Pace: ERG on", BOOL, True,
+       hint_pt="ligado: o rolo põe os watts da secção; desligado: segues o sinal da guia "
+               "(vale ao abrir a preparação; podes mudar em cada sessão)",
+       hint_en="on: the trainer sets the section's watts; off: you follow the guide's sign "
+               "(applies when the setup opens; you can change it per session)"),
+    _o("seg_lead_in_m", "pace", "Entrada antes do segmento", "Lead-in before the segment",
+       INT, 500, lo=0, hi=5000, step=100, unit="m",
+       hint_pt="a sessão começa tantos metros antes do início do segmento (0 = parte do "
+               "início, parado)",
+       hint_en="the session starts this many metres before the segment start (0 = start "
+               "from the line, standing)",
+       binds=(("perennia.core.segment_pace", "LEAD_IN_M"),)),
+    _o("seg_pace_variation_pct", "pace", "Segment Pace: variação dos watts",
+       "Segment Pace: watts variation", FLOAT, 20.0, lo=0.0, hi=50.0, step=1.0, unit="± %",
+       hint_pt="quanto os watts de cada secção se afastam da média (mais nas partes duras, "
+               "menos nas fáceis); 0 = potência igual",
+       hint_en="how far each section's watts move from the average (more on hard parts, "
+               "less on easy ones); 0 = even power",
+       binds=(("perennia.core.segment_pace", "VARIATION_PCT"),)),
+    _o("seg_pace_floor_pct", "pace", "Segment Pace: mínimo (descidas)",
+       "Segment Pace: floor (descents)", FLOAT, 50.0, lo=10.0, hi=100.0, step=5.0,
+       unit="% da média",
+       hint_pt="nenhuma secção pede menos do que isto (nas descidas recuperas, sem parar)",
+       hint_en="no section asks for less than this (you recover on descents, without "
+               "stopping)",
+       binds=(("perennia.core.segment_pace", "FLOOR_PCT"),)),
+    _o("seg_pace_replan", "pace", "Segment Pace: recalcular se te atrasas",
+       "Segment Pace: replan when behind", BOOL, True,
+       hint_pt="ao entrar numa secção nova, os watts das que faltam são recalculados para "
+               "ainda chegares ao alvo",
+       hint_en="on entering a new section, the watts of the remaining ones are recalculated "
+               "so you can still hit the target",
+       binds=(("perennia.core.segment_pace", "REPLAN"),)),
+    _o("seg_pace_tol_pct", "pace", "Segment Pace: tolerância do alvo",
+       "Segment Pace: target tolerance", FLOAT, 1.0, lo=0.1, hi=10.0, step=0.1, unit="%",
+       hint_pt="chegar até esta % acima do tempo alvo conta como cumprido",
+       hint_en="finishing up to this % over the target time counts as met",
+       binds=(("perennia.core.segment_pace", "TOL_PCT"),)),
+    _o("seg_section_min_m", "pace", "Secções: comprimento mínimo", "Sections: minimum length",
+       INT, 250, lo=100, hi=2000, step=50, unit="m",
+       hint_pt="o segmento parte-se em secções de inclinação parecida, nunca mais curtas "
+               "que isto",
+       hint_en="the segment is split into sections of similar gradient, never shorter than "
+               "this",
+       binds=(("perennia.core.segment_pace", "SECTION_MIN_M"),)),
+    _o("seg_section_max_m", "pace", "Secções: comprimento máximo", "Sections: maximum length",
+       INT, 1000, lo=250, hi=10000, step=250, unit="m",
+       hint_pt="uma secção mais comprida parte-se (para os watts não ficarem iguais "
+               "durante quilómetros)",
+       hint_en="a longer section is split (so the watts do not stay the same for "
+               "kilometres)",
+       binds=(("perennia.core.segment_pace", "SECTION_MAX_M"),)),
+    _o("seg_section_grade_tol_pct", "pace", "Secções: mudança de inclinação",
+       "Sections: gradient change", FLOAT, 1.5, lo=0.5, hi=6.0, step=0.5, unit="%",
+       hint_pt="uma mudança de inclinação desta ordem abre uma secção nova",
+       hint_en="a gradient change of this size opens a new section",
+       binds=(("perennia.core.segment_pace", "GRADE_TOL_PCT"),)),
+    _o("seg_grade_ref_pct", "pace", "Variação: diferença de inclinação de referência",
+       "Variation: reference gradient difference", FLOAT, 4.0, lo=1.0, hi=12.0, step=0.5,
+       unit="%",
+       hint_pt="uma secção que se afasta tanto da inclinação média leva a variação toda",
+       hint_en="a section this far from the average gradient gets the full variation",
+       binds=(("perennia.core.segment_pace", "GRADE_REF_PCT"),)),
+    _o("seg_hard_pct", "pace", "Viabilidade: «no limite» a partir de",
+       "Feasibility: “at your limit” from", FLOAT, 95.0, lo=70.0, hi=100.0, step=1.0,
+       unit="% da capacidade",
+       hint_pt="a partir desta % do teu máximo estimado para a duração, o alvo avisa que é "
+               "no limite",
+       hint_en="from this % of your estimated maximum for the duration, the target warns it "
+               "is at your limit",
+       binds=(("perennia.core.segment_pace", "HARD_PCT"),)),
 )
 
 BY_KEY: dict[str, Opt] = {o.key: o for o in OPTIONS}

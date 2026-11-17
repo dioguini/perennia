@@ -295,9 +295,13 @@ class RideEngine:
             power_zone_bounds=list(db.get("power_zones_pct", [55, 75, 90, 105, 120, 150])),
             hr_zone_bounds=list(db.get("hr_zones_pct_lthr", [68, 83, 94, 105])),
         )
+        # Segment Pace / KOM: o atleta arranca a alguns metros do segmento (a entrada)
+        start_m = float(getattr(game, "start_m", 0.0) or 0.0) if resume is None else 0.0
         if self.route:
-            self.state.ele_m = self.route.ele_at(0.0)
-            self.state.grade_pct = self.route.grade_at(0.0)
+            start_m = min(max(0.0, start_m), max(0.0, self.route.total_m - 1.0))
+            self.state.pos_m = start_m
+            self.state.ele_m = self.route.ele_at(start_m)
+            self.state.grade_pct = self.route.grade_at(start_m)
         self.state.weight_kg = athlete.weight_kg
         self.state.difficulty = self.difficulty
         self.state.power_zone_s = [0.0] * (len(self.state.power_zone_bounds) + 1)
@@ -370,8 +374,9 @@ class RideEngine:
         self._lap_acc = _lap_accumulator()
         self.laps: list[Lap] = []
 
-        # subidas
-        self._next_climb = 0
+        # subidas (as que ficam para trás do ponto de partida não contam)
+        self._next_climb = sum(1 for c in self.climbs if c.start_m <= self.state.pos_m
+                               ) if self.state.pos_m > 0 else 0
         self._active: _SectionTimer | None = None
         self.climb_results: list[dict] = []
 
@@ -522,6 +527,7 @@ class RideEngine:
         self._track_sections()
         self._track_strava()
         self._track_ghosts()
+        self._track_game()
         self.state.t_s = self._t
 
     # ------------------------------------------------------- pausas e arranque
@@ -1117,6 +1123,18 @@ class RideEngine:
                 self.strava_results.append(dict(data))
             self._emit(kind, **data)
 
+    def _track_game(self) -> None:
+        """Jogos de segmento (Pace/KOM): a posição a cada frame, para cronometrar as
+        secções e o segmento com precisão (o `tick` de 1 Hz não chegava)."""
+        g = self.game
+        if g is None or g.finished or not g.needs_segment:
+            return
+        for kind, data in g.observe(self.state.pos_m, self._t, self.state.speed_mps):
+            self._emit(kind, **data)
+        self.state.target_power_w = g.target_w
+        if g.finished:
+            self._save_game()
+
     def active_segment(self) -> dict | None:
         if self.strava is None:
             return None
@@ -1151,6 +1169,8 @@ class RideEngine:
             their_t = g.time_at(self.state.pos_m)
             delta = (mine - their_t) if their_t is not None else 0.0
             out.append((g.label, g.dist_at(mine), delta))
+        if self.game is not None:
+            out += self.game.guides()
         return out
 
     # ---------------------------------------------------------------- fim
