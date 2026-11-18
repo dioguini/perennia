@@ -17,12 +17,14 @@ import types
 created: dict[str, list] = {"labels": [], "rects": [], "lines": [], "vlists": [],
                             "sprites": []}
 calls: list[tuple[str, tuple]] = []
+frame: list = []          # o que foi desenhado desde o último `Window.clear()` (por ordem)
 
 
 def reset() -> None:
     for key in created:
         created[key].clear()
     calls.clear()
+    frame.clear()
 
 
 class _Recorder:
@@ -60,13 +62,19 @@ class Label:
         self.x, self.y = x, y
         self.anchor_x, self.anchor_y = anchor_x, anchor_y
         self.batch = batch
+        self.multiline = multiline
+        self.width = width
+        self.deleted = False
+        if batch is not None:
+            batch.members.append(self)
         created["labels"].append(self)
 
     def draw(self) -> None:
+        frame.append(self)
         calls.append(("Label.draw", (self.text,)))
 
     def delete(self) -> None:
-        pass
+        self.deleted = True
 
 
 class Rectangle:
@@ -77,13 +85,17 @@ class Rectangle:
         self.color = color
         self.opacity = 255
         self.batch = batch
+        self.deleted = False
+        if batch is not None:
+            batch.members.append(self)
         created["rects"].append(self)
 
     def draw(self) -> None:
+        frame.append(self)
         calls.append(("Rectangle.draw", (self.x, self.y)))
 
     def delete(self) -> None:
-        pass
+        self.deleted = True
 
 
 class Line:
@@ -151,9 +163,12 @@ class Sprite:
 class Batch:
     def __init__(self):
         self.drawn = 0
+        self.members: list = []
 
     def draw(self) -> None:
         self.drawn += 1
+        self.members[:] = [m for m in self.members if not getattr(m, "deleted", False)]
+        frame.extend(self.members)
         calls.append(("Batch.draw", ()))
 
 
@@ -233,6 +248,7 @@ class Window:
 
     def clear(self) -> None:
         self.cleared += 1
+        frame.clear()
 
     def push_handlers(self, **handlers) -> None:
         self.handlers.append(handlers)

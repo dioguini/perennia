@@ -50,6 +50,11 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 23** — **Fim automático das sessões**: quando acaba o último bloco de um treino, um challenge,
+  um teste, a fuga ou um plano de voltas (em qualquer desporto; a sessão livre nunca), o tempo pára e
+  abre-se o ecrã **«… concluído»** com o menu de guardar ou não, como em «Terminar» (opção
+  `session_auto_finish` para desligar). E **todos os textos ficam dentro das caixas** (listas, construtor,
+  separadores, métricas, avisos, diálogos), com um teste que os mede em 1024×640 e 1280×760. Ver o RUN.md.
 - **Ronda 22** — **Segment Pace** e **Segment KOM** no Challenge: sobre qualquer segmento que já
   tenhas (subida, plano ou descida; também os da biblioteca, offline). No **Pace** dás um alvo (tempo,
   o teu melhor + x % ou potência média) e a Perennia calcula, por física, **os watts de cada secção**

@@ -113,6 +113,8 @@ class FinishDialog:
                                 anchor_x="center", anchor_y="center", batch=tb)
         self.sub = make_label("", font_size=13, color=DIM, anchor_x="center",
                               anchor_y="center", batch=tb)
+        self.detail = make_label("", font_size=13, bold=True, color=ACCENT, anchor_x="center",
+                                 anchor_y="center", batch=tb)      # o resultado (challenge, teste…)
         self.yes = _rect(tb, _theme.P.danger, 0)
         self.no = _rect(tb, _theme.P.panel2, 0)
         self.discard = _rect(tb, _theme.P.danger_soft, 0)
@@ -146,12 +148,14 @@ class FinishDialog:
     def layout(self, w: int, h: int) -> None:
         self.shade.x, self.shade.y = 0, 0
         self.shade.width, self.shade.height = w, h
-        bw, bh = 560, 240
+        bw, bh = min(560, max(320, w - 40)), 240
+        self._bw = bw
         bx, by = (w - bw) // 2, (h - bh) // 2
         self.box.x, self.box.y = bx, by
         self.box.width, self.box.height = bw, bh
         self.title.x, self.title.y = w // 2, by + bh - 42
         self.sub.x, self.sub.y = w // 2, by + bh - 80
+        self.detail.x, self.detail.y = w // 2, by + bh - 106
         for r, x0 in ((self.yes, bx + 30), (self.no, bx + bw // 2 + 10)):
             r.x, r.y, r.width, r.height = x0, by + 76, bw // 2 - 40, 50
         self.yes_label.x = bx + 30 + (bw // 2 - 40) // 2
@@ -162,17 +166,23 @@ class FinishDialog:
         self.discard_label.x, self.discard_label.y = w // 2, by + 40
         self._place_icons()
 
-    def show(self, title: str | None = None, sub: str | None = None) -> None:
+    def show(self, title: str | None = None, sub: str | None = None,
+             detail: str | None = None) -> None:
+        from perennia.ui.widgets import fit_text
         self.visible = True
         self.shade.opacity = _theme.P.shade_alpha
         self.box.opacity = 245
         self.yes.opacity = self.no.opacity = 255
         self.discard.opacity = 255
-        self.discard_label.text = tr("Terminar sem guardar (D)", "Finish without saving (D)")
-        self.title.text = title or t("confirm.title")
-        self.sub.text = sub or t("confirm.sub")
-        self.yes_label.text = t("confirm.yes")
-        self.no_label.text = t("confirm.no")
+        room = getattr(self, "_bw", 560) - 40            # o texto nunca sai da caixa
+        self.discard_label.text = fit_text(tr("Terminar sem guardar (D)",
+                                              "Finish without saving (D)"), room - 20, 12, True)
+        self.title.text = fit_text(title or t("confirm.title"), room, 22, True)
+        self.sub.text = fit_text(sub or t("confirm.sub"), room, 13)
+        self.detail.text = fit_text(detail or "", room, 13, True)
+        half = getattr(self, "_bw", 560) // 2 - 40 - 16
+        self.yes_label.text = fit_text(t("confirm.yes"), half - 26, 14, True)
+        self.no_label.text = fit_text(t("confirm.no"), half - 26, 14, True)
         self._place_icons()
 
     def hide(self) -> None:
@@ -182,7 +192,7 @@ class FinishDialog:
                 ic.opacity = 0
         for r in (self.shade, self.box, self.yes, self.no, self.discard):
             r.opacity = 0
-        for lab in (self.title, self.sub, self.yes_label, self.no_label,
+        for lab in (self.title, self.sub, self.detail, self.yes_label, self.no_label,
                     self.discard_label):
             lab.text = ""
 
@@ -246,7 +256,8 @@ class PauseDialog:
     def layout(self, w: int, h: int) -> None:
         self.shade.x, self.shade.y = 0, 0
         self.shade.width, self.shade.height = w, h
-        bw, bh = 560, 250
+        bw, bh = min(560, max(320, w - 40)), 250
+        self._bw = bw
         bx, by = (w - bw) // 2, (h - bh) // 2
         self.box.x, self.box.y, self.box.width, self.box.height = bx, by, bw, bh
         self.edge.x, self.edge.y, self.edge.width, self.edge.height = bx, by + bh - 4, bw, 4
@@ -266,10 +277,13 @@ class PauseDialog:
         self.edge.opacity = self.resume.opacity = self.finish.opacity = 255
         self.title.text = tr("PAUSA", "PAUSED")
         self.sub.text = tr("A sessão está parada.", "The session is on hold.")
-        self.resume_label.text = tr("Retomar sessão", "Resume session")
-        self.finish_label.text = tr("Terminar treino", "Finish workout")
-        self.hint.text = tr("P ou Esc retomam  ·  F10 termina",
-                            "P or Esc resume  ·  F10 finishes")
+        from perennia.ui.widgets import fit_text
+        half = getattr(self, "_bw", 560) // 2 - 40 - 26
+        self.resume_label.text = fit_text(tr("Retomar sessão", "Resume session"), half, 14, True)
+        self.finish_label.text = fit_text(tr("Terminar treino", "Finish workout"), half, 14, True)
+        self.hint.text = fit_text(tr("P ou Esc retomam  ·  F10 termina",
+                                     "P or Esc resume  ·  F10 finishes"),
+                                  getattr(self, "_bw", 560) - 40, 11)
         self._place_icons()
 
     def hide(self) -> None:
@@ -717,6 +731,7 @@ class Hud:
         # placa e estado ao centro, sempre acima da zona dos avisos
         mid_y = max((mid_top + mid_bottom) // 2, bottom_top + 3 * 24 + 80)
         sw_ = int(min(640, center_w))
+        self._center_w = sw_             # a largura do estado e da placa: o texto cabe nela
         self._sign_bg.x, self._sign_bg.width = w // 2 - sw_ // 2, sw_
         self._sign_bg.y, self._sign_bg.height = mid_y - 70, 140
         self._sign_title.x, self._sign_title.y = w // 2, mid_y + 20
@@ -1107,7 +1122,8 @@ class Hud:
             text = ""                       # o popup «PAUSA» já o diz
         if self.confirm_visible:
             text = ""
-        self._paused_label.text = text
+        from perennia.ui.widgets import fit_text
+        self._paused_label.text = fit_text(text, getattr(self, "_center_w", 640) - 30, 22, True)
         self._status_bg.opacity = HUD_A if text else 0
         self._pause_label.text = (t("ride.resume_btn") if state.status == "paused"
                                   else t("ride.pause_btn"))
@@ -1115,9 +1131,9 @@ class Hud:
     # ---------------------------------------------------------------- caixas
 
     def _update_boxes(self, state) -> None:
+        from perennia.ui.widgets import fit_text, text_px
         stacked = self._box_stacked
-        max_chars = max(6, int(self._box_width / (10.5 if stacked else 7.5)))
-        label_chars = 26 if stacked else max(8, int(self._box_width / 7.5) - 10)
+        bw = self._box_width
         for box, wid in zip(self.boxes, self._box_widgets):
             for k, (label, value) in enumerate(wid["rows"]):
                 if k >= len(box["metrics"]):
@@ -1126,12 +1142,16 @@ class Hud:
                 mid = box["metrics"][k]
                 name, text = metrics_mod.formatted(mid, state, self.units)
                 name = name.upper()
-                value.text = text if len(text) <= max_chars else text[:max_chars - 1] + "…"
-                if not stacked:
+                vs = float(value.font_size)
+                # medido a sério: nem o valor nem o nome saem da caixa
+                if stacked:
+                    value.text = fit_text(text, bw - 20, vs, True)
+                    label.text = fit_text(name, bw - 28 - 10, 9)
+                else:
+                    value.text = fit_text(text, (bw - 38) * 0.65, vs, True)
                     # na mesma linha: o nome só usa o espaço que o valor deixa livre
-                    free = self._box_width - 28 - 10 - len(value.text) * 8.5 - 8
-                    label_chars = max(3, int(free / 6.8))
-                label.text = name if len(name) <= label_chars else name[:label_chars - 1] + "…"
+                    label.text = fit_text(
+                        name, bw - 28 - 10 - text_px(value.text, vs, True) - 8, 9)
                 value.color = self._metric_color(mid, state)
 
     @staticmethod
@@ -1663,8 +1683,10 @@ class Hud:
         fade = 1.0 if age < self.sign.duration - 0.8 else \
             max(0.0, (self.sign.duration - age) / 0.8)
         self._sign_bg.opacity = int(190 * fade)
-        self._sign_title.text = self.sign.title
-        self._sign_sub.text = self.sign.subtitle
+        from perennia.ui.widgets import fit_text
+        room = getattr(self, "_center_w", 640) - 30
+        self._sign_title.text = fit_text(self.sign.title, room, 30, True)
+        self._sign_sub.text = fit_text(self.sign.subtitle, room, 16)
         self._sign_title.color = ACCENT[:3] + (int(255 * fade),)
         self._sign_sub.color = TEXT[:3] + (int(255 * fade),)
 
@@ -1675,7 +1697,8 @@ class Hud:
                 toast = self.toasts[len(self.toasts) - 1 - i]
                 fade = min(1.0, (toast.duration - (now - toast.born)) / 0.8)
                 base = ACCENT[:3] if toast.emphasis else TEXT[:3]
-                lab.text = toast.text
+                from perennia.ui.widgets import fit_text
+                lab.text = fit_text(toast.text, max(200, getattr(self, "_w", 1024) - 120), 14)
                 lab.color = base + (int(255 * max(0.0, min(1.0, fade))),)
             else:
                 lab.text = ""
@@ -1700,8 +1723,9 @@ class Hud:
     def confirm_visible(self) -> bool:
         return self.finish_dialog.visible
 
-    def show_confirm(self) -> None:
-        self.finish_dialog.show()
+    def show_confirm(self, title: str | None = None, sub: str | None = None,
+                     detail: str | None = None) -> None:
+        self.finish_dialog.show(title, sub, detail)
 
     def hide_confirm(self) -> None:
         self.finish_dialog.hide()

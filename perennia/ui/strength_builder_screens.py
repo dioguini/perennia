@@ -319,7 +319,8 @@ class StrengthBuilder(Screen):
         self._rect(lx + 11, lbottom + 9, lw - 22, instr_h - 2, P.panel)
         itext = self.struct.get("instructions") or ""
         shown = wrap(itext + ("▏" if sel else ""), lw - 36, 9, 4) if (itext or sel) else \
-            tr("O que o atleta deve saber (aparece no treino)", "What the athlete should know")
+            wrap(tr("O que o atleta deve saber (aparece no treino)", "What the athlete should know"),
+                 lw - 36, 9, 2)
         self._label(shown, lx + 18, lbottom + instr_h + 2, 9, txt if itext or sel else faint,
                     anchor_y="top")
         self.cell_geo.append((("instr",), lx + 10, lbottom + 8, lw - 20, instr_h))

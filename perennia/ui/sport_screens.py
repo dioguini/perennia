@@ -3065,6 +3065,7 @@ class LapSessionScreen(FinishFlow, EditScreen):
                              k=self.kind_name(data["kind"])))
             elif kind == "plan_done":
                 a.message(tr("Plano cumprido!", "Plan done!"))
+                self.plan_complete("plan")          # o tempo pára e abre-se o ecrã «concluído»
         if self._signature() != self._sig:
             self.enter()
         self._update_panel()

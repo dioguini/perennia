@@ -610,8 +610,15 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
         if msg:
             self.toast = msg
             self._toast_until = time.monotonic() + 3.0
+        # acabou sozinho (treino, teste ou jogo): o tempo pára e abre-se o ecrã «concluído»
         if kind == "workout_done":
-            self.plan_complete()
+            self.plan_complete("workout")
+        elif kind == "test_done":
+            from perennia.core import fitness_tests as ft
+            self.plan_complete("test", tr("Resultado: {v}", "Result: {v}",
+                                          v=ft.fmt_value(data.get("value"), data.get("unit"))))
+        elif kind == "game_over":
+            self.plan_complete("game", str(data.get("summary", "")))
 
     # ------------------------------------------------------------- teclas
 

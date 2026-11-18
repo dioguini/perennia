@@ -453,7 +453,11 @@ class BlockBuilder(EditScreen):
 
     # ----------------------------------------------------------- geometria
 
+    _ym_frozen: float | None = None
+
     def y_max(self) -> float:
+        if self._ym_frozen is not None:                # durante o redraw, calcula-se uma só vez
+            return self._ym_frozen
         top = max([b.lo or 0 for b in self.blocks] + [b.end_pct or 0 for b in self.blocks] + [0])
         return max(150.0, top + 15)
 
@@ -586,6 +590,14 @@ class BlockBuilder(EditScreen):
             y -= heights[k]
 
     def redraw(self) -> None:
+        self._ym_frozen = None
+        self._ym_frozen = self.y_max()           # `y_of` chama-o por cada ponto: uma conta só
+        try:
+            self._redraw()
+        finally:
+            self._ym_frozen = None
+
+    def _redraw(self) -> None:
         spans, total = self.spans()
         n = 0
         nl = 0
@@ -654,9 +666,18 @@ class BlockBuilder(EditScreen):
             r.width = width * secs / tot
             x += r.width
         # (o impacto na longevidade e o veredicto do Treinador ficavam apagados aqui)
-        self.chrome.subtitle.text = (f"{wm.control_name(self.control)} · " if self.sport != "gym"
-                                     else "") + self.summary.text.replace("\n", "  ·  ") \
-            + self._longevity_text() + self._coach_text()
+        from perennia.ui.widgets import fit_text, text_px
+        head = (f"{wm.control_name(self.control)} · " if self.sport != "gym"
+                else "") + self.summary.text.replace("\n", "  ·  ") + self._longevity_text()
+        tail = self._coach_text()
+        room = self.app.window.width - 96
+        # a linha nunca passa da janela: o que não couber fica com reticências; o veredicto do
+        # Treinador (no fim) tem prioridade, por isso é o início que encolhe primeiro
+        if tail:
+            tail = fit_text(tail, room * 0.6, 13)        # um veredicto muito longo também encolhe
+            self.chrome.subtitle.text = fit_text(head, room - text_px(tail, 13), 13) + tail
+        else:
+            self.chrome.subtitle.text = fit_text(head, room, 13)
 
     def draw(self) -> None:
         super().draw()

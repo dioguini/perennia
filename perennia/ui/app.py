@@ -106,12 +106,20 @@ class Screen:
             self.chrome.agent_hint.text = t("agent.hint")
         self.board_panel: BoardPanel | None = None
         if self.HAS_BOARD:
-            self.board_panel = BoardPanel(w - 48 - BOARD_W, h - 124, BOARD_W)
+            self.board_panel = BoardPanel(w - 48 - BOARD_W, self._board_top(w, h), BOARD_W)
         self._board_key: tuple | None = None
 
     def _list_width(self, w: int) -> int:
         return w - 96 - (BOARD_W + 30 if self.HAS_BOARD else 0)
 
+    def _board_top(self, w: int, h: int) -> int:
+        """O topo do painel de recordes. Numa janela estreita os separadores chegam até ele:
+        desce uma linha para não ficar por cima de nenhum."""
+        tabs = getattr(self, "tabs", None)
+        if tabs is not None and w - 48 - BOARD_W < 48 + self._tabs_width(w) + 8 \
+                and tabs.right_edge() > w - 48 - BOARD_W - 6:
+            return h - 124 - 44
+        return h - 124
     # -------------------------------------------------------- separadores
 
     def tab_labels(self) -> list[str]:
@@ -510,7 +518,7 @@ class Screen:
         self.list.top_y = h - 74
         self.list.set_visible_rows(max(4, (top - 110) // 38))
         if self.board_panel is not None:
-            self.board_panel.layout(w - 48 - BOARD_W, h - 124, BOARD_W)
+            self.board_panel.layout(w - 48 - BOARD_W, self._board_top(w, h), BOARD_W)
 
     def footer(self) -> str:
         return "↑↓ mover · Enter escolher · Esc ou ← Voltar"
@@ -1577,14 +1585,24 @@ class RideScreen(Screen):
             return
         a.hub.tick(dt)
         self.engine.update(dt)
-        done = False
+        done = None
         for event in self.engine.drain_events():
             self.hud.handle(event)
-            done = done or event.kind == "workout_done"
+            if event.kind == "game_over":                  # o challenge acabou
+                done = ("game", str(event.data.get("summary", "")))
+            elif event.kind == "chase_caught" and done is None:
+                done = ("chase", "")
+            elif event.kind == "workout_done" and done is None:
+                done = ("test" if self.ftp_protocol else "workout", "")   # o teste de FTP é um treino
         self.hud.alert_n = self._cue_tick()
         self.hud.update(self.engine)
-        if done:                      # o último bloco acabou: pára e pergunta, como em «Terminar»
-            self._ask_finish()
+        from perennia.ui import session_flow as _sf
+        if done and _sf.AUTO_FINISH and not self.hud.confirm_visible:
+            # acabou sozinho (último bloco, challenge ou fuga): o tempo pára e abre-se o ecrã
+            # «concluído» com o menu de guardar, como em «Terminar»
+            from perennia.ui.session_flow import done_texts
+            title, sub = done_texts(done[0])
+            self._ask_finish(title, sub, done[1])
 
     def _cue_tick(self) -> int | None:
         """Bips e contagem dos últimos segundos de cada bloco do treino (ver `perennia.core.cues`)."""
@@ -1711,7 +1729,8 @@ class RideScreen(Screen):
 
     _pause_before_finish = False
 
-    def _ask_finish(self) -> None:
+    def _ask_finish(self, title: str | None = None, sub: str | None = None,
+                    detail: str | None = None) -> None:
         """Terminar pergunta primeiro. Enquanto pergunta, a sessão fica parada."""
         if self.engine is None or self.hud is None:
             self._finish()
@@ -1720,7 +1739,7 @@ class RideScreen(Screen):
         self._menu_pause = False
         self.hud.hide_pause()
         self.engine.pause(confirming=True)
-        self.hud.show_confirm()
+        self.hud.show_confirm(title, sub, detail)
 
     def _finish_with_tags(self) -> None:
         """«Sim, terminar»: antes de gravar, a janela das etiquetas do .fit."""

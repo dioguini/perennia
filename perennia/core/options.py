@@ -84,6 +84,15 @@ OPTIONS: tuple[Opt, ...] = (
        INT, 15, lo=0, hi=60, step=1, unit="s",
        hint_pt="segundos de contagem antes de qualquer sessão (0 = começa logo)",
        hint_en="seconds of countdown before any session (0 = starts at once)"),
+    _o("session_auto_finish", "sessions", "Parar sozinho ao concluir o treino ou challenge",
+       "Stop by itself when the workout or challenge is done", BOOL, True,
+       hint_pt="ligado: quando acaba o último bloco, o challenge, o teste ou o plano de voltas, o "
+               "tempo pára e abre-se o ecrã para guardar a sessão; desligado: continuas à vontade "
+               "(a sessão livre nunca pára sozinha)",
+       hint_en="on: when the last block, the challenge, the test or the lap plan ends, the clock "
+               "stops and the save screen opens; off: you carry on freely (a free session never "
+               "stops by itself)",
+       binds=(("perennia.ui.session_flow", "AUTO_FINISH"),)),
     _o("auto_pause_after_s", "sessions", "Pausa automática ao fim de", "Auto-pause after",
        FLOAT, 3.0, lo=1.0, hi=30.0, step=0.5, unit="s",
        hint_pt="segundos sem pedalar até a sessão pausar (se a pausa automática estiver ligada)",

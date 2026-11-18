@@ -41,6 +41,21 @@ def workout_step_cues(screen, w) -> int | None:
     return drive_cues(screen, ("step", w.idx), kind, w.step_t, s.dur_value - w.step_t)
 
 
+AUTO_FINISH = True            # Definições → Sessões: parar sozinho ao concluir (ver `plan_complete`)
+
+
+def done_texts(kind: str) -> tuple[str, str]:
+    """O título e a linha de baixo do ecrã de «concluído» (o tempo já parou)."""
+    title = {"workout": tr("Treino concluído", "Workout complete"),
+             "game": tr("Challenge concluído", "Challenge complete"),
+             "test": tr("Teste concluído", "Test complete"),
+             "plan": tr("Plano concluído", "Plan complete"),
+             "chase": tr("Fuga terminada", "Chase over")}.get(
+        kind, tr("Sessão concluída", "Session complete"))
+    sub = tr("O tempo parou. Queres guardar a sessão?", "The clock has stopped. Save the session?")
+    return title, sub
+
+
 class FinishFlow:
     finish_dialog: FinishDialog | None = None
     pause_dialog: PauseDialog | None = None
@@ -184,8 +199,11 @@ class FinishFlow:
     def confirming(self) -> bool:
         return self.finish_dialog is not None and self.finish_dialog.visible
 
-    def ask_finish(self) -> None:
-        """Terminar pergunta primeiro. Enquanto pergunta, a sessão fica parada."""
+    def ask_finish(self, title: str | None = None, sub: str | None = None,
+                   detail: str | None = None) -> None:
+        """Terminar pergunta primeiro. Enquanto pergunta, a sessão fica parada.
+        `title`/`sub`: o texto do diálogo quando foi a sessão que acabou sozinha
+        (treino, challenge, teste ou plano concluído)."""
         if self.finish_dialog is None or self.confirming:
             return
         self._pause_before_finish = self.pause_popup or self._menu_pause
@@ -195,13 +213,17 @@ class FinishFlow:
         self._resume_on_cancel = not self._flow_paused()
         if self._resume_on_cancel:
             self._flow_set_paused(True)
-        self.finish_dialog.show()
+        self.finish_dialog.show(title, sub, detail)
 
-    def plan_complete(self) -> None:
-        """O último bloco acabou: o tempo pára de imediato e abre-se, sozinho, o diálogo de
-        terminar (como se tivesses carregado em «Terminar»)."""
-        if not self.confirming:
-            self.ask_finish()
+    def plan_complete(self, kind: str = "workout", detail: str = "") -> None:
+        """A sessão acabou sozinha (o último bloco do treino, o challenge, o teste ou o plano de
+        voltas): o tempo pára de imediato e abre-se, sozinho, o ecrã «… concluído» com o diálogo
+        de terminar (Guardar / Continuar / Terminar sem guardar), como se tivesses carregado em
+        «Terminar». Numa sessão livre isto nunca acontece: aí és tu que decides."""
+        if self.confirming or not AUTO_FINISH:
+            return
+        title, sub = done_texts(kind)
+        self.ask_finish(title, sub, detail)
 
     def cancel_finish(self) -> None:
         """«Não»: volta à sessão (retoma, se foi o diálogo que a parou)."""
