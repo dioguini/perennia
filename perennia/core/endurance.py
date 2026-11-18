@@ -781,6 +781,11 @@ class EnduranceEngine:
 
     # ------------------------------------------------------------------- fim
 
+    def tag_activity(self) -> tuple[str, str | None]:
+        """(tipo, nome) da sessão para as etiquetas: sessão livre ou treino."""
+        from . import tags as tags_mod
+        return tags_mod.kind_of(workout_id=self.workout_id)
+
     def summary(self) -> dict:
         hrs = [h for h in self._hrs if h]
         load, source = None, None
@@ -833,6 +838,7 @@ class EnduranceEngine:
         tag_info = tags_mod.resolve(
             self.db, self.sport, self.session_id, getattr(self, "tags_chosen", None),
             workout_id=self.workout_id, has_route=bool(self.route_id),
+            activity=self.tag_activity(),
             summary={"load": summ.get("load"), "moving_s": summ.get("moving_s"),
                      "elapsed_s": summ.get("elapsed_s")})
         try:

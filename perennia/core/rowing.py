@@ -1158,6 +1158,12 @@ class RowEngine:
         self.game_result = save_game(self.db, self.session_id, self.game)
         self.events.append(("game_saved", self.game_result))
 
+    def tag_activity(self) -> tuple[str, str | None]:
+        """(tipo, nome) da sessão para as etiquetas: livre, treino, jogo (e qual), teste."""
+        from . import tags as tags_mod
+        return tags_mod.kind_of(kind=self.kind, workout_id=self.workout_id,
+                                game_key=self.game_spec.get("key"), test=self.protocol)
+
     def summary(self) -> dict:
         hrs = [h for h in self._hrs if h]
         np_w = physics.normalized_power(self._watts) if len(self._watts) >= 30 else (
@@ -1201,7 +1207,7 @@ class RowEngine:
         from . import tags as tags_mod
         tag_info = tags_mod.resolve(
             self.db, "rowing", self.session_id, getattr(self, "tags_chosen", None),
-            workout_id=self.workout_id,
+            workout_id=self.workout_id, activity=self.tag_activity(),
             summary={"ftp_w": self.ftp, "np_w": summ.get("np_w"),
                      "avg_power_w": summ.get("avg_power_w"), "load": summ.get("load"),
                      "moving_s": summ.get("moving_s"), "elapsed_s": summ.get("elapsed_s")})

@@ -50,6 +50,11 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 24** — **Tags**: cada sessão, em qualquer desporto, leva o seu tipo (`Free Session`, `Workout`,
+  `Challenge` + o nome do jogo, `Test` + o teste) e os **treinos têm tags** próprias (que as sessões herdam).
+  As tags são **sempre em inglês**. Na Análise AdHoc há os campos «Tipo de sessão», «Jogo ou teste» e
+  «Tags» e o filtro «tem todas / tem alguma / não tem nenhuma» para ir buscar tudo para uma ou mais tags.
+  As sessões antigas recebem o tipo sozinhas. Ver o RUN.md.
 - **Ronda 23** — **Fim automático das sessões**: quando acaba o último bloco de um treino, um challenge,
   um teste, a fuga ou um plano de voltas (em qualquer desporto; a sessão livre nunca), o tempo pára e
   abre-se o ecrã **«… concluído»** com o menu de guardar ou não, como em «Terminar» (opção

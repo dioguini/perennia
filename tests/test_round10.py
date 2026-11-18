@@ -113,7 +113,9 @@ class TestFinishLikeCycling(tg.GuiCase):
         for want in ("Tipo de treino", "Tipo de sessão", "+ Adicionar etiqueta",
                      "Guardar e terminar"):
             self.assertIn(want, labels)
-        sess_type = next(i for i in pop.list.items if i.label == "Tipo de sessão").value
+        self.assertEqual(next(i for i in pop.list.items if i.label == "Tipo de sessão").value,
+                         "Free Session")                     # (ronda 24) a tag do tipo de sessão
+        sess_type = next(i for i in pop.list.items if i.label == "Onde").value
         self.assertIn("Perennia", sess_type)
         self.assertIn("Indoor Running", sess_type)
         self.assertNotIn("Virtual", sess_type)             # a passadeira não é virtual
@@ -252,7 +254,7 @@ class TestTags(tg.GuiCase):
         self.assertIn(b"Virtual Cycling", raw)
         self.assertEqual(self.app.db.conn.execute(
             "SELECT COUNT(*) FROM session_tags WHERE sport='cycling'").fetchone()[0],
-            1 + len(info["session"]) + len(info["custom"]))
+            1 + len(info["activity"]) + len(info["session"]) + len(info["custom"]))
 
     def test_builder_has_a_workout_type_dropdown_above_the_name(self):
         b = bs.BlockBuilder(self.app, "cycling", None, control="erg")

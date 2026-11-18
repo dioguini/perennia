@@ -165,13 +165,13 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("perennia_segments", "strava_segments", "strava_library",
                       "strava_library_efforts")),
     Component("treinos", "Treinos", "Workouts",
-              "listas de treinos de todos os desportos, definição, objetivos e planos de "
-              "voltas (também as cópias das sessões)",
-              "workout lists of every sport, definition, goals and lap plans (also the "
-              "sessions' copies)",
+              "listas de treinos de todos os desportos, definição, objetivos, tipo e tags e planos "
+              "de voltas (também as cópias das sessões)",
+              "workout lists of every sport, definition, goals, type and tags, and lap plans "
+              "(also the sessions' copies)",
               tables=("workouts", "workout_steps", "row_workouts", "row_workout_steps",
                       "endurance_workouts", "endurance_steps", "workout_meta",
-                      "workout_goals", "lap_plans", "workout_types")),
+                      "workout_goals", "lap_plans", "workout_types", "workout_tags")),
     Component("ginasio", "Ginásio e exercícios", "Gym and exercises",
               "exercícios, treinos de força e as suas estruturas, os planos de X semanas que "
               "importaste e os planos em curso",

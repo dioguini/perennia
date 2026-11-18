@@ -248,6 +248,10 @@ def save(db, info: dict, sport: str | None = None, name: str | None = None) -> s
 def delete(db, uid: str) -> None:
     gs.ensure(db)
     db.conn.execute("DELETE FROM synced_activities WHERE id = ? AND source = 'upload'", (uid,))
+    try:                                   # as tags da atividade apagada também saem
+        db.conn.execute("DELETE FROM session_tags WHERE session_id = ?", (str(uid),))
+    except Exception:                      # a tabela das tags ainda não existe
+        pass
     db.conn.commit()
 
 

@@ -456,7 +456,7 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
             idx = cell[0]
             if b.list.items[idx].head:
                 xs[b.list.items[idx].label] = (value.x, value.anchor_x)
-        self.assertEqual(len(xs), 3)
+        self.assertEqual(len(xs), 4)                               # tipo, tags, nome, objetivo
         self.assertEqual(len({v for v in xs.values()}), 1)         # o mesmo x, à esquerda
         self.assertEqual(next(iter(xs.values()))[1], "left")
 

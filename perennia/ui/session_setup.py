@@ -202,7 +202,8 @@ class SessionModePopup(PopupMixin, Screen):
                 rows.append(Item(p["name"], value=f"≈ {hms(ls.plan_seconds(p['items']))}",
                                  detail=tr("{n} voltas", "{n} laps", n=len(p["items"])),
                                  action=self._after(lambda pid=p["id"]: gs.start_laps(
-                                     a, "conditioning", ls.plan(a.db, pid)["items"]))))
+                                     a, "conditioning", ls.plan(a.db, pid)["items"],
+                                     plan_id=pid))))
             rows += self._gym_common_rows()
             return m.name, rows
         n = len(gym.workouts(a.db, mod))

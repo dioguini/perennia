@@ -246,8 +246,8 @@ class GymChallengeMenu(Screen):
             from perennia.core import laps_session as ls
             items.append(Item(tr(pt, en_), value=f"≈ {hms(ls.plan_seconds(plan))}",
                               detail=tr(dpt, den),
-                              action=lambda p=plan: gs.start_laps(a, "conditioning",
-                                                                  [dict(x) for x in p])))
+                              action=lambda p=plan, k=key_: gs.start_laps(
+                                  a, "conditioning", [dict(x) for x in p], challenge=k)))
         self.chrome.set(f"{t('menu.challenge')} · {sp.name('gym')}",
                         tr("Para quando te apetece ser surpreendido",
                            "For when you want to be surprised"), self.footer())
