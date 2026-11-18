@@ -53,11 +53,28 @@ _MEASURE: dict = {}
 _FIT_CACHE: dict = {}
 
 
+_PX_CACHE: dict = {}
+
+
 def text_px(text: str, size: float, bold: bool = False) -> float:
     """A largura do texto em píxeis, medida com a letra a sério (sem pyglet
-    real, uma estimativa por excesso, para nunca passar por cima de nada)."""
+    real, uma estimativa por excesso, para nunca passar por cima de nada).
+    Medir obriga a compor o texto; as listas medem as mesmas linhas a cada tecla, por isso o
+    resultado guarda-se (por texto, tamanho, negrito e escala da letra)."""
     if not text:
         return 0.0
+    from perennia.gfx import compat as _compat
+    ck = (text, size, bool(bold), _compat.FONT_PCT)
+    hit = _PX_CACHE.get(ck)
+    if hit is not None:
+        return hit
+    if len(_PX_CACHE) > 30000:
+        _PX_CACHE.clear()
+    out = _PX_CACHE[ck] = _text_px(text, size, bold)
+    return out
+
+
+def _text_px(text: str, size: float, bold: bool) -> float:
     from perennia.gfx import compat as _compat
     if getattr(pyglet, "version", "") != "0.0-stub":
         k = (int(size), bool(bold), _compat.FONT_PCT)
@@ -465,8 +482,15 @@ class ListView:
                 highlight.opacity = 255 if idx == self.index else 0
                 highlight._bar.opacity = highlight.opacity
             highlight._bar.x, highlight._bar.y = highlight.x, highlight.y
-            shown_value = item.value + (DROPDOWN_MARK if item.value and self.is_dropdown(item)
-                                        and item.enabled else "")
+            mark = DROPDOWN_MARK if item.value and self.is_dropdown(item) and item.enabled else ""
+            # o valor nunca sai da linha: fica com o que o rótulo deixar (pelo menos 40 %) e, se
+            # ainda for comprido, corta-se com reticências
+            avail = col_w - 18 - self.COL_W * len(item.cols)
+            lab_w = text_px(item.label, 13 if item.header else 14, item.header) \
+                + item.indent * self.INDENT_PX
+            v_max = min(avail * 0.8, max(avail * 0.4, avail - lab_w))
+            shown_value = (fit_text(item.value, v_max - text_px(mark, 13), 13) + mark
+                           if item.value else "")
             value.text = shown_value
             if c == "h" and self.head_stack and self.head_value_x is not None:
                 value.anchor_x = "left"
@@ -1611,7 +1635,7 @@ class TabBar:
         h = self.H - (6 if self.small else 0)
         # largura proporcional ao texto, sem passar do espaço disponível
         size = 11 if self.small else 13
-        want = [len(t) * size * 0.74 + 28 for t in self.labels_text]   # letra a negrito
+        want = [text_px(t, size, True) + 28 for t in self.labels_text]   # medido, a negrito
         scale = min(1.0, (width - 4 * (n - 1)) / max(1.0, sum(want)))
         cx = x
         for i, (bg, mark, lab) in enumerate(zip(self.bgs, self.marks, self.labs)):
@@ -1619,14 +1643,21 @@ class TabBar:
             bg.x, bg.y, bg.width, bg.height = cx, top - h, w, h
             mark.x, mark.y, mark.width = cx, top - h, w
             lab.x, lab.y = cx + w / 2, top - h / 2
-            lab.font_size = size if scale > 0.8 else max(9, int(size * scale + 1))
+            fs = size if scale > 0.8 else max(9, int(size * scale + 1))
+            lab.font_size = fs
+            lab.text = fit_text(self.labels_text[i], w - 8, fs, True)    # nunca sai do separador
             cx += w + 4
+        self._right = cx - 4
         self.base.x, self.base.y, self.base.width = x, top - h - 2, width
         self.select(self.index)
 
     @property
     def height(self) -> int:
         return self.H - (6 if self.small else 0)
+
+    def right_edge(self) -> float:
+        """Onde acaba o último separador."""
+        return getattr(self, "_right", self.x + self.width)
 
     def select(self, i: int) -> None:
         if not self.labels_text:

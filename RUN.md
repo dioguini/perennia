@@ -1853,6 +1853,60 @@ por isso corre na preparação sem travar o ecrã; é guardado em cache enquanto
 *Setas → lista pendente:* o segmento (janela própria), o alvo, o ERG e a entrada são listas (as setas
 continuam a funcionar nas três últimas); o tempo/%/watts do alvo escreve-se. *Valores no código:* 12 opções novas.
 
+### Ronda 23: o fim automático das sessões e os textos dentro das caixas
+
+**Quando o treino ou o challenge acaba, a sessão pára sozinha.** Em qualquer desporto, numa sessão
+que **não é livre**, quando termina o que estavas a fazer o **tempo pára** e aparece, por cima da
+sessão, um ecrã a dizer **«… concluído»**, com o menu de **guardar a sessão ou não** — exatamente como se
+tivesses carregado em «Terminar» (Sim, guardar · Não, continuar · Terminar sem guardar):
+
+| O que acabou | Onde | O ecrã diz |
+|---|---|---|
+| o último bloco de um treino | ciclismo, remo, corrida, natação, ginásio | **Treino concluído** |
+| um challenge/jogo (inclui Segment Pace e Segment KOM) | ciclismo e remo | **Challenge concluído** + o resultado (posição, tempo…) |
+| um teste de aptidão | remo | **Teste concluído** + o resultado |
+| a fuga (quando te apanham) | ciclismo | **Fuga terminada** |
+| o plano de voltas (sessões por voltas do ginásio, com plano) | ginásio | **Plano concluído** |
+
+- **A sessão livre nunca pára sozinha**: aí és tu que decides quando acaba (e uma sessão numa rota
+  também é livre — a rota dá a volta).
+- **«Não, continuar»** volta à sessão (continuas à vontade) e **não volta a perguntar** por aquele fim.
+- **Para desligar** isto: Definições → Avançado → *Sessões e aparelhos* → «Parar sozinho ao concluir o
+  treino ou challenge» (`session_auto_finish`). Desligado, só aparece o aviso «Treino concluído» e a
+  sessão continua.
+- **Se a janela de «concluído» tapa algo**: é a mesma do «Terminar» (Esc também a fecha).
+
+**Os textos ficam dentro das caixas.** Revi todos os ecrãs, janelas e avisos e corrigi o que saía fora:
+- as **linhas das listas** (o valor à direita já não passa por cima do rótulo nem sai da linha — fica
+  com reticências se for comprido, como «Material» e «Exercícios novos» nos programas);
+- a **linha de resumo do construtor de treinos** (duração, carga, IF, blocos, longevidade…) passava da
+  janela: agora corta-se à largura dela;
+- os **separadores** (a largura mede-se pela letra a sério e o texto nunca sai do separador);
+- as **caixas de métricas** da sessão de ciclismo (o valor e o nome medem-se, em vez de contar letras);
+- o **aviso de estado** («Começa a pedalar para arrancar»), a **placa** ao centro e os **avisos**;
+- os diálogos **«Terminar a sessão?»** e **«PAUSA»** (cabem em janelas estreitas);
+- o painel de **Recordes** já não fica por cima dos separadores numa janela pequena;
+- a nota do construtor de força («O que o atleta deve saber…»).
+
+Para isto não voltar a acontecer há um teste novo (`tests/test_round23.py`, com `tests/textfit.py`) que
+mede cada texto desenhado, com uma letra real, contra a caixa onde está e contra a janela — percorrendo
+todos os menus no tamanho **1024×640 (o mínimo)** e no **1280×760**.
+
+**Revisões desta ronda.** *Base de dados:* nada a alterar (tudo em `settings`/tabelas que já existem;
+a opção nova vai no backup com as **Definições**). *Segurança:* revi o código, os scripts (`.bat`, `.sh`,
+`build`) e a configuração: `.claude/` está no `.gitignore` (e `.env*`, `*.pem`, `*.key`, `*.db`,
+`GarminConnectConfig.json*`); nenhuma palavra-passe nem segredo escritos (só as variáveis de ambiente
+`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_SYNC_PIN`, `PERENNIA_STRAVA_CLIENT_ID/SECRET`); a palavra-passe do
+Garmin vai para um ficheiro temporário privado (0600) e nunca na linha de comandos; sem `shell=True`,
+`eval`, `exec` nem `pickle`; o XML lê-se por `safexml`; repor um backup não escreve fora da pasta de
+dados. *Observação:* os tokens do Strava ficam em texto no ficheiro `.db` (permissões 0600 em
+Linux/macOS; no Windows, a pasta do utilizador) — não vão nos backups sem escolheres «Ligações».
+*Bottlenecks:* a medição de texto passou a ter cache (as listas voltavam a medir as mesmas linhas a
+cada tecla) e o construtor de treinos deixou de recalcular a escala vertical a cada barra (de
+quadrático para linear). *Setas → lista pendente:* percorri todas as linhas de escolha de todos os
+menus e as que têm muitas opções (≥ 8) já abrem uma lista com pesquisa; sobram só números (idade, peso,
+FTP…), que se escrevem. *Valores no código:* 1 opção nova (`session_auto_finish`).
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -1865,6 +1919,7 @@ de omissão. Não estão disponíveis durante uma sessão.
 |---|---|---|---|
 | **Sessões e aparelhos** | | | |
 | Contagem antes de começar (`session_countdown_s`) | 0 a 60 s | 15 s | segundos de contagem antes de qualquer sessão (0 = começa logo) |
+| Parar sozinho ao concluir o treino ou challenge (`session_auto_finish`) | ligado/desligado | ligado | quando acaba o último bloco, o challenge, o teste ou o plano de voltas o tempo pára e abre-se o ecrã de guardar (a sessão livre nunca pára sozinha) |
 | Pausa automática ao fim de (`auto_pause_after_s`) | 1 a 30 s | 3 s | segundos sem pedalar até a sessão pausar (se a pausa automática estiver ligada) |
 | Aparelho sem dados ao fim de (`device_stale_after_s`) | 2 a 30 s | 5 s | segundos sem receber um valor até um sensor contar como perdido |
 | Procura Bluetooth: duração (`ble_scan_s`) | 3 a 30 s | 8 s | quanto tempo a procura de aparelhos Bluetooth escuta (mais tempo encontra mais) |
@@ -3640,6 +3695,8 @@ projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código n
 construída refaz do mesmo modo (módulo novo `strava_library`). **Autoriza o Strava outra vez uma
 vez** (Definições → Strava → «Autorizar no browser») para a Perennia ter a permissão `read_all`. **Ronda 22:** sem pacotes novos; quem usa a app
 construída refaz do mesmo modo (módulo novo `segment_pace` e o ecrã `pace_screens`), e depois
+`criar_atalho_windows.bat`; a versão do projeto já abre o código novo e o atalho continua a servir. **Ronda 23:** sem pacotes novos nem módulos novos; quem usa a app
+construída refaz do mesmo modo (`build.sh` / `build_windows.bat`) para levar o código alterado, e depois
 `criar_atalho_windows.bat`; a versão do projeto já abre o código novo e o atalho continua a servir.
 
 ### Mac, Linux, Raspberry Pi
