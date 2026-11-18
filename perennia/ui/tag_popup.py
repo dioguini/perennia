@@ -1,9 +1,10 @@
 """A janela do fim da sessão: as etiquetas que o .fit vai levar.
 
-Mostra o tipo de treino (o do próprio treino, ou — numa sessão livre — o
-sugerido pelo esforço; muda-se na lista), o tipo de sessão (`Perennia`,
-`Indoor Cycling`, `Virtual …` quando segue um .gpx) e as etiquetas livres.
-Ao escrever uma nova, as que já existem aparecem logo a sugerir.
+Mostra o tipo de sessão (automático: `Free Session`, `Workout`, `Challenge` + o jogo,
+`Test`), o tipo de treino (o do próprio treino, ou — numa sessão livre — o sugerido pelo
+esforço; muda-se na lista), onde foi (`Perennia`, `Indoor Cycling`, `Virtual …` quando segue
+um .gpx) e as etiquetas livres (as do treino já lá estão). Ao escrever uma nova, as que já
+existem aparecem logo a sugerir. As etiquetas são sempre em inglês.
 """
 from __future__ import annotations
 
@@ -14,12 +15,12 @@ from perennia.ui.widgets import Item
 
 
 def open_session_tags(screen, sport: str, *, workout_id: str | None, has_route: bool,
-                      summary, on_done, on_back) -> None:
+                      summary, on_done, on_back, activity=None) -> None:
     """Abre a janela das etiquetas por cima de `screen`. `on_done(info)` quando se
     guarda; `on_back()` se se volta atrás."""
     db = screen.app.db
     info = tg.defaults(db, sport, workout_id=workout_id, has_route=has_route,
-                       summary=summary)
+                       summary=summary, activity=activity)
     suggested = tg.suggest_for(summary) if summary is not None else None
     screen.app.push(SessionTagsPopup(screen.app, sport, info, suggested, on_done, on_back,
                                      fixed_type=tg.workout_type(db, sport, workout_id)))
@@ -35,6 +36,7 @@ class SessionTagsPopup(PopupMixin, Screen):
         super().__init__(app)
         self.sport = sport
         self.info = {"workout_type": info.get("workout_type"),
+                     "activity": list(info.get("activity") or []),
                      "session": list(info.get("session") or []),
                      "custom": list(info.get("custom") or [])}
         self.suggested = suggested
@@ -60,6 +62,10 @@ class SessionTagsPopup(PopupMixin, Screen):
             Item(tr("Tipo de treino", "Workout type"), value=tg.type_label(wt) or "—",
                  detail=why, action=self._pick_type),
             Item(tr("Tipo de sessão", "Session type"),
+                 value=" · ".join(self.info["activity"]) or "—", enabled=False,
+                 detail=tr("automático: livre, treino, challenge ou teste",
+                           "automatic: free, workout, challenge or test")),
+            Item(tr("Onde", "Where"),
                  value=" · ".join(self.info["session"]) or "—", enabled=False,
                  detail=tr("automático: o aparelho e a rota", "automatic: the device and route")),
         ]
@@ -74,7 +80,8 @@ class SessionTagsPopup(PopupMixin, Screen):
         items.append(Item(tr("Guardar e terminar", "Save and finish"), button=True,
                           primary=True, action=self._done, data="done"))
         self.chrome.set(tr("Etiquetas da sessão", "Session tags"),
-                        tr("O .fit leva estas etiquetas", "The .fit carries these tags"), "")
+                        tr("O .fit leva estas etiquetas · são sempre em inglês",
+                           "The .fit carries these tags · they are always in English"), "")
         self.list.set_items(items, keep_index=True)
         if not self._focused:                    # Enter, Enter: termina com as etiquetas sugeridas
             self._focused = True
@@ -188,3 +195,63 @@ class AddTagPopup(PopupMixin, Screen):
             self.app.pop()
             return True
         return super().search_key(symbol, modifiers)
+
+
+class WorkoutTagsPopup(PopupMixin, Screen):
+    """As tags de um treino (as livres): ver, tirar e juntar. As sessões desse treino herdam-nas.
+    `on_done(lista)` quando se confirma; Esc deixa tudo como estava."""
+    W, H = 640, 520
+    SEARCH = False
+    AGENT = False
+
+    def __init__(self, app, name: str, tags: list[str], on_done):
+        super().__init__(app)
+        self.name = name
+        self.tags = list(tags or [])
+        self.on_done = on_done
+        self.back_button = None
+        self._closing = False
+        self._init_popup()
+
+    def enter(self) -> None:
+        items = [Item(t, value=tr("remover", "remove"), action=lambda t=t: self._remove(t))
+                 for t in self.tags]
+        if not items:
+            items.append(Item(tr("Este treino ainda não tem tags", "This workout has no tags yet"),
+                              enabled=False,
+                              detail=tr("as sessões dele herdam as que juntares aqui",
+                                        "its sessions inherit the ones you add here")))
+        items.append(Item(tr("+ Adicionar tag", "+ Add a tag"), action=self._add))
+        items.append(Item(tr("Cancelar", "Cancel"), button=True, action=self._cancel))
+        items.append(Item(tr("Guardar tags", "Save tags"), button=True, primary=True,
+                          action=self._done, data="done"))
+        self.chrome.set(tr("Tags do treino", "Workout tags"),
+                        (self.name or tr("Treino", "Workout"))
+                        + " · " + tr("as tags são sempre em inglês",
+                                     "tags are always in English"), "")
+        self.list.set_items(items, keep_index=True)
+
+    def _add(self) -> None:
+        self.app.push(AddTagPopup(self.app, self.tags, self._added))
+
+    def _added(self, tag: str) -> None:
+        if tag and tg._fold(tag) not in {tg._fold(t) for t in self.tags}:
+            self.tags.append(tag)
+        self.enter()
+
+    def _remove(self, tag: str) -> None:
+        if tag in self.tags:
+            self.tags.remove(tag)
+        self.enter()
+
+    def _cancel(self) -> None:
+        if not self._closing:
+            self._closing = True
+            self.app.pop()
+
+    def _done(self) -> None:
+        if self._closing:
+            return
+        self._closing = True
+        self.app.pop()
+        self.on_done(tg.clean_tags(self.tags))

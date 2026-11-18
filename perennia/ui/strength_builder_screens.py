@@ -74,6 +74,8 @@ class StrengthBuilder(Screen):
         if wk and wk.get("modality"):
             self.mod = wk["modality"]
         self.struct = sb.load(db, wid)
+        from perennia.core import tags as tags_mod
+        self.wtags = tags_mod.workout_tags(db, "strength", wid)     # as tags livres do treino
         self.plan_day = plan_day
         self.dirty = False
         self.saved_at = 0.0
@@ -255,6 +257,8 @@ class StrengthBuilder(Screen):
         # botões à direita: hora de início · planear · guardar · começar
         bx = w - 48
         buttons = [("start_session", tr("▶ Começar", "▶ Start"), P.good),
+                   ("tags", tr("Tags: {n}", "Tags: {n}", n=len(self.wtags) or "—"),
+                    _theme.mix(P.header, (255, 255, 255), 0.14)),
                    ("plan", tr("Planear: {d}", "Plan: {d}",
                                d=self.plan_day.strftime("%d/%m") if self.plan_day
                                else tr("—", "—")), _theme.mix(P.header, (255, 255, 255), 0.14)),
@@ -269,7 +273,7 @@ class StrengthBuilder(Screen):
             if sel:
                 self._rect(bx - 2, bt - 50, bw + 4, 34, (255, 255, 255))
             self._rect(bx, bt - 48, bw, 30, col)
-            fg = hd_txt if cid in ("plan", "start") else _theme.rgba(P.accent_text)
+            fg = hd_txt if cid in ("plan", "start", "tags") else _theme.rgba(P.accent_text)
             if cid == "start_session":
                 fg = (255, 255, 255, 255)
             self._label(text, bx + bw / 2, bt - 33, 10, fg, True, anchor_x="center")
@@ -508,7 +512,7 @@ class StrengthBuilder(Screen):
     # --------------------------------------------------------------- foco
 
     def _focusables(self) -> list[tuple]:
-        out = [("name",), ("start",), ("plan",), ("start_session",), ("instr",)]
+        out = [("name",), ("start",), ("plan",), ("tags",), ("start_session",), ("instr",)]
         for row in self._rows():
             for cid, _x, _w in self._cells(row, 0, 800):
                 out.append(cid)
@@ -698,6 +702,8 @@ class StrengthBuilder(Screen):
             self.start_session()
         elif k == "plan":
             self._plan_menu()
+        elif k == "tags":
+            self._tags_popup()
         elif k == "addblock":
             self.add_block_menu()
         elif k in ("bmenu", "exmenu", "exname"):
@@ -822,6 +828,14 @@ class StrengthBuilder(Screen):
         if opts:
             a.push(MenuPopup(a, tr("Adicionar parâmetro", "Add parameter"), opts))
 
+    def _tags_popup(self) -> None:
+        from perennia.ui.tag_popup import WorkoutTagsPopup
+
+        def done(tags: list[str]) -> None:
+            self.wtags = tags
+            self.changed()
+        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
+
     def _plan_menu(self) -> None:
         a = self.app
         today = date.today()
@@ -926,6 +940,8 @@ class StrengthBuilder(Screen):
         except ValueError as e:
             self.app.message(str(e))
             return None
+        from perennia.core import tags as tags_mod
+        self.wtags = tags_mod.set_workout_tags(self.app.db, "strength", self.wid, self.wtags)
         if self.plan_day is not None and not self.draft:
             from perennia.core import calendar_view as cv
             have = [p for p in cv.planned_for(self.app.db, self.plan_day)

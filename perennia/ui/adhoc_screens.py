@@ -683,7 +683,9 @@ class AdHocFilterEditor(EditPopup):
 
     def _choices_values(self) -> list[str]:
         if self._values is None or getattr(self, "_values_for", None) != self.field:
-            self._values = adhoc.distinct_values(self.owner._source_rows(), self.field)
+            self._values = adhoc.distinct_values(
+                self.owner._source_rows(), self.field,
+                split=adhoc.TAG_SEP if self._kind() == adhoc.TAGS else None)
             self._values_for = self.field
         return self._values
 
@@ -718,6 +720,17 @@ class AdHocFilterEditor(EditPopup):
             else:
                 out.append(Item(tr("Valor", "Value"), value="—", enabled=False,
                                 detail=tr("sem valores nos dados", "no values in the data")))
+        elif kind == adhoc.TAGS:
+            # uma ou mais tags: escrevem-se separadas por vírgulas, ou juntam-se das que existem
+            out.append(Item(tr("Tags", "Tags"), value=self.value + "▏", data="text:value",
+                            detail=tr("separadas por vírgulas · em inglês · ex.: Challenge, Zone Hero",
+                                      "separated by commas · in English · e.g. Challenge, Zone Hero")))
+            have = self._choices_values()
+            if have:
+                out.append(Item(tr("+ Juntar uma tag que existe", "+ Add an existing tag"),
+                                value="", data="cyc:addtag",
+                                dropdown=Dropdown(have, 0, self._add_tag,
+                                                  title=tr("Tags", "Tags"))))
         elif kind == adhoc.DATE:
             out.append(Item(tr("Valor", "Value"), value=self.value or "—", data="cyc:day",
                             detail=tr("Enter abre o calendário", "Enter opens the calendar")))
@@ -753,6 +766,18 @@ class AdHocFilterEditor(EditPopup):
     def _pick_op(self, k: int) -> None:
         ops = adhoc.ops_for(self._kind())
         self.op = ops[max(0, min(len(ops) - 1, k))]
+
+    def _add_tag(self, k: int) -> None:
+        have = self._choices_values()
+        if not have:
+            return
+        tag = have[max(0, min(len(have) - 1, k))]
+        from perennia.core import tags as tg
+        mine = tg.split_tags(self.value)
+        if tag.casefold() not in {t.casefold() for t in mine}:
+            mine.append(tag)
+        self.value = ", ".join(mine)[:60]
+        self.enter()
 
     def _pick_value(self, k: int) -> None:
         values = self._choices_values()

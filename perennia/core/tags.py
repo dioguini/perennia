@@ -10,7 +10,14 @@ Cada sessão (e o seu .fit) leva etiquetas de três géneros:
   limiar, VO2máx, anaeróbio, trabalho, aquecimento de prova… Um treino pode
   trazer o seu (escolhido no construtor); numa sessão livre sugere-se pelo
   esforço (o fator de intensidade, IF) e podes mudar no fim da sessão.
-* **etiquetas livres** — as que escreves; as já usadas aparecem a sugerir.
+* **tipo de atividade** — automático, igual em todos os desportos: `Free Session` (sessão
+  livre), `Workout` (um treino), `Challenge` + o nome do jogo (`Zone Hero`, `Regatta`…) ou
+  `Test` + o nome do teste. Serve para ir buscar de uma vez todas as sessões de um tipo.
+* **etiquetas livres** — as que escreves; as já usadas aparecem a sugerir. Um **treino** também
+  as tem (escolhem-se no construtor) e as sessões desse treino herdam-nas.
+
+**As etiquetas são sempre em inglês**, seja qual for o idioma da Perennia: assim as consultas
+(`sessions_with`, filtros da Análise AdHoc) e os .fit dizem o mesmo em qualquer instalação.
 
 O .fit guarda as etiquetas no nome do perfil desportivo (campo `name` da
 mensagem `sport`), onde o Garmin Connect, o Strava e o TrainingPeaks as mostram.
@@ -51,14 +58,15 @@ SUB_INDOOR_CYCLING, SUB_TREADMILL, SUB_VIRTUAL = 6, 1, 58
 
 
 def type_label(key: str | None) -> str:
-    for k, pt, en in WORKOUT_TYPES:
+    """O nome da etiqueta de um tipo de treino — sempre em inglês (é uma etiqueta)."""
+    for k, _pt, en in WORKOUT_TYPES:
         if k == key:
-            return tr(pt, en)
+            return en
     return key or ""
 
 
 def type_labels() -> list[str]:
-    return [tr(pt, en) for _k, pt, en in WORKOUT_TYPES]
+    return [en for _k, _pt, en in WORKOUT_TYPES]
 
 
 def type_key(label: str) -> str | None:
@@ -89,6 +97,11 @@ def ensure(db) -> None:
     db.conn.execute(
         "CREATE TABLE IF NOT EXISTS tag_catalog (tag TEXT PRIMARY KEY, kind TEXT NOT NULL"
         " DEFAULT 'custom')")
+    db.conn.execute(
+        "CREATE TABLE IF NOT EXISTS workout_tags (sport TEXT NOT NULL, workout_id TEXT NOT"
+        " NULL, tag TEXT NOT NULL, PRIMARY KEY (sport, workout_id, tag))")
+    db.conn.execute("CREATE INDEX IF NOT EXISTS ix_session_tags_tag ON session_tags(tag)")
+    db.conn.execute("CREATE INDEX IF NOT EXISTS ix_session_tags_sid ON session_tags(session_id)")
     db.conn.commit()
 
 
@@ -202,6 +215,105 @@ def suggest_for_blocks(blocks, sport: str = "cycling") -> str:
     return suggest_type(nf)
 
 
+# --------------------------------------------------- tipo de atividade (automático)
+
+FREE, WORKOUT, CHALLENGE, TEST = "Free Session", "Workout", "Challenge", "Test"
+KINDS = ("free", "workout", "game", "chase", "test")
+# o nome do jogo/teste como etiqueta (inglês, igual em todos os desportos)
+GAME_NAMES = {"adaptive": "Adaptive Challenge", "zone_hero": "Zone Hero",
+              "ladder": "Power Ladder", "warmup": "Warm-up", "elimination": "Elimination",
+              "tug": "Tug of War", "regatta": "Regatta", "seg_pace": "Segment Pace",
+              "seg_kom": "Segment KOM", "chase": "Chase", "surprise": "Surprise",
+              "emom20": "EMOM 20 min", "tabata": "Tabata x3",
+              "tread_pyramid": "Treadmill Pyramid", "row_pyramid": "Rowing Pyramid"}
+TEST_NAMES = {"20min": "FTP 20 min", "ramp": "FTP Ramp", "8x8": "FTP 2x8 min",
+              "sprint": "Sprint Test", "1min": "1 min Test", "5min": "5 min Test",
+              "row_2000": "Row 2000 m", "row_500": "Row 500 m", "row_30min": "Row 30 min",
+              "row_1min": "Row 1 min"}
+
+
+def _title(key: str) -> str:
+    return " ".join(w.capitalize() for w in str(key).replace("_", " ").replace(":", " ").split())
+
+
+def kind_of(*, kind: str | None = None, workout_id: str | None = None,
+            game_key: str | None = None, chase: bool = False,
+            test: str | None = None) -> tuple[str, str | None]:
+    """(tipo, nome) de uma sessão — o que cada motor sabe de si:
+    `free` · `workout` · `game` (nome = o jogo) · `chase` · `test` (nome = o protocolo)."""
+    if game_key:
+        return "game", str(game_key)
+    if chase or kind == "chase":
+        return "chase", None
+    if test or kind in ("ftp_test", "test"):
+        return "test", test
+    if workout_id or kind == "workout":
+        return "workout", None
+    return "free", None
+
+
+def kind_tags(kind: str | None, name: str | None = None) -> list[str]:
+    """As etiquetas do tipo de atividade: `Free Session` · `Workout` · `Challenge` + jogo ·
+    `Test` + teste. Sempre em inglês."""
+    if kind == "game":
+        tags = [CHALLENGE]
+        if name:
+            tags.append(GAME_NAMES.get(name) or _title(name))
+        return tags
+    if kind == "chase":
+        return [CHALLENGE, GAME_NAMES["chase"]]
+    if kind == "test":
+        tags = [TEST]
+        label = TEST_NAMES.get(name or "")
+        if label:
+            tags.append(label)
+        return tags
+    if kind == "workout":
+        return [WORKOUT]
+    return [FREE]
+
+
+# ----------------------------------------------------- etiquetas de um treino
+
+
+def clean_tags(tags) -> list[str]:
+    """Etiquetas limpas: sem espaços a mais, sem vazias nem repetidas (maiúsculas e
+    acentos não contam), no máximo 32 letras cada."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in tags or []:
+        c = " ".join(str(t).split())[:32]
+        f = _fold(c)
+        if c and f not in seen:
+            seen.add(f)
+            out.append(c)
+    return out
+
+
+def workout_tags(db, sport: str, wid: str | None) -> list[str]:
+    """As etiquetas livres de um treino (as que escolheste no construtor)."""
+    if not wid:
+        return []
+    ensure(db)
+    return [r["tag"] for r in db.conn.execute(
+        "SELECT tag FROM workout_tags WHERE sport = ? AND workout_id = ? ORDER BY rowid",
+        (sport, str(wid)))]
+
+
+def set_workout_tags(db, sport: str, wid: str, tags) -> list[str]:
+    ensure(db)
+    clean = clean_tags(tags)
+    db.conn.execute("DELETE FROM workout_tags WHERE sport = ? AND workout_id = ?",
+                    (sport, str(wid)))
+    for t in clean:
+        db.conn.execute("INSERT OR IGNORE INTO workout_tags (sport, workout_id, tag)"
+                        " VALUES (?, ?, ?)", (sport, str(wid), t))
+        db.conn.execute("INSERT OR IGNORE INTO tag_catalog (tag, kind) VALUES (?, 'custom')",
+                        (t,))
+    db.conn.commit()
+    return clean
+
+
 # ------------------------------------------------------- tipo de sessão
 
 
@@ -273,8 +385,9 @@ def normalize(db, text: str) -> str:
 
 
 def load(db, sport: str, sid: str | None) -> dict:
-    """{"workout_type": chave|None, "session": [...], "custom": [...]} de uma sessão."""
-    out = {"workout_type": None, "session": [], "custom": []}
+    """{"workout_type": chave|None, "activity": [...], "session": [...], "custom": [...]}
+    de uma sessão (`activity`: Free Session, Challenge + jogo…; `session`: Perennia, Indoor …)."""
+    out = {"workout_type": None, "activity": [], "session": [], "custom": []}
     if not sid:
         return out
     ensure(db)
@@ -282,6 +395,8 @@ def load(db, sport: str, sid: str | None) -> dict:
                              " session_id = ? ORDER BY rowid", (sport, str(sid))):
         if r["kind"] == "workout_type":
             out["workout_type"] = r["tag"]
+        elif r["kind"] == "activity":
+            out["activity"].append(r["tag"])
         elif r["kind"] == "session":
             out["session"].append(r["tag"])
         else:
@@ -296,6 +411,7 @@ def save(db, sport: str, sid: str, info: dict) -> None:
     rows = []
     if info.get("workout_type"):
         rows.append((info["workout_type"], "workout_type"))
+    rows += [(t, "activity") for t in info.get("activity") or []]
     rows += [(t, "session") for t in info.get("session") or []]
     rows += [(t, "custom") for t in info.get("custom") or []]
     for tag, kind in rows:
@@ -308,8 +424,9 @@ def save(db, sport: str, sid: str, info: dict) -> None:
 
 
 def labels(info: dict) -> list[str]:
-    """As etiquetas por mostrar/gravar: o tipo de treino (por extenso) + sessão + livres."""
-    out = []
+    """As etiquetas por mostrar/gravar: o tipo de atividade, o tipo de treino (em inglês),
+    o tipo de sessão e as livres."""
+    out = list(info.get("activity") or [])
     if info.get("workout_type"):
         out.append(type_label(info["workout_type"]))
     out += list(info.get("session") or [])
@@ -318,35 +435,191 @@ def labels(info: dict) -> list[str]:
 
 
 def fit_text(info: dict, limit: int = 63) -> str:
-    """O texto do .fit (cabe no campo de 64 bytes): `Perennia · Indoor Cycling · Limiar`."""
-    text = " · ".join(labels(info))
-    return text[:limit]
+    """O texto do .fit (cabe no campo de 64 bytes): `Free Session · Tempo · Indoor Cycling`.
+    Entram etiquetas inteiras, por prioridade — o tipo de sessão, o tipo de treino, as tuas,
+    onde foi e, por fim, `Perennia` (que é igual em todas); a que já não couber fica de fora."""
+    lab = labels(info)
+    session = list(info.get("session") or [])
+    order = [t for t in lab if t not in session] + [t for t in session if t != APP_TAG] \
+        + [t for t in session if t == APP_TAG]
+    out = ""
+    for tag in order:
+        nxt = tag if not out else out + " · " + tag
+        if len(nxt) > limit:
+            if not out:
+                out = tag[:limit]
+            continue
+        out = nxt
+    return out
 
 
 def defaults(db, sport: str, *, workout_id: str | None = None, has_route: bool = False,
-             summary=None) -> dict:
-    """As etiquetas de uma sessão que ainda ninguém editou: o tipo do treino (ou, numa
-    sessão livre, o sugerido pelo esforço) e o tipo de sessão."""
+             summary=None, activity: tuple[str, str | None] | None = None) -> dict:
+    """As etiquetas de uma sessão que ainda ninguém editou: o tipo de atividade (`activity` =
+    (tipo, nome) de `kind_of`; sem isso, treino ou sessão livre), o tipo do treino (ou, numa
+    sessão livre, o sugerido pelo esforço), o tipo de sessão e as etiquetas do treino."""
     wtype = workout_type(db, sport, workout_id)
     if wtype is None:
         wtype = suggest_for(summary) if summary is not None else None
-    return {"workout_type": wtype, "session": session_type_tags(sport, has_route),
-            "custom": []}
+    kind, name = activity or kind_of(workout_id=workout_id)
+    return {"workout_type": wtype, "activity": kind_tags(kind, name),
+            "session": session_type_tags(sport, has_route),
+            "custom": workout_tags(db, sport, workout_id)}
 
 
 def resolve(db, sport: str, sid: str, chosen: dict | None, *, workout_id: str | None = None,
-            has_route: bool = False, summary=None) -> dict:
+            has_route: bool = False, summary=None,
+            activity: tuple[str, str | None] | None = None) -> dict:
     """Fecha as etiquetas de uma sessão: as escolhidas na janela do fim, ou as de
     omissão; guarda-as e devolve-as (o .fit e o resumo usam o mesmo)."""
     info = dict(defaults(db, sport, workout_id=workout_id, has_route=has_route,
-                         summary=summary))
-    base = list(info["session"])
+                         summary=summary, activity=activity))
+    auto = {"activity": list(info["activity"]), "session": list(info["session"])}
     if chosen:
-        for k in ("workout_type", "session", "custom"):
+        for k in ("workout_type", "activity", "session", "custom"):
             if k in chosen and chosen[k] is not None:
                 info[k] = chosen[k]
-    # `Perennia` e o `Indoor …` do desporto estão SEMPRE lá, venha o que vier da janela
-    info["session"] = base + [x for x in info["session"] if x not in base]
-    info["custom"] = [x for x in info["custom"] if x not in info["session"]]
+    # o tipo de atividade, `Perennia` e o `Indoor …` do desporto estão SEMPRE lá
+    for k, base in auto.items():
+        info[k] = base + [x for x in info[k] if x not in base]
+    fixed = set(info["activity"]) | set(info["session"])
+    info["custom"] = [x for x in info["custom"] if x not in fixed]
     save(db, sport, sid, info)
     return info
+
+
+# ------------------------------------------------- sessões antigas (uma vez e já)
+
+
+def _missing(db, table: str, where: str = "status = 'completed'") -> str:
+    return (f"{table} WHERE {where} AND id NOT IN (SELECT session_id FROM session_tags"
+            f" WHERE kind = 'activity')")
+
+
+def backfill(db) -> int:
+    """Põe o tipo de atividade nas sessões que ainda não o têm (as de antes das etiquetas:
+    o `kind`, o jogo e o treino ficaram guardados). Não mexe no que já tem. Devolve quantas."""
+    ensure(db)
+    have = {r[0] for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    rows: list[tuple[str, str, tuple[str, str | None]]] = []
+
+    def q(sql: str) -> list:
+        try:
+            return db.conn.execute(sql).fetchall()
+        except Exception:
+            return []
+
+    if "rides" in have:
+        games = {}
+        if "game_results" in have:
+            games = {r["ride_id"]: r["game"] for r in q(
+                "SELECT ride_id, game FROM game_results WHERE ride_id IS NOT NULL")}
+        tests = {}
+        if "ftp_tests" in have:
+            tests = {r["ride_id"]: r["protocol"] for r in q(
+                "SELECT ride_id, protocol FROM ftp_tests WHERE ride_id IS NOT NULL")}
+        for r in q("SELECT id, kind, workout_id FROM " + _missing(db, "rides")):
+            rows.append(("cycling", r["id"], kind_of(
+                kind=r["kind"], workout_id=r["workout_id"], game_key=games.get(r["id"])
+                if r["kind"] == "game" else None, test=tests.get(r["id"]))))
+    if "row_sessions" in have:
+        for r in q("SELECT id, kind, workout_id, protocol, game FROM "
+                   + _missing(db, "row_sessions")):
+            rows.append(("rowing", r["id"], kind_of(
+                kind=r["kind"], workout_id=r["workout_id"], game_key=r["game"],
+                test=r["protocol"])))
+    if "endurance_sessions" in have:
+        for r in q("SELECT id, sport, workout_id FROM " + _missing(db, "endurance_sessions")):
+            rows.append((r["sport"] or "running", r["id"], kind_of(workout_id=r["workout_id"])))
+    if "strength_sessions" in have:
+        for r in q("SELECT id, workout_id FROM " + _missing(db, "strength_sessions")):
+            rows.append(("strength", r["id"], kind_of(workout_id=r["workout_id"])))
+    for sport, sid, (kind, name) in rows:
+        for tag in kind_tags(kind, name):
+            db.conn.execute("INSERT OR IGNORE INTO session_tags (sport, session_id, tag, kind)"
+                            " VALUES (?, ?, ?, 'activity')", (sport, str(sid), tag))
+    if rows:
+        db.conn.commit()
+    return len(rows)
+
+
+# ---------------------------------------------------------------- consultas
+
+
+def split_tags(text) -> list[str]:
+    """Uma lista escrita («Challenge, Zone Hero»), ou já em lista, em etiquetas limpas."""
+    if isinstance(text, (list, tuple, set)):
+        parts = list(text)
+    else:
+        parts = str(text or "").replace(";", ",").replace("|", ",").split(",")
+    return clean_tags(parts)
+
+
+def tags_by_session(db) -> dict[str, list[str]]:
+    """{id da sessão: [etiquetas…]} — numa só consulta (a Análise AdHoc usa-o)."""
+    ensure(db)
+    out: dict[str, list[str]] = {}
+    for r in db.conn.execute("SELECT session_id, tag FROM session_tags ORDER BY rowid"):
+        out.setdefault(r["session_id"], []).append(r["tag"])
+    return out
+
+
+def tag_counts(db) -> list[tuple[str, int]]:
+    """As etiquetas em uso nas sessões, com quantas sessões cada uma, da mais usada para a menos."""
+    ensure(db)
+    return [(r["tag"], r["n"]) for r in db.conn.execute(
+        "SELECT tag, COUNT(DISTINCT session_id) AS n FROM session_tags GROUP BY tag"
+        " ORDER BY n DESC, tag")]
+
+
+def matches(have, wanted, mode: str = "all") -> bool:
+    """`have` (etiquetas de uma sessão) cumpre `wanted`? `all`: tem todas · `any`: tem alguma ·
+    `none`: não tem nenhuma. Maiúsculas e acentos não contam."""
+    h = {_fold(t) for t in have or []}
+    w = [_fold(t) for t in wanted or [] if _fold(t)]
+    if not w:
+        return True
+    if mode == "any":
+        return any(t in h for t in w)
+    if mode == "none":
+        return not any(t in h for t in w)
+    return all(t in h for t in w)
+
+
+def sessions_with(db, wanted, mode: str = "all") -> list[dict]:
+    """As sessões (de todos os desportos) com uma ou mais etiquetas:
+    [{"sport", "id", "tags": [...]}]. `mode`: all · any · none."""
+    ensure(db)
+    sports: dict[str, str] = {}
+    by: dict[str, list[str]] = {}
+    for r in db.conn.execute("SELECT sport, session_id, tag FROM session_tags ORDER BY rowid"):
+        sports.setdefault(r["session_id"], r["sport"])
+        by.setdefault(r["session_id"], []).append(r["tag"])
+    return [{"sport": sports[sid], "id": sid, "tags": have}
+            for sid, have in by.items() if matches(have, split_tags(wanted), mode)]
+
+
+def workouts_with(db, wanted, mode: str = "all") -> list[dict]:
+    """Os treinos com uma ou mais etiquetas (as livres e o tipo de treino):
+    [{"sport", "id", "tags": [...]}]."""
+    ensure(db)
+    by: dict[tuple[str, str], list[str]] = {}
+    for r in db.conn.execute("SELECT sport, workout_id, wtype FROM workout_types"):
+        by.setdefault((r["sport"], r["workout_id"]), []).append(type_label(r["wtype"]))
+    for r in db.conn.execute("SELECT sport, workout_id, tag FROM workout_tags ORDER BY rowid"):
+        by.setdefault((r["sport"], r["workout_id"]), []).append(r["tag"])
+    want = split_tags(wanted)
+    return [{"sport": sp, "id": wid, "tags": have}
+            for (sp, wid), have in by.items() if matches(have, want, mode)]
+
+
+def activity_of(have) -> tuple[str, str]:
+    """(tipo de sessão, jogo ou teste) de uma lista de etiquetas: `("Challenge", "Zone Hero")`,
+    `("Free Session", "")`. Vazio se a sessão não tem o tipo (uma importada, por exemplo)."""
+    have = list(have or [])
+    for base in (CHALLENGE, TEST, WORKOUT, FREE):
+        if base in have:
+            names = set(GAME_NAMES.values()) | set(TEST_NAMES.values())
+            return base, next((t for t in have if t in names), "") \
+                if base in (CHALLENGE, TEST) else ""
+    return "", ""

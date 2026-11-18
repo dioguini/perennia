@@ -466,7 +466,7 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
     SET_LINES = 3
 
     def __init__(self, app, workout_id: str | None = None, resume: dict | None = None,
-                 free: bool = False):
+                 free: bool = False, challenge: str | None = None):
         super().__init__(app)
         self.chrome.title.font_size = 18
         a = app
@@ -474,7 +474,7 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
         wid = workout_id or (resume or {}).get("config", {}).get("workout_id")
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
                                           out_dir=a.data_dir / "strength", resume=resume,
-                                          free=free)
+                                          free=free, challenge=challenge)
         self.start_countdown(resume)
         self.init_finish()                    # o diálogo de terminar, como no ciclismo
         self._plan_asked = False
@@ -2731,14 +2731,15 @@ class LapSessionScreen(FinishFlow, EditScreen):
     LAP_LINES = 10
 
     def __init__(self, app, mode: str = "free", resume: dict | None = None,
-                 plan: list | None = None, autolap: dict | None = None):
+                 plan: list | None = None, autolap: dict | None = None,
+                 plan_id: str | None = None, challenge: str | None = None):
         super().__init__(app)
         from perennia.core import laps_session as ls
         self.ls = ls
         self.session = ls.LapSession(app.db, app.db.athlete(), mode, sensors=app.hub,
                                      out_dir=app.data_dir / "strength", resume=resume,
                                      rower=getattr(app, "rower", None), plan=plan,
-                                     autolap=autolap)
+                                     autolap=autolap, plan_id=plan_id, challenge=challenge)
         self.start_countdown(resume)
         self.chrome.title.font_size = 18
         self.init_finish()                    # o diálogo de terminar, como no ciclismo
@@ -2985,7 +2986,7 @@ class LapSessionScreen(FinishFlow, EditScreen):
         if not s.laps:
             return None
         summ = s.summary()
-        return ("strength", None, False,
+        return ("strength", s.plan_id, False,
                 {"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
 
     def _tags_done(self, info: dict) -> None:

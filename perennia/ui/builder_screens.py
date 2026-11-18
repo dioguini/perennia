@@ -176,6 +176,7 @@ class BlockBuilder(EditScreen):
         from perennia.core import objectives as ob
         from perennia.core import tags as tags_mod
         self.wtype = tags_mod.workout_type(app.db, sport, wid)     # None: pelo esforço
+        self.wtags = tags_mod.workout_tags(app.db, sport, wid)     # as tags livres do treino
         saved = ob.stored(app.db, sport, wid)
         self.wgoal = saved.get("goal") or ob.library_goal(self.name)
         for b, g in zip(self.blocks, saved.get("blocks") or []):
@@ -778,7 +779,11 @@ class BlockBuilder(EditScreen):
                           value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat)]
         # o nome e o objetivo do treino ficam em cima (head), um por baixo do outro
         rows += [Item(tr("Tipo de treino", "Workout type"), value=self._wtype_text(),
-                      data="cyc:wtype", head=True),
+                      data="cyc:wtype", head=True, dropdown=self._wtype_dropdown()),
+                 Item(tr("Tags do treino", "Workout tags"),
+                      value=", ".join(self.wtags) or tr("nenhuma · Enter junta", "none · Enter adds"),
+                      head=True, action=self._edit_tags,
+                      detail=tr("as sessões deste treino herdam-nas", "its sessions inherit them")),
                  Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name", head=True),
                  Item(tr("Objetivo do treino", "Workout goal"),
@@ -877,6 +882,28 @@ class BlockBuilder(EditScreen):
             b.lo = 75.0
         self.dirty = True
         self.redraw()
+
+    def _wtype_dropdown(self):
+        from perennia.core import tags as tags_mod
+        from perennia.ui.widgets import Dropdown
+        order = [None, *tags_mod.TYPE_KEYS]
+        names = [tr("Automático", "Automatic"), *tags_mod.type_labels()]
+
+        def pick(k: int) -> None:
+            self.wtype = order[max(0, min(len(order) - 1, k))]
+            self.dirty = True
+            self.enter()
+        return Dropdown(names, order.index(self.wtype) if self.wtype in order else 0, pick,
+                        title=tr("Tipo de treino", "Workout type"))
+
+    def _edit_tags(self) -> None:
+        from perennia.ui.tag_popup import WorkoutTagsPopup
+
+        def done(tags: list[str]) -> None:
+            self.wtags = tags
+            self.dirty = True
+            self.enter()
+        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
 
     def _wtype_text(self) -> str:
         """O tipo escolhido, ou — se ninguém escolheu — o que os blocos sugerem."""
@@ -1155,6 +1182,7 @@ class BlockBuilder(EditScreen):
                 [{"name": "", "goal": b.goal} for b in self.blocks])
         from perennia.core import tags as tags_mod
         tags_mod.set_workout_type(self.app.db, self.sport, self.wid, self.wtype)
+        self.wtags = tags_mod.set_workout_tags(self.app.db, self.sport, self.wid, self.wtags)
         self.dirty = False
         if self.plan_day is not None:
             from perennia.ui.day_popups import plan_it

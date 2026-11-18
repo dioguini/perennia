@@ -336,6 +336,7 @@ def normalize(db: Database, rules: list[dict] | None = None, *, dry_run: bool = 
         new_name = res["name"] or act["name"]
         old = tags.load(db, act["sport"], act["id"])
         info = {"workout_type": res["workout_type"] or old["workout_type"],
+                "activity": list(old["activity"]),
                 "session": list(old["session"]),
                 "custom": [t for t in old["custom"] + res["tags"] if t not in res["remove"]]}
         info["custom"] = list(dict.fromkeys(info["custom"]))

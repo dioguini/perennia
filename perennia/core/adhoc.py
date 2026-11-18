@@ -32,7 +32,8 @@ from . import stats
 from .db import Database
 from .i18n import tr
 
-DATE, NUM, CAT, TEXT = "date", "number", "category", "text"
+DATE, NUM, CAT, TEXT, TAGS = "date", "number", "category", "text", "tags"
+TAG_SEP = " | "                  # as etiquetas de uma sessão, numa só célula
 
 SETTING_STATE = "adhoc_state"
 SETTING_VIEWS = "adhoc_views"
@@ -48,7 +49,7 @@ GRAINS = ("day", "week", "month", "year")
 AGGS = ("sum", "avg", "min", "max", "median", "count")
 CHARTS = ("bars", "stacked", "lines", "scatter")
 PERIODS = ("all", "7", "30", "90", "365", "ytd", "custom")
-OPS = ("=", "!=", ">", ">=", "<", "<=", "contains")
+OPS = ("=", "!=", ">", ">=", "<", "<=", "contains", "has_all", "has_any", "has_none")
 ROWS = "@rows"                  # «contagem de linhas» como valor do eixo Y
 
 
@@ -85,7 +86,9 @@ def period_name(p: str) -> str:
 
 def op_name(op: str) -> str:
     return {"=": "=", "!=": "≠", ">": ">", ">=": "≥", "<": "<", "<=": "≤",
-            "contains": tr("contém", "contains")}[op]
+            "contains": tr("contém", "contains"),
+            "has_all": tr("tem todas", "has all of"), "has_any": tr("tem alguma", "has any of"),
+            "has_none": tr("não tem nenhuma", "has none of")}[op]
 
 
 def sep_name(sep: str) -> str:
@@ -127,6 +130,10 @@ SESSION_FIELDS = TIME_FIELDS + (
     _f("sport", "Desporto", "Sport", CAT),
     _f("origin", "Origem", "Origin", CAT),
     _f("name", "Nome", "Name", TEXT),
+    # as tags (sempre em inglês): o tipo de sessão, o jogo ou teste, e todas juntas
+    _f("activity", "Tipo de sessão (tag)", "Session type (tag)", CAT),
+    _f("game", "Jogo ou teste (tag)", "Game or test (tag)", CAT),
+    _f("tags", "Tags", "Tags", TAGS),
     _f("duration_min", "Duração", "Duration", NUM, "min"),
     _f("moving_min", "Tempo em movimento", "Moving time", NUM, "min"),
     _f("distance_km", "Distância", "Distance", NUM, "km"),
@@ -310,20 +317,29 @@ def _rows_of(db: Database, sql: str, args: tuple = ()) -> list:
 
 def load_sessions(db: Database) -> list[dict]:
     out: list[dict] = []
+    from . import tags as tg
+    try:
+        tg.backfill(db)                    # as sessões de antes das tags recebem o tipo
+        by_tags = tg.tags_by_session(db)
+    except Exception:
+        by_tags = {}
 
-    def add(sport_key: str, origin: str, started: str | None, **cols) -> None:
+    def add(sport_key: str, origin: str, started: str | None, sid=None, **cols) -> None:
         when = _parse_iso(started)
         row = _blank(SESSION_FIELDS)
         row.update(time_columns(when.date() if when else None, when))
         row["sport"] = sp.name(sport_key)
         row["origin"] = origin
+        have = by_tags.get(str(sid), []) if sid is not None else []
+        row["tags"] = TAG_SEP.join(have)
+        row["activity"], row["game"] = tg.activity_of(have)
         row.update(cols)
         if row["date"] is not None:
             out.append(row)
 
     for r in _rows_of(db, "SELECT * FROM rides WHERE status='completed'"):
         secs = r["moving_s"] or r["elapsed_s"]
-        add("cycling", "Perennia", r["started_at"], name=r["name"],
+        add("cycling", "Perennia", r["started_at"], sid=r["id"], name=r["name"],
             duration_min=_min(r["elapsed_s"]), moving_min=_min(r["moving_s"]),
             distance_km=_km(r["distance_m"]), ascent_m=_num(r["ascent_m"]),
             avg_speed_kmh=_speed(r["distance_m"], secs), avg_power_w=_num(r["avg_power_w"]),
@@ -332,7 +348,7 @@ def load_sessions(db: Database) -> list[dict]:
             intensity_factor=_num(r["intensity_factor"]), work_kj=_num(r["work_kj"]))
     for r in _rows_of(db, "SELECT * FROM row_sessions WHERE status='completed'"):
         secs = r["moving_s"] or r["elapsed_s"]
-        add("rowing", "Perennia", r["started_at"], name=r["name"],
+        add("rowing", "Perennia", r["started_at"], sid=r["id"], name=r["name"],
             duration_min=_min(r["elapsed_s"]), moving_min=_min(r["moving_s"]),
             distance_km=_km(r["distance_m"]), avg_speed_kmh=_speed(r["distance_m"], secs),
             avg_power_w=_num(r["avg_power_w"]), np_w=_num(r["np_w"]),
@@ -341,19 +357,19 @@ def load_sessions(db: Database) -> list[dict]:
             calories=_num(r["kcal"]))
     for r in _rows_of(db, "SELECT * FROM endurance_sessions WHERE status='completed'"):
         secs = r["moving_s"] or r["elapsed_s"]
-        add(r["sport"] or "running", "Perennia", r["started_at"], name=r["name"],
+        add(r["sport"] or "running", "Perennia", r["started_at"], sid=r["id"], name=r["name"],
             duration_min=_min(r["elapsed_s"]), moving_min=_min(r["moving_s"]),
             distance_km=_km(r["distance_m"]), avg_speed_kmh=_speed(r["distance_m"], secs),
             avg_hr=_num(r["avg_hr"]), max_hr=_num(r["max_hr"]), load=_num(r["load"]))
     for r in _rows_of(db, "SELECT * FROM strength_sessions WHERE status='completed'"):
-        add("gym", "Perennia", r["started_at"], name=r["name"],
+        add("gym", "Perennia", r["started_at"], sid=r["id"], name=r["name"],
             duration_min=_min(r["elapsed_s"]), avg_hr=_num(r["avg_hr"]), max_hr=_num(r["max_hr"]),
             load=_num(r["load"]), sets=_num(r["total_sets"]), reps=_num(r["total_reps"]),
             volume_kg=_num(r["volume_kg"]), avg_rpe=_num(r["avg_rpe"]))
     for r in _rows_of(db, "SELECT * FROM synced_activities"):
         secs = r["moving_s"] or r["elapsed_s"]
         add(r["sport"] or "other", str(r["source"] or "garmin").capitalize(), r["started_at"],
-            name=r["name"], duration_min=_min(r["elapsed_s"]), moving_min=_min(r["moving_s"]),
+            sid=r["id"], name=r["name"], duration_min=_min(r["elapsed_s"]), moving_min=_min(r["moving_s"]),
             distance_km=_km(r["distance_m"]), ascent_m=_num(r["ascent_m"]),
             avg_speed_kmh=_speed(r["distance_m"], secs), avg_power_w=_num(r["avg_power_w"]),
             np_w=_num(r["np_w"]), avg_hr=_num(r["avg_hr"]), max_hr=_num(r["max_hr"]),
@@ -573,7 +589,7 @@ class Spec:
             self.sort = "x"
         nums = [f.key for f in src.fields if f.kind == NUM]
         cats = [f.key for f in src.fields if f.kind in (CAT, DATE)]
-        if self.x not in valid:
+        if self.x not in valid or (src.field(self.x) and src.field(self.x).kind == TAGS):
             self.x = "date" if "date" in valid else src.fields[0].key
         if self.y != ROWS and self.y not in nums:
             self.y = nums[0] if nums else ROWS
@@ -597,11 +613,13 @@ def ops_for(kind: str) -> tuple[str, ...]:
         return ("=", ">=", "<=", ">", "<")
     if kind == TEXT:
         return ("contains", "=", "!=")
+    if kind == TAGS:
+        return ("has_all", "has_any", "has_none")
     return ("=", "!=", "contains")
 
 
 def x_fields(src: Source) -> list[Field]:
-    return list(src.fields)
+    return [f for f in src.fields if f.kind != TAGS]        # a lista de tags não é um eixo
 
 
 def y_fields(src: Source) -> list[Field]:
@@ -652,6 +670,10 @@ def period_range(spec: Spec, today: date | None = None) -> tuple[str | None, str
 
 
 def _compare(a, op: str, b: str, kind: str) -> bool:
+    if kind == TAGS:                       # «tem todas / alguma / nenhuma» das tags escritas
+        from . import tags as tg
+        have = str(a).split(TAG_SEP) if a else []
+        return tg.matches(have, tg.split_tags(b), op.removeprefix("has_"))
     if a is None:
         return False
     if kind == NUM:
@@ -685,12 +707,15 @@ def apply_filters(rows: list[dict], spec: Spec, today: date | None = None) -> li
     return out
 
 
-def distinct_values(rows: list[dict], key: str, limit: int = 200) -> list[str]:
+def distinct_values(rows: list[dict], key: str, limit: int = 200,
+                    split: str | None = None) -> list[str]:
+    """Os valores distintos de um campo; `split`: separa uma célula com várias (as tags)."""
     seen: dict[str, None] = {}
     for r in rows:
         v = r.get(key)
         if v is not None and v != "":
-            seen[str(v)] = None
+            for part in (str(v).split(split) if split else [str(v)]):
+                seen[part] = None
             if len(seen) >= limit:
                 break
     return sorted(seen)

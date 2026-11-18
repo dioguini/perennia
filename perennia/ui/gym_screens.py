@@ -62,9 +62,9 @@ class GymHub(SportHub):
                                   action=lambda wid=w["id"]: a.push(StrengthPreview(a, wid))))
             for p in ps:
                 items.append(Item(p["name"], value=f"≈ {hms(ls.plan_seconds(p['items']))}",
-                                  action=lambda pid=p["id"]: start_laps(a, "conditioning",
-                                                                        ls.plan(a.db, pid)[
-                                                                            "items"])))
+                                  action=lambda pid=p["id"]: start_laps(
+                                      a, "conditioning", ls.plan(a.db, pid)["items"],
+                                      plan_id=pid)))
         return items
 
     def items_history(self) -> list[Item]:
@@ -205,7 +205,8 @@ class ModalityScreen(Screen):
                                   detail=tr("{n} voltas · E editar", "{n} laps · E edit",
                                             n=len(p["items"])),
                                   action=lambda pid=p["id"]: start_laps(
-                                      a, "conditioning", ls.plan(a.db, pid)["items"]),
+                                      a, "conditioning", ls.plan(a.db, pid)["items"],
+                                      plan_id=pid),
                                   data=("plan", p["id"])))
         else:
             items = [Item(tr("Treino livre", "Free workout"),
@@ -504,17 +505,21 @@ class SurpriseScreen(Screen):
         wid = gym.save_plan(self.app.db, None, tr("Surpresa", "Surprise") + " · " +
                             gym.modality(self.mod).name + time.strftime(" · %d/%m"), None,
                             self.items, self.mod, hidden=True)
-        self.app.replace(StrengthSessionScreen(self.app, wid))
+        self.app.replace(StrengthSessionScreen(self.app, wid, challenge="surprise"))
 
 
 # =============================================================== conditioning
 
 
-def start_laps(app, mode: str, items: list[dict] | None, replace: bool = False) -> None:
+def start_laps(app, mode: str, items: list[dict] | None, replace: bool = False,
+               plan_id: str | None = None, challenge: str | None = None) -> None:
+    """Abre a preparação de uma sessão por voltas. `plan_id`: o plano guardado (as suas tags);
+    `challenge`: o formato do menu Challenge (emom20, tabata…) — etiqueta `Challenge` + nome."""
     title = t(f"laps.mode.{mode}")
 
     def go(autolap: dict, _o: dict) -> None:
-        app.replace(LapSessionScreen(app, mode, plan=items, autolap=autolap))
+        app.replace(LapSessionScreen(app, mode, plan=items, autolap=autolap, plan_id=plan_id,
+                                     challenge=challenge))
     lines = [tr("{n} voltas no plano", "{n} laps in the plan", n=len(items or []))] if items \
         else []
     scr = StartOptions(app, "gym", title, go, lines=lines, structured=bool(items))
@@ -536,10 +541,20 @@ class LapPlanEditor(EditScreen):
                                          if draft else tr("Plano de Conditioning",
                                                           "Conditioning plan"))
         self.items: list[dict] = list(p["items"]) if p else list(items or [])
+        from perennia.core import tags as tags_mod
+        self.wtags = tags_mod.workout_tags(app.db, "strength", pid)       # as tags do plano
         self._saved_state = self._state()
 
     def _state(self) -> str:
-        return repr((self.name, self.items))
+        return repr((self.name, self.items, self.wtags))
+
+    def _edit_tags(self) -> None:
+        from perennia.ui.tag_popup import WorkoutTagsPopup
+
+        def done(tags: list[str]) -> None:
+            self.wtags = tags
+            self.enter()
+        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
 
     def has_unsaved(self) -> bool:
         return not self.draft and self._state() != self._saved_state
@@ -565,7 +580,12 @@ class LapPlanEditor(EditScreen):
         return hms(it.get("seconds") or 0) if it.get("seconds") else tr("livre", "open")
 
     def enter(self) -> None:
-        rows = [Item(tr("Nome", "Name"), value=self.name + "▏", data="text:name")]
+        rows = [Item(tr("Nome", "Name"), value=self.name + "▏", data="text:name"),
+                Item(tr("Tags do plano", "Plan tags"),
+                     value=", ".join(self.wtags) or tr("nenhuma · Enter junta", "none · Enter adds"),
+                     action=self._edit_tags,
+                     detail=tr("guarda o plano: as sessões dele herdam-nas",
+                               "save the plan: its sessions inherit them"))]
         for i, it in enumerate(self.items):
             rows.append(Item(f"{i + 1}. {self.text_of(it)}", value=self.value_of(it),
                              detail=tr("←/→ muda · Shift+←/→ move · Del apaga",
@@ -652,12 +672,15 @@ class LapPlanEditor(EditScreen):
 
     def _save(self) -> None:
         self.pid = ls.save_plan(self.app.db, self.pid, self.name, "conditioning", self.items)
+        from perennia.core import tags as tags_mod
+        self.wtags = tags_mod.set_workout_tags(self.app.db, "strength", self.pid, self.wtags)
         self._saved_state = self._state()
         self.app.message(tr("Plano guardado", "Plan saved"))
         self.enter()
 
     def _start(self) -> None:
-        start_laps(self.app, "conditioning", list(self.items), replace=True)
+        start_laps(self.app, "conditioning", list(self.items), replace=True,
+                   plan_id=self.pid)
 
     def _delete(self) -> None:
         ls.delete_plan(self.app.db, self.pid)

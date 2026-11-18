@@ -470,9 +470,13 @@ class StrengthSession:
     def __init__(self, db: Database, athlete: Athlete, workout_id: str, *,
                  sensors: Any = None, out_dir: str | Path = "strength",
                  clock: Callable[[], float] = time.monotonic,
-                 resume: dict | None = None, free: bool = False):
+                 resume: dict | None = None, free: bool = False,
+                 challenge: str | None = None):
         self.db = db
         _ensure_mode(db)
+        self.challenge = challenge        # um desafio do menu Challenge (a Surpresa)
+        if resume is not None and not challenge:
+            self.challenge = (resume.get("config") or {}).get("challenge")
         if resume is not None:                    # a sessão livre continua livre ao retomar
             row = db.conn.execute("SELECT mode FROM strength_sessions WHERE id = ?",
                                   (resume["session_id"],)).fetchone()
@@ -1049,6 +1053,7 @@ class StrengthSession:
         try:
             self.db.save_checkpoint(self.session_id, "strength", {
                 "workout_id": self.workout_id, "start_unix": self.start_unix,
+                "challenge": self.challenge,
                 "name": self.workout_name}, {
                 "t": self.t, "paused_s": self.paused_s, "phase": self.phase,
                 "item_idx": self.item_idx, "extra": {str(k): v for k, v in self.extra.items()},
@@ -1109,6 +1114,15 @@ class StrengthSession:
             pass
 
     # ------------------------------------------------------------ fim
+
+    def tag_activity(self) -> tuple[str, str | None]:
+        """(tipo, nome) da sessão para as etiquetas: sessão livre ou treino."""
+        from . import tags as tags_mod
+        row = self.db.conn.execute("SELECT hidden FROM strength_workouts WHERE id = ?",
+                                   (self.workout_id,)).fetchone()
+        draft = bool(self.free or (row is not None and row["hidden"]))   # montado na hora
+        return tags_mod.kind_of(workout_id=None if draft else self.workout_id,
+                                game_key=self.challenge)
 
     def summary(self) -> dict:
         body = self.athlete.weight_kg
@@ -1172,7 +1186,7 @@ class StrengthSession:
         from . import tags as tags_mod
         tag_info = tags_mod.resolve(
             self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
-            workout_id=self.workout_id,
+            workout_id=self.workout_id, activity=self.tag_activity(),
             summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit

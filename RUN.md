@@ -1907,6 +1907,61 @@ quadrático para linear). *Setas → lista pendente:* percorri todas as linhas d
 menus e as que têm muitas opções (≥ 8) já abrem uma lista com pesquisa; sobram só números (idade, peso,
 FTP…), que se escrevem. *Valores no código:* 1 opção nova (`session_auto_finish`).
 
+### Ronda 24: tags nas sessões e nos treinos (sempre em inglês)
+
+**Cada sessão leva o seu tipo, em qualquer desporto.** É automático e fica guardado com a sessão
+(ciclismo, remo, corrida, natação e ginásio, incluindo as sessões por voltas):
+
+| O que foi | Tags da sessão |
+|---|---|
+| sessão livre (também a que segue uma rota) | `Free Session` |
+| um treino (blocos, plano de voltas, treino de força guardado) | `Workout` + as tags do treino |
+| um jogo do Challenge | `Challenge` + o nome do jogo: `Adaptive Challenge`, `Zone Hero`, `Power Ladder`, `Warm-up`, `Elimination`, `Tug of War`, `Regatta`, `Segment Pace`, `Segment KOM` |
+| a fuga | `Challenge` + `Chase` |
+| os desafios do ginásio | `Challenge` + `Surprise`, `EMOM 20 min`, `Tabata x3`, `Treadmill Pyramid` ou `Rowing Pyramid` |
+| um teste | `Test` + o nome: `FTP 20 min`, `FTP Ramp`, `FTP 2x8 min`, `Sprint Test`, `1 min Test`, `5 min Test`, `Row 2000 m`, `Row 500 m`, `Row 30 min`, `Row 1 min` |
+
+Estas tags juntam-se às que já existiam (`Perennia`, `Indoor Cycling`…, o tipo de treino — ex.
+`Threshold` — e as tuas livres). **As tags são sempre em inglês**, seja qual for o idioma da
+Perennia — é o que permite pedir «tudo o que for X» sem depender da língua. O tipo de treino
+(`Recovery`, `Aerobic endurance`, `Tempo`, `Threshold`, `VO2max`…) também passou a mostrar-se em inglês.
+
+**Os treinos também têm tags.** No **construtor de treinos** (ciclismo, remo, corrida e natação) há uma
+linha **«Tags do treino»** (Enter abre uma janela: juntas as que quiseres — as que já existem aparecem
+a sugerir —, tiras com Enter na tag, e **Guardar tags**); no **construtor de força** é o botão **«Tags: n»**
+do cabeçalho; nos **planos de voltas** (ginásio) é a linha **«Tags do plano»** (guarda o plano para as sessões o herdarem). O «editor simples» de força não tem tags: usa o construtor de blocos. Quando fazes uma sessão desse treino, **ela herda as tags** (e
+`Workout`); na janela do fim da sessão podes tirar as que não quiseres para essa sessão. Mudar as
+tags do treino depois **não mexe** nas sessões que já fizeste. O **tipo de treino** do construtor passou
+a ser uma **lista pendente** (era com as setas).
+
+**Ir buscar tudo para uma ou mais tags** — *Estatísticas gerais → Análise AdHoc* (fonte «Sessões»):
+- campos novos: **Tipo de sessão (tag)** (`Free Session`, `Workout`, `Challenge`, `Test`), **Jogo ou
+  teste (tag)** e **Tags** (todas as tags da sessão numa só coluna, separadas por ` | ` — assim saem no .csv);
+- filtro **Tags** com três operadores: **tem todas**, **tem alguma**, **não tem nenhuma**. Escrevem-se as
+  tags separadas por vírgulas (maiúsculas e acentos não contam) ou juntam-se das que existem
+  («+ Juntar uma tag que existe»). Ex.: `Challenge, Zone Hero` com «tem todas» → só os Zone Hero;
+  `Chase, Tug of War` com «tem alguma» → fugas e cabos de guerra, de todos os desportos;
+- dá para fazer gráficos com o tipo de sessão ou o jogo na **legenda** e **exportar em .csv**.
+Por baixo (para quem usa a base de dados diretamente): `tags.sessions_with(db, "Challenge, Chase",
+"any")`, `tags.workouts_with(...)` e `tags.tag_counts(db)`.
+
+**Sessões antigas.** Ao abrir a versão nova (e sempre que se abre a Análise AdHoc) a Perennia dá o tipo
+às sessões que ainda não o têm, a partir do que já ficou guardado (o tipo da sessão, o jogo, o teste de
+FTP, o treino). É feito **uma vez** e não mexe no que já tem tags. As atividades importadas (Garmin,
+Strava, TrainingPeaks) continuam com as tags que as regras do histórico lhes deram.
+
+**Revisões desta ronda.** *Base de dados:* **uma tabela nova**, `workout_tags` (`sport`, `workout_id`,
+`tag`) — criada sozinha ao abrir; `session_tags` ganhou o género `activity` (o tipo de sessão; é só
+um valor novo na coluna `kind`, sem mudar o esquema) e dois índices (`tag` e `session_id`).
+**Não tens de fazer nada** nem correr scripts. *Backup/import:* `workout_tags` vai na componente
+«Treinos» (a `session_tags` já ia em «Histórico de sessões»); um restauro de sessões antigas sem tags
+recebe o tipo no arranque seguinte. *Rebuild:* sem pacotes nem módulos novos — o atalho/ícone continuam
+a funcionar com a versão atual; se usas o executável empacotado, refaz com `build.sh` /
+`build_windows.bat` e volta a correr `criar_atalho_windows.bat`. *Segurança:* sem alterações de
+superfície — as tags são texto limitado a 32 letras, gravado com parâmetros SQL (nada de texto montado
+à mão), e apagar uma atividade carregada apaga também as suas tags. *Valores no código:* nenhuma opção
+nova — os nomes das tags são fixos e em inglês de propósito (é o que as torna comparáveis).
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -3915,7 +3970,8 @@ de segurança, faz um backup antes: Backups, ou `python main.py --backup`.)
 | Tabela / coluna / definição | Para quê |
 |---|---|
 | `workout_types` (`sport`, `workout_id`, `wtype`) | o **tipo de treino** de cada treino (o do construtor); vazio = «Automático» |
-| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `session` (Perennia, Indoor…) ou `custom` |
+| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `activity` (Free Session, Challenge…, ronda 24), `session` (Perennia, Indoor…) ou `custom` |
+| `workout_tags` (`sport`, `workout_id`, `tag`) | as **tags de cada treino** (ronda 24); as sessões desse treino herdam-nas |
 | `tag_catalog` (`tag`) | as etiquetas livres já usadas (para sugerir ao escreveres) |
 | `muscle_groups` (`key`, `name_pt`, `name_en`) e `muscle_subgroups` | os **grupos e subgrupos musculares**; os de origem são criados uma vez (só se a tabela estiver vazia) |
 | `exercises.subgroup_id` | o subgrupo muscular de cada exercício (`exercises.category` continua a guardar a chave do grupo) |

@@ -1362,6 +1362,14 @@ class RideEngine:
             power_curve=physics.power_curve(self._power_series),
         )
 
+    def tag_activity(self) -> tuple[str, str | None]:
+        """(tipo, nome) da sessão para as etiquetas: livre, treino, jogo (e qual), fuga, teste."""
+        from . import tags as tags_mod
+        return tags_mod.kind_of(
+            kind=self.kind, workout_id=self.workout_id,
+            game_key=getattr(self.game, "key", None), chase=bool(self.chase_level),
+            test=(self.meta or {}).get("ftp_protocol"))
+
     def finish(self) -> dict[str, Any]:
         """Fecha a sessão: volta final, FIT, sumário e base de dados."""
         if self.finished:
@@ -1401,7 +1409,7 @@ class RideEngine:
         has_route = bool(self.route_id) or self.route is not None
         tag_info = tags_mod.resolve(
             self.db, "cycling", self.ride_id, getattr(self, "tags_chosen", None),
-            workout_id=self.workout_id, has_route=has_route,
+            workout_id=self.workout_id, has_route=has_route, activity=self.tag_activity(),
             summary={"ftp_w": self.athlete.ftp_w, "np_w": summary.np_w,
                      "avg_power_w": summary.avg_power_w, "tss": summary.tss,
                      "elapsed_s": summary.elapsed_s})

@@ -184,7 +184,8 @@ class LapSession:
     def __init__(self, db: Database, athlete: Athlete, mode: str = "free", *,
                  sensors: Any = None, out_dir: str | Path = "strength", rower: Any = None,
                  clock: Callable[[], float] = time.monotonic, resume: dict | None = None,
-                 plan: list[dict] | None = None, autolap: dict | None = None):
+                 plan: list[dict] | None = None, autolap: dict | None = None,
+                 plan_id: str | None = None, challenge: str | None = None):
         ensure(db)
         st.seed(db)
         self.db = db
@@ -208,6 +209,8 @@ class LapSession:
         self._pending: list[tuple[int, int | None]] = []
         self._hr_all: list[int | None] = []
         self.plan: list[dict] = list(plan or [])
+        self.plan_id = plan_id            # o plano guardado de que vem (as suas tags)
+        self.challenge = challenge        # um formato do menu Challenge (EMOM, Tabata…)
         self.plan_idx = 0
         self._lap_plan: dict | None = None
         from .sports import AutoLap
@@ -217,6 +220,8 @@ class LapSession:
             self.session_id = resume["session_id"]
             self.mode = resume["config"].get("mode", self.mode)
             self.plan = list(resume["config"].get("plan") or self.plan)
+            self.plan_id = resume["config"].get("plan_id") or self.plan_id
+            self.challenge = resume["config"].get("challenge") or self.challenge
             self.autolap = AutoLap(resume["config"].get("autolap"))
             self.start_unix = float(resume["config"].get("start_unix") or time.time())
             self._restore(resume["state"])
@@ -622,6 +627,7 @@ class LapSession:
             self.db.save_checkpoint(self.session_id, "strength_laps",
                                     {"mode": self.mode, "start_unix": self.start_unix,
                                      "name": self.title, "plan": self.plan,
+                                     "plan_id": self.plan_id, "challenge": self.challenge,
                                      "autolap": self.autolap.as_dict()},
                                     {"t": self.t, "paused_s": self.paused_s,
                                      "hr_zone_s": self.hr_zone_s, "plan_idx": self.plan_idx,
@@ -669,6 +675,12 @@ class LapSession:
                 pass
 
     # ---------------------------------------------------------------- fim
+
+    def tag_activity(self) -> tuple[str, str | None]:
+        """(tipo, nome) da sessão para as etiquetas: sessão livre, ou treino (um plano de voltas)."""
+        from . import tags as tags_mod
+        return tags_mod.kind_of(workout_id="plan" if self.plan else None,
+                                game_key=self.challenge)
 
     def summary(self) -> dict:
         body = self.athlete.weight_kg
@@ -719,6 +731,7 @@ class LapSession:
         from . import tags as tags_mod
         tag_info = tags_mod.resolve(
             self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
+            workout_id=self.plan_id, activity=self.tag_activity(),
             summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit

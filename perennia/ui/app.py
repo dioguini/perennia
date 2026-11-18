@@ -1754,7 +1754,8 @@ class RideScreen(Screen):
             self, "cycling", workout_id=self.workout_id, has_route=bool(self.route_id),
             summary={"ftp_w": e.athlete.ftp_w, "np_w": s.np_w, "avg_power_w": s.avg_power_w,
                      "tss": s.tss, "elapsed_s": s.elapsed_s},
-            on_done=self._tags_done, on_back=self._cancel_finish)
+            on_done=self._tags_done, on_back=self._cancel_finish,
+            activity=e.tag_activity())
 
     def _tags_done(self, info: dict) -> None:
         self.engine.tags_chosen = info
@@ -4692,6 +4693,11 @@ class App:
         try:
             from perennia.core import indexes
             indexes.ensure(self.db)                # índices de leitura (o histórico cresce)
+        except Exception:
+            pass
+        try:
+            from perennia.core import tags as tags_mod
+            tags_mod.backfill(self.db)             # o tipo de sessão (tag) das sessões antigas
         except Exception:
             pass
         try:
