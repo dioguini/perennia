@@ -199,8 +199,9 @@ class RowingMenu(SportHub):
                                    + (f" · {s['avg_power_w']:.0f} W" if s["avg_power_w"]
                                       else ""),
                             action=lambda sid=s["id"]: a.push(RowSessionDetail(a, sid))))
+        from perennia.ui.gym_screens import conditioning_history_items
         from perennia.ui.sync_screens import history_items
-        return out + history_items(a, "rowing")
+        return out + history_items(a, "rowing") + conditioning_history_items(a, "rowing")
 
     def items_stats(self) -> list[Item]:
         return super().items_stats() + record_items(self.app)

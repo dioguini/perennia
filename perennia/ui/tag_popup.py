@@ -15,12 +15,12 @@ from perennia.ui.widgets import Item
 
 
 def open_session_tags(screen, sport: str, *, workout_id: str | None, has_route: bool,
-                      summary, on_done, on_back, activity=None) -> None:
+                      summary, on_done, on_back, activity=None, sports=None) -> None:
     """Abre a janela das etiquetas por cima de `screen`. `on_done(info)` quando se
     guarda; `on_back()` se se volta atrás."""
     db = screen.app.db
     info = tg.defaults(db, sport, workout_id=workout_id, has_route=has_route,
-                       summary=summary, activity=activity)
+                       summary=summary, activity=activity, sports=sports)
     suggested = tg.suggest_for(summary) if summary is not None else None
     screen.app.push(SessionTagsPopup(screen.app, sport, info, suggested, on_done, on_back,
                                      fixed_type=tg.workout_type(db, sport, workout_id)))
@@ -37,6 +37,7 @@ class SessionTagsPopup(PopupMixin, Screen):
         self.sport = sport
         self.info = {"workout_type": info.get("workout_type"),
                      "activity": list(info.get("activity") or []),
+                     "sport": list(info.get("sport") or []),
                      "session": list(info.get("session") or []),
                      "custom": list(info.get("custom") or [])}
         self.suggested = suggested
@@ -65,6 +66,10 @@ class SessionTagsPopup(PopupMixin, Screen):
                  value=" · ".join(self.info["activity"]) or "—", enabled=False,
                  detail=tr("automático: livre, treino, challenge ou teste",
                            "automatic: free, workout, challenge or test")),
+            Item(tr("Desporto", "Sport"),
+                 value=" · ".join(self.info["sport"]) or "—", enabled=False,
+                 detail=tr("automático: no Conditioning, um por desporto feito",
+                           "automatic: in Conditioning, one per sport done")),
             Item(tr("Onde", "Where"),
                  value=" · ".join(self.info["session"]) or "—", enabled=False,
                  detail=tr("automático: o aparelho e a rota", "automatic: the device and route")),

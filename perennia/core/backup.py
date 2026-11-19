@@ -187,11 +187,11 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("equipment_items",)),
     Component("sessoes", "Histórico de sessões", "Session history",
               "todas as sessões (ciclismo, remo, corrida, natação, ginásio): amostras, "
-              "voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, "
-              "TrainingPeaks, upload manual) — e os .fit",
+              "voltas, tempos em subidas e segmentos, jogos, as partes por desporto do "
+              "Conditioning, importadas (Garmin, TrainingPeaks, upload manual) — e os .fit",
               "every session (cycling, rowing, running, swimming, gym): samples, laps, "
-              "climb and segment times, games, imported (Garmin, TrainingPeaks, manual upload) — "
-              "and the .fit files",
+              "climb and segment times, games, Conditioning's parts per sport, imported "
+              "(Garmin, TrainingPeaks, manual upload) — and the .fit files",
               tables=("rides", "ride_samples", "laps", "climb_efforts", "route_efforts",
                       "chase_efforts", "ride_comparisons", "workout_step_results",
                       "game_results", "row_sessions", "row_samples", "row_laps",
@@ -199,7 +199,7 @@ COMPONENTS: tuple[Component, ...] = (
                       "strength_sessions", "strength_sets", "strength_laps", "strength_hr",
                       "session_workouts", "segment_efforts", "strava_efforts",
                       "synced_activities", "session_tags", "tag_catalog", "block_events",
-                      "strength_set_parts"),
+                      "strength_set_parts", "conditioning_parts"),
               folders=("rides", "rowing", "endurance", "strength")),
     Component("analises", "Análises e feedback", "Analyses and feedback",
               "o feedback de cada sessão e a sua análise, picos e curvas de potência",

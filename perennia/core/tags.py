@@ -52,6 +52,11 @@ INDOOR = {"cycling": "Indoor Cycling", "rowing": "Indoor Rowing", "running": "In
           "swimming": "Pool Swimming", "strength": "Indoor Strength"}
 VIRTUAL = {"cycling": "Virtual Cycling", "running": "Virtual Running"}
 APP_TAG = "Perennia"
+# o desporto como tag (ronda 25): todas as sessões têm a do seu desporto; uma sessão de
+# Conditioning tem `Conditioning` e uma por cada desporto que lá se fez
+SPORT_TAGS = {"cycling": "Cycling", "rowing": "Rowing", "running": "Running",
+              "swimming": "Swimming", "strength": "Gym", "gym": "Gym"}
+CONDITIONING = "Conditioning"
 
 # os valores do FIT (sub_sport)
 SUB_INDOOR_CYCLING, SUB_TREADMILL, SUB_VIRTUAL = 6, 1, 58
@@ -252,9 +257,15 @@ def kind_of(*, kind: str | None = None, workout_id: str | None = None,
     return "free", None
 
 
-def kind_tags(kind: str | None, name: str | None = None) -> list[str]:
+def kind_tags(kind: str | None, name: str | None = None, group: str | None = None) -> list[str]:
     """As etiquetas do tipo de atividade: `Free Session` · `Workout` · `Challenge` + jogo ·
-    `Test` + teste. Sempre em inglês."""
+    `Test` + teste. Sempre em inglês. `group="conditioning"`: `Conditioning` à frente
+    (é obrigatória numa sessão de Conditioning)."""
+    tags = _kind_tags(kind, name)
+    return [CONDITIONING] + tags if group == "conditioning" else tags
+
+
+def _kind_tags(kind: str | None, name: str | None = None) -> list[str]:
     if kind == "game":
         tags = [CHALLENGE]
         if name:
@@ -387,7 +398,7 @@ def normalize(db, text: str) -> str:
 def load(db, sport: str, sid: str | None) -> dict:
     """{"workout_type": chave|None, "activity": [...], "session": [...], "custom": [...]}
     de uma sessão (`activity`: Free Session, Challenge + jogo…; `session`: Perennia, Indoor …)."""
-    out = {"workout_type": None, "activity": [], "session": [], "custom": []}
+    out = {"workout_type": None, "activity": [], "sport": [], "session": [], "custom": []}
     if not sid:
         return out
     ensure(db)
@@ -397,6 +408,8 @@ def load(db, sport: str, sid: str | None) -> dict:
             out["workout_type"] = r["tag"]
         elif r["kind"] == "activity":
             out["activity"].append(r["tag"])
+        elif r["kind"] == "sport":
+            out["sport"].append(r["tag"])
         elif r["kind"] == "session":
             out["session"].append(r["tag"])
         else:
@@ -412,6 +425,7 @@ def save(db, sport: str, sid: str, info: dict) -> None:
     if info.get("workout_type"):
         rows.append((info["workout_type"], "workout_type"))
     rows += [(t, "activity") for t in info.get("activity") or []]
+    rows += [(t, "sport") for t in info.get("sport") or []]
     rows += [(t, "session") for t in info.get("session") or []]
     rows += [(t, "custom") for t in info.get("custom") or []]
     for tag, kind in rows:
@@ -427,6 +441,7 @@ def labels(info: dict) -> list[str]:
     """As etiquetas por mostrar/gravar: o tipo de atividade, o tipo de treino (em inglês),
     o tipo de sessão e as livres."""
     out = list(info.get("activity") or [])
+    out += [t for t in info.get("sport") or [] if t not in out]
     if info.get("workout_type"):
         out.append(type_label(info["workout_type"]))
     out += list(info.get("session") or [])
@@ -434,55 +449,72 @@ def labels(info: dict) -> list[str]:
     return out
 
 
-def fit_text(info: dict, limit: int = 63) -> str:
-    """O texto do .fit (cabe no campo de 64 bytes): `Free Session · Tempo · Indoor Cycling`.
+def fit_text(info: dict, limit: int = 127) -> str:
+    """O texto do .fit (cabe no campo de 128 bytes; conta-se em bytes, que o «·» ocupa 2):
+    `Free Session · Tempo · Indoor Cycling · Perennia`.
     Entram etiquetas inteiras, por prioridade — o tipo de sessão, o tipo de treino, as tuas,
     onde foi e, por fim, `Perennia` (que é igual em todas); a que já não couber fica de fora."""
     lab = labels(info)
     session = list(info.get("session") or [])
-    order = [t for t in lab if t not in session] + [t for t in session if t != APP_TAG] \
-        + [t for t in session if t == APP_TAG]
+    sports = [t for t in info.get("sport") or [] if t not in (info.get("activity") or [])]
+    cond = CONDITIONING in (info.get("activity") or [])
+    first = [t for t in lab if t not in session and t not in sports]
+    if cond:            # no Conditioning, os desportos dizem mais do que o `Indoor …`
+        first[len(info.get("activity") or []):len(info.get("activity") or [])] = sports
+        sports = []
+    # fora do Conditioning, o desporto já vai no próprio .fit: a tag não gasta espaço
+    order = first + [t for t in session if t != APP_TAG] + [t for t in session if t == APP_TAG]
     out = ""
+    size = lambda x: len(x.encode("utf-8"))                       # noqa: E731
     for tag in order:
         nxt = tag if not out else out + " · " + tag
-        if len(nxt) > limit:
+        if size(nxt) > limit:
             if not out:
-                out = tag[:limit]
+                out = tag.encode("utf-8")[:limit].decode("utf-8", "ignore")
             continue
         out = nxt
     return out
 
 
 def defaults(db, sport: str, *, workout_id: str | None = None, has_route: bool = False,
-             summary=None, activity: tuple[str, str | None] | None = None) -> dict:
+             summary=None, activity: tuple | None = None,
+             sports: list[str] | None = None) -> dict:
     """As etiquetas de uma sessão que ainda ninguém editou: o tipo de atividade (`activity` =
-    (tipo, nome) de `kind_of`; sem isso, treino ou sessão livre), o tipo do treino (ou, numa
-    sessão livre, o sugerido pelo esforço), o tipo de sessão e as etiquetas do treino."""
+    (tipo, nome[, grupo]) de `kind_of`; sem isso, treino ou sessão livre), o desporto (`sports`:
+    as tags dos desportos feitos — no Conditioning, um por desporto; sem isso, o da sessão),
+    o tipo do treino (ou, numa sessão livre, o sugerido pelo esforço), o tipo de sessão e as
+    etiquetas do treino."""
     wtype = workout_type(db, sport, workout_id)
     if wtype is None:
         wtype = suggest_for(summary) if summary is not None else None
-    kind, name = activity or kind_of(workout_id=workout_id)
-    return {"workout_type": wtype, "activity": kind_tags(kind, name),
-            "session": session_type_tags(sport, has_route),
+    kind, name, *rest = activity or kind_of(workout_id=workout_id)
+    group = rest[0] if rest else None
+    if sports is None:
+        sports = [SPORT_TAGS[sport]] if sport in SPORT_TAGS else []
+    return {"workout_type": wtype, "activity": kind_tags(kind, name, group),
+            "sport": list(sports),
+            "session": [APP_TAG] if group == "conditioning"
+            else session_type_tags(sport, has_route),
             "custom": workout_tags(db, sport, workout_id)}
 
 
 def resolve(db, sport: str, sid: str, chosen: dict | None, *, workout_id: str | None = None,
-            has_route: bool = False, summary=None,
-            activity: tuple[str, str | None] | None = None) -> dict:
+            has_route: bool = False, summary=None, activity: tuple | None = None,
+            sports: list[str] | None = None) -> dict:
     """Fecha as etiquetas de uma sessão: as escolhidas na janela do fim, ou as de
     omissão; guarda-as e devolve-as (o .fit e o resumo usam o mesmo)."""
     info = dict(defaults(db, sport, workout_id=workout_id, has_route=has_route,
-                         summary=summary, activity=activity))
-    auto = {"activity": list(info["activity"]), "session": list(info["session"])}
+                         summary=summary, activity=activity, sports=sports))
+    auto = {"activity": list(info["activity"]), "sport": list(info["sport"]),
+            "session": list(info["session"])}
     if chosen:
-        for k in ("workout_type", "activity", "session", "custom"):
+        for k in ("workout_type", "activity", "sport", "session", "custom"):
             if k in chosen and chosen[k] is not None:
                 info[k] = chosen[k]
-    # o tipo de atividade, `Perennia` e o `Indoor …` do desporto estão SEMPRE lá
+    # o tipo de atividade, o desporto, `Perennia` e o `Indoor …` estão SEMPRE lá
     for k, base in auto.items():
         info[k] = base + [x for x in info[k] if x not in base]
-    fixed = set(info["activity"]) | set(info["session"])
+    fixed = set(info["activity"]) | set(info["sport"]) | set(info["session"])
     info["custom"] = [x for x in info["custom"] if x not in fixed]
     save(db, sport, sid, info)
     return info
@@ -491,9 +523,10 @@ def resolve(db, sport: str, sid: str, chosen: dict | None, *, workout_id: str | 
 # ------------------------------------------------- sessões antigas (uma vez e já)
 
 
-def _missing(db, table: str, where: str = "status = 'completed'") -> str:
+def _missing(db, table: str, where: str = "status = 'completed'",
+             kind: str = "activity") -> str:
     return (f"{table} WHERE {where} AND id NOT IN (SELECT session_id FROM session_tags"
-            f" WHERE kind = 'activity')")
+            f" WHERE kind = '{kind}')")
 
 
 def backfill(db) -> int:
@@ -531,16 +564,61 @@ def backfill(db) -> int:
     if "endurance_sessions" in have:
         for r in q("SELECT id, sport, workout_id FROM " + _missing(db, "endurance_sessions")):
             rows.append((r["sport"] or "running", r["id"], kind_of(workout_id=r["workout_id"])))
+    cond_ids: set[str] = set()
     if "strength_sessions" in have:
-        for r in q("SELECT id, workout_id FROM " + _missing(db, "strength_sessions")):
-            rows.append(("strength", r["id"], kind_of(workout_id=r["workout_id"])))
-    for sport, sid, (kind, name) in rows:
-        for tag in kind_tags(kind, name):
+        cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(strength_sessions)")}
+        mode = "mode" if "mode" in cols else "NULL AS mode"
+        cond_ids = {r["id"] for r in q(f"SELECT id, {mode} FROM strength_sessions"
+                                        " WHERE status = 'completed'")
+                    if r["mode"] == "conditioning"}
+        for r in q(f"SELECT id, workout_id, {mode} FROM " + _missing(db, "strength_sessions")):
+            plan = r["mode"] in ("free", "conditioning")      # voltas: com ou sem plano
+            rows.append(("strength", r["id"], kind_of(
+                workout_id=None if plan else r["workout_id"])
+                + (("conditioning",) if r["id"] in cond_ids else ())))
+    for sport, sid, (kind, name, *rest) in rows:
+        for tag in kind_tags(kind, name, rest[0] if rest else None):
             db.conn.execute("INSERT OR IGNORE INTO session_tags (sport, session_id, tag, kind)"
                             " VALUES (?, ?, ?, 'activity')", (sport, str(sid), tag))
-    if rows:
+    n = len(rows) + _backfill_sports(db, have, q, cond_ids)
+    if n:
         db.conn.commit()
-    return len(rows)
+    return n
+
+
+def _backfill_sports(db, have: set, q, cond_ids: set) -> int:
+    """(ronda 25) A tag do desporto nas sessões que ainda não a têm; as de Conditioning ficam
+    com `Conditioning` e uma tag por desporto feito, e com as partes por desporto calculadas
+    a partir das voltas (sem .fit por desporto: esses só nas sessões novas)."""
+    todo: list[tuple[str, str, list[str]]] = []
+    for table, sport in (("rides", "cycling"), ("row_sessions", "rowing")):
+        if table in have:
+            todo += [(sport, r["id"], [SPORT_TAGS[sport]])
+                     for r in q(f"SELECT id FROM " + _missing(db, table, kind="sport"))]
+    if "endurance_sessions" in have:
+        todo += [(r["sport"] or "running", r["id"],
+                  [SPORT_TAGS.get(r["sport"] or "running", "Running")])
+                 for r in q("SELECT id, sport FROM "
+                            + _missing(db, "endurance_sessions", kind="sport"))]
+    if "strength_sessions" in have:
+        for r in q("SELECT id FROM " + _missing(db, "strength_sessions", kind="sport")):
+            if r["id"] in cond_ids:
+                from . import laps_session as ls
+                try:
+                    parts = ls.rebuild_parts(db, r["id"])
+                except Exception:
+                    parts = []
+                todo.append(("strength", r["id"], [p["tag"] for p in parts] or ["Gym"]))
+                db.conn.execute("INSERT OR IGNORE INTO session_tags (sport, session_id, tag,"
+                                " kind) VALUES ('strength', ?, ?, 'activity')",
+                                (str(r["id"]), CONDITIONING))
+            else:
+                todo.append(("strength", r["id"], ["Gym"]))
+    for sport, sid, tags in todo:
+        for tag in tags:
+            db.conn.execute("INSERT OR IGNORE INTO session_tags (sport, session_id, tag, kind)"
+                            " VALUES (?, ?, ?, 'sport')", (sport, str(sid), tag))
+    return len(todo)
 
 
 # ---------------------------------------------------------------- consultas
@@ -559,17 +637,21 @@ def tags_by_session(db) -> dict[str, list[str]]:
     """{id da sessão: [etiquetas…]} — numa só consulta (a Análise AdHoc usa-o)."""
     ensure(db)
     out: dict[str, list[str]] = {}
-    for r in db.conn.execute("SELECT session_id, tag FROM session_tags ORDER BY rowid"):
-        out.setdefault(r["session_id"], []).append(r["tag"])
+    for r in db.conn.execute("SELECT session_id, tag, kind FROM session_tags ORDER BY rowid"):
+        out.setdefault(r["session_id"], []).append(
+            type_label(r["tag"]) if r["kind"] == "workout_type" else r["tag"])
     return out
 
 
 def tag_counts(db) -> list[tuple[str, int]]:
     """As etiquetas em uso nas sessões, com quantas sessões cada uma, da mais usada para a menos."""
     ensure(db)
-    return [(r["tag"], r["n"]) for r in db.conn.execute(
-        "SELECT tag, COUNT(DISTINCT session_id) AS n FROM session_tags GROUP BY tag"
-        " ORDER BY n DESC, tag")]
+    counts: dict[str, int] = {}
+    for r in db.conn.execute("SELECT tag, kind, COUNT(DISTINCT session_id) AS n"
+                             " FROM session_tags GROUP BY tag, kind"):
+        name = type_label(r["tag"]) if r["kind"] == "workout_type" else r["tag"]
+        counts[name] = counts.get(name, 0) + r["n"]
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
 def matches(have, wanted, mode: str = "all") -> bool:
@@ -592,9 +674,11 @@ def sessions_with(db, wanted, mode: str = "all") -> list[dict]:
     ensure(db)
     sports: dict[str, str] = {}
     by: dict[str, list[str]] = {}
-    for r in db.conn.execute("SELECT sport, session_id, tag FROM session_tags ORDER BY rowid"):
+    for r in db.conn.execute("SELECT sport, session_id, tag, kind FROM session_tags"
+                             " ORDER BY rowid"):
         sports.setdefault(r["session_id"], r["sport"])
-        by.setdefault(r["session_id"], []).append(r["tag"])
+        by.setdefault(r["session_id"], []).append(          # o tipo de treino pelo nome
+            type_label(r["tag"]) if r["kind"] == "workout_type" else r["tag"])
     return [{"sport": sports[sid], "id": sid, "tags": have}
             for sid, have in by.items() if matches(have, split_tags(wanted), mode)]
 

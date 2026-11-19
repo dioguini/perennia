@@ -3088,16 +3088,20 @@ class LapSessionScreen(FinishFlow, EditScreen):
                 self.notice.hide()
                 self._notice_kind = None
             return
-        left = float(lp["seconds"]) - (s.t - cur.start_t)
-        kind = "rest" if cur.kind == "rest" else "work"
-        self._cue_n = drive_cues(self, ("lap", cur.no), kind, s.t - cur.start_t, left)
+        # o bloco do plano conta desde que começou, mesmo que lá dentro abras outras voltas do
+        # mesmo desporto (num bloco de ginásio: um exercício, um descanso, outro exercício…)
+        done = s.t - getattr(s, "_block_t0", cur.start_t)
+        left = float(lp["seconds"]) - done
+        kind = "rest" if lp.get("kind") == "rest" else "work"
+        self._cue_n = drive_cues(self, ("block", s.plan_idx), kind, done, left)
         nxt = s.next_planned
         sub = tr("A seguir: {k}", "Next: {k}", k=self.ls_text(nxt)) if nxt else \
             tr("Última volta do plano", "Last planned lap")
-        color = _theme.P.accent if cur.kind == "rest" else _theme.P.good
-        if self._notice_kind != cur.no or not self.notice.visible:
-            self._notice_kind = cur.no
-            self.notice.show(self.kind_name(cur.kind).upper(), hms(max(0.0, left)), sub, color)
+        color = _theme.P.accent if lp.get("kind") == "rest" else _theme.P.good
+        if self._notice_kind != s.plan_idx or not self.notice.visible:
+            self._notice_kind = s.plan_idx
+            self.notice.show(self.kind_name(lp.get("kind") or cur.kind).upper(),
+                             hms(max(0.0, left)), sub, color)
         else:
             self.notice.update_big(hms(max(0.0, left)), color)
 
@@ -3213,6 +3217,7 @@ class LapSummaryScreen(Screen):
         if r.get("load"):
             add(t("str.load_total"), f"{r['load']:.0f} · " + t(
                 "str.load_src_hr" if r.get("load_source") == "hr" else "str.load_src_rpe"))
+        items += conditioning_part_items(r.get("parts") or [])
         for lap in r["laps"]:
             items.append(Item(f"  {lap.no}. {t(f'laps.kind.{lap.kind}')}",
                               value=hms(lap.seconds), detail=lap_text(lap), enabled=False))
@@ -3224,6 +3229,33 @@ class LapSummaryScreen(Screen):
             items.insert(0, fb_item)
         self.list.set_items(items)
         _feedback().maybe_ask(self, "strength", self.result.get("session_id"))
+
+
+def conditioning_part_items(parts: list[dict]) -> list[Item]:
+    """Conditioning (ronda 25): uma linha por desporto — o tempo, os blocos, a distância, a FC
+    e o .fit desse desporto (o total tem o seu, no subtítulo)."""
+    from pathlib import Path
+
+    from perennia.core import sports as sp_mod
+    from perennia.core.i18n import tr
+    if not parts:
+        return []
+    out = [Item(tr("Por desporto · um .fit cada", "By sport · one .fit each"), header=True)]
+    for p in parts:
+        bits = [tr("{n} blocos", "{n} blocks", n=p.get("blocks") or 0) if (p.get("blocks") or 0)
+                != 1 else tr("1 bloco", "1 block")]
+        if p.get("distance_km"):
+            bits.append(f"{p['distance_km']:.2f} km")
+        if p.get("sets"):
+            bits.append(tr("{n} séries", "{n} sets", n=p["sets"]))
+        if p.get("avg_hr"):
+            bits.append(tr("FC {h:.0f}", "HR {h:.0f}", h=p["avg_hr"]))
+        bits.append(Path(p["fit_path"]).name if p.get("fit_path")
+                    else tr("sem .fit", "no .fit"))
+        out.append(Item(f"  {sp_mod.name(p['sport'])} · {p.get('tag', '')}",
+                        value=hms(p.get("timer_s") or 0), detail=" · ".join(bits),
+                        enabled=False))
+    return out
 
 
 def _feedback():

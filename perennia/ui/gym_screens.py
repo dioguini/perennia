@@ -70,12 +70,14 @@ class GymHub(SportHub):
     def items_history(self) -> list[Item]:
         a = self.app
         out = []
+        by_parts = ls.all_parts(a.db)
         for s in gym.sessions(a.db):
             mod = s.get("modality") or ("conditioning" if s.get("mode") in
                                         ("free", "conditioning") else "strength")
             out.append(Item(f"{str(s['started_at'])[:16].replace('T', ' ')}  {_pretty(s['name'])}",
                             value=hms(s["elapsed_s"] or 0),
                             detail=gym.modality(mod).name
+                            + parts_text(by_parts.get(s["id"]))
                             + (f" · {s['total_sets']} " + tr("séries", "sets")
                                if s.get("total_sets") else "")
                             + (f" · {s['avg_hr']:.0f} bpm" if s.get("avg_hr") else ""),
@@ -566,11 +568,15 @@ class LapPlanEditor(EditScreen):
 
     def text_of(self, it: dict) -> str:
         bits = [_kind(it["kind"])]
+        if it["kind"] == "strength" and not it.get("exercise_id") and it.get("seconds"):
+            bits = [tr("Bloco de ginásio", "Gym block")]
         if it.get("name"):
             bits.append(it["name"])
         return " · ".join(bits)
 
     def value_of(self, it: dict) -> str:
+        if it["kind"] == "strength" and not it.get("exercise_id") and it.get("seconds"):
+            return hms(it["seconds"])                     # um bloco de ginásio com tempo
         if it["kind"] == "strength":
             unit = " s" if it.get("measure") == "time" else ""
             return f"{it.get('reps') or 10}{unit}" + (f" @ {it['load_kg']:g} kg"
@@ -594,6 +600,12 @@ class LapPlanEditor(EditScreen):
         for k in self.KINDS:
             rows.append(Item(tr("+ Volta: {k}", "+ Lap: {k}", k=_kind(k)),
                              action=lambda kk=k: self._add(kk)))
+            if k == "strength":
+                rows.append(Item(tr("+ Bloco de ginásio (tempo)", "+ Gym block (time)"),
+                                 detail=tr("os exercícios marcas na sessão; o bloco conta o "
+                                           "tempo", "you mark the exercises in the session; "
+                                           "the block counts the time"),
+                                 action=lambda: self._add("gym_block")))
         rows += [Item(tr("Guardar o plano", "Save the plan"), action=self._save,
                       enabled=bool(self.items), button=True),
                  Item(tr("Começar treino", "Start workout"), action=self._start,
@@ -602,9 +614,12 @@ class LapPlanEditor(EditScreen):
             rows.insert(-2, Item(tr("Apagar o plano", "Delete the plan"), action=self._delete,
                                  button=True))
         total = ls.plan_seconds(self.items)
+        from perennia.core import sports as sp_mod
+        by = " · ".join(f"{sp_mod.name(s)} {hms(secs)}"
+                        for s, secs in ls.plan_by_sport(self.items).items())
         self.chrome.set(tr("Plano de voltas", "Lap plan") + " · Conditioning",
                         tr("{n} voltas · ≈ {t}", "{n} laps · ≈ {t}", n=len(self.items),
-                           t=hms(total)), self.footer())
+                           t=hms(total)) + (f" · {by}" if by else ""), self.footer())
         self.list.set_items(rows, keep_index=True)
 
     def _add(self, kind: str) -> None:
@@ -617,13 +632,17 @@ class LapPlanEditor(EditScreen):
                                    "reps": 40 if ex["measure"] == "time" else 12})
             self.app.push(ExerciseInventory(self.app, "conditioning", pick=picked))
             return
+        if kind == "gym_block":
+            self.items.append({"kind": "strength", "seconds": 900})
+            self.enter()
+            return
         default = {"treadmill": 300, "rowing": 300, "rest": 60, "cardio": 300}[kind]
         self.items.append({"kind": kind, "seconds": default})
         self.enter()
 
     def num_adjust(self, field: str, steps: int, big: bool) -> None:
         it = self.items[int(field)]
-        if it["kind"] == "strength":
+        if it["kind"] == "strength" and not (it.get("seconds") and not it.get("exercise_id")):
             it["reps"] = max(1, (it.get("reps") or 10) + steps * (5 if big else 1))
         else:
             cur = it.get("seconds") or 0
@@ -633,7 +652,7 @@ class LapPlanEditor(EditScreen):
         it = self.items[int(field)]
         if value is None:
             return
-        if it["kind"] == "strength":
+        if it["kind"] == "strength" and not (it.get("seconds") and not it.get("exercise_id")):
             it["reps"] = max(1, int(value))
         else:
             it["seconds"] = max(10, value * 60)          # escrito em minutos
@@ -695,6 +714,36 @@ def _pretty(name) -> str:
 def _builder(app, mod: str, wid: str | None = None, draft: bool = False):
     from perennia.ui.strength_builder_screens import StrengthBuilder
     return StrengthBuilder(app, mod, wid, draft=draft)
+
+
+def parts_text(parts: list[dict] | None) -> str:
+    """« · Remo 5:00 · Corrida 19:00 · Ginásio 25:00» — as partes de um Conditioning."""
+    from perennia.core import sports as sp_mod
+    if not parts:
+        return ""
+    return "".join(f" · {sp_mod.name(p['sport'])} {hms(p['timer_s'] or 0)}" for p in parts)
+
+
+def conditioning_history_items(app, sport: str) -> list[Item]:
+    """No histórico da corrida e do remo: as sessões de Conditioning que tiveram esse desporto
+    (a passadeira ou o remo lá dentro), para nunca se perder a conta. Enter abre a sessão."""
+    rows = ls.sessions_with_part(app.db, sport)
+    if not rows:
+        return []
+    out = [Item(tr("Dentro de um Conditioning", "Inside a Conditioning"), header=True)]
+    for s in rows:
+        p = s["parts"][0]
+        bits = [tr("{n} blocos", "{n} blocks", n=p["blocks"]) if p["blocks"] != 1
+                else tr("1 bloco", "1 block")]
+        if p.get("distance_km"):
+            bits.append(f"{p['distance_km']:.2f} km")
+        if p.get("avg_hr"):
+            bits.append(f"{p['avg_hr']:.0f} bpm")
+        bits.append(tr("sessão de {t}", "session of {t}", t=hms(s.get("elapsed_s") or 0)))
+        out.append(Item(f"{str(s['started_at'])[:16].replace('T', ' ')}  {_pretty(s['name'])}",
+                        value=hms(p["timer_s"] or 0), detail=" · ".join(bits),
+                        action=lambda sid=s["id"]: app.push(_analysis(app, sid))))
+    return out
 
 
 def _analysis(app, sid: str):

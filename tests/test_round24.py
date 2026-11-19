@@ -98,7 +98,7 @@ class TestKindTags(Tmp):
         info = {"activity": ["Challenge", "Zone Hero"], "workout_type": "threshold",
                 "session": ["Perennia", "Indoor Cycling"], "custom": ["A" * 30, "Etiqueta"]}
         text = tags.fit_text(info)
-        self.assertLessEqual(len(text), 63)
+        self.assertLessEqual(len(text.encode("utf-8")), 127)          # bytes (ronda 25)
         self.assertTrue(text.startswith("Challenge · Zone Hero · Threshold"))
         self.assertNotIn("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ·", text[:0])
         for part in text.split(" · "):
@@ -192,13 +192,15 @@ class TestSessionsGetTheirTags(Tmp):
             s.lap("manual") if hasattr(s, "lap") else None
             s.finish()
             return s
+        # (ronda 25) o Conditioning leva sempre a tag `Conditioning` à frente
         free = laps()
-        self.assertEqual(self.stored("strength", free.session_id)["activity"], ["Free Session"])
+        self.assertEqual(self.stored("strength", free.session_id)["activity"],
+                         ["Conditioning", "Free Session"])
         plan = [{"kind": "cardio", "seconds": 30}, {"kind": "rest", "seconds": 10}]
         self.assertEqual(self.stored("strength", laps(plan=plan).session_id)["activity"],
-                         ["Workout"])
+                         ["Conditioning", "Workout"])
         self.assertEqual(self.stored("strength", laps(plan=plan, challenge="tabata").session_id
-                                     )["activity"], ["Challenge", "Tabata x3"])
+                                     )["activity"], ["Conditioning", "Challenge", "Tabata x3"])
 
 
 class TestWorkoutTags(Tmp):
@@ -313,7 +315,7 @@ class TestBackfillAndQueries(Tmp):
         # e sai em .csv, as tags numa só coluna
         text = adhoc.csv_text(cols, rows, ";", ".")
         got = list(csv.reader(io.StringIO(text), delimiter=";"))
-        self.assertIn("Challenge | Chase", [r[-1] for r in got[1:]][0:3] + [x[-1] for x in got])
+        self.assertIn("Challenge | Chase | Cycling", [x[-1] for x in got])  # + o desporto (r25)
 
     def test_tags_are_not_an_axis_and_old_views_stay_valid(self):
         src = adhoc.source_of("sessions")

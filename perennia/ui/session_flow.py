@@ -256,6 +256,12 @@ class FinishFlow:
                      "tag_activity", None)
         return fn() if callable(fn) else None
 
+    def _tag_sports(self):
+        """As tags dos desportos (o Conditioning tem várias); None: a do desporto da sessão."""
+        fn = getattr(getattr(self, "engine", None) or getattr(self, "session", None),
+                     "tag_sports", None)
+        return fn() if callable(fn) else None
+
     def finish_with_tags(self) -> None:
         """«Sim, terminar»: antes de gravar, a janela das etiquetas do .fit."""
         ctx = self._tag_context()
@@ -266,7 +272,7 @@ class FinishFlow:
         from perennia.ui.tag_popup import open_session_tags
         open_session_tags(self, sport, workout_id=wid, has_route=has_route, summary=summ,
                           on_done=self._tags_done, on_back=self.cancel_finish,
-                          activity=self._tag_activity())
+                          activity=self._tag_activity(), sports=self._tag_sports())
 
     def _tags_done(self, info: dict) -> None:
         self.engine.tags_chosen = info

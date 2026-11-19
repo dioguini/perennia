@@ -254,7 +254,8 @@ class TestTags(tg.GuiCase):
         self.assertIn(b"Virtual Cycling", raw)
         self.assertEqual(self.app.db.conn.execute(
             "SELECT COUNT(*) FROM session_tags WHERE sport='cycling'").fetchone()[0],
-            1 + len(info["activity"]) + len(info["session"]) + len(info["custom"]))
+            1 + len(info["activity"]) + len(info["sport"]) + len(info["session"])
+            + len(info["custom"]))
 
     def test_builder_has_a_workout_type_dropdown_above_the_name(self):
         b = bs.BlockBuilder(self.app, "cycling", None, control="erg")

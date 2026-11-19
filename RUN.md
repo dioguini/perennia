@@ -1962,6 +1962,75 @@ superfície — as tags são texto limitado a 32 letras, gravado com parâmetros
 à mão), e apagar uma atividade carregada apaga também as suas tags. *Valores no código:* nenhuma opção
 nova — os nomes das tags são fixos e em inglês de propósito (é o que as torna comparáveis).
 
+### Ronda 25: o Conditioning como agregador de remo, passadeira e ginásio
+
+**O que é.** Uma sessão de Conditioning é feita de **blocos de remo, passadeira e ginásio**, pela
+ordem que quiseres. Está em *Ginásio → Conditioning* (e no menu da força). Há três formas de a fazer:
+- **Sessão livre** (nova): sem plano — vais abrindo blocos à medida que treinas (Espaço/L, «Nova volta»);
+- **Montar um treino e começar**: juntas os blocos, começas, e guardar o treino é opcional;
+- **um treino guardado** (os planos de Conditioning da lista) — um treino é um agregador de blocos.
+
+No construtor (plano de voltas) há os blocos **Passadeira**, **Remo**, **Força** (um exercício),
+**Descanso**, **Cardio** e o novo **+ Bloco de ginásio (tempo)**: um bloco de ginásio com duração (ex.
+15 min) onde marcas os exercícios durante a sessão. O bloco **conta o tempo todo**, mesmo que lá dentro
+abras outro exercício ou um descanso; quando acaba, passa ao bloco seguinte. O subtítulo do construtor
+mostra o tempo por desporto (`Remo 5:00 · Corrida 18:00 · Ginásio 35:00`).
+
+**De que desporto é cada bloco.** Passadeira → **corrida**; remo → **remo**; força e outro cardio →
+**ginásio**. Um **descanso conta para o bloco de antes** (um descanso no início conta para o primeiro).
+
+**Os .fit.** No fim gravam-se **vários .fit** na pasta `strength`:
+- o **total** (`…_Conditioning.fit`, treino cardio), com todas as voltas;
+- **um por desporto** (`…_rowing.fit`, `…_running.fit`, `…_gym.fit`): cada um junta **tudo o que foi
+  desse desporto**, mesmo que separado no tempo. Exemplo: 5 min remo, 10 passadeira, 15 ginásio,
+  5 passadeira, 10 ginásio, 3 passadeira, 10 ginásio → 4 ficheiros: o total, remo (5 min), passadeira
+  (10 + 5 + 3 = 18 min) e ginásio (15 + 10 + 10 = 35 min). Nos .fit por desporto o relógio **pára entre
+  blocos** (eventos de stop/start), por isso o tempo de treino é só o desse desporto. Remo = remo indoor,
+  passadeira = corrida em passadeira, ginásio = treino de força.
+
+O resumo do fim mostra a secção **«Por desporto · um .fit cada»** (tempo, blocos, distância, séries,
+FC e o nome do .fit).
+
+**Tags.** `Conditioning` é **obrigatória** e há **uma tag por desporto feito** (`Rowing`, `Running`,
+`Gym`), mais `Free Session`/`Workout`/`Challenge` como nas outras sessões. Para as contas baterem
+certo, **todas as outras sessões passaram a ter a tag do seu desporto** (`Cycling`, `Running`,
+`Rowing`, `Swimming`, `Gym`) — as antigas recebem-na sozinhas.
+
+**Contar sem perder a noção.**
+- *Quantos Conditioning fiz:* Análise AdHoc → «Sessões» → filtro Tags «tem todas» `Conditioning`
+  (o desporto destas sessões aparece como **Conditioning**; o campo **«Desportos (tags)»** diz
+  `Rowing + Running + Gym`).
+- *Quantas corridas fiz, contando as de dentro do Conditioning:* Tags «tem todas» `Running` (a corrida
+  sozinha e o Conditioning com passadeira); com `Running, Conditioning` só as de dentro.
+- **Fonte nova «Sessões por desporto (o Conditioning repartido)»**: uma linha por desporto praticado —
+  cada sessão normal é uma linha; um Conditioning dá **uma linha por parte** (Corrida 18 min · 3 blocos;
+  Ginásio 35 min…), com o campo **«Dentro de um Conditioning»** (Sim/Não). Contas linhas de Corrida e
+  tens todas as corridas, separáveis por esse campo; somas a duração e o tempo **não conta duas vezes**
+  (a carga do Conditioning é repartida pelas partes na proporção do tempo).
+- Nos **históricos da corrida e do remo** aparece uma secção **«Dentro de um Conditioning»** com as
+  sessões que tiveram passadeira/remo (o tempo e os blocos desse desporto; Enter abre a sessão). O
+  histórico do ginásio mostra, em cada Conditioning, o tempo de cada desporto.
+
+**Sessões de Conditioning antigas.** Ao abrir a versão nova, recebem `Conditioning`, as tags dos
+desportos e as partes por desporto, calculadas a partir das voltas gravadas (os .fit por desporto
+só existem nas sessões novas).
+
+**O «Treino livre» do ginásio** (o outro modo por voltas) não se reparte: continua uma sessão de ginásio.
+
+**Revisões desta ronda.** *Base de dados:* **uma tabela nova**, `conditioning_parts` (`session_id`,
+`sport`, `seq`, `blocks`, `laps`, `timer_s`, `span_s`, `start_t_s`, `distance_km`, `avg_hr`, `max_hr`,
+`sets`, `reps`, `load`, `fit_path`) — criada sozinha; `session_tags` ganhou o género `sport` (sem mudar
+o esquema). **Não tens de fazer nada.** *Backup/import:* `conditioning_parts` vai em «Histórico de
+sessões» (os .fit por desporto vão com a pasta `strength`, como o total). *Rebuild:* sem pacotes nem
+módulos novos; se usas o executável, refaz com `build.sh` / `build_windows.bat` e volta a correr
+`criar_atalho_windows.bat`. *Segurança:* sem superfície nova (os nomes dos .fit vêm do nome da sessão
+já limpo pelo `naming`, e o SQL usa parâmetros). *Opções novas:* nenhuma — o mapa bloco → desporto
+(passadeira → corrida, remo → remo, força/cardio → ginásio, descanso → bloco de antes) é a regra do
+Conditioning. *Corrigido:* na Análise AdHoc e nas consultas de tags, o tipo de treino aparecia pela chave
+interna (`endurance`) em vez do nome (`Aerobic endurance`). *Corrigido:* o campo das tags no .fit tinha 64 bytes e contava letras em vez de
+bytes (o «·» ocupa 2): com um tipo de treino comprido (`Aerobic endurance`), a tag `Perennia` ficava
+de fora. Agora o campo tem 128 bytes (a norma FIT deixa cada ficheiro escolher) e conta-se em bytes.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -3970,8 +4039,9 @@ de segurança, faz um backup antes: Backups, ou `python main.py --backup`.)
 | Tabela / coluna / definição | Para quê |
 |---|---|
 | `workout_types` (`sport`, `workout_id`, `wtype`) | o **tipo de treino** de cada treino (o do construtor); vazio = «Automático» |
-| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `activity` (Free Session, Challenge…, ronda 24), `session` (Perennia, Indoor…) ou `custom` |
+| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `activity` (Free Session, Challenge…, ronda 24), `sport` (Cycling, Running…, Conditioning: um por desporto, ronda 25), `session` (Perennia, Indoor…) ou `custom` |
 | `workout_tags` (`sport`, `workout_id`, `tag`) | as **tags de cada treino** (ronda 24); as sessões desse treino herdam-nas |
+| `conditioning_parts` (`session_id`, `sport`, …) | as **partes por desporto** de uma sessão de Conditioning (ronda 25): tempo, blocos, distância, FC, carga e o .fit desse desporto |
 | `tag_catalog` (`tag`) | as etiquetas livres já usadas (para sugerir ao escreveres) |
 | `muscle_groups` (`key`, `name_pt`, `name_en`) e `muscle_subgroups` | os **grupos e subgrupos musculares**; os de origem são criados uma vez (só se a tabela estiver vazia) |
 | `exercises.subgroup_id` | o subgrupo muscular de cada exercício (`exercises.category` continua a guardar a chave do grupo) |

@@ -617,7 +617,7 @@ class TestLapSessionGui(tg.GuiCase):
         self.pick("Ginásio")
         self.pick("Sessão de treino")
         self.pick("Conditioning")                              # a modalidade, na mesma janela
-        self.pick("Treino livre")
+        self.pick("Montar um treino e começar")         # (ronda 25) antes «Treino livre»
         plan = self.screen()
         self.assertIsInstance(plan, gs.LapPlanEditor)
         self.pick("+ Volta: Passadeira")

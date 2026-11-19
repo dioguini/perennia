@@ -50,6 +50,12 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 25** — **Conditioning como agregador**: uma sessão (livre ou um treino) feita de blocos de
+  remo, passadeira e ginásio (há agora o «Bloco de ginásio» com tempo). No fim grava **um .fit total e
+  um por desporto** (cada um junta tudo o que foi desse desporto). Tags `Conditioning` + uma por desporto,
+  e todas as sessões passam a ter a tag do seu desporto. Na Análise AdHoc, a fonte **«Sessões por
+  desporto»** reparte o Conditioning, para contar conditioning e corrida/remo/ginásio sem perder a
+  noção; os históricos da corrida e do remo mostram o que foi feito dentro de um Conditioning.
 - **Ronda 24** — **Tags**: cada sessão, em qualquer desporto, leva o seu tipo (`Free Session`, `Workout`,
   `Challenge` + o nome do jogo, `Test` + o teste) e os **treinos têm tags** próprias (que as sessões herdam).
   As tags são **sempre em inglês**. Na Análise AdHoc há os campos «Tipo de sessão», «Jogo ou teste» e
