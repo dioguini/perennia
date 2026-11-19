@@ -123,6 +123,7 @@ def _limits(t: str) -> tuple[int, int]:
 
 MSG_FILE_ID, MSG_USER_PROFILE, MSG_DEVICE_INFO, MSG_SPORT = 0, 3, 23, 12
 NAME_LEN = 64
+SPORT_NAME_LEN = 128
 MSG_SESSION, MSG_LAP, MSG_RECORD, MSG_EVENT, MSG_ACTIVITY = 18, 19, 20, 21, 34
 
 FILE_ID = (MSG_FILE_ID, [
@@ -177,7 +178,8 @@ RECORD = (MSG_RECORD, [
 SPORT = (MSG_SPORT, [
     Field("sport", 0, "enum"),
     Field("sub_sport", 1, "enum"),
-    Field("name", 3, "string", length=NAME_LEN),
+    # as tags da sessão (ronda 25: 128 bytes — a norma deixa cada ficheiro definir o tamanho)
+    Field("name", 3, "string", length=SPORT_NAME_LEN),
 ])
 
 LAP = (MSG_LAP, [
@@ -520,6 +522,8 @@ def verify(path: str | Path) -> dict[str, Any]:
 MSG_SET, MSG_WORKOUT, MSG_WORKOUT_STEP = 225, 26, 27
 SPORT_TRAINING = 10
 SUB_SPORT_STRENGTH = 20
+SUB_SPORT_CARDIO_TRAINING = 26          # o total de uma sessão de Conditioning
+SPORT_RUNNING_, SUB_SPORT_TREADMILL_ = 1, 1
 FILE_TYPE_WORKOUT = 5
 
 HR_RECORD = (MSG_RECORD, [
@@ -603,9 +607,18 @@ def write_strength(path: str | Path, athlete: Athlete, hr: Sequence[tuple[int, i
 def write_lap_session(path: str | Path, athlete: Athlete,
                       hr: Sequence[tuple[int, int | None]], laps: Sequence[Any],
                       summary: dict, start_unix: float, name: str = "",
-                      tags: str = "") -> Path:
+                      tags: str = "", sport: int = SPORT_TRAINING,
+                      sub_sport: int = SUB_SPORT_STRENGTH, part: bool = False) -> Path:
     """Treino livre / Conditioning: uma volta FIT por volta da sessão (com a
-    distância nas da passadeira), séries nas voltas de força e a FC."""
+    distância nas da passadeira e do remo), séries nas voltas de força e a FC.
+
+    `part=True` (ronda 25): uma parte de uma sessão de Conditioning — só as voltas de um
+    desporto, que podem estar separadas no tempo (5 min de passadeira, depois ginásio, depois
+    mais passadeira…). O relógio pára entre elas (eventos stop/start), o tempo de treino é a
+    soma das voltas e a atividade começa na primeira e acaba na última."""
+    if part:
+        return _write_lap_part(path, athlete, hr, laps, summary, start_unix, name, tags,
+                               sport, sub_sport)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     w = FitWriter()
@@ -618,7 +631,7 @@ def write_lap_session(path: str | Path, athlete: Athlete,
             manufacturer=MANUFACTURER_DEVELOPMENT, product=1, software_version=1.0)
     w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
             functional_threshold_power=athlete.ftp_w)
-    w.write(SPORT, sport=SPORT_TRAINING, sub_sport=SUB_SPORT_STRENGTH,
+    w.write(SPORT, sport=sport, sub_sport=sub_sport,
             name=tags or name or "Perennia")           # as etiquetas: ver perennia.core.tags
     w.write(EVENT, timestamp=t0, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
     for t, h in hr:
@@ -648,17 +661,90 @@ def write_lap_session(path: str | Path, athlete: Athlete,
                 total_timer_time=secs, total_distance=dist_m,
                 avg_speed=(dist_m / secs) if dist_m and secs else None,
                 avg_heart_rate=lap.avg_hr, max_heart_rate=lap.max_hr,
-                lap_trigger=LAP_TRIGGER["manual"], sport=SPORT_TRAINING,
-                sub_sport=SUB_SPORT_STRENGTH)
+                lap_trigger=LAP_TRIGGER["manual"], sport=sport,
+                sub_sport=sub_sport)
     total_dist = (summary.get("distance_km") or 0.0) * 1000.0
     w.write(SESSION, timestamp=t0 + end_t, message_index=0, event=8, event_type=1,
-            start_time=t0, sport=SPORT_TRAINING, sub_sport=SUB_SPORT_STRENGTH,
+            start_time=t0, sport=sport, sub_sport=sub_sport,
             sport_profile_name=name or "Perennia", total_elapsed_time=end_t,
             total_timer_time=end_t, total_distance=total_dist or None,
             avg_heart_rate=summary.get("avg_hr"), max_heart_rate=summary.get("max_hr"),
             first_lap_index=0, num_laps=max(1, len(laps)),
             training_stress_score=summary.get("load"))
     w.write(ACTIVITY, timestamp=t0 + end_t, total_timer_time=end_t, num_sessions=1,
+            type=ACTIVITY_TYPE_MANUAL, event=EVENT_ACTIVITY, event_type=EVENT_TYPE_STOP_ALL)
+    path.write_bytes(w.to_bytes())
+    return path
+
+
+def _write_lap_part(path, athlete, hr, laps, summary, start_unix, name, tags, sport,
+                    sub_sport) -> Path:
+    """Uma parte (um desporto) de uma sessão de Conditioning — ver `write_lap_session`."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    laps = sorted(laps, key=lambda lp: lp.start_t)
+    if not laps:
+        raise ValueError("uma parte sem voltas")
+    t0 = to_fit_time(start_unix)
+    spans = [(int(lp.start_t), int(lp.end_t if lp.end_t is not None else lp.start_t))
+             for lp in laps]
+    first, last = spans[0][0], max(e for _s, e in spans)
+    inside = lambda t: any(s <= t <= e for s, e in spans)            # noqa: E731
+    timer = float(sum(max(0.0, (lp.end_t or lp.start_t) - lp.start_t) for lp in laps))
+    w = FitWriter()
+    w.write(FILE_ID, type=FILE_TYPE_ACTIVITY, manufacturer=MANUFACTURER_DEVELOPMENT,
+            product=1, serial_number=1, time_created=t0 + first)
+    w.write(DEVICE_INFO, timestamp=t0 + first, device_index=0,
+            manufacturer=MANUFACTURER_DEVELOPMENT, product=1, software_version=1.0)
+    w.write(USER_PROFILE, message_index=0, age=athlete.age, weight=athlete.weight_kg,
+            functional_threshold_power=athlete.ftp_w)
+    w.write(SPORT, sport=sport, sub_sport=sub_sport, name=tags or name or "Perennia")
+    # o relógio: corre nas voltas deste desporto e pára entre elas
+    prev_end = None
+    for s, e in spans:
+        if prev_end is not None and s > prev_end:
+            w.write(EVENT, timestamp=t0 + prev_end, event=EVENT_TIMER,
+                    event_type=EVENT_TYPE_STOP_ALL)
+        if prev_end is None or s > prev_end:
+            w.write(EVENT, timestamp=t0 + s, event=EVENT_TIMER, event_type=EVENT_TYPE_START)
+        prev_end = e if prev_end is None else max(prev_end, e)
+    for t, h in hr:
+        if inside(int(t)):
+            w.write(HR_RECORD, timestamp=t0 + int(t), heart_rate=h)
+    idx = 0
+    for lap in laps:
+        if lap.kind in ("strength", "rest") and sport == SPORT_TRAINING:
+            timed = getattr(lap, "measure", "reps") == "time"
+            w.write(SET, timestamp=t0 + int(lap.end_t or lap.start_t),
+                    duration=max(0.0, (lap.end_t or lap.start_t) - lap.start_t),
+                    repetitions=None if (timed or lap.kind == "rest") else lap.reps,
+                    weight=lap.load_kg if lap.kind == "strength" else None,
+                    set_type=1 if lap.kind == "strength" else 0,
+                    start_time=t0 + int(lap.start_t),
+                    category=getattr(lap, "fit_category", None) if lap.kind == "strength"
+                    else None, weight_display_unit=1, message_index=idx)
+            idx += 1
+    w.write(EVENT, timestamp=t0 + last, event=EVENT_TIMER, event_type=EVENT_TYPE_STOP_ALL)
+    for i, lap in enumerate(laps):
+        secs = max(0.0, (lap.end_t or lap.start_t) - lap.start_t)
+        dist_m = (lap.distance_km or 0.0) * 1000.0 if lap.kind in ("treadmill", "cardio",
+                                                                   "rowing") else None
+        w.write(LAP, timestamp=t0 + int(lap.end_t or lap.start_t), message_index=i, event=9,
+                event_type=1, start_time=t0 + int(lap.start_t), total_elapsed_time=secs,
+                total_timer_time=secs, total_distance=dist_m or None,
+                avg_speed=(dist_m / secs) if dist_m and secs else None,
+                avg_heart_rate=lap.avg_hr, max_heart_rate=lap.max_hr,
+                lap_trigger=LAP_TRIGGER["manual"], sport=sport, sub_sport=sub_sport)
+    total_dist = (summary.get("distance_km") or 0.0) * 1000.0
+    w.write(SESSION, timestamp=t0 + last, message_index=0, event=8, event_type=1,
+            start_time=t0 + first, sport=sport, sub_sport=sub_sport,
+            sport_profile_name=name or "Perennia", total_elapsed_time=last - first,
+            total_timer_time=timer, total_distance=total_dist or None,
+            avg_speed=(total_dist / timer) if total_dist and timer else None,
+            avg_heart_rate=summary.get("avg_hr"), max_heart_rate=summary.get("max_hr"),
+            first_lap_index=0, num_laps=len(laps),
+            training_stress_score=summary.get("load"))
+    w.write(ACTIVITY, timestamp=t0 + last, total_timer_time=timer, num_sessions=1,
             type=ACTIVITY_TYPE_MANUAL, event=EVENT_ACTIVITY, event_type=EVENT_TYPE_STOP_ALL)
     path.write_bytes(w.to_bytes())
     return path

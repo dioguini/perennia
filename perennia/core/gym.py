@@ -313,8 +313,10 @@ for _ex in (("Equilíbrio numa perna", "isometric", "mobility", "hip_stability",
     SEED_EXERCISES.append(_ex)
 
 register(Modality("conditioning", "Conditioning", "Conditioning", "stopwatch",
-                  ("Voltas de passadeira, remo, força e descanso, com a FC do relógio.",
-                   "Laps of treadmill, rowing, strength and rest, with your watch's HR."),
+                  ("Uma sessão feita de blocos de remo, passadeira e ginásio. Grava um .fit "
+                   "total e um por desporto, e conta para cada desporto.",
+                   "A session made of rowing, treadmill and gym blocks. Saves a total .fit and "
+                   "one per sport, and counts for each sport."),
                   Scheme(n=4, sets=1, reps=300, measure="time", time_s=300, rest_s=60),
                   laps=True))
 

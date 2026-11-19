@@ -103,10 +103,16 @@ class EnduranceHub(SportHub):
                             f"{pace_unit(self.SPORT)}"
                             + (f" · {s['avg_hr']:.0f} bpm" if s["avg_hr"] else ""),
                      action=lambda sid=s["id"]: a.push(EnduranceDetail(a, sid)))
-                for s in en.sessions(a.db, self.SPORT)] + _synced(a, self.SPORT)
+                for s in en.sessions(a.db, self.SPORT)] + _synced(a, self.SPORT) \
+            + (_cond_items(a, "running") if self.SPORT == "running" else [])
 
     def items_stats(self) -> list[Item]:
         return super().items_stats() + record_items(self.app, self.SPORT)
+
+
+def _cond_items(app, sport: str) -> list[Item]:
+    from perennia.ui.gym_screens import conditioning_history_items
+    return conditioning_history_items(app, sport)
 
 
 def record_items(app, sport: str) -> list[Item]:

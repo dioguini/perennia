@@ -134,6 +134,7 @@ SESSION_FIELDS = TIME_FIELDS + (
     _f("activity", "Tipo de sessão (tag)", "Session type (tag)", CAT),
     _f("game", "Jogo ou teste (tag)", "Game or test (tag)", CAT),
     _f("tags", "Tags", "Tags", TAGS),
+    _f("sports", "Desportos (tags)", "Sports (tags)", TEXT),
     _f("duration_min", "Duração", "Duration", NUM, "min"),
     _f("moving_min", "Tempo em movimento", "Moving time", NUM, "min"),
     _f("distance_km", "Distância", "Distance", NUM, "km"),
@@ -315,6 +316,9 @@ def _rows_of(db: Database, sql: str, args: tuple = ()) -> list:
         return []
 
 
+SPORT_TAG_SET = {"Cycling", "Rowing", "Running", "Swimming", "Gym"}
+
+
 def load_sessions(db: Database) -> list[dict]:
     out: list[dict] = []
     from . import tags as tg
@@ -328,11 +332,13 @@ def load_sessions(db: Database) -> list[dict]:
         when = _parse_iso(started)
         row = _blank(SESSION_FIELDS)
         row.update(time_columns(when.date() if when else None, when))
-        row["sport"] = sp.name(sport_key)
+        row["sport"] = "Conditioning" if sport_key == "conditioning" else sp.name(sport_key)
         row["origin"] = origin
         have = by_tags.get(str(sid), []) if sid is not None else []
         row["tags"] = TAG_SEP.join(have)
         row["activity"], row["game"] = tg.activity_of(have)
+        row["sports"] = " + ".join(t for t in have if t in SPORT_TAG_SET) or None
+        row["_sid"] = None if sid is None else str(sid)
         row.update(cols)
         if row["date"] is not None:
             out.append(row)
@@ -362,7 +368,10 @@ def load_sessions(db: Database) -> list[dict]:
             distance_km=_km(r["distance_m"]), avg_speed_kmh=_speed(r["distance_m"], secs),
             avg_hr=_num(r["avg_hr"]), max_hr=_num(r["max_hr"]), load=_num(r["load"]))
     for r in _rows_of(db, "SELECT * FROM strength_sessions WHERE status='completed'"):
-        add("gym", "Perennia", r["started_at"], sid=r["id"], name=r["name"],
+        cond = "mode" in r.keys() and r["mode"] == "conditioning"
+        add("conditioning" if cond else "gym", "Perennia", r["started_at"], sid=r["id"],
+            name=r["name"], distance_km=_km((r["distance_km"] or 0) * 1000)
+            if cond and "distance_km" in r.keys() and r["distance_km"] else None,
             duration_min=_min(r["elapsed_s"]), avg_hr=_num(r["avg_hr"]), max_hr=_num(r["max_hr"]),
             load=_num(r["load"]), sets=_num(r["total_sets"]), reps=_num(r["total_reps"]),
             volume_kg=_num(r["volume_kg"]), avg_rpe=_num(r["avg_rpe"]))
@@ -490,9 +499,65 @@ def load_bp(db: Database) -> list[dict]:
     return out
 
 
+BY_SPORT_FIELDS = TIME_FIELDS + (
+    _f("sport", "Desporto", "Sport", CAT),
+    _f("in_conditioning", "Dentro de um Conditioning", "Inside a Conditioning", CAT),
+    _f("name", "Sessão", "Session", TEXT),
+    _f("blocks", "Blocos", "Blocks", NUM),
+    _f("duration_min", "Duração", "Duration", NUM, "min"),
+    _f("distance_km", "Distância", "Distance", NUM, "km"),
+    _f("avg_hr", "FC média", "Average HR", NUM, "bpm"),
+    _f("max_hr", "FC máxima", "Maximum HR", NUM, "bpm"),
+    _f("load", "Carga (TSS)", "Load (TSS)", NUM),
+    _f("sets", "Séries", "Sets", NUM),
+    _f("reps", "Repetições", "Reps", NUM),
+    _f("tags", "Tags", "Tags", TAGS),
+)
+
+PART_SPORT_NAME = {"running": "running", "rowing": "rowing", "gym": "gym"}
+
+
+def load_by_sport(db: Database) -> list[dict]:
+    """(ronda 25) Uma linha por desporto praticado: cada sessão normal é uma linha do seu
+    desporto; uma sessão de Conditioning dá uma linha por parte (a passadeira conta como
+    corrida, o remo como remo, a força como ginásio), marcada «dentro de um Conditioning».
+    Contar aqui as linhas de Corrida dá todas as corridas — sozinhas e dentro do Conditioning —
+    sem contar o tempo duas vezes."""
+    from . import laps_session as ls
+    try:
+        by_parts = ls.all_parts(db)
+    except Exception:
+        by_parts = {}
+    yes, no = tr("Sim", "Yes"), tr("Não", "No")
+    out: list[dict] = []
+    for s in load_sessions(db):
+        base = _blank(BY_SPORT_FIELDS)
+        for k in base:
+            if k in s:
+                base[k] = s[k]
+        parts = by_parts.get(s.get("_sid") or "") if s.get("sport") == "Conditioning" else None
+        if not parts:
+            base["in_conditioning"] = yes if s.get("sport") == "Conditioning" else no
+            base["blocks"] = 1
+            out.append(base)
+            continue
+        for p in parts:
+            row = dict(base)
+            row.update(sport=sp.name(PART_SPORT_NAME.get(p["sport"], p["sport"])),
+                       in_conditioning=yes, blocks=_num(p["blocks"]),
+                       duration_min=_min(p["timer_s"]), distance_km=_num(p["distance_km"]),
+                       avg_hr=_num(p["avg_hr"]), max_hr=_num(p["max_hr"]), load=_num(p["load"]),
+                       sets=_num(p["sets"]), reps=_num(p["reps"]))
+            out.append(row)
+    return out
+
+
 SOURCES: dict[str, Source] = {s.key: s for s in (
     Source("sessions", "Sessões (todos os desportos)", "Sessions (all sports)", SESSION_FIELDS,
            load_sessions, "training"),
+    Source("by_sport", "Sessões por desporto (o Conditioning repartido)",
+           "Sessions by sport (Conditioning split up)", BY_SPORT_FIELDS, load_by_sport,
+           "training"),
     Source("sets", "Séries de força (uma linha por série)", "Strength sets (one row per set)",
            SET_FIELDS, load_sets, "strength"),
     Source("daily", "Diário (saúde e alimentação)", "Daily log (health and food)", DAILY_FIELDS,

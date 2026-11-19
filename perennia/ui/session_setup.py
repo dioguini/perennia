@@ -188,9 +188,13 @@ class SessionModePopup(PopupMixin, Screen):
             return self._gym_workouts(mod)
         if m.laps:                                         # Conditioning: planos de voltas
             rows = [
-                Item(tr("Treino livre", "Free workout"),
-                     detail=tr("Monta o plano de voltas e depois começa",
-                               "Build the lap plan, then start"),
+                Item(tr("Sessão livre", "Free session"),
+                     detail=tr("Sem plano: vais abrindo blocos de remo, passadeira e ginásio",
+                               "No plan: you open rowing, treadmill and gym blocks as you go"),
+                     action=self._after(lambda: gs.start_laps(a, "conditioning", None))),
+                Item(tr("Montar um treino e começar", "Build a workout and start"),
+                     detail=tr("Junta blocos de remo, passadeira e ginásio; guardar é opcional",
+                               "Put rowing, treadmill and gym blocks together; saving is optional"),
                      action=self._after(lambda: a.push(gs.LapPlanEditor(a, None, draft=True)))),
                 Item(tr("Treino surpresa", "Surprise workout"),
                      detail=tr("Voltas de máquina e de força à sorte",

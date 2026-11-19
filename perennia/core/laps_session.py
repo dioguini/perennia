@@ -12,7 +12,12 @@ a anterior). A frequência cardíaca vem da banda ou do relógio, como na força
 - Cardio: outro aparelho ou exercício, com distância opcional.
 - Descanso: só o tempo e a FC.
 
-O Conditioning é o mesmo motor, com a passadeira como primeira escolha.
+O Conditioning é o mesmo motor, com a passadeira como primeira escolha — e é um
+**agregador** (ronda 25): uma sessão feita de blocos de remo, passadeira e ginásio. No fim
+gravam-se vários .fit: o total e um por desporto (o da passadeira junta todas as voltas de
+passadeira, mesmo separadas no tempo), e uma «parte» por desporto na base de dados
+(`conditioning_parts`), para se contar o conditioning e, ao mesmo tempo, a corrida, o remo e o
+ginásio que lá se fizeram. Tags: `Conditioning` (sempre) e uma por desporto feito.
 """
 from __future__ import annotations
 
@@ -29,6 +34,13 @@ from .db import Athlete, Database, new_id, now_iso
 KINDS = ("strength", "rest", "treadmill", "cardio", "rowing")
 MODES = ("free", "conditioning")
 HR_FLUSH_EVERY = 5
+
+# ---- Conditioning: de que desporto é cada volta (o descanso fica com o bloco de antes)
+PART_SPORT = {"treadmill": "running", "rowing": "rowing", "strength": "gym", "cardio": "gym"}
+PART_ORDER = ("running", "rowing", "gym")
+PART_TAG = {"running": "Running", "rowing": "Rowing", "gym": "Gym"}
+# (sport, sub_sport) do .fit de cada parte: passadeira, remo indoor, treino de força
+PART_FIT = {"running": (1, 1), "rowing": (15, 14), "gym": (10, 20)}
 
 
 def ensure(db: Database) -> None:
@@ -53,7 +65,164 @@ def ensure(db: Database) -> None:
     for c, decl in (("row_spm", "REAL"), ("row_pace_s", "REAL"), ("row_resistance", "INTEGER")):
         if c not in lcols:
             db.conn.execute(f"ALTER TABLE strength_laps ADD COLUMN {c} {decl}")
+    db.conn.execute(
+        "CREATE TABLE IF NOT EXISTS conditioning_parts (session_id TEXT NOT NULL"
+        " REFERENCES strength_sessions(id) ON DELETE CASCADE, sport TEXT NOT NULL,"
+        " seq INTEGER NOT NULL, blocks INTEGER NOT NULL DEFAULT 0, laps INTEGER NOT NULL"
+        " DEFAULT 0, timer_s REAL, span_s REAL, start_t_s REAL, distance_km REAL, avg_hr REAL,"
+        " max_hr INTEGER, sets INTEGER, reps INTEGER, load REAL, fit_path TEXT,"
+        " PRIMARY KEY (session_id, sport))")
     db.conn.commit()
+
+
+# ----------------------------------------------- Conditioning: as partes por desporto
+
+
+def lap_sports(laps) -> list[str]:
+    """O desporto de cada volta: passadeira → corrida, remo → remo, força e outro cardio →
+    ginásio; um descanso conta para o bloco de antes (ou, no início, para o de depois)."""
+    out: list[str | None] = [PART_SPORT.get(lp.kind) for lp in laps]
+    prev = None
+    for i, s in enumerate(out):
+        if s is None:
+            out[i] = prev
+        else:
+            prev = s
+    nxt = None
+    for i in range(len(out) - 1, -1, -1):
+        if out[i] is None:
+            out[i] = nxt
+        else:
+            nxt = out[i]
+    return [s or "gym" for s in out]
+
+
+def split_parts(laps) -> dict[str, list]:
+    """{desporto: [voltas…]} pela ordem em que apareceram na sessão."""
+    parts: dict[str, list] = {}
+    for lap, s in zip(laps, lap_sports(laps)):
+        parts.setdefault(s, []).append(lap)
+    return parts
+
+
+def part_summaries(laps, total_load: float | None = None) -> list[dict]:
+    """Um resumo por desporto: voltas, blocos (corridas seguidas do mesmo desporto), tempo
+    (a soma das voltas), distância, FC (média pesada pelo tempo), séries/repetições e a
+    carga — a da sessão repartida pelo tempo, para que a soma das partes dê o total."""
+    laps = list(laps)
+    sports = lap_sports(laps)
+    total = sum(max(0.0, lp.seconds) for lp in laps) or 0.0
+    out = []
+    for seq, (sport, mine) in enumerate(split_parts(laps).items()):
+        secs = sum(max(0.0, lp.seconds) for lp in mine)
+        blocks = sum(1 for i, s in enumerate(sports) if s == sport
+                     and (i == 0 or sports[i - 1] != sport))
+        hr_w = [(lp.avg_hr, lp.seconds) for lp in mine if lp.avg_hr and lp.seconds > 0]
+        wsum = sum(w for _h, w in hr_w)
+        strength = [lp for lp in mine if lp.kind == "strength" and lp.reps is not None]
+        dist = sum(lp.distance_km or 0.0 for lp in mine
+                   if lp.kind in ("treadmill", "cardio", "rowing"))
+        out.append({
+            "sport": sport, "tag": PART_TAG[sport], "seq": seq, "laps": len(mine),
+            "blocks": blocks, "timer_s": secs,
+            "start_t_s": min(lp.start_t for lp in mine),
+            "span_s": max((lp.end_t if lp.end_t is not None else lp.start_t) for lp in mine)
+            - min(lp.start_t for lp in mine),
+            "distance_km": round(dist, 3) if dist else None,
+            "avg_hr": sum(h * w for h, w in hr_w) / wsum if wsum else None,
+            "max_hr": max((lp.max_hr for lp in mine if lp.max_hr), default=None),
+            "sets": len(strength) or None, "reps": sum(lp.reps for lp in strength) or None,
+            "load": (total_load * secs / total) if total_load and total else None,
+            "fit_path": None, "laps_list": mine})
+    return out
+
+
+def save_parts(db: Database, sid: str, parts: list[dict]) -> None:
+    ensure(db)
+    db.conn.execute("DELETE FROM conditioning_parts WHERE session_id = ?", (sid,))
+    for p in parts:
+        db.conn.execute(
+            "INSERT INTO conditioning_parts(session_id, sport, seq, blocks, laps, timer_s,"
+            " span_s, start_t_s, distance_km, avg_hr, max_hr, sets, reps, load, fit_path)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (sid, p["sport"], p["seq"], p["blocks"], p["laps"], p["timer_s"], p["span_s"],
+             p["start_t_s"], p["distance_km"], p["avg_hr"], p["max_hr"], p["sets"], p["reps"],
+             p["load"], p.get("fit_path")))
+    db.conn.commit()
+
+
+def parts(db: Database, sid: str) -> list[dict]:
+    """As partes por desporto de uma sessão de Conditioning (vazio nas outras)."""
+    ensure(db)
+    out = []
+    for r in db.conn.execute("SELECT * FROM conditioning_parts WHERE session_id = ?"
+                             " ORDER BY seq", (sid,)):
+        d = dict(r)
+        d["tag"] = PART_TAG.get(d["sport"], d["sport"])
+        out.append(d)
+    return out
+
+
+def all_parts(db: Database) -> dict[str, list[dict]]:
+    """{id da sessão: [partes…]} numa só consulta (a Análise AdHoc usa-o)."""
+    ensure(db)
+    out: dict[str, list[dict]] = {}
+    for r in db.conn.execute("SELECT * FROM conditioning_parts ORDER BY session_id, seq"):
+        d = dict(r)
+        d["tag"] = PART_TAG.get(d["sport"], d["sport"])
+        out.setdefault(d["session_id"], []).append(d)
+    return out
+
+
+def sessions_with_part(db: Database, sport: str | None = None, limit: int = 200) -> list[dict]:
+    """As sessões de Conditioning (as mais recentes primeiro) com a parte de `sport`
+    (`running`, `rowing`, `gym`); sem `sport`, todas com as suas partes em `parts`."""
+    ensure(db)
+    out = []
+    for r in db.conn.execute(
+            "SELECT * FROM strength_sessions WHERE status = 'completed' AND mode ="
+            " 'conditioning' ORDER BY started_at DESC LIMIT ?", (limit,)):
+        ps = parts(db, r["id"])
+        if sport is not None:
+            ps = [p for p in ps if p["sport"] == sport]
+            if not ps:
+                continue
+        d = dict(r)
+        d["parts"] = ps
+        out.append(d)
+    return out
+
+
+class _LapRow:
+    """Uma volta lida da base de dados, com os nomes do `LapEntry`."""
+
+    def __init__(self, r):
+        self.kind = r["kind"]
+        self.start_t = float(r["start_t_s"] or 0)
+        self.end_t = None if r["end_t_s"] is None else float(r["end_t_s"])
+        self.distance_km = r["distance_km"]
+        self.avg_hr = r["avg_hr"]
+        self.max_hr = r["max_hr"]
+        self.reps = r["reps"]
+        self.load_kg = r["load_kg"]
+
+    @property
+    def seconds(self) -> float:
+        return (self.end_t if self.end_t is not None else self.start_t) - self.start_t
+
+
+def rebuild_parts(db: Database, sid: str) -> list[dict]:
+    """As partes de uma sessão de Conditioning já gravada, a partir das voltas (sessões de
+    antes da ronda 25; não há .fit por desporto)."""
+    ensure(db)
+    laps = [_LapRow(r) for r in db.conn.execute(
+        "SELECT * FROM strength_laps WHERE session_id = ? ORDER BY lap_no", (sid,))]
+    if not laps:
+        return []
+    row = db.conn.execute("SELECT load FROM strength_sessions WHERE id = ?", (sid,)).fetchone()
+    ps = part_summaries(laps, row["load"] if row else None)
+    save_parts(db, sid, ps)
+    return ps
 
 
 @dataclass
@@ -146,16 +315,33 @@ def delete_plan(db: Database, pid: str) -> None:
     db.conn.commit()
 
 
+def _item_seconds(it: dict) -> float:
+    if it.get("seconds"):
+        return float(it["seconds"])
+    if it.get("km"):
+        return it["km"] * 360            # ~10 km/h
+    if it.get("kind") == "strength":
+        return (it.get("reps") or 10) * 3 + 10
+    return 0.0
+
+
 def plan_seconds(items: list[dict]) -> float:
-    total = 0.0
-    for it in items:
-        if it.get("seconds"):
-            total += it["seconds"]
-        elif it.get("km"):
-            total += it["km"] * 360            # ~10 km/h
-        elif it.get("kind") == "strength":
-            total += (it.get("reps") or 10) * 3 + 10
-    return total
+    return sum(_item_seconds(it) for it in items)
+
+
+class _PlanLap:
+    def __init__(self, kind: str):
+        self.kind = kind
+
+
+def plan_by_sport(items: list[dict]) -> dict[str, float]:
+    """{desporto: segundos ≈} de um plano de Conditioning, pela ordem em que aparecem
+    (o descanso conta para o bloco de antes, como na sessão)."""
+    sports = lap_sports([_PlanLap(it.get("kind") or "rest") for it in items])
+    out: dict[str, float] = {}
+    for it, s in zip(items, sports):
+        out[s] = out.get(s, 0.0) + _item_seconds(it)
+    return out
 
 
 def surprise_plan(db: Database, seed: int | None = None, rounds: int = 3) -> list[dict]:
@@ -213,6 +399,7 @@ class LapSession:
         self.challenge = challenge        # um formato do menu Challenge (EMOM, Tabata…)
         self.plan_idx = 0
         self._lap_plan: dict | None = None
+        self._block_t0 = 0.0              # quando começou o bloco do plano em curso
         from .sports import AutoLap
         self.autolap = AutoLap(autolap)
         self.started = True
@@ -282,7 +469,7 @@ class LapSession:
         cur = self.current
         lp = self._lap_plan
         if cur is not None and lp is not None and lp.get("seconds") and \
-                self.t - cur.start_t >= lp["seconds"]:
+                self.t - self._block_t0 >= lp["seconds"]:
             nxt = self.next_planned
             if nxt is not None:
                 self.events.append(("plan_next", {"kind": nxt["kind"]}))
@@ -384,6 +571,13 @@ class LapSession:
         if kind not in KINDS:
             raise ValueError(kind)
         self.started = True
+        # um bloco do plano com tempo (ex.: 15 min de ginásio) continua a contar se abrires
+        # voltas do mesmo desporto lá dentro (outro exercício, um descanso); outro desporto
+        # deixa o plano à espera da volta seguinte
+        keep = self._lap_plan
+        if keep is not None and not (kind == "rest" or PART_SPORT.get(kind) ==
+                                     PART_SPORT.get(keep.get("kind"))):
+            keep = None
         self._lap_plan = None
         self.close_lap()
         lap = LapEntry(0, len(self.laps) + 1, kind, self.t)
@@ -412,6 +606,7 @@ class LapSession:
         self.laps.append(lap)
         self._save(lap)
         self.paused = False
+        self._lap_plan = keep
         self.events.append(("lap_start", {"no": lap.no, "kind": kind}))
         self.checkpoint()
         return lap
@@ -453,6 +648,7 @@ class LapSession:
         lap = self.start_lap(it["kind"], ex)
         self.plan_idx += 1
         self._lap_plan = it
+        self._block_t0 = lap.start_t
         if it.get("reps") is not None and lap.kind == "strength":
             lap.reps = it["reps"]
         if it.get("load_kg") is not None:
@@ -676,11 +872,20 @@ class LapSession:
 
     # ---------------------------------------------------------------- fim
 
-    def tag_activity(self) -> tuple[str, str | None]:
-        """(tipo, nome) da sessão para as etiquetas: sessão livre, ou treino (um plano de voltas)."""
+    def tag_activity(self) -> tuple:
+        """(tipo, nome[, "conditioning"]) da sessão para as etiquetas: sessão livre, ou treino
+        (um plano de voltas); no Conditioning, também a tag `Conditioning`."""
         from . import tags as tags_mod
-        return tags_mod.kind_of(workout_id="plan" if self.plan else None,
+        kind = tags_mod.kind_of(workout_id="plan" if self.plan else None,
                                 game_key=self.challenge)
+        return kind + (("conditioning",) if self.mode == "conditioning" else ())
+
+    def tag_sports(self) -> list[str] | None:
+        """As tags dos desportos: no Conditioning, uma por desporto feito (pela ordem); nas
+        outras, None (a do ginásio)."""
+        if self.mode != "conditioning":
+            return None
+        return [PART_TAG[s] for s in split_parts(self.laps)] or [PART_TAG["gym"]]
 
     def summary(self) -> dict:
         body = self.athlete.weight_kg
@@ -731,19 +936,27 @@ class LapSession:
         from . import tags as tags_mod
         tag_info = tags_mod.resolve(
             self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
-            workout_id=self.plan_id, activity=self.tag_activity(),
+            workout_id=self.plan_id, activity=self.tag_activity(), sports=self.tag_sports(),
             summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
+        cond = self.mode == "conditioning"
+        hr = []
         try:
             from . import fit
             hr_rows = self.db.conn.execute(
                 "SELECT t_s, hr_bpm FROM strength_hr WHERE session_id = ? ORDER BY t_s",
                 (self.session_id,)).fetchall()
-            fit.write_lap_session(path, self.athlete, [(r["t_s"], r["hr_bpm"]) for r in hr_rows],
-                                  self.laps, summ, start_unix=self.start_unix, name=name,
-                                  tags=tags_mod.fit_text(tag_info))
+            hr = [(r["t_s"], r["hr_bpm"]) for r in hr_rows]
+            fit.write_lap_session(path, self.athlete, hr, self.laps, summ,
+                                  start_unix=self.start_unix, name=name,
+                                  tags=tags_mod.fit_text(tag_info),
+                                  sub_sport=fit.SUB_SPORT_CARDIO_TRAINING if cond
+                                  else fit.SUB_SPORT_STRENGTH)
             fit_path = str(path)
         except Exception as e:
             self.events.append(("fit_error", {"message": str(e)}))
+        parts_out: list[dict] = []
+        if cond and self.laps:
+            parts_out = self._write_parts(path, name, hr, summ, tag_info)
         self.db.conn.execute(
             "UPDATE strength_sessions SET status='completed', ended_at=?, elapsed_s=?,"
             " paused_s=?, total_sets=?, total_reps=?, volume_kg=?, avg_rpe=?, avg_hr=?,"
@@ -756,8 +969,32 @@ class LapSession:
         self.db.conn.commit()
         self.db.delete_checkpoint(self.session_id)
         summ.update(session_id=self.session_id, name=name, fit_path=fit_path,
-                    title=self.title, tags=tag_info)
+                    title=self.title, tags=tag_info,
+                    parts=[{k: v for k, v in p.items() if k != "laps_list"} for p in parts_out])
         return summ
+
+    def _write_parts(self, path: Path, name: str, hr: list, summ: dict, tag_info: dict
+                     ) -> list[dict]:
+        """Conditioning: um .fit por desporto (ao lado do total, com o nome do desporto no fim)
+        e uma linha por desporto em `conditioning_parts`."""
+        from . import fit
+        from . import tags as tags_mod
+        ps = part_summaries(self.laps, summ.get("load"))
+        for p in ps:
+            ppath = path.with_name(f"{path.stem}_{p['sport']}{path.suffix}")
+            info = dict(tag_info, sport=[p["tag"]])
+            sport, sub = PART_FIT[p["sport"]]
+            try:
+                fit.write_lap_session(ppath, self.athlete, hr, p["laps_list"], p,
+                                      start_unix=self.start_unix,
+                                      name=f"{name} · {p['tag']}",
+                                      tags=tags_mod.fit_text(info), sport=sport,
+                                      sub_sport=sub, part=True)
+                p["fit_path"] = str(ppath)
+            except Exception as e:
+                self.events.append(("fit_error", {"message": f"{p['tag']}: {e}"}))
+        save_parts(self.db, self.session_id, ps)
+        return ps
 
     def abort(self) -> None:
         self.finished = True
