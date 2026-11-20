@@ -1369,13 +1369,19 @@ def StrengthSessionDetail(app, session_id: str):          # noqa: N802 — compa
 # ------------------------------------------------------------ construtor
 
 
+def _block_builder(app, wid: str | None):
+    from perennia.ui.strength_builder_screens import StrengthBuilder as _SB
+    return _SB(app, "strength", wid)
+
+
 class StrengthBuilder(Screen):
     """Lista de planos de força. Del apaga (carregando duas vezes)."""
 
     def enter(self) -> None:
         a = self.app
-        items = [Item(t("str.new_workout"), action=lambda: a.push(
-            StrengthWorkoutEditor(a, None)))]
+        # (ronda 26) criar e editar é no construtor por blocos (tem tags); o editor simples
+        # deixou de se abrir daqui
+        items = [Item(t("str.new_workout"), action=lambda: a.push(_block_builder(a, None)))]
         for w in st.workouts(a.db):
             plan = st.workout_items(a.db, w["id"])
             items.append(Item(w["name"], value=f"≈ {hms(st.plan_seconds(plan))}",
@@ -1383,8 +1389,7 @@ class StrengthBuilder(Screen):
                                      f"{w['n_sets']} {t('str.sets').lower()}"
                                      + (f" · {w['description']}" if w.get("description")
                                         else ""),
-                              action=lambda wid=w["id"]: a.push(
-                                  StrengthWorkoutEditor(a, wid)),
+                              action=lambda wid=w["id"]: a.push(_block_builder(a, wid)),
                               data=("sworkout", w["id"])))
         self.chrome.set(t("menu.builder"), t("home.strength"), t("str.builder_footer"))
         self.list.set_items(items, keep_index=True)
@@ -2814,7 +2819,7 @@ class LapSessionScreen(FinishFlow, EditScreen):
     def enter(self) -> None:
         from perennia.core.i18n import tr
         s = self.session
-        order = ("treadmill", "rowing", "strength", "rest", "cardio") \
+        order = ("bike", "treadmill", "rowing", "strength", "rest", "cardio") \
             if s.mode == "conditioning" else ("strength", "rest", "treadmill", "rowing", "cardio")
         rows = []
         nxt = s.next_planned
@@ -2888,7 +2893,9 @@ class LapSessionScreen(FinishFlow, EditScreen):
 
     def ls_text(self, it: dict) -> str:
         bits = [self.kind_name(it["kind"])]
-        if it.get("name"):
+        if it.get("control") == "erg":
+            bits[0] += " · ERG"
+        if it.get("name") and it["name"] != self.kind_name(it["kind"]):
             bits.append(it["name"])
         if it.get("seconds"):
             bits.append(hms(it["seconds"]))
@@ -3097,9 +3104,18 @@ class LapSessionScreen(FinishFlow, EditScreen):
         nxt = s.next_planned
         sub = tr("A seguir: {k}", "Next: {k}", k=self.ls_text(nxt)) if nxt else \
             tr("Última volta do plano", "Last planned lap")
+        step = s.current_step()          # (ronda 26) o passo do bloco em curso e o alvo dele
+        if step is not None:
+            i, st_, st_left = step
+            sub = tr("Passo {i}: {t} · {l}", "Step {i}: {t} · {l}", i=i + 1,
+                     t=st_.get("text") or "—", l=hms(float(st_.get("seconds") or 0))) \
+                + "  ·  " + sub
+            if self._notice_kind != (s.plan_idx, i):
+                self._notice_kind = None          # o passo mudou: o aviso refaz-se
         color = _theme.P.accent if lp.get("kind") == "rest" else _theme.P.good
-        if self._notice_kind != s.plan_idx or not self.notice.visible:
-            self._notice_kind = s.plan_idx
+        key_ = (s.plan_idx, step[0]) if step is not None else s.plan_idx
+        if self._notice_kind != key_ or not self.notice.visible:
+            self._notice_kind = key_
             self.notice.show(self.kind_name(lp.get("kind") or cur.kind).upper(),
                              hms(max(0.0, left)), sub, color)
         else:

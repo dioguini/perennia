@@ -84,6 +84,16 @@ OPTIONS: tuple[Opt, ...] = (
        INT, 15, lo=0, hi=60, step=1, unit="s",
        hint_pt="segundos de contagem antes de qualquer sessão (0 = começa logo)",
        hint_en="seconds of countdown before any session (0 = starts at once)"),
+    _o("cond_rest_default_s", "sessions", "Conditioning: um descanso novo dura",
+       "Conditioning: a new rest lasts", INT, 120, lo=10, hi=900, step=15, unit="s",
+       hint_pt="o tempo de um bloco de descanso acabado de juntar ao treino de Conditioning",
+       hint_en="the length of a rest block just added to a Conditioning workout",
+       binds=(("perennia.core.conditioning", "REST_DEFAULT_S"),)),
+    _o("cond_gym_block_default_s", "sessions", "Conditioning: bloco de ginásio sem exercícios",
+       "Conditioning: gym block with no exercises", INT, 900, lo=60, hi=3600, step=60,
+       unit="s", hint_pt="quanto conta um bloco de ginásio em que só marcas os exercícios na "
+       "sessão", hint_en="how long a gym block counts when you only mark the exercises in the "
+       "session", binds=(("perennia.core.conditioning", "GYM_DEFAULT_S"),)),
     _o("session_auto_finish", "sessions", "Parar sozinho ao concluir o treino ou challenge",
        "Stop by itself when the workout or challenge is done", BOOL, True,
        hint_pt="ligado: quando acaba o último bloco, o challenge, o teste ou o plano de voltas, o "

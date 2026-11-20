@@ -190,9 +190,14 @@ class ModalityScreen(Screen):
         m = gym.modality(self.mod)
         from perennia.ui.hub_screens import ExerciseInventory
         if m.laps:
-            items = [Item(tr("Treino livre", "Free workout"),
-                          detail=tr("Monta o plano de voltas e depois começa",
-                                    "Build the lap plan, then start"),
+            items = [Item(tr("Sessão livre", "Free session"),
+                          detail=tr("Sem plano: vais abrindo blocos à medida que treinas",
+                                    "No plan: you open blocks as you train"),
+                          action=lambda: start_laps(a, "conditioning", None)),
+                     Item(tr("Montar um treino e começar", "Build a workout and start"),
+                          detail=tr("Blocos de ciclismo, passadeira, remo e ginásio; guardar é "
+                                    "opcional", "Cycling, treadmill, rowing and gym blocks; "
+                                    "saving is optional"),
                           action=lambda: a.push(LapPlanEditor(a, None, draft=True))),
                      Item(tr("Treino surpresa", "Surprise workout"),
                           detail=tr("Voltas de máquina e de força à sorte",
@@ -200,7 +205,7 @@ class ModalityScreen(Screen):
                           action=lambda: a.push(LapPlanEditor(
                               a, None, draft=True, items=ls.surprise_plan(
                                   a.db, int(time.time()) % 100000)))),
-                     Item(tr("+ Criar plano", "+ Create plan"),
+                     Item(tr("+ Criar treino de Conditioning", "+ Create Conditioning workout"),
                           action=lambda: a.push(LapPlanEditor(a, None)))]
             for p in ls.plans(a.db, "conditioning"):
                 items.append(Item(p["name"], value=f"≈ {hms(ls.plan_seconds(p['items']))}",
@@ -229,9 +234,8 @@ class ModalityScreen(Screen):
                      Item(tr("Treino livre por blocos", "Free workout in the block builder"),
                           detail=tr("Monta no construtor e começa; guardar é opcional",
                                     "Build it in the builder and start; saving is optional"),
-                          action=lambda: a.push(_builder(a, self.mod, draft=True))),
-                     Item(tr("+ Criar treino (editor simples)", "+ Create workout (simple editor)"),
-                          action=lambda: a.push(GymPlanEditor(a, self.mod, None)))]
+                          action=lambda: a.push(_builder(a, self.mod, draft=True)))]
+            # (ronda 26) o «editor simples» saiu daqui: não tem tags; cria-se no construtor
             for w in gym.workouts(a.db, self.mod):
                 plan = st.workout_items(a.db, w["id"])
                 last = f" · {t('str.last')} {w['last_done'][:10]}" if w.get("last_done") else ""
@@ -472,8 +476,7 @@ class SurpriseScreen(Screen):
         m = gym.modality(self.mod)
         rows = [Item(tr("↻ Outra surpresa", "↻ Another surprise"), action=self._again),
                 Item(tr("Ajustar antes de começar", "Adjust before starting"),
-                     action=lambda: a.replace(GymPlanEditor(a, self.mod, None, draft=True,
-                                                            items=self.items)))]
+                     action=self._adjust)]
         plan = []
         for i, it in enumerate(self.items):
             ex = st.exercise(a.db, it["exercise_id"]) or {}
@@ -493,6 +496,9 @@ class SurpriseScreen(Screen):
         self.chrome.set(tr("Treino surpresa", "Surprise workout") + f" · {m.name}",
                         f"≈ {hms(st.plan_seconds(plan))} · {note}", self.footer())
         self.list.set_items(rows, keep_index=True)
+
+    def _adjust(self) -> None:
+        self.app.replace(builder_from_items(self.app, self.mod, self.items))
 
     def _again(self) -> None:
         self.seed += 1
@@ -528,187 +534,34 @@ def start_laps(app, mode: str, items: list[dict] | None, replace: bool = False,
     app.replace(scr) if replace else app.push(scr)
 
 
-class LapPlanEditor(EditScreen):
-    """Plano de voltas (Conditioning): monta-se antes de começar."""
-
-    KINDS = ("treadmill", "rowing", "strength", "rest", "cardio")
-
-    def __init__(self, app, pid: str | None, draft: bool = False,
-                 items: list[dict] | None = None):
-        super().__init__(app)
-        self.pid = pid
-        self.draft = draft
-        p = ls.plan(app.db, pid) if pid else None
-        self.name = p["name"] if p else (tr("Conditioning livre", "Free conditioning")
-                                         if draft else tr("Plano de Conditioning",
-                                                          "Conditioning plan"))
-        self.items: list[dict] = list(p["items"]) if p else list(items or [])
-        from perennia.core import tags as tags_mod
-        self.wtags = tags_mod.workout_tags(app.db, "strength", pid)       # as tags do plano
-        self._saved_state = self._state()
-
-    def _state(self) -> str:
-        return repr((self.name, self.items, self.wtags))
-
-    def _edit_tags(self) -> None:
-        from perennia.ui.tag_popup import WorkoutTagsPopup
-
-        def done(tags: list[str]) -> None:
-            self.wtags = tags
-            self.enter()
-        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
-
-    def has_unsaved(self) -> bool:
-        return not self.draft and self._state() != self._saved_state
-
-    def on_save(self) -> bool:
-        if self.items:
-            self._save()
-        return True
-
-    def text_of(self, it: dict) -> str:
-        bits = [_kind(it["kind"])]
-        if it["kind"] == "strength" and not it.get("exercise_id") and it.get("seconds"):
-            bits = [tr("Bloco de ginásio", "Gym block")]
-        if it.get("name"):
-            bits.append(it["name"])
-        return " · ".join(bits)
-
-    def value_of(self, it: dict) -> str:
-        if it["kind"] == "strength" and not it.get("exercise_id") and it.get("seconds"):
-            return hms(it["seconds"])                     # um bloco de ginásio com tempo
-        if it["kind"] == "strength":
-            unit = " s" if it.get("measure") == "time" else ""
-            return f"{it.get('reps') or 10}{unit}" + (f" @ {it['load_kg']:g} kg"
-                                                      if it.get("load_kg") else "")
-        if it.get("km"):
-            return f"{it['km']:g} km"
-        return hms(it.get("seconds") or 0) if it.get("seconds") else tr("livre", "open")
-
-    def enter(self) -> None:
-        rows = [Item(tr("Nome", "Name"), value=self.name + "▏", data="text:name"),
-                Item(tr("Tags do plano", "Plan tags"),
-                     value=", ".join(self.wtags) or tr("nenhuma · Enter junta", "none · Enter adds"),
-                     action=self._edit_tags,
-                     detail=tr("guarda o plano: as sessões dele herdam-nas",
-                               "save the plan: its sessions inherit them"))]
-        for i, it in enumerate(self.items):
-            rows.append(Item(f"{i + 1}. {self.text_of(it)}", value=self.value_of(it),
-                             detail=tr("←/→ muda · Shift+←/→ move · Del apaga",
-                                       "←/→ changes · Shift+←/→ moves · Del deletes"),
-                             data=f"num:{i}"))
-        for k in self.KINDS:
-            rows.append(Item(tr("+ Volta: {k}", "+ Lap: {k}", k=_kind(k)),
-                             action=lambda kk=k: self._add(kk)))
-            if k == "strength":
-                rows.append(Item(tr("+ Bloco de ginásio (tempo)", "+ Gym block (time)"),
-                                 detail=tr("os exercícios marcas na sessão; o bloco conta o "
-                                           "tempo", "you mark the exercises in the session; "
-                                           "the block counts the time"),
-                                 action=lambda: self._add("gym_block")))
-        rows += [Item(tr("Guardar o plano", "Save the plan"), action=self._save,
-                      enabled=bool(self.items), button=True),
-                 Item(tr("Começar treino", "Start workout"), action=self._start,
-                      enabled=bool(self.items), button=True, primary=True)]
-        if self.pid:
-            rows.insert(-2, Item(tr("Apagar o plano", "Delete the plan"), action=self._delete,
-                                 button=True))
-        total = ls.plan_seconds(self.items)
-        from perennia.core import sports as sp_mod
-        by = " · ".join(f"{sp_mod.name(s)} {hms(secs)}"
-                        for s, secs in ls.plan_by_sport(self.items).items())
-        self.chrome.set(tr("Plano de voltas", "Lap plan") + " · Conditioning",
-                        tr("{n} voltas · ≈ {t}", "{n} laps · ≈ {t}", n=len(self.items),
-                           t=hms(total)) + (f" · {by}" if by else ""), self.footer())
-        self.list.set_items(rows, keep_index=True)
-
-    def _add(self, kind: str) -> None:
-        if kind == "strength":
-            from perennia.ui.hub_screens import ExerciseInventory
-
-            def picked(ex):
-                self.items.append({"kind": "strength", "exercise_id": ex["id"],
-                                   "name": ex["name"], "measure": ex["measure"],
-                                   "reps": 40 if ex["measure"] == "time" else 12})
-            self.app.push(ExerciseInventory(self.app, "conditioning", pick=picked))
-            return
-        if kind == "gym_block":
-            self.items.append({"kind": "strength", "seconds": 900})
-            self.enter()
-            return
-        default = {"treadmill": 300, "rowing": 300, "rest": 60, "cardio": 300}[kind]
-        self.items.append({"kind": kind, "seconds": default})
-        self.enter()
-
-    def num_adjust(self, field: str, steps: int, big: bool) -> None:
-        it = self.items[int(field)]
-        if it["kind"] == "strength" and not (it.get("seconds") and not it.get("exercise_id")):
-            it["reps"] = max(1, (it.get("reps") or 10) + steps * (5 if big else 1))
-        else:
-            cur = it.get("seconds") or 0
-            it["seconds"] = max(10, cur + steps * (60 if big else (15 if cur < 120 else 30)))
-
-    def num_set(self, field: str, value) -> None:
-        it = self.items[int(field)]
-        if value is None:
-            return
-        if it["kind"] == "strength" and not (it.get("seconds") and not it.get("exercise_id")):
-            it["reps"] = max(1, int(value))
-        else:
-            it["seconds"] = max(10, value * 60)          # escrito em minutos
-
-    def on_key(self, symbol: int, modifiers: int) -> bool:
-        f = self._field("num:")
-        if f is not None:
-            i = int(f)
-            if symbol in (key.LEFT, key.RIGHT) and modifiers & key.MOD_SHIFT:
-                j = i + (1 if symbol == key.RIGHT else -1)
-                if 0 <= j < len(self.items):
-                    self.items[i], self.items[j] = self.items[j], self.items[i]
-                    self.list.index += j - i
-                    self.enter()
-                return True
-            if symbol == key.DELETE:
-                def gone(i=i) -> None:
-                    del self.items[i]
-                    self.dirty = True
-                    self.enter()
-                self.app.confirm(tr("Tirar este exercício do plano?",
-                                    "Remove this exercise from the plan?"),
-                                 tr("Até guardares, sair sem guardar desfaz.",
-                                    "Until you save, leaving without saving undoes it."),
-                                 gone, yes=tr("Tirar", "Remove"))
-                return True
-        return super().on_key(symbol, modifiers)
-
-    def text_input(self, field: str, text: str) -> None:
-        self.name += text
-        self.enter()
-
-    def text_backspace(self, field: str) -> None:
-        self.name = self.name[:-1]
-        self.enter()
-
-    def _save(self) -> None:
-        self.pid = ls.save_plan(self.app.db, self.pid, self.name, "conditioning", self.items)
-        from perennia.core import tags as tags_mod
-        self.wtags = tags_mod.set_workout_tags(self.app.db, "strength", self.pid, self.wtags)
-        self._saved_state = self._state()
-        self.app.message(tr("Plano guardado", "Plan saved"))
-        self.enter()
-
-    def _start(self) -> None:
-        start_laps(self.app, "conditioning", list(self.items), replace=True,
-                   plan_id=self.pid)
-
-    def _delete(self) -> None:
-        ls.delete_plan(self.app.db, self.pid)
-        self.app.pop(force=True)
+def LapPlanEditor(app, pid: str | None, draft: bool = False, items: list[dict] | None = None):
+    """(ronda 26) O construtor de treinos de Conditioning — blocos de vários desportos
+    (ver perennia.ui.conditioning_builder). O nome antigo fica para quem o chama."""
+    from perennia.ui.conditioning_builder import ConditioningBuilder
+    return ConditioningBuilder(app, pid, draft=draft, items=items)
 
 
 def _pretty(name) -> str:
     from perennia.core.naming import pretty
     return pretty(name)
+
+
+def builder_from_items(app, mod: str, items: list[dict]):
+    """O construtor por blocos (com tags), já com uma lista simples de exercícios — a
+    Surpresa «Ajustar antes de começar» (ronda 26: antes era o editor simples)."""
+    from perennia.core import strength as st
+    from perennia.core import strength_builder as sb
+    named = []
+    for it in items:
+        it = dict(it)
+        if not it.get("name"):
+            it["name"] = (st.exercise(app.db, it.get("exercise_id")) or {}).get("name") or ""
+        named.append(it)
+    b = _builder(app, mod, draft=True)
+    b.struct = sb.normalize(sb.from_items(named))
+    b.dirty = True
+    b.refresh()
+    return b
 
 
 def _builder(app, mod: str, wid: str | None = None, draft: bool = False):

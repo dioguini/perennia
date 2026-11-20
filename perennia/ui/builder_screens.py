@@ -155,13 +155,24 @@ class BlockBuilder(EditScreen):
     HEAD_VALUE_X = 230        # onde começam o nome e o objetivo (os dois no mesmo sítio)
 
     def __init__(self, app, sport: str, wid: str | None, control: str | None = None,
-                 plan_day=None):
+                 plan_day=None, cond_cb=None, cond_block: dict | None = None):
         self.sport = sport
         self.wid = wid
         self.plan_day = plan_day          # vindo do calendário: ao guardar, fica planeado
+        # (ronda 26) um bloco de um treino de Conditioning: o mesmo construtor, mas o botão
+        # de baixo devolve o bloco ao treino de Conditioning em vez de gravar um treino
+        self.cond_cb = cond_cb
+        self.cond_block = cond_block
         self.name, self.desc, mode, self.blocks = load_blocks(app.db, sport, wid)
+        if cond_block is not None and cond_block.get("blocks"):
+            from perennia.core import conditioning as cnd
+            self.blocks = cnd.to_blocks(cond_block)
+            mode = cond_block.get("mode") or mode
+        if cond_cb is not None:
+            from perennia.core import conditioning as cnd
+            self.name = (cond_block or {}).get("name") or cnd.sport_name(sport)
         meta = wm.get(app.db, sport, wid)
-        self.control = control or meta["control"]
+        self.control = control or (cond_block or {}).get("control") or meta["control"]
         if sport == "swimming":
             self.control = "manual"
         self.modes = list(wm.modes(sport, self.control))
@@ -777,13 +788,40 @@ class BlockBuilder(EditScreen):
                           action=self._duplicate),
                      Item(tr("Repetir os 2 últimos blocos", "Repeat the last 2 blocks"),
                           value=f"× {self.repeat_n}", data="cyc:repeat", action=self._repeat)]
+        if self.cond_cb is not None:
+            # um bloco de Conditioning: o nome do bloco e o botão que o devolve ao treino
+            rows += [Item(tr("Nome do bloco", "Block name"), value=self.name + "▏",
+                          data="text:name", head=True),
+                     Item(tr("Cancelar", "Cancel"), button=True, action=self._cond_cancel),
+                     Item(tr("Atualizar bloco no treino de Conditioning",
+                             "Update block in the Conditioning workout")
+                          if self.cond_block is not None else
+                          tr("Adicionar bloco a treino de Conditioning",
+                             "Add block to Conditioning workout"),
+                          action=self._save, button=True, primary=True, data="cond_add")]
+            from perennia.core import conditioning as cnd
+            self.chrome.set(tr("Bloco de Conditioning", "Conditioning block")
+                            + f" · {cnd.sport_name(self.sport)}"
+                            + f" · {wm.control_name(self.control)}",
+                            self.summary.text.replace("\n", "  ·  "),
+                            tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
+                               "D duplicar · Del apagar · Ctrl+S junta o bloco ao treino",
+                               "Drag palette blocks · ←/→ block · ↑↓ row · +/− duration · "
+                               "D duplicate · Del delete · Ctrl+S adds the block to the workout"))
+            self.list.set_items(rows, keep_index=True)
+            if hasattr(self, "pal"):
+                self._layout()
+                self.redraw()
+            return
         # o nome e o objetivo do treino ficam em cima (head), um por baixo do outro
         rows += [Item(tr("Tipo de treino", "Workout type"), value=self._wtype_text(),
                       data="cyc:wtype", head=True, dropdown=self._wtype_dropdown()),
                  Item(tr("Tags do treino", "Workout tags"),
-                      value=", ".join(self.wtags) or tr("nenhuma · Enter junta", "none · Enter adds"),
+                      value=" · ".join(self._auto_tags() + self.wtags),
                       head=True, action=self._edit_tags,
-                      detail=tr("as sessões deste treino herdam-nas", "its sessions inherit them")),
+                      detail=tr("as automáticas e as tuas · as sessões herdam-nas · Enter junta",
+                                "the automatic ones and yours · sessions inherit them · "
+                                "Enter adds")),
                  Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
                       data="text:name", head=True),
                  Item(tr("Objetivo do treino", "Workout goal"),
@@ -903,7 +941,13 @@ class BlockBuilder(EditScreen):
             self.wtags = tags
             self.dirty = True
             self.enter()
-        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
+        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done,
+                                       auto=self._auto_tags()))
+
+    def _auto_tags(self) -> list[str]:
+        """As tags que as sessões deste treino vão ter sozinhas (o desporto, `Workout`…)."""
+        from perennia.core import tags as tags_mod
+        return tags_mod.builder_auto_tags(self.sport)
 
     def _wtype_text(self) -> str:
         """O tipo escolhido, ou — se ninguém escolheu — o que os blocos sugerem."""
@@ -1161,9 +1205,23 @@ class BlockBuilder(EditScreen):
             bits.append(f"± {b.extra['tol']:g} %")
         return " · ".join(bits)
 
+    def _cond_cancel(self) -> None:
+        self.dirty = False
+        self.app.pop()
+
     def _save(self) -> None:
         if not self.blocks:
             self.app.message(tr("O treino não tem blocos.", "The workout has no blocks."))
+            return
+        if self.cond_cb is not None:          # devolve o bloco ao treino de Conditioning
+            from perennia.core import conditioning as cnd
+            block = dict(self.cond_block or {}, sport=self.sport, control=self.control,
+                         name=self.name.strip() or cnd.sport_name(self.sport))
+            block.update(cnd.endurance_payload(self.blocks, self.mode))
+            self.dirty = False
+            cb = self.cond_cb
+            self.app.pop()
+            cb(block)
             return
         import copy
         to_save = copy.deepcopy(self.blocks)

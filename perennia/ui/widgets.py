@@ -2163,6 +2163,7 @@ class CenterNotice:
     def layout(self) -> None:
         w, h = self.window.width, self.window.height
         bw, bh = min(460, w - 60), 230
+        self._bw = bw
         x, y = (w - bw) / 2, (h - bh) / 2
         self.outline.x, self.outline.y = x - 1, y - 1
         self.outline.width, self.outline.height = bw + 2, bh + 2
@@ -2178,7 +2179,9 @@ class CenterNotice:
         for r in (self.outline, self.bg, self.edge):
             r.opacity = 255
         self.edge.color = tuple(col[:3])
-        self.title.text, self.sub.text = title, sub
+        room = getattr(self, "_bw", 460) - 28          # o texto nunca sai da caixa
+        self.title.text = fit_text(title, room, 18, True)
+        self.sub.text = fit_text(sub, room, 13)
         self.title.color = _theme.rgba(col)
         self.update_big(big, col)
 

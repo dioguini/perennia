@@ -714,7 +714,8 @@ class MainMenu(SportHub):
                             detail=" · ".join(bits),
                             action=lambda rid=r["id"]: a.push(RideDetailScreen(a, rid))))
         from perennia.ui.sync_screens import history_items
-        return out + history_items(a, "cycling")
+        from perennia.ui.gym_screens import conditioning_history_items
+        return out + history_items(a, "cycling") + conditioning_history_items(a, "cycling")
 
     def items_stats(self) -> list[Item]:
         a = self.app

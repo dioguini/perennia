@@ -619,14 +619,21 @@ class TestLapSessionGui(tg.GuiCase):
         self.pick("Conditioning")                              # a modalidade, na mesma janela
         self.pick("Montar um treino e começar")         # (ronda 25) antes «Treino livre»
         plan = self.screen()
-        self.assertIsInstance(plan, gs.LapPlanEditor)
-        self.pick("+ Volta: Passadeira")
-        self.pick("+ Volta: Força")
-        self.assertIsInstance(self.screen(), hs_.ExerciseInventory)
-        self.pick("Kettlebell swing")
-        self.assertIs(self.screen(), plan)
-        self.pick("+ Volta: Descanso")
-        self.assertEqual([i["kind"] for i in plan.items], ["treadmill", "strength", "rest"])
+        # (ronda 26) o construtor de Conditioning por blocos; um plano com uma passadeira, um
+        # exercício de força (como os planos antigos) e um descanso
+        from perennia.core import conditioning as cnd
+        from perennia.ui.conditioning_builder import ConditioningBuilder
+        self.assertIsInstance(plan, ConditioningBuilder)
+        del hs_
+        ex = self.app.db.conn.execute("SELECT id FROM exercises WHERE name = 'Kettlebell swing'"
+                                      ).fetchone()["id"]
+        plan.blocks = cnd.from_items([
+            {"kind": "treadmill", "seconds": 300},
+            {"kind": "strength", "exercise_id": ex, "name": "Kettlebell swing", "reps": 15},
+            {"kind": "rest", "seconds": 60}])
+        plan.enter()
+        self.assertEqual([i["kind"] for i in cnd.to_items(self.app.db, plan.blocks)],
+                         ["treadmill", "strength", "rest"])
         self.pick("Começar")                                   # → opções (auto lap)
         opts = self.screen()
         self.assertEqual(opts.list.items[1].value, "uma por bloco")  # plano: volta por bloco

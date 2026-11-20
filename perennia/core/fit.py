@@ -654,7 +654,7 @@ def write_lap_session(path: str | Path, athlete: Athlete,
     w.write(EVENT, timestamp=t0 + end_t, event=EVENT_TIMER, event_type=EVENT_TYPE_STOP_ALL)
     for i, lap in enumerate(laps):
         secs = max(0.0, (lap.end_t or lap.start_t) - lap.start_t)
-        dist_m = (lap.distance_km or 0.0) * 1000.0 if lap.kind in ("treadmill", "cardio",
+        dist_m = (lap.distance_km or 0.0) * 1000.0 if lap.kind in ("treadmill", "cardio", "bike",
                                                                    "rowing") else None
         w.write(LAP, timestamp=t0 + int(lap.end_t or lap.start_t), message_index=i, event=9,
                 event_type=1, start_time=t0 + int(lap.start_t), total_elapsed_time=secs,
@@ -727,7 +727,7 @@ def _write_lap_part(path, athlete, hr, laps, summary, start_unix, name, tags, sp
     w.write(EVENT, timestamp=t0 + last, event=EVENT_TIMER, event_type=EVENT_TYPE_STOP_ALL)
     for i, lap in enumerate(laps):
         secs = max(0.0, (lap.end_t or lap.start_t) - lap.start_t)
-        dist_m = (lap.distance_km or 0.0) * 1000.0 if lap.kind in ("treadmill", "cardio",
+        dist_m = (lap.distance_km or 0.0) * 1000.0 if lap.kind in ("treadmill", "cardio", "bike",
                                                                    "rowing") else None
         w.write(LAP, timestamp=t0 + int(lap.end_t or lap.start_t), message_index=i, event=9,
                 event_type=1, start_time=t0 + int(lap.start_t), total_elapsed_time=secs,

@@ -209,18 +209,26 @@ class WorkoutTagsPopup(PopupMixin, Screen):
     SEARCH = False
     AGENT = False
 
-    def __init__(self, app, name: str, tags: list[str], on_done):
+    def __init__(self, app, name: str, tags: list[str], on_done, auto: list[str] | None = None):
         super().__init__(app)
         self.name = name
         self.tags = list(tags or [])
+        self.auto = list(auto or [])           # as automáticas (fixas): o desporto, Workout…
         self.on_done = on_done
         self.back_button = None
         self._closing = False
         self._init_popup()
 
     def enter(self) -> None:
-        items = [Item(t, value=tr("remover", "remove"), action=lambda t=t: self._remove(t))
-                 for t in self.tags]
+        items = []
+        if self.auto:
+            items.append(Item(tr("Automáticas", "Automatic"), value=" · ".join(self.auto),
+                              enabled=False,
+                              detail=tr("vêm do desporto e do treino; a sessão leva-as sempre",
+                                        "they come from the sport and the workout; the session "
+                                        "always carries them")))
+        items += [Item(t, value=tr("remover", "remove"), action=lambda t=t: self._remove(t))
+                  for t in self.tags]
         if not items:
             items.append(Item(tr("Este treino ainda não tem tags", "This workout has no tags yet"),
                               enabled=False,
@@ -240,7 +248,7 @@ class WorkoutTagsPopup(PopupMixin, Screen):
         self.app.push(AddTagPopup(self.app, self.tags, self._added))
 
     def _added(self, tag: str) -> None:
-        if tag and tg._fold(tag) not in {tg._fold(t) for t in self.tags}:
+        if tag and tg._fold(tag) not in {tg._fold(t) for t in self.tags + self.auto}:
             self.tags.append(tag)
         self.enter()
 
