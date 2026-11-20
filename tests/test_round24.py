@@ -372,13 +372,15 @@ class TestUI(tg.GuiCase):
         self.assertTrue(scr.dirty)
 
     def test_lap_plan_editor_saves_tags_and_the_session_inherits_them(self):
+        # (ronda 26) o plano de Conditioning é o construtor por blocos, com a linha «Tags»
+        from perennia.core import conditioning as cnd
         from perennia.ui import gym_screens as gs
         scr = gs.LapPlanEditor(self.app, None)
-        scr.items = [{"kind": "cardio", "seconds": 30}]
+        scr.blocks = [cnd.new_block("rest", seconds=30)]
         scr.enter()
-        self.assertIn("Tags do plano", [i.label for i in scr.list.items])
+        self.assertIn("Tags", [i.label for i in scr.list.items])
         scr.wtags = ["Conditioning", "Friday"]
-        self.assertNotEqual(scr._state(), scr._saved_state)           # conta como por guardar
+        self.assertTrue(scr.has_unsaved())                        # conta como por guardar
         scr._save()
         self.assertEqual(tags.workout_tags(self.app.db, "strength", scr.pid),
                          ["Conditioning", "Friday"])

@@ -62,8 +62,12 @@ class StrengthBuilder(Screen):
     MAX_LABELS = 520
 
     def __init__(self, app, mod: str = "strength", wid: str | None = None,
-                 draft: bool = False, plan_day: date | None = None):
+                 draft: bool = False, plan_day: date | None = None, cond_cb=None,
+                 cond_block: dict | None = None):
         self.mod, self.wid, self.draft = mod, wid, draft
+        # (ronda 26) um bloco de ginásio de um treino de Conditioning: o mesmo construtor, e o
+        # botão do cabeçalho devolve o bloco ao treino em vez de o gravar
+        self.cond_cb, self.cond_block = cond_cb, cond_block
         super().__init__(app)
         db = app.db
         from perennia.core import strength as st
@@ -74,6 +78,15 @@ class StrengthBuilder(Screen):
         if wk and wk.get("modality"):
             self.mod = wk["modality"]
         self.struct = sb.load(db, wid)
+        if cond_cb is not None:
+            import copy
+            from perennia.core import conditioning as cnd
+            blk = cond_block or {}
+            if blk.get("struct"):
+                self.struct = sb.normalize(copy.deepcopy(blk["struct"]))
+            self.mod = blk.get("modality") or mod
+            self.name = blk.get("name") or f"{cnd.sport_name('gym')} · " \
+                f"{gym.modality(self.mod).name}"
         from perennia.core import tags as tags_mod
         self.wtags = tags_mod.workout_tags(db, "strength", wid)     # as tags livres do treino
         self.plan_day = plan_day
@@ -249,7 +262,8 @@ class StrengthBuilder(Screen):
         self.cell_geo.append((("name",), 44, bt - 44, w * 0.48, 34))
         if name_sel:
             self._rect(44, bt - 46, w * 0.48, 2, P.accent)
-        sub = [tr("Treino de força", "Strength workout"),
+        sub = [tr("Bloco de Conditioning", "Conditioning block") if self.cond_cb is not None
+               else tr("Treino de força", "Strength workout"),
                gym.modality(self.mod).name,
                "≈ " + hms(sb.estimate_seconds(self.struct)) if self.struct["blocks"] else "",
                ]
@@ -257,7 +271,8 @@ class StrengthBuilder(Screen):
         # botões à direita: hora de início · planear · guardar · começar
         bx = w - 48
         buttons = [("start_session", tr("▶ Começar", "▶ Start"), P.good),
-                   ("tags", tr("Tags: {n}", "Tags: {n}", n=len(self.wtags) or "—"),
+                   ("tags", tr("Tags: {n}", "Tags: {n}",
+                               n=len(self._auto_tags()) + len(self.wtags)),
                     _theme.mix(P.header, (255, 255, 255), 0.14)),
                    ("plan", tr("Planear: {d}", "Plan: {d}",
                                d=self.plan_day.strftime("%d/%m") if self.plan_day
@@ -266,6 +281,12 @@ class StrengthBuilder(Screen):
                                 t=(self.struct.get("start_time") or "––:––")
                                 + ("▏" if self.focus == ("start",) else "")),
                     _theme.mix(P.header, (255, 255, 255), 0.14))]
+        if self.cond_cb is not None:          # só o botão que devolve o bloco ao treino
+            buttons = [("cond_add", tr("Atualizar bloco no Conditioning",
+                                       "Update block in Conditioning")
+                        if self.cond_block is not None else
+                        tr("Adicionar bloco a treino de Conditioning",
+                           "Add block to Conditioning workout"), P.good)]
         for cid, text, col in buttons:
             bw = len(text) * 7.2 + 26
             bx -= bw
@@ -274,7 +295,7 @@ class StrengthBuilder(Screen):
                 self._rect(bx - 2, bt - 50, bw + 4, 34, (255, 255, 255))
             self._rect(bx, bt - 48, bw, 30, col)
             fg = hd_txt if cid in ("plan", "start", "tags") else _theme.rgba(P.accent_text)
-            if cid == "start_session":
+            if cid in ("start_session", "cond_add"):
                 fg = (255, 255, 255, 255)
             self._label(text, bx + bw / 2, bt - 33, 10, fg, True, anchor_x="center")
             self.cell_geo.append(((cid,), bx, bt - 48, bw, 30))
@@ -512,7 +533,8 @@ class StrengthBuilder(Screen):
     # --------------------------------------------------------------- foco
 
     def _focusables(self) -> list[tuple]:
-        out = [("name",), ("start",), ("plan",), ("tags",), ("start_session",), ("instr",)]
+        out = [("name",), ("cond_add",), ("instr",)] if self.cond_cb is not None else \
+            [("name",), ("start",), ("plan",), ("tags",), ("start_session",), ("instr",)]
         for row in self._rows():
             for cid, _x, _w in self._cells(row, 0, 800):
                 out.append(cid)
@@ -700,6 +722,8 @@ class StrengthBuilder(Screen):
             self.save()
         elif k == "start_session":
             self.start_session()
+        elif k == "cond_add":
+            self._cond_add()
         elif k == "plan":
             self._plan_menu()
         elif k == "tags":
@@ -834,7 +858,13 @@ class StrengthBuilder(Screen):
         def done(tags: list[str]) -> None:
             self.wtags = tags
             self.changed()
-        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done))
+        self.app.push(WorkoutTagsPopup(self.app, self.name, self.wtags, done,
+                                       auto=self._auto_tags()))
+
+    def _auto_tags(self) -> list[str]:
+        """As tags automáticas: `Workout`, `Gym`, a modalidade, `Indoor Strength`, `Perennia`."""
+        from perennia.core import tags as tags_mod
+        return tags_mod.builder_auto_tags("strength", modality=self.mod)
 
     def _plan_menu(self) -> None:
         a = self.app
@@ -929,7 +959,22 @@ class StrengthBuilder(Screen):
 
     # ------------------------------------------------------- guardar / começar
 
+    def _cond_add(self) -> None:
+        """Devolve o bloco de ginásio ao treino de Conditioning."""
+        import copy
+        self._commit_typing()
+        block = dict(self.cond_block or {}, sport="gym", control="manual",
+                     name=self.name.strip() or tr("Ginásio", "Gym"), modality=self.mod,
+                     struct=sb.normalize(copy.deepcopy(self.struct)))
+        self.dirty = False
+        cb = self.cond_cb
+        self.app.pop()
+        cb(block)
+
     def save(self, quiet: bool = False) -> str | None:
+        if self.cond_cb is not None:
+            self._cond_add()
+            return None
         self._commit_typing()
         if not self.struct["blocks"]:
             self.app.message(tr("Junta pelo menos um bloco.", "Add at least one block."))

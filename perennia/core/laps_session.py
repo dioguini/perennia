@@ -31,16 +31,18 @@ from . import block_log, naming, physics
 from . import strength as st
 from .db import Athlete, Database, new_id, now_iso
 
-KINDS = ("strength", "rest", "treadmill", "cardio", "rowing")
+KINDS = ("strength", "rest", "treadmill", "cardio", "rowing", "bike")
 MODES = ("free", "conditioning")
 HR_FLUSH_EVERY = 5
 
 # ---- Conditioning: de que desporto é cada volta (o descanso fica com o bloco de antes)
-PART_SPORT = {"treadmill": "running", "rowing": "rowing", "strength": "gym", "cardio": "gym"}
-PART_ORDER = ("running", "rowing", "gym")
-PART_TAG = {"running": "Running", "rowing": "Rowing", "gym": "Gym"}
-# (sport, sub_sport) do .fit de cada parte: passadeira, remo indoor, treino de força
-PART_FIT = {"running": (1, 1), "rowing": (15, 14), "gym": (10, 20)}
+PART_SPORT = {"treadmill": "running", "rowing": "rowing", "strength": "gym", "cardio": "gym",
+              "bike": "cycling"}
+PART_ORDER = ("cycling", "running", "rowing", "gym")
+PART_TAG = {"cycling": "Cycling", "running": "Running", "rowing": "Rowing", "gym": "Gym"}
+# (sport, sub_sport) do .fit de cada parte: rolo (indoor cycling), passadeira, remo indoor,
+# treino de força
+PART_FIT = {"cycling": (2, 6), "running": (1, 1), "rowing": (15, 14), "gym": (10, 20)}
 
 
 def ensure(db: Database) -> None:
@@ -121,7 +123,7 @@ def part_summaries(laps, total_load: float | None = None) -> list[dict]:
         wsum = sum(w for _h, w in hr_w)
         strength = [lp for lp in mine if lp.kind == "strength" and lp.reps is not None]
         dist = sum(lp.distance_km or 0.0 for lp in mine
-                   if lp.kind in ("treadmill", "cardio", "rowing"))
+                   if lp.kind in ("treadmill", "cardio", "rowing", "bike"))
         out.append({
             "sport": sport, "tag": PART_TAG[sport], "seq": seq, "laps": len(mine),
             "blocks": blocks, "timer_s": secs,
@@ -400,6 +402,7 @@ class LapSession:
         self.plan_idx = 0
         self._lap_plan: dict | None = None
         self._block_t0 = 0.0              # quando começou o bloco do plano em curso
+        self._erg_step: tuple | None = None  # o passo cuja potência já foi posta no rolo
         from .sports import AutoLap
         self.autolap = AutoLap(autolap)
         self.started = True
@@ -466,6 +469,7 @@ class LapSession:
             return
         self.t += dt
         self._track_rower(dt)
+        self._drive_erg()
         cur = self.current
         lp = self._lap_plan
         if cur is not None and lp is not None and lp.get("seconds") and \
@@ -872,6 +876,46 @@ class LapSession:
 
     # ---------------------------------------------------------------- fim
 
+    # ---------------------------------------- os passos de um bloco (Conditioning, ronda 26)
+
+    def current_step(self) -> tuple[int, dict, float] | None:
+        """(índice, passo, segundos que faltam) do passo em curso no bloco do plano — os passos
+        com tempo (ciclismo, passadeira, remo); None se o bloco não os tem."""
+        lp = self._lap_plan
+        steps = (lp or {}).get("steps") or []
+        timed = [s for s in steps if s.get("seconds")]
+        if not timed:
+            return None
+        done = self.t - self._block_t0
+        acc = 0.0
+        for i, s in enumerate(timed):
+            acc += float(s["seconds"])
+            if done < acc:
+                return i, s, acc - done
+        return len(timed) - 1, timed[-1], 0.0
+
+    def _drive_erg(self) -> None:
+        """Num bloco de ciclismo ERG: põe no rolo a potência do passo em curso (uma vez por
+        passo). Sem rolo que aceite comandos, não faz nada."""
+        lp = self._lap_plan
+        if not lp or lp.get("control") != "erg" or lp.get("kind") != "bike":
+            return
+        cur = self.current_step()
+        if cur is None:
+            return
+        key = (self.plan_idx, cur[0])
+        watts = cur[1].get("watts")
+        if key == self._erg_step or not watts:
+            return
+        self._erg_step = key
+        fn = getattr(self.sensors, "set_target_power", None)
+        if callable(fn):
+            try:
+                fn(int(watts))
+                self.events.append(("erg", {"watts": int(watts)}))
+            except Exception:
+                pass
+
     def tag_activity(self) -> tuple:
         """(tipo, nome[, "conditioning"]) da sessão para as etiquetas: sessão livre, ou treino
         (um plano de voltas); no Conditioning, também a tag `Conditioning`."""
@@ -902,7 +946,7 @@ class LapSession:
                 volume += st.set_volume(lap.load_kg, lap.reps, lap.bodyweight, body, lap.measure)
                 if lap.rpe:
                     rpes.append(lap.rpe)
-            if lap.kind in ("treadmill", "cardio", "rowing") and lap.distance_km:
+            if lap.kind in ("treadmill", "cardio", "rowing", "bike") and lap.distance_km:
                 dist += lap.distance_km
         avg_rpe = sum(rpes) / len(rpes) if rpes else None
         load = st.hr_load(self._hr_all, self.lthr)

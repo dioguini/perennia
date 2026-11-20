@@ -1115,6 +1115,15 @@ class StrengthSession:
 
     # ------------------------------------------------------------ fim
 
+    def tag_sports(self) -> list[str]:
+        """(ronda 26) `Gym` e a modalidade do treino (`Strength`, `Mobility`, `HIIT`…)."""
+        from . import tags as tags_mod
+        row = self.db.conn.execute("SELECT modality FROM strength_workouts WHERE id = ?",
+                                   (self.workout_id,)).fetchone()
+        mt = tags_mod.modality_tag(row["modality"] if row is not None and "modality" in
+                                   row.keys() else None)
+        return ["Gym"] + ([mt] if mt and mt != "Gym" else [])
+
     def tag_activity(self) -> tuple[str, str | None]:
         """(tipo, nome) da sessão para as etiquetas: sessão livre ou treino."""
         from . import tags as tags_mod
@@ -1187,6 +1196,7 @@ class StrengthSession:
         tag_info = tags_mod.resolve(
             self.db, "strength", self.session_id, getattr(self, "tags_chosen", None),
             workout_id=self.workout_id, activity=self.tag_activity(),
+            sports=self.tag_sports(),
             summary={"load": summ.get("load"), "elapsed_s": summ.get("elapsed_s")})
         try:
             from . import fit

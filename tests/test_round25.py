@@ -86,6 +86,8 @@ class TestPartsAndFits(Tmp):
         res = self.session()
         by = {p["sport"]: p for p in res["parts"]}
         for sport, (fsport, fsub) in ls.PART_FIT.items():
+            if sport not in by:                      # (ronda 26) o ciclismo não está no exemplo
+                continue
             msgs = fit.read_messages(by[sport]["fit_path"])
             sess = [f for m, f in msgs if m == 18][0]
             self.assertEqual((sess[5], sess[6]), (fsport, fsub), sport)      # sport, sub_sport
@@ -292,15 +294,17 @@ class TestUI(tg.GuiCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_plan_editor_shows_time_per_sport_and_gym_block(self):
+        # (ronda 26) o construtor de Conditioning por blocos
+        from perennia.core import conditioning as cnd
         from perennia.ui import gym_screens as gs
         scr = gs.LapPlanEditor(self.app, None, draft=True)
         self.app.push(scr)
-        scr._add("rowing")
-        scr._add("gym_block")
+        scr.blocks = cnd.from_items([{"kind": "rowing", "seconds": 300}])
+        scr.blocks.append(cnd.new_block("gym", seconds=900))
+        scr.enter()
         self.assertIn("Remo 5:00", scr.chrome.subtitle.text)
         self.assertIn("Ginásio 15:00", scr.chrome.subtitle.text)
-        self.assertIn("+ Bloco de ginásio (tempo)", [i.label for i in scr.list.items])
-        self.assertEqual(scr.value_of(scr.items[-1]), "15:00")
+        self.assertIn("+ Adicionar bloco", [i.label for i in scr.list.items])
 
     def test_conditioning_menu_has_a_free_session_without_plan(self):
         from perennia.ui import session_setup as ss

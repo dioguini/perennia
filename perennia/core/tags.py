@@ -286,6 +286,38 @@ def _kind_tags(kind: str | None, name: str | None = None) -> list[str]:
 
 # ----------------------------------------------------- etiquetas de um treino
 
+COND_SPORT_TAGS = {"cycling": "Cycling", "running": "Running", "rowing": "Rowing", "gym": "Gym"}
+
+
+def modality_tag(modality: str | None) -> str | None:
+    """A modalidade do ginásio como tag (em inglês): `Strength`, `Mobility`, `HIIT`…"""
+    if not modality:
+        return None
+    from . import gym
+    m = gym.MODALITIES.get(modality)
+    return m.en if m is not None else None
+
+
+def builder_auto_tags(sport: str, *, sports: list[str] | None = None,
+                      modality: str | None = None, has_route: bool = False) -> list[str]:
+    """(ronda 26) As tags que uma sessão deste treino vai ter sozinha — o construtor mostra-as
+    (fixas) ao lado das tuas: `Workout`, o desporto (no ginásio, também a modalidade), o
+    `Indoor …` e `Perennia`. Num treino de Conditioning: `Conditioning`, `Workout` e uma por
+    desporto dos blocos (`sports`: cycling/running/rowing/gym)."""
+    if sport == "conditioning":
+        return [CONDITIONING, WORKOUT] + [COND_SPORT_TAGS[s] for s in (sports or [])
+                                         if s in COND_SPORT_TAGS] + [APP_TAG]
+    out = [WORKOUT]
+    if sport in SPORT_TAGS:
+        out.append(SPORT_TAGS[sport])
+    mt = modality_tag(modality) if sport in ("strength", "gym") else None
+    if mt and mt not in out:
+        out.append(mt)
+    for t in session_type_tags(sport, has_route):
+        if t not in out and t != APP_TAG:
+            out.append(t)
+    return out + [APP_TAG]
+
 
 def clean_tags(tags) -> list[str]:
     """Etiquetas limpas: sem espaços a mais, sem vazias nem repetidas (maiúsculas e

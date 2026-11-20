@@ -2031,6 +2031,78 @@ interna (`endurance`) em vez do nome (`Aerobic endurance`). *Corrigido:* o campo
 bytes (o «·» ocupa 2): com um tipo de treino comprido (`Aerobic endurance`), a tag `Perennia` ficava
 de fora. Agora o campo tem 128 bytes (a norma FIT deixa cada ficheiro escolher) e conta-se em bytes.
 
+### Ronda 26: tags ao criar treinos e o construtor de Conditioning por blocos
+
+**Tags em todos os construtores de treino.** Ao criar ou editar um treino, de qualquer desporto,
+há sempre as tags:
+- **construtor de blocos** (ciclismo, remo, corrida, natação): a linha **«Tags do treino»**;
+- **construtor de força / ginásio** (todas as modalidades): o botão **«Tags: n»** do cabeçalho;
+- **construtor de Conditioning**: a linha **«Tags»**.
+
+Cada um mostra primeiro as **automáticas** — as mesmas que a sessão desse treino vai ter sozinha,
+e que não se tiram — e depois as tuas (Enter junta; as que já existem aparecem a sugerir):
+
+| Treino | Tags automáticas |
+|---|---|
+| ciclismo | `Workout` · `Cycling` · `Indoor Cycling` · `Perennia` |
+| corrida / remo / natação | `Workout` · `Running` / `Rowing` / `Swimming` · `Indoor …` · `Perennia` |
+| ginásio | `Workout` · `Gym` · **a modalidade** (`Strength`, `Mobility`, `HIIT`, `Yoga`…) · `Indoor Strength` · `Perennia` |
+| Conditioning | `Conditioning` · `Workout` · **um por desporto dos blocos** (`Cycling`, `Running`, `Rowing`, `Gym`) · `Perennia` |
+
+O tipo de treino (`Threshold`, `Recovery`…) continua na sua linha própria. **Novo nas sessões:** uma
+sessão de ginásio passa a levar também a tag da **modalidade** do treino (ex. `Gym` + `Mobility`).
+
+**Saíram os sítios onde se criava um treino sem tags:** o «+ Criar treino (editor simples)» do ginásio
+e a lista antiga de treinos de força (menu da força → Construtor) passam a abrir o **construtor por
+blocos**; a Surpresa → «Ajustar antes de começar» também.
+
+**O construtor de Conditioning (novo).** *Ginásio → Conditioning → + Criar treino de Conditioning*
+(ou «Montar um treino e começar», ou Enter/E num treino da lista). Numa só página:
+- **em cima, a faixa dos blocos**: um retângulo por bloco, da cor do desporto e da largura do tempo;
+  **arrasta um bloco com o rato** para o pôr noutro sítio; um clique escolhe-o;
+- **por baixo, a lista**: o nome, as tags, os blocos (`1. Ciclismo · Sweet spot · 32:00`, com o resumo:
+  ERG/Manual, passos, modalidade) e os botões;
+- **+ Adicionar bloco**: escolhes o desporto numa lista — **Ciclismo, Passadeira, Remo, Ginásio ou
+  Descanso**. Nos três primeiros perguntas **Manual ou ERG**; no ginásio, **a modalidade** (lista).
+  Abre-se **o construtor desse desporto** (o mesmo de sempre, «responsive»: o de blocos para
+  ciclismo/passadeira/remo, o de força para o ginásio), com o botão **«Adicionar bloco a treino de
+  Conditioning»** em baixo (no ginásio, no cabeçalho). O bloco volta para o treino, a seguir ao
+  escolhido. O descanso entra logo; o tempo muda-se com ←/→ na linha (Shift: ±1 min) ou escrevendo
+  minutos;
+- num bloco: **Enter** edita-o no construtor do desporto (o botão diz «Atualizar bloco…»),
+  **D** duplica, **Alt+↑/↓** (ou Shift+←/→) muda-o de lugar, **Del** tira; também há as linhas
+  «Duplicar o bloco» e «Tirar o bloco»;
+- **▶ Começar** (não precisa de guardar) e **Guardar** (Ctrl+S). Os planos antigos abrem como blocos
+  (cada volta vira um bloco).
+
+**Na sessão** cada bloco é uma volta planeada. O aviso ao centro mostra o bloco, o tempo que falta e o
+**passo em curso** com o alvo (ex. `Passo 2: FTP 95–105 % · 238–263 W · 8:00`). Num bloco de
+**ciclismo ERG** a app **põe a potência de cada passo no rolo** (se o rolo aceitar comandos); num
+bloco Manual só mostra o alvo. O **ciclismo** passou a ser um desporto do Conditioning: há a volta
+«Bicicleta», a parte por desporto e o **.fit de ciclismo** (rolo, indoor cycling), e o histórico do
+ciclismo mostra o que foi feito dentro de um Conditioning.
+
+**Revisões desta ronda.**
+- *Base de dados:* **nada a fazer** — os treinos de Conditioning continuam em `lap_plans` (cada item
+  leva agora o bloco completo em `cond`); sem tabelas novas.
+- *Backup/import:* sem alterações (os planos já iam em «Treinos»; as opções novas em «Definições»).
+- *Rebuild:* há **um módulo novo** (`perennia/ui/conditioning_builder.py`, `perennia/core/conditioning.py`)
+  mas sem pacotes novos: refaz o executável com `build.sh` / `build_windows.bat` e volta a correr
+  `criar_atalho_windows.bat`.
+- *Segurança:* sem superfície nova; `.claude/`, `.env*`, `*.db`, `*.pem`, `*.key` no `.gitignore`;
+  as passwords só por variáveis de ambiente (`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_STRAVA_CLIENT_SECRET`,
+  `PERENNIA_SYNC_PIN`); nenhum comando leva uma password; SQL com parâmetros (os poucos nomes de tabela
+  montados no código são fixos).
+- *Opções novas (Definições → Avançado → Sessões):* `cond_rest_default_s` (um descanso novo, 120 s) e
+  `cond_gym_block_default_s` (um bloco de ginásio sem exercícios, 900 s).
+- *Setas → listas:* o desporto e a modalidade do bloco escolhem-se numa lista; Manual/ERG com botões.
+- *Bottlenecks:* o construtor de Conditioning lê o contexto de intensidade (FTP, limiares) uma vez por
+  desporto e só refaz as durações quando os blocos mudam (antes seriam várias consultas à BD por bloco
+  a cada tecla).
+- *Textos:* o aviso ao centro da sessão (título e linha de baixo) passou a cortar o texto à largura da
+  caixa; um teste mede o construtor de Conditioning, os construtores em modo bloco e a janela das tags
+  a 1024×640 e 1280×760.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -2044,6 +2116,8 @@ de omissão. Não estão disponíveis durante uma sessão.
 | **Sessões e aparelhos** | | | |
 | Contagem antes de começar (`session_countdown_s`) | 0 a 60 s | 15 s | segundos de contagem antes de qualquer sessão (0 = começa logo) |
 | Parar sozinho ao concluir o treino ou challenge (`session_auto_finish`) | ligado/desligado | ligado | quando acaba o último bloco, o challenge, o teste ou o plano de voltas o tempo pára e abre-se o ecrã de guardar (a sessão livre nunca pára sozinha) |
+| Conditioning: um descanso novo dura (`cond_rest_default_s`) | 10 a 900 s | 120 s | o tempo de um bloco de descanso acabado de juntar ao treino de Conditioning (ronda 26) |
+| Conditioning: bloco de ginásio sem exercícios (`cond_gym_block_default_s`) | 60 a 3600 s | 900 s | quanto conta um bloco de ginásio em que só marcas os exercícios na sessão (ronda 26) |
 | Pausa automática ao fim de (`auto_pause_after_s`) | 1 a 30 s | 3 s | segundos sem pedalar até a sessão pausar (se a pausa automática estiver ligada) |
 | Aparelho sem dados ao fim de (`device_stale_after_s`) | 2 a 30 s | 5 s | segundos sem receber um valor até um sensor contar como perdido |
 | Procura Bluetooth: duração (`ble_scan_s`) | 3 a 30 s | 8 s | quanto tempo a procura de aparelhos Bluetooth escuta (mais tempo encontra mais) |

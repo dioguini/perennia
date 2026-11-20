@@ -1146,6 +1146,7 @@ _STRINGS[PT].update({
     "laps.cond_detail": "remo + passadeira + ginásio numa sessão; um .fit total e um por desporto",
     "laps.kind.strength": "Força", "laps.kind.rest": "Descanso",
     "laps.kind.treadmill": "Passadeira", "laps.kind.cardio": "Cardio", "laps.kind.rowing": "Remo",
+    "laps.kind.bike": "Bicicleta",
     "laps.laps": "voltas",
     # jogos
     "game.over": "Fim do jogo",
@@ -1236,6 +1237,7 @@ _STRINGS[EN].update({
     "laps.cond_detail": "rowing + treadmill + gym in one session; a total .fit and one per sport",
     "laps.kind.strength": "Strength", "laps.kind.rest": "Rest",
     "laps.kind.treadmill": "Treadmill", "laps.kind.cardio": "Cardio", "laps.kind.rowing": "Rowing",
+    "laps.kind.bike": "Bike",
     "laps.laps": "laps",
     "game.over": "Game over",
     "game.points": "{n} points",

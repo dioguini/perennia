@@ -50,6 +50,12 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 26** — **Tags ao criar treinos**: todos os construtores (blocos, força/ginásio, Conditioning)
+  mostram as tags automáticas (desporto, modalidade no ginásio, `Workout`, `Indoor …`) e juntam as tuas;
+  saíram os editores sem tags. **Construtor de Conditioning por blocos**: blocos de ciclismo, passadeira,
+  remo e ginásio (Manual ou ERG, configurados no construtor do próprio desporto, com «Adicionar bloco a
+  treino de Conditioning»), descansos, duplicar e arrastar; na sessão, o passo de cada bloco e a potência
+  ERG no rolo. O ciclismo entra no Conditioning (com o seu .fit).
 - **Ronda 25** — **Conditioning como agregador**: uma sessão (livre ou um treino) feita de blocos de
   remo, passadeira e ginásio (há agora o «Bloco de ginásio» com tempo). No fim grava **um .fit total e
   um por desporto** (cada um junta tudo o que foi desse desporto). Tags `Conditioning` + uma por desporto,
