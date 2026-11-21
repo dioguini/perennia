@@ -20,15 +20,15 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import climbs as climbs_mod  # noqa: E402
-from velo.core import fit, gpx, stats  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.core import workout_export as wx  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.ride import AUTO_PAUSED, Reading, RideEngine  # noqa: E402
-from velo.core.workouts import Step, Workout, WorkoutRunner, parse_mrc, parse_zwo  # noqa: E402
-from velo.io.hub import SensorHub  # noqa: E402
-from velo.io.sim import SimulatedTrainer  # noqa: E402
+from perennia.core import climbs as climbs_mod  # noqa: E402
+from perennia.core import fit, gpx, stats  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.core import workout_export as wx  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.ride import AUTO_PAUSED, Reading, RideEngine  # noqa: E402
+from perennia.core.workouts import Step, Workout, WorkoutRunner, parse_mrc, parse_zwo  # noqa: E402
+from perennia.io.hub import SensorHub  # noqa: E402
+from perennia.io.sim import SimulatedTrainer  # noqa: E402
 
 GPX = Path(__file__).parent / "teste.gpx"
 
@@ -124,7 +124,8 @@ class TestStrengthCore(unittest.TestCase):
         self.assertGreater(result["load"], 0)
         self.assertGreater(sum(result["hr_zone_s"]), 0)
         squat = next(e for e in result["exercises"] if e["name"].startswith("Agachamento"))
-        self.assertAlmostEqual(squat["best_e1rm"], 60 * (1 + (6 + 2.5) / 30), places=3)
+        # a sessão já não pede o RPE: sem ele a série conta como feita até ao limite (sem RIR)
+        self.assertAlmostEqual(squat["best_e1rm"], 60 * (1 + 6 / 30), places=3)
         # na base: sessão concluída, ponto de recuperação apagado
         row = self.db.conn.execute("SELECT * FROM strength_sessions").fetchone()
         self.assertEqual(row["status"], "completed")
@@ -514,7 +515,7 @@ class TestFitnessAndFtp(unittest.TestCase):
     def test_zones_by_period_and_sport(self):
         rid = self.add_ride(date.today(), 60)
         self.db.append_samples(rid, [
-            __import__("velo.core.db", fromlist=["Sample"]).Sample(
+            __import__("perennia.core.db", fromlist=["Sample"]).Sample(
                 t_s=i, dist_m=i * 8.0, power_w=240 if i < 60 else 100, hr_bpm=150)
             for i in range(120)])
         z = stats.zones_series(self.db, "power", "week", 4)
@@ -530,14 +531,14 @@ class TestFitnessAndFtp(unittest.TestCase):
 # ================================================================= interface
 
 from tests import test_gui as tg  # noqa: E402
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import session_setup as sessetup  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import session_setup as sessetup  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
 
 
 class TestStrengthGui(tg.GuiCase):
     def go_strength(self):
-        from velo.ui import gym_screens as gs
+        from perennia.ui import gym_screens as gs
         self.press(key.ESCAPE)
         self.pick("Ginásio")
         self.assertIsInstance(self.screen(), gs.GymHub)
@@ -547,7 +548,7 @@ class TestStrengthGui(tg.GuiCase):
         self.assertEqual(self.screen().level, "mod:strength")
 
     def test_train_a_plan_and_finish(self):
-        from velo.ui import gym_screens as gs
+        from perennia.ui import gym_screens as gs
         self.go_strength()
         self.press(key.ESCAPE)                            # volta às modalidades
         self.press(key.ESCAPE)                            # fecha a janela da sessão
@@ -569,15 +570,15 @@ class TestStrengthGui(tg.GuiCase):
         self.app._on_draw()
         for _ in range(20):
             self.app._tick(0.5)
-        self.assertEqual(scr.clock.value.text, "0:10")   # tempo total ao centro
-        self.assertIn("série", scr.clock.sub.text)
+        self.assertFalse(hasattr(scr, "clock"))           # sem cronómetro no topo
         self.press(key.SPACE)                             # Lap: termina a série
         self.assertEqual(len(scr.session.sets), 1)
-        self.select("Segundos")                            # corrige: foram 280 s
-        self.app._on_text("280")
+        # as repetições corrigem-se na linha do exercício (não há linhas à parte, nem RPE)
+        self.assertFalse([i for i in scr.list.items if i.label in ("Segundos", "RPE", "Carga")])
+        scr.list.select_data(("ex", 0))
+        self.app._on_text("280")                           # foram 280 s
         self.assertEqual(scr.session.sets[-1].reps, 280)
-        self.select("RPE")
-        self.press(key.RIGHT, key.RIGHT)
+        self.assertEqual(scr.session.sets[-1].rpe, None)   # a sessão já não pede o RPE
         self.app._on_draw()
         self.press(key.SPACE)                             # Lap: série seguinte
         self.assertEqual(scr.session.phase, "work")
@@ -588,7 +589,7 @@ class TestStrengthGui(tg.GuiCase):
         self.assertTrue(scr.confirming)
         self.assertTrue(scr.finish_dialog.visible)
         self.press(key.ENTER)                             # «Sim, terminar»
-        from velo.ui import tag_popup as tp_
+        from perennia.ui import tag_popup as tp_
         self.assertIsInstance(self.screen(), tp_.SessionTagsPopup)
         self.press(key.ENTER)                             # «Guardar e terminar» (etiquetas)
         summ = self.screen()
@@ -602,8 +603,8 @@ class TestStrengthGui(tg.GuiCase):
         self.assertIn("Força A", self.screen().list.items[0].label)
         self.assertIn("Força", self.screen().list.items[0].detail)
         self.pick("Força A")
-        from velo.ui import session_analysis as sa_ui
-        from velo.ui import strength_analysis_screens as sas
+        from perennia.ui import session_analysis as sa_ui
+        from perennia.ui import strength_analysis_screens as sas
         an = self.screen()                                 # a análise em separadores
         self.assertIsInstance(an, sa_ui.SessionAnalysis)
         self.assertEqual(an.tab_labels(), ["Geral", "Feedback", "Análise do treino",
@@ -649,11 +650,11 @@ class TestStrengthGui(tg.GuiCase):
         self.assertFalse(scr.confirming)
 
     def test_builder_creates_a_plan(self):
-        from velo.ui import hub_screens as hs_
+        from perennia.ui import hub_screens as hs_
         self.go_strength()
         self.press(key.ESCAPE)
         self.press(key.ESCAPE)
-        from velo.ui import gym_screens as gs_
+        from perennia.ui import gym_screens as gs_
         self.app.push(gs_.GymPlanEditor(self.app, "strength", None))     # o editor simples
         ed = self.screen()
         self.assertIsInstance(ed, ss.StrengthWorkoutEditor)
@@ -685,7 +686,7 @@ class TestStrengthGui(tg.GuiCase):
         self.assertEqual(ed.items[-1]["name"], "Nordic curl")
         self.pick("Guardar e treinar")
         self.assertIsInstance(self.screen(), ss.StrengthPreview)
-        from velo.core import gym
+        from perennia.core import gym
         names = [w["name"] for w in gym.workouts(self.app.db, "strength")]
         self.assertIn("Pernas", names)
 

@@ -16,13 +16,13 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import screen_layout as sl  # noqa: E402
-from velo.core.db import Database  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import screen_layout as sl  # noqa: E402
+from perennia.core.db import Database  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import arrangement_screens as ars  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import arrangement_screens as ars  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
 
 
 class TestModel(unittest.TestCase):
@@ -175,7 +175,7 @@ class TestSessionsFollowTheLayout(tg.GuiCase):
             self.app._tick(0.5)
         self.app._on_draw()
         self.assertTrue(ses.live_chart is not None)
-        self.assertGreater(len(ses._series["a"]), 3)
+        self.assertGreater(ses.live.total, 3)
 
     def test_hidden_panel_goes_off_screen(self):
         p = sl.defaults("running")

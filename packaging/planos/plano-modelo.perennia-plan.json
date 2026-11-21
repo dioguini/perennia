@@ -1,0 +1,268 @@
+{
+  "format": "perennia-plan",
+  "version": 1,
+  "name": "O meu plano (modelo)",
+  "description": "Explica aqui o plano em duas ou três frases: para quem é, como progride, o que fazer quando se falha.",
+  "author": "o teu nome",
+  "source": "de onde veio o plano (livro, site…)",
+  "category": "strength",
+  "level": "beginner",
+  "weeks": 4,
+  "exercises": {
+    "squat": {
+      "name": "Agachamento com barra",
+      "group": "legs",
+      "measure": "reps",
+      "bodyweight": 0.0,
+      "modality": "strength",
+      "equipment": [
+        "barbell",
+        "plates",
+        "rack"
+      ],
+      "aliases": [
+        "Back squat",
+        "Squat"
+      ],
+      "description": ""
+    },
+    "bench": {
+      "name": "Supino com barra",
+      "group": "chest",
+      "measure": "reps",
+      "bodyweight": 0.0,
+      "modality": "strength",
+      "equipment": [
+        "barbell",
+        "plates",
+        "bench",
+        "rack"
+      ],
+      "aliases": [
+        "Bench press"
+      ],
+      "description": ""
+    },
+    "row": {
+      "name": "Remada com barra",
+      "group": "back",
+      "measure": "reps",
+      "bodyweight": 0.0,
+      "modality": "strength",
+      "equipment": [
+        "barbell",
+        "plates"
+      ],
+      "aliases": [],
+      "description": ""
+    },
+    "pullup": {
+      "name": "Elevações (pull-ups)",
+      "group": "back",
+      "measure": "reps",
+      "bodyweight": 1.0,
+      "modality": "calisthenics",
+      "equipment": [
+        "pullup_bar"
+      ],
+      "aliases": [],
+      "description": ""
+    },
+    "plank": {
+      "name": "Prancha",
+      "group": "core",
+      "measure": "time",
+      "bodyweight": 0.0,
+      "modality": "strength",
+      "equipment": [],
+      "aliases": [],
+      "description": ""
+    },
+    "meu_exercicio": {
+      "name": "Um exercício que ainda não existe",
+      "group": "arms",
+      "measure": "reps",
+      "bodyweight": 0.0,
+      "modality": "strength",
+      "equipment": [
+        "dumbbell"
+      ],
+      "aliases": [],
+      "description": "É criado na Perennia quando começares o plano."
+    }
+  },
+  "sessions": {
+    "A": {
+      "name": "Treino A",
+      "notes": "Texto livre que aparece no topo da sessão.",
+      "blocks": [
+        {
+          "kind": "single",
+          "rounds": 1,
+          "rest": 0,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "squat",
+              "sets": 5,
+              "reps": 5,
+              "rest": 180.0,
+              "add_kg": 2.5,
+              "per": "session",
+              "start_pct": 50.0,
+              "track": "squat",
+              "notes": ""
+            }
+          ]
+        },
+        {
+          "kind": "single",
+          "rounds": 1,
+          "rest": 0,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "bench",
+              "sets": 3,
+              "reps": "8-12",
+              "rpe": 8.0,
+              "rest": 120.0,
+              "notes": ""
+            }
+          ]
+        },
+        {
+          "kind": "superset",
+          "rounds": 1,
+          "rest": 60,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "row",
+              "sets": 3,
+              "reps": 10,
+              "pct1rm": [
+                60.0,
+                62.5,
+                65.0,
+                55.0
+              ],
+              "notes": ""
+            },
+            {
+              "exercise": "meu_exercicio",
+              "sets": 3,
+              "reps": 12,
+              "notes": ""
+            }
+          ]
+        },
+        {
+          "kind": "single",
+          "rounds": 1,
+          "rest": 0,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "plank",
+              "sets": 3,
+              "time": [
+                30.0,
+                40.0,
+                50.0,
+                30.0
+              ],
+              "rest": 45.0,
+              "notes": ""
+            }
+          ]
+        }
+      ]
+    },
+    "B": {
+      "name": "Treino B",
+      "notes": "",
+      "blocks": [
+        {
+          "kind": "single",
+          "rounds": 1,
+          "rest": 0,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "squat",
+              "sets": [
+                {
+                  "reps": 5,
+                  "pct1rm": 65.0
+                },
+                {
+                  "reps": 5,
+                  "pct1rm": 75.0
+                },
+                {
+                  "reps": "5+",
+                  "pct1rm": 85.0
+                }
+              ],
+              "notes": ""
+            }
+          ]
+        },
+        {
+          "kind": "single",
+          "rounds": 1,
+          "rest": 0,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "pullup",
+              "sets": 3,
+              "reps": "max",
+              "rest": 120.0,
+              "notes": ""
+            }
+          ]
+        },
+        {
+          "kind": "circuit",
+          "rounds": 3,
+          "rest": 90,
+          "notes": "",
+          "exercises": [
+            {
+              "exercise": "meu_exercicio",
+              "sets": 1,
+              "reps": 15,
+              "notes": ""
+            },
+            {
+              "exercise": "plank",
+              "sets": 1,
+              "time": 30.0,
+              "notes": ""
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "rotation": [
+    "A",
+    "B"
+  ],
+  "days_per_week": 3,
+  "weekdays": [
+    1,
+    3,
+    5
+  ],
+  "equipment": [
+    "barbell",
+    "bench",
+    "dumbbell",
+    "plates",
+    "pullup_bar",
+    "rack"
+  ]
+}

@@ -13,13 +13,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from velo.core import climbs as climbs_mod
-from velo.core import fit, ftp, gpx, physics
-from velo.core.db import Athlete, Database
-from velo.core.ride import Ghost, RideEngine, load_ghosts
-from velo.core.workouts import Step, Workout, WorkoutRunner
-from velo.io.hub import SensorHub
-from velo.io.sim import SimulatedTrainer
+from perennia.core import climbs as climbs_mod
+from perennia.core import fit, ftp, gpx, physics
+from perennia.core.db import Athlete, Database
+from perennia.core.ride import Ghost, RideEngine, load_ghosts
+from perennia.core.workouts import Step, Workout, WorkoutRunner
+from perennia.io.hub import SensorHub
+from perennia.io.sim import SimulatedTrainer
 
 GPX = Path(__file__).parent / "teste.gpx"
 DT = 0.25     # passo de simulação: 4 "frames" por segundo
@@ -158,7 +158,7 @@ class TestFullRide(unittest.TestCase):
         self.assertAlmostEqual(result["summary"].avg_balance_left, 47.5, delta=2.0)
         laps = self.h.db.laps(e.ride_id)
         self.assertTrue(all(r["avg_balance_left"] is not None for r in laps))
-        from velo.core import stats
+        from perennia.core import stats
         hist = stats.balance_history(self.h.db)
         self.assertEqual(len(hist), 1)
         self.assertIsNotNone(stats.avg_balance(self.h.db))
@@ -201,8 +201,8 @@ class TestFullRide(unittest.TestCase):
 
     def test_pedals_that_keep_repeating_still_pause_the_ride(self):
         """O caso real da Assioma: parada, continua a repetir a última página."""
-        from velo.io import ant
-        from velo.io.hub import SensorHub
+        from perennia.io import ant
+        from perennia.io.hub import SensorHub
         now = [0.0]
         hub = SensorHub(clock=lambda: now[0])
         pedals = ant.AntSensor(ant.AntStick(), 3,
@@ -576,7 +576,7 @@ class TestChaseMode(unittest.TestCase):
         h.close()
 
     def test_equal_power_keeps_the_gap(self):
-        from velo.core.chase import Chase
+        from perennia.core.chase import Chase
         c = Chase("normal", 250, 80.0, 0.32, 0.004)
         rider_v, rider_m = 0.0, 0.0
         for _ in range(int(240 / 0.05)):
@@ -680,8 +680,8 @@ class TestGradientFeel(unittest.TestCase):
         no mundo continua a sair do declive real da estrada. Para isolar isto
         de um ciclista que reage à resistência, injeta-se potência constante.
         """
-        from velo.core.ride import Reading
-        from velo.io.sim import ScriptedSource
+        from perennia.core.ride import Reading
+        from perennia.io.sim import ScriptedSource
 
         def distance_after(difficulty: float, tag: str) -> float:
             db = Database(Path(self.tmp.name) / f"{tag}.db")
@@ -782,7 +782,7 @@ class TestComparisonMode(unittest.TestCase):
         h.close()
 
     def test_ghost_interpolates_between_samples(self):
-        from velo.core.db import Sample
+        from perennia.core.db import Sample
         g = Ghost("x", "teste", [Sample(t_s=0, dist_m=0.0), Sample(t_s=10, dist_m=100.0)])
         self.assertAlmostEqual(g.time_at(50.0), 5.0)
         self.assertAlmostEqual(g.dist_at(5.0), 50.0)
@@ -904,7 +904,7 @@ class TestSensorHub(unittest.TestCase):
     """Vários sensores ao mesmo tempo, com prioridades (req. 27)."""
 
     def test_power_meter_beats_trainer_but_cadence_can_differ(self):
-        from velo.core.ride import Reading
+        from perennia.core.ride import Reading
         hub = SensorHub()
         trainer = SimulatedTrainer(base_power=200, with_hr=True)
         hub.add_source(trainer, role="trainer", is_trainer=True)

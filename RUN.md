@@ -2,12 +2,13 @@
 
 Este guia leva-te do zero à aplicação a correr. Tudo funciona offline.
 
-**A aplicação chamava-se VeloLocal e passou a chamar-se Perennia.** Se já
-tinhas dados, não perdes nada: a Perennia continua a usar a pasta antiga
-(`VeloLocal` / `velolocal`) enquanto ela existir. A base de dados passa a
-chamar-se `perennia.db`; a antiga (`velolocal.db`) é renomeada sozinha na
-primeira vez que abres a aplicação. Os `.fit` novos chamam-se
-`perennia_<data>_<nome>.fit`.
+**Se vens da versão antiga (VeloLocal), não tens de fazer nada à mão.** Na primeira vez que
+abres a Perennia, ela **renomeia** a pasta de dados antiga (`VeloLocal` / `velolocal`) para
+`Perennia` / `perennia` (uma só operação, na mesma pasta-mãe, sem copiar nada), a base `velolocal.db`
+passa a `perennia.db`, e os caminhos e o formato das sessões antigas que estavam guardados na base
+são atualizados. Fica tudo na mesma. Se as duas pastas existirem, a nova ganha e a antiga fica
+intacta (nada se apaga). Os `.fit` novos chamam-se `perennia_<data>_<nome>.fit`. Daqui para a frente,
+**o nome VeloLocal só existe num ficheiro do código** (`perennia/legacy.py`, que faz esta migração).
 
 ---
 
@@ -107,7 +108,7 @@ python main.py --fullscreen
 python main.py --window                 # em janela, mesmo que da última vez não fosse
 python main.py --width 1920 --height 1080
 python main.py --data-dir ./dados       # base de dados nesta pasta
-VELO_FPS=1 python main.py               # mostra os fotogramas por segundo
+PERENNIA_FPS=1 python main.py               # mostra os fotogramas por segundo
 ```
 
 **Resolução.** Não precisas destas opções: em **Definições → Resolução**,
@@ -123,6 +124,57 @@ as linhas dos gráficos e o contorno do perfil saem sem serrilhado. Se a
 placa gráfica não aceitar 4×, a aplicação tenta 2× e depois sem, sozinha.
 Num computador lento ou num Raspberry Pi podes baixar para 2× ou desligar em
 **Definições → Suavização**; a mudança aplica-se ao reabrir a aplicação.
+
+### Abrir como uma app, sem o PyCharm
+
+O PyCharm serve para **programar**; para **usar** a Perennia não precisas dele. Há dois caminhos
+e os **dados são os mesmos** nos dois (a mesma base de dados, os mesmos `.fit`), por isso podes
+trocar à vontade.
+
+**Caminho 1 — o mais rápido (usa o teu projeto, tal como está):**
+
+| Sistema | Como |
+|---|---|
+| **Windows** | duplo clique em **`Perennia.bat`**. Usa o ambiente virtual do projeto (`.venv`, o que o PyCharm criou, ou o da secção 2) e abre **sem a janela preta**. |
+| **macOS / Linux / Raspberry Pi** | `./perennia.sh` (no terminal, ou duplo clique se o gestor de ficheiros deixar). |
+
+Depois de um `git pull` a versão nova já é a que abre: não há nada para reconstruir. Se a
+aplicação fechar com um erro, fica em **`perennia-erro.log`** na pasta dos dados (secção 8); para
+veres as mensagens em direto, abre um terminal e corre `python main.py`.
+
+**Um ícone no Ambiente de trabalho (Windows):** duplo clique em **`criar_atalho_windows.bat`**.
+Aparece o atalho **Perennia**, com o ícone da aplicação. Botão direito no atalho → *Fixar na barra
+de tarefas* (ou *Fixar no Iniciar*) e já a abres como qualquer outra app. Se já fizeste o build
+(caminho 2), o atalho aponta para o `Perennia.exe`; senão, para o ambiente do projeto.
+
+**Caminho 2 — uma app a sério (`Perennia.exe`, sem precisar de Python):**
+
+1. Duplo clique em **`build_windows.bat`** (uns minutos da primeira vez; é o da secção 7). Corre o
+   autoteste e empacota. No fim tens **`dist\Perennia\Perennia.exe`**, já com o ícone.
+2. Duplo clique em **`criar_atalho_windows.bat`** outra vez: o atalho passa a apontar para ele.
+   (Ou arrasta o `Perennia.exe` para o Ambiente de trabalho com *Alt* carregado, para criar um atalho.)
+3. Para teres uma versão nova da app depois de um `git pull`, voltas a correr o `build_windows.bat`.
+   A pasta `dist` não vai para o git. Os dados ficam, que estão em `%APPDATA%\Perennia`.
+
+No Mac e no Linux o empacotamento é o `./build.sh` (sai `dist/Perennia-mac.zip`, com a
+`Perennia.app` lá dentro: arrasta-a para a pasta *Aplicações*). O GitHub também a pode gerar sozinho
+(secção 7, «Alternativa: o GitHub faz tudo»).
+
+**Linux com ícone no menu de aplicações:** cria o ficheiro `~/.local/share/applications/perennia.desktop`
+com (troca `/caminho/para` pela pasta do projeto):
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Perennia
+Exec=/caminho/para/perennia/perennia.sh
+Icon=/caminho/para/perennia/perennia/assets/app_icon.png
+Terminal=false
+Categories=Sports;
+```
+
+O ícone da aplicação está em `perennia/assets/app_icon.png` (janela) e `packaging/perennia.ico` (o `.exe`);
+`python tools/make_app_icon.py` volta a desenhá-los.
 
 ### Primeira vez, passo a passo
 
@@ -163,32 +215,76 @@ sem os segmentos) ou **Cancelar a sessão**.
 
 ### Teclas durante a sessão
 
+As teclas são **as mesmas em todos os desportos** — ciclismo, corrida, natação, remo e ginásio:
+
 | Tecla | O que faz |
 |---|---|
-| **L** | marca uma volta (como nos Garmin) |
-| **+ / −** ou **↑ / ↓** | mais ou menos resistência (ou intensidade, em ERG) |
-| **P** ou clique em **❚❚ Pausa** | pausa manual / retoma |
-| **Esc** | pausa e lembra como terminar — não termina por acidente |
-| **F10** ou clique em **■ Terminar** | pergunta "Terminar a sessão?"; Sim grava o `.fit` e vai para o resumo, Não volta à sessão em pausa |
+| **L** | marca uma **volta** (como nos Garmin) |
+| **P** ou clique em **❚❚ Pausa** | **pausa** — abre o aviso **PAUSA** ao centro — e retoma |
+| **Esc** | também pausa (abre o **PAUSA**) e **não termina** por acidente; com o PAUSA aberto, Esc retoma |
+| **F10** ou clique em **■ Terminar** | pergunta «Terminar a sessão?»; Sim grava o `.fit` e vai para o resumo, Não volta |
 | **D** (na pergunta de terminar) | **Terminar sem guardar**: apaga a sessão, sem `.fit` nem histórico |
-| **F4** | janela dos dispositivos, sem parar a sessão |
+| **N** | **saltar bloco**: o passo do treino (ciclismo, corrida, remo) ou o exercício/bloco (ginásio) |
+| **Espaço** | **começar sem contagem**, durante a contagem dos 15 s (no ginásio, durante a sessão, é o Lap) |
+| **+ / −** | ciclismo e remo: mais / menos **resistência** · corrida: **velocidade** · natação: + / − piscina |
+| **↑ / ↓** | corrida: **declive** · ciclismo: resistência (ou intensidade, em ERG) · ginásio: linha anterior / seguinte |
+| **T** | corrida: escrever o total que o visor da passadeira mostra |
+| **V** | remo: outra página de campos |
+| **F4** | **Dispositivos** — a sessão **fica em pausa** enquanto estiver aberto |
+| **F8** | **Definições** (só algumas; ver abaixo) — a sessão **fica em pausa** |
+| **F9** | **Glossário** (fora das sessões) |
 | **F11** | ecrã inteiro |
 
+**O aviso PAUSA.** Quando a sessão está em pausa (à mão ou por teres aberto um menu), aparece ao centro
+um aviso com a palavra **PAUSA** e dois botões:
+
+- **Retomar sessão** (clique, **P**, **Esc**, **Enter** ou **Espaço**): o tempo volta a correr;
+- **Terminar treino** (clique, **F10** ou **D**): pergunta «Terminar a sessão?» (Sim · Não · Terminar
+  sem guardar). Se escolheres **Não**, voltas ao PAUSA.
+
+A **pausa automática** do ciclismo (parares de pedalar) continua a ser só um aviso no topo, que
+desaparece quando pedalas; o aviso ao centro é para a pausa **à mão** e para a dos menus.
+
+**Dispositivos e Definições durante uma sessão.** Podes abri-los a qualquer altura (F4, F8 ou os
+botões da barra do topo): abrem **por cima** da sessão e **põem-na em pausa** — o tempo, o treino e o
+`.fit` ficam parados. Ao fechar, a sessão **não arranca sozinha**: vês o aviso PAUSA e retomas tu.
+Nas **Definições** só aparece o que se pode mexer sem estragar a sessão:
+
+| Separador | O que tem durante a sessão |
+|---|---|
+| **Geral** | só os **passos seguintes** no treino |
+| **Desportos** | só o separador **do desporto em que estás** (a natação não tem) |
+| **Ecrã e idioma** | só **Tema, Unidades e Idioma** |
+| **Atalhos de teclado** | tudo |
+| **Configurações sonoras** | tudo (os bips são os mesmos para todos os desportos) |
+
+Não aparecem o **Atleta**, as **Ligações Externas**, a resolução, a suavização… (isso muda-se fora da
+sessão). **Guardar** (Ctrl+S) grava; **Esc** com alterações por guardar pergunta primeiro. Os atalhos e
+os bips novos valem já ao voltar; as métricas e a disposição do ecrã, e o tema, valem por inteiro na
+sessão seguinte. **Backups** e **Desligar** continuam a cinzento até terminares a sessão.
+
 Todas as sessões (ciclismo, corrida, natação, remo, ginásio) começam com uma
-**contagem de 15 s** ao centro do ecrã; a sessão só arranca no fim. **Esc**
+**contagem de 15 s** ao centro do ecrã; a sessão só arranca no fim, ou antes se carregares em
+**Espaço** (começar sem contagem). **Esc**
 durante a contagem cancela (nada fica gravado). Nos **treinos estruturados**
 (um treino da lista, um teste, um plano de voltas) não há auto lap para
 escolher: **cada bloco feito fecha uma volta**, sozinho.
 
-As teclas destas tabelas são as de origem: em **Definições → Atalhos de
-teclado** mudas qualquer uma (Enter na linha e carrega na tecla nova). A
+**Atalhos únicos.** As teclas destas tabelas são as de origem: em **Definições → Atalhos de
+teclado** mudas qualquer uma (Enter na linha e carrega na tecla nova). **Marcar volta, Pausa / retomar,
+Terminar, Começar sem contagem e Saltar bloco são uma só definição para todos os desportos**
+(grupo «Sessões de treino (todos os desportos)»): mudas uma vez e vale em todos. Só ficam à parte as
+que fazem sentido num desporto: a **resistência** (ciclismo e remo), a **velocidade e o declive** da
+corrida e o escrever o total do visor, e a **página de campos** do remo. Se já tinhas mudado a
+tecla de um desporto (por exemplo a volta do remo), essa passa para a definição única, sozinha. A
 aplicação avisa se a tecla já é de outro atalho no mesmo contexto ou se é de
-navegação (setas, Enter, Esc, Tab…, que são fixas). **Guardar** fixa,
+navegação (setas, Enter, Esc, Tab…, que são fixas; **J** e **K** também não, porque mudam de linha no
+ginásio — só com Ctrl ou Alt). **Guardar** fixa,
 **Cancelar** desfaz, e **Repor as teclas de origem** volta tudo atrás.
 
-O **tempo total** fica em grande, ao centro, no topo de todas as sessões
-(ciclismo, remo, corrida, natação, ginásio). Por baixo aparece o tempo da
-volta, ou da série e do descanso no ginásio.
+O **tempo total** fica em grande, ao centro, no topo das sessões de ciclismo, remo, corrida e natação.
+Por baixo aparece o tempo da volta. **O ginásio já não tem esse relógio**: a contagem da série (por
+tempo) e a do descanso vão para a métrica **Série / descanso** (ver «A sessão de força»).
 
 **Volta automática.** Antes de começar qualquer treino há a opção **Volta
 automática**, desligada por omissão. Enter alterna entre desligada, por
@@ -225,9 +321,9 @@ arrancar sozinha.
 
 ### O ecrã inicial
 
-Doze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
-(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**) e a
-**Saúde**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
+Treze cartões, **todos do mesmo tamanho** e com ícones discretos: na primeira fila os cinco desportos
+(**Ciclismo**, **Remo**, **Corrida**, **Natação** e **Ginásio**), a
+**Saúde** e o **Treinador**; na segunda, **Rotas**, **Segmentos**, **Estatísticas
 gerais**, **Inventário de artigos**, **Exercícios** e **Longevidade**. O Calendário deixou
 de ser um cartão: **está no próprio ecrã inicial** (ver abaixo), e os
 **Backups e Sincronização** estão na barra do topo. Um título que não caiba numa linha parte-se em
@@ -256,11 +352,12 @@ ecrãs:
   **Dispositivos** (F4), **Backups**, **Definições** (F8) e **Desligar**
   (Ctrl+Q). Backups fica a cinzento durante uma sessão.
 - **Dispositivos** abre uma janela por cima do ecrã onde estás, também a
-  meio de uma sessão. Aí ligas ou desligas cada aparelho e a sessão
-  continua por baixo. Quando um aparelho se desliga aparece o aviso
+  meio de uma sessão — e, numa sessão, **a sessão fica em pausa** até voltares (aparece o aviso
+  PAUSA). Aí ligas ou desligas cada aparelho. Quando um aparelho se desliga aparece o aviso
   "⚠ … desligou-se", e quando volta, "… voltou".
-- **Definições** e **Desligar** ficam a cinzento durante uma sessão. Termina
-  a sessão primeiro.
+- **Definições** também abre durante uma sessão (a sessão fica em pausa), mas só com os separadores
+  e as opções que se podem mexer sem a estragar (ver «Teclas durante a sessão»). **Desligar** fica
+  a cinzento: termina a sessão primeiro.
 - **Desligar** pergunta sempre "Sair da Perennia?". A resposta já
   escolhida é "Não", para um Enter distraído não fechar a aplicação.
 - **As mensagens** («Guardado», um erro, onde ficou um ficheiro…) aparecem
@@ -300,9 +397,15 @@ Sincronização**). Tab e Shift+Tab mudam de separador; também podes clicar.
   painéis** só têm o separador do desporto de onde vieste.
 
 **Atalhos de teclado** mostra todas as teclas da aplicação, por grupo (em
-qualquer ecrã, sessão de ciclismo, remo, corrida e natação, ginásio,
+qualquer ecrã, **sessões de treino de todos os desportos**, ciclismo, remo, corrida e natação,
 construtores, listas e calendário). **Ctrl+S** guarda em qualquer ecrã que
-tenha alguma coisa para guardar.
+tenha alguma coisa para guardar. Os atalhos de volta, pausa, terminar, começar sem contagem e
+saltar bloco são **um só para todos os desportos**; a resistência, a velocidade e o declive têm o
+seu (ver «Teclas durante a sessão»).
+
+**Durante uma sessão** as Definições têm só cinco separadores: **Geral** (os passos seguintes),
+**Desportos** (só o desporto da sessão), **Ecrã e idioma** (tema, unidades e idioma), **Atalhos de
+teclado** e **Configurações sonoras**.
 
 **As regras de todos os ecrãs:**
 
@@ -485,6 +588,12 @@ abre a análise em quatro separadores (Tab muda):
    mudam de vista).
 
 ### Feedback no fim de cada sessão
+
+**A avaliação do treino é agora do Treinador** (ver «O Treinador», mais abaixo): o painel da
+direita chama-se **Treinador** e começa pela leitura dele — a forma com que entraste na sessão,
+se foi um dia pesado para a tua carga habitual, o que acrescentou à longevidade e **o que fazer a
+seguir** (descansar, baixar ou subir alvos, repetir, seguir o plano, e o próximo treino do
+calendário). Por baixo continua a análise que já existia (execução, objetivo, sensações).
 
 Quando uma sessão termina, por cima do resumo aparece **«Como correu esta
 sessão?»**:
@@ -679,8 +788,8 @@ e **o mesmo ícone para a mesma ação**: **+** para acrescentar (o «+» da eti
 pelo ícone), disquete para Guardar, caixote para Apagar / Remover / Terminar sem guardar, **×**
 para Cancelar / Fechar, lápis para Editar, calendário para Planear, um ícone próprio para
 Exportar e outro para Importar, ▶ para Começar / Retomar, ⏸ para Pausa, ■ para Terminar, ✓ para
-Sim / OK / Aplicar e ← para Voltar. (Os ícones vêm de `velo/assets/icons`, gerados por
-`tools/make_icons.py`, e a regra de qual vai com cada etiqueta está em `velo/gfx/icons.py`.)
+Sim / OK / Aplicar e ← para Voltar. (Os ícones vêm de `perennia/assets/icons`, gerados por
+`tools/make_icons.py`, e a regra de qual vai com cada etiqueta está em `perennia/gfx/icons.py`.)
 
 ### Os menus de cada desporto
 
@@ -807,7 +916,10 @@ O ecrã da sessão de remo tem agora **duas páginas de 12 quadrados**; a tecla
 - kcal e kcal/h, e carga (TSS);
 - volta atual: tempo, distância, ritmo, e o ritmo da volta anterior;
 - no treino estruturado, o alvo do passo e a diferença para ele;
-- projeção dos 2 km e tempo final previsto.
+- projeção dos 2 km e tempo final previsto;
+- **velocidade**, **velocidade média** e **máxima** (km/h, ou mph nas unidades imperiais) e o
+  **total de remadas** (o ritmo /500 m e o ritmo médio /500 m já existiam). A velocidade e as
+  remadas totais também entram no resumo, no histórico e na análise da sessão.
 
 Escolhe-as em **Remo → Treinar → Campos do ecrã de remo**, uma página por
 separador.
@@ -882,10 +994,12 @@ força criado no TrainingPeaks) e pergunta se fica na lista; a **Lista de treino
 **aparelhos** (a banda de FC) e o **auto lap**, que aparece **bloqueado** porque o ginásio faz
 auto lap a cada bloco do treino.
 
-**A sessão de força** tem os mesmos botões das outras, **em cima, à direita, ao lado do relógio**:
+**A sessão de força** tem os mesmos botões das outras, **em cima, à direita**:
 **Lap**, **+ Série**, **Saltar**, **Pausa** e o **Terminar a vermelho** (como no ciclismo; em janelas
-estreitas descem para a barra de baixo), o mesmo diálogo de terminar (Esc pausa, F10 pergunta; Sim ·
-Não · Terminar sem guardar) e as etiquetas do `.fit`.
+estreitas descem para a barra de baixo), o mesmo aviso **PAUSA** e o mesmo diálogo de terminar (Esc
+pausa, F10 pergunta; Sim · Não · Terminar sem guardar) e as etiquetas do `.fit`. **Já não há
+cronómetro no topo** nem campos de **RPE**: a sessão não os pede (o RPE da sessão inteira continua
+no feedback do fim).
 
 - **Começa sozinha**, como as outras sessões: passada a contagem de **15 s** (Definições) arranca
   logo o 1.º exercício — **já não há «Começar série 1»**. O botão é só o **Lap** (também Espaço e
@@ -893,10 +1007,22 @@ Não · Terminar sem guardar) e as etiquetas do `.fit`.
 - **O treino está numa lista, num só ecrã**: uma linha por exercício com o **alvo**, as
   **repetições e a carga à frente** (colunas «Repetições» e «Carga»: o que o plano pede, ou o que
   fizeste) e as séries feitas (`2/4`); **seguido do seu descanso** (assim o treino está todo
-  descrito e é só segui-lo). ▶ é o exercício (ou o descanso, com a contagem) em curso, ✓ os feitos.
-  **Mesmo por baixo do exercício em curso** ficam os campos da série (repetições/segundos, carga,
-  RPE): ←/→ ajustam, escrever números substitui. **Enter num exercício** vai para ele e começa a
-  série (a meio de uma série avisa).
+  descrito e é só segui-lo). ▶ é o exercício (ou o descanso, com a contagem) em curso, ✓ os feitos,
+  – os saltados. **O descanso é a única linha por baixo de cada exercício** (já não há linhas à parte
+  para as repetições, a carga e o RPE) e leva o **tempo na coluna das repetições** (`1:30`; no que
+  está a decorrer conta para trás e passa a `+0:05` a vermelho se ultrapassares).
+  As **repetições** (ou os segundos) do exercício em curso mudam-se **na própria linha dele**: ←/→
+  ajustam, escrever um número substitui; a **carga** muda com **[** e **]**. **Enter num exercício**
+  vai para ele e começa a série (a meio de uma série avisa).
+- **Séries por tempo (a prancha de 40 s)**: o tempo da série **conta para trás**, como o descanso, com
+  os mesmos bips nos últimos segundos; quando chega a zero a série **termina sozinha** e passa ao
+  descanso (e daí ao exercício seguinte). O botão **Lap** termina-a antes, se quiseres.
+- **A contagem decrescente** (da série por tempo e do descanso) aparece na métrica **Série /
+  descanso**. Se essa métrica **não estiver no ecrã** (Definições → Desportos → Ginásio → Disposição),
+  abre-se um **aviso ao centro** com a descrição — **DESCANSO** (e o exercício que vem a seguir) ou o
+  nome do exercício e «Série 2 de 4» — e o número grande. Some-se quando pausas ou terminas.
+- **Saltar** salta o exercício, mesmo **a meio de uma série** (a série não fica gravada); **N** salta o
+  **bloco** inteiro (um superset, um circuito). No descanso, passa ao exercício seguinte.
 - **Treino concluído**: quando a **última série acaba**, o tempo **pára de imediato** e abre-se
   sozinho o diálogo de terminar (como se tivesses carregado em «Terminar»). O mesmo nos treinos
   **por blocos** de ciclismo, corrida e remo: ao acabar o último bloco, o tempo pára e abre-se a
@@ -925,7 +1051,7 @@ depois arrancas. As voltas com tempo passam à seguinte sozinhas; as outras
 passam com L ou com **▶ Volta do plano**.
 
 **Para acrescentar uma modalidade nova**, basta um bloco
-`register(Modality(...), [exercícios])` no ficheiro `velo/core/gym.py`.
+`register(Modality(...), [exercícios])` no ficheiro `perennia/core/gym.py`.
 Aparece sozinha no menu, com surpresa, treinos, histórico e inventário de
 exercícios.
 
@@ -1054,6 +1180,166 @@ resumo do fim da sessão.
 Teclas: ↑↓ escolhem o exercício, **Enter** abre o histórico dele, **F** o
 feedback e **S** a lista das séries.
 
+### Perfil por desporto (separador «Perfil»)
+
+Cada desporto tem agora um separador **Perfil** (entre Histórico e Estatísticas): como te
+posicionas **nesse desporto**. As capacidades para a vida (aeróbia, força, VO2máx, mobilidade,
+estabilidade…) **continuam no menu Longevidade**; a última linha do Perfil leva-te lá.
+
+**Ciclismo — que tipo de ciclista és.** A Perennia vai buscar os teus melhores esforços dos
+últimos 180 dias em **5 s** (sprint), **1 min** (anaeróbio), **5 min** (VO2máx) e ao **limiar**
+(95 % dos melhores 20 min, ou a FTP do perfil se for maior), divide pelo teu peso e põe cada
+um numa escala de **0 a 100** entre «sem treino» e «classe mundial» (uma aproximação da tabela
+de perfil de potência de Coggan; há a tabela de homens e a de mulheres). O ponto forte dá o
+tipo:
+
+| Tipo | Quando |
+|---|---|
+| **Sprinter** | os 5 s destacam-se |
+| **Puncheur** | o ponto forte são os esforços de 1 a 5 minutos |
+| **Trepador** | o ponto forte é o limiar e pesas até 68 kg |
+| **Rolador / contrarrelogista** | o ponto forte é o limiar e pesas mais |
+| **Completo** | a melhor e a pior durações diferem menos de 8 pontos |
+
+O ecrã mostra os W/kg, os W, a data e a sessão de cada duração, o ponto mais fraco e **o que
+treinar** para o subir. Uma duração sem esforço máximo aparece «por medir» (precisas de medidor
+de potência); com menos de duas durações curtas medidas, o tipo fica «por definir».
+
+**Ginásio — o teu perfil de força.** Oito capacidades, cada uma de 0 a 100 (100 = «bom nível»,
+que defines nas opções):
+
+| Capacidade | O que mede | O que conta do treino |
+|---|---|---|
+| **Força máxima** | 1RM estimada a dividir pelo peso: agachamento (1,5×), peso morto (2×), supino (1,25×), press (0,75×), remada (1×) | séries com carga por semana |
+| **Força relativa** | máximo de elevações (12), flexões (40), fundos (15) | séries com o peso do corpo |
+| **Força de mãos** | suspensão na barra (90 s), farmer's carry (o teu peso nas duas mãos) | séries de suspensões, transportes, gripper, pinça, punhos |
+| **Tendões** | (sem teste) | séries das modalidades Tendões e Isométrico |
+| **Explosividade** | (sem teste aqui; os de salto estão na Longevidade) | séries de pliometria, swings, cleans e snatches |
+| **Mobilidade** | (sem teste) | minutos de mobilidade por semana |
+| **Tronco e estabilidade** | prancha (120 s) | séries de tronco |
+| **Condicionamento** | (sem teste) | minutos de HIIT, cardio e circuitos no ginásio |
+
+Onde há medição, a nota é 60 % o que mediste e 40 % o que treinas nas últimas 8 semanas; onde
+não há, é só o treino. **Com sessões registadas, uma capacidade que não treinas vale 0** (é uma
+deficiência); sem sessões nenhumas, aparece «sem dados». O ecrã diz **onde tens mais
+deficiências** (abaixo de 50), avisa de **desequilíbrios** (puxas pouco face ao que empurras;
+as pernas levam pouco trabalho) e, para cada deficiência, o que fazer — com o **plano de X
+semanas** que a trata: Enter abre o plano.
+
+**Remo, corrida e natação — velocidade contra resistência.** Compara a velocidade média da tua
+melhor sessão curta (< 20 min) com a da melhor longa: se perdes pouco (≥ 92 %), o teu perfil é
+de resistência; se perdes muito (≤ 82 %), é de velocidade. São sessões inteiras, não esforços
+máximos: é uma leitura aproximada.
+
+Todos os níveis de referência, as janelas e os limiares estão em Definições → Avançado →
+**Perfil por desporto**.
+
+### Planos de treino de X semanas (Ginásio)
+
+**Ginásio → Lista de treinos → «Planos de X semanas»** (a primeira linha). Um plano junta
+treinos específicos num calendário de várias semanas; a Perennia traz **31 planos** e
+deixa-te importar os teus.
+
+**Começar um plano.** Enter num plano abre a ficha: a descrição, a duração, o **material** (e o
+que não tens no Inventário), os **exercícios novos** que seriam criados, as semanas e cada
+sessão com as séries e as cargas. **«Começar este plano»** pergunta:
+
+- **Início** (calendário) e os **dias da semana** (lista; «Outros dias…» deixa escolher
+  exatamente os que o plano pede);
+- nos planos de **progressão linear** (StrongLifts, Starting Strength, GZCLP, Madcow), a
+  **carga inicial** de cada exercício — sugerida pela percentagem que o plano indica da tua 1RM
+  estimada, ou 20 kg (a barra) se ainda não houver histórico.
+
+Ao confirmar, a Perennia **cria os exercícios que faltam**, cria o treino de cada sessão (com as
+séries, as repetições e as cargas daquela semana) e **põe-os todos no calendário**. Daí para a
+frente é só **fazer a sessão do dia**: abre-se pelo Calendário, pela linha **«Plano em curso:
+próxima sessão»** no separador Treinar do ginásio, ou pela ficha do plano em curso. Os treinos
+de um plano não enchem a Lista de treinos.
+
+**O plano em curso** (Planos de X semanas → Em curso): o progresso, todas as sessões por semana
+(✓ feita, ▶ hoje, ! em atraso) e os botões:
+
+- **Fazer a próxima sessão**;
+- **Recalcular cargas** — novas cargas para o que falta (falhaste, estiveste parado, ou a
+  progressão ficou curta); **«Baixar tudo 10 %»** faz a descarga clássica. Só as sessões por
+  fazer são refeitas;
+- **Adiar o que falta (7 dias)** — empurra as sessões por fazer, também no calendário;
+- **Terminar plano** — as sessões por fazer saem do calendário; o que fizeste fica no histórico.
+
+As cargas em **% da 1RM** (5/3/1, Texas Method, Smolov Jr…) calculam-se no momento de cada
+sessão a partir da tua 1RM estimada; as de progressão linear ficam fixadas quando começas (e
+quando recalculas). Uma sessão conta como feita quando a terminas, em qualquer dia.
+
+**Os planos que vêm com a Perennia:**
+
+| Categoria | Plano | Semanas | Dias/sem. | Nível | Origem |
+|---|---|---|---|---|---|
+| Força | **5/3/1 de Wendler (ciclo de 4 dias)** | 4 | 4 | Intermédio | 5/3/1 (Jim Wendler) |
+| Força | **Força de base (corpo inteiro)** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Força | **Madcow 5×5** | 9 | 3 | Intermédio | Madcow 5×5 (a partir do 5×5 de Bill Starr) |
+| Força | **Rotina russa de agachamento (6 semanas)** | 6 | 3 | Intermédio | Russian Squat Routine |
+| Força | **Smolov Jr (supino, 3 semanas)** | 3 | 4 | Intermédio | Smolov Jr |
+| Força | **Starting Strength (progressão linear)** | 12 | 3 | Iniciante | Método Starting Strength (Rippetoe) |
+| Força | **StrongLifts 5×5** | 12 | 3 | Iniciante | Método StrongLifts 5×5 (Mehdi) |
+| Força | **Texas Method (6 semanas)** | 6 | 3 | Intermédio | Texas Method (Rippetoe / Pendlay) |
+| Powerlifting | **GZCLP (progressão linear)** | 12 | 4 | Iniciante | GZCLP (Cody Lefever) |
+| Powerlifting | **Korte 3×3** | 8 | 3 | Intermédio | Korte 3×3 (Stephan Korte) |
+| Powerlifting | **Powerlifting linear (iniciação à competição)** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Hipertrofia | **5/3/1 Boring But Big** | 4 | 4 | Intermédio | 5/3/1 Boring But Big (Jim Wendler) |
+| Hipertrofia | **German Volume Training (10 × 10)** | 6 | 3 | Intermédio | German Volume Training |
+| Hipertrofia | **Push / Pull / Legs (6 dias)** | 8 | 6 | Intermédio | Divisão Push/Pull/Legs |
+| Hipertrofia | **Upper / Lower (4 dias)** | 8 | 4 | Intermédio | Divisão Upper/Lower |
+| Strongman | **Força com sandbag** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Strongman | **Transportes com carga** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Força de mãos | **Bloco de força de mãos** | 8 | 3 | Intermédio | plano de base da Perennia |
+| Força de mãos | **Força de mãos com pouco material** | 4 | 2 | Iniciante | plano de base da Perennia |
+| Longevidade | **Bases do decatlo do centenário** | 12 | 4 | Intermédio | plano de base da Perennia |
+| Longevidade | **Big 3 de McGill + força** | 6 | 3 | Iniciante | Big 3 (Stuart McGill) |
+| Longevidade | **Easy Strength** | 8 | 5 | Iniciante | Easy Strength (Dan John / Pavel) |
+| Longevidade | **Greasing the Groove** | 4 | 7 | Intermédio | Greasing the Groove (Pavel Tsatsouline) |
+| Longevidade | **Manutenção minimalista (2× por semana)** | 8 | 2 | Iniciante | plano de base da Perennia |
+| Longevidade | **Simple & Sinister** | 6 | 6 | Iniciante | Simple & Sinister (Pavel Tsatsouline) |
+| Forma geral | **Corpo inteiro 3× (manutenção)** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Forma geral | **Em casa só com halteres** | 8 | 3 | Iniciante | plano de base da Perennia |
+| Condicionamento | **Complexos de kettlebell** | 6 | 4 | Intermédio | plano de base da Perennia |
+| Condicionamento | **Condicionamento só com o corpo** | 4 | 4 | Iniciante | plano de base da Perennia |
+| Desempenho atlético | **Progressão de pliometria** | 6 | 3 | Intermédio | plano de base da Perennia |
+| Glúteos | **Bloco de glúteos** | 8 | 4 | Intermédio | plano de base da Perennia |
+
+**De onde vêm.** A lista e as categorias seguem o catálogo de programas da Capazity
+(capazity.ai/programs), que tem 199 programas. **Não foram todos traduzidos, nem copiados de
+lá:** essa página só mostra a primeira semana dos programas gratuitos e nada dos pagos. Os
+planos acima são **versões gerais de métodos publicados** (as séries, repetições e percentagens
+dos métodos originais) e planos de base desenhados para a Perennia. Ficaram de fora o
+halterofilismo olímpico, os programas «de autor» e os de gravidez. Qualquer outro plano entra
+pelo formato abaixo.
+
+**Importar um plano (o formato Perennia).** Um plano é um ficheiro JSON com o nome a acabar em
+`.perennia-plan.json`. **«Ficheiro modelo»** (em Planos de X semanas) grava na pasta `planos`
+dos dados um **plano-modelo** que funciona e usa quase tudo o que o formato tem, e o
+**`FORMATO-DO-PLANO.md`** com a descrição campo a campo e os passos para traduzir um plano que
+já exista (os dois estão também em `packaging/planos/`). **«Exportar (.json)»** na ficha de
+qualquer plano dá-te um ponto de partida real. **«Importar plano…»** procura os ficheiros na
+pasta `workouts` ao lado da aplicação, em Transferências, em Documentos e na pasta `planos`.
+Um ficheiro que não obedeça ao formato é **recusado com o campo e a razão**, e nada entra. Só
+se lê JSON (um plano não pode trazer código) e há limite de tamanho.
+
+Pela linha de comandos:
+
+```bash
+python main.py --plano-modelo                       # grava o modelo e o FORMATO-DO-PLANO.md
+python main.py --plano-importar o-meu.perennia-plan.json
+python main.py --plano-exportar lista               # as chaves dos planos
+python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
+```
+
+**Material e exercícios novos.** O Inventário de artigos ganhou os tipos **prensa de pernas,
+trenó, barra hexagonal, gripper, pegas grossas, rolo de punho e roda abdominal**. Os exercícios
+que um plano pede e ainda não existem (power clean, push press, peso morto sumo, good morning,
+chin-ups, curl martelo, roda abdominal, curl-up de McGill, bird dog, gripper, pinça de discos,
+rolo de punho, suitcase carry, empurrar trenó, pogo jumps…) **são criados quando começas o
+plano**, com o grupo, o material e a modalidade certos.
+
 ### Estatísticas por exercício (Ginásio)
 
 Em **Ginásio → Estatísticas → Estatísticas por exercício**. Também se chega
@@ -1093,6 +1379,946 @@ Cada tipo de gráfico é um separador; muda-se com Tab ou com o rato. A
 primeira linha, **Desporto**, escolhe o desporto com ←/→. No remo, na
 corrida e na natação os separadores são Distância, Tempo, Carga, Ritmo médio
 e Zonas de FC. O ciclismo e o ginásio mantêm os gráficos que já tinham.
+
+### AdHoc Analysis (o centro exploratório das Estatísticas gerais)
+
+É o **último separador das Estatísticas gerais** (Tab, ou o rato). Serve para duas coisas, sobre os
+mesmos dados, sem escreveres uma linha de código:
+
+1. **Construir um dataset e exportá-lo para .csv** (escolhes o nome do ficheiro e o separador).
+2. **Montar um gráfico dinâmico**, ao estilo Power BI, com o que quiseres.
+
+À esquerda estão os controlos; à direita, o gráfico (ou a pré-visualização do dataset). Em cada linha,
+**Enter ou um clique abrem uma lista com pesquisa** (escreves para filtrar) e **←/→ passam à opção
+seguinte**. Tudo o que escolhes **fica guardado** e volta quando reabres o separador.
+
+| Linha | O que faz |
+|---|---|
+| **Modo** | *Gráfico dinâmico* ou *Dataset (campos e .csv)* |
+| **Fonte dos dados** | **Sessões** (todos os desportos, uma linha por sessão; as importadas do Garmin/TrainingPeaks também; **nunca** o Strava), **Séries de força** (uma linha por série), **Diário** (saúde e alimentação), **Análises clínicas** (um marcador por linha), **Testes de longevidade** e **Pressão arterial** (uma medição por linha) |
+| **Vista guardada** | abre uma vista que guardaste (fonte, campos, filtros e gráfico) |
+| **Período** | tudo, 7/30/90 dias, último ano, este ano, ou *datas à escolha* (aparecem «de» e «até», com calendário) |
+| **Filtros** | até 6 (muda-se em Avançado). Cada filtro é *campo · operador · valor*: as categorias dão-te a lista dos valores que existem, os números escrevem-se, as datas abrem o calendário |
+| **Campos do dataset** | (modo dataset) marcas os campos que queres no .csv |
+| **Eixo X** | qualquer campo: uma data (agrupada por dia, semana, mês ou ano — os períodos vazios contam como zero nas somas e contagens), uma categoria (maior primeiro, ou pela ordem natural; as que passam do limite ficam em «Outros») ou um número (vira um histograma com as classes que definires) |
+| **Valor (eixo Y)** | um campo numérico, ou a *contagem de linhas* |
+| **Agregação** | soma, média, mínimo, máximo, mediana ou contagem |
+| **Legenda** | uma série por categoria (por exemplo, uma cor por desporto); as séries a mais ficam em «Outros» |
+| **Tipo de gráfico** | colunas (lado a lado, se houver legenda), colunas empilhadas, linhas ou dispersão (dois números: um em X, outro em Y) |
+
+Clica num ponto do gráfico para ver o valor. Por baixo do gráfico, uma linha diz quantas linhas
+passaram nos filtros.
+
+**Botões, em baixo à direita:**
+
+- **Exportar .csv…** — abre uma janela com o **nome do ficheiro**, o **separador de valores**
+  (`;` `,` Tab ou `|`), o separador decimal, o cabeçalho (nomes legíveis ou chaves técnicas) e o
+  UTF-8 com BOM (o Excel abre bem os acentos). Em modo gráfico podes exportar o **dataset** ou os
+  **números do gráfico**. Os valores por omissão estão em Definições → Avançado → Análise AdHoc. O
+  ficheiro vai para a pasta `exports` dos dados (ou a que definires) e **nunca substitui** um que já
+  exista (junta `-2`, `-3`…). Se escreveres pastas no nome (`../x`), só conta o nome do ficheiro: nunca sai da pasta de destino.
+- **Guardar vista…** — dá um nome à vista. **Apagar vista** apaga a que está aberta.
+
+O .csv defende-se de «injeção de fórmulas»: uma célula de texto que comece por `=`, `+`, `-` ou `@`
+leva um `'` à frente, para o Excel não a executar.
+
+**Pela linha de comandos** (sem abrir a janela), a mesma exportação:
+
+```bash
+python main.py --adhoc-exportar sessions --destino ~/Documentos --nome as-minhas-sessoes --separador ";"
+python main.py --adhoc-exportar sessions --vista "Carga por semana"
+```
+
+As fontes são `sessions`, `sets`, `daily`, `labs`, `tests` e `bp` (pressão arterial). Sem `--vista` leva os campos por omissão
+da fonte; com `--vista`, os campos, o período e os filtros dessa vista.
+
+**Privacidade.** Nada daqui sai do computador, e o agente de IA nunca vê os dados da AdHoc: só vê o
+que o ecrã mostra, e só se o pedires.
+
+### Glossário (botão «Glossário», na barra do topo, ou F9)
+
+O botão **Glossário** fica na faixa do topo, antes de **Dispositivos** (não está disponível durante
+uma sessão). Explica os termos da Perennia e do treino, num separador por tema:
+
+| Separador | O que tem |
+|---|---|
+| **Perennia** | sessão, treino, bloco, barra do bloco, sessão livre, comparação, rota, segmento, subida, volta, plano, calendário, Treinador, evento, inventário, dispositivo, backup, sincronização, Fonte, modo ERG… |
+| **Ficheiros e formatos** | `.gpx`, `.fit`, `.tcx`, `.zwo`, `.erg/.mrc`, `.csv`, modelo, base de dados, SQLite, GarminDB, backup `.zip` |
+| **Conceitos de treino** | FTP, W/kg, NP, IF, TSS, forma/fitness (CTL), fadiga (ATL), frescura (TSB), zonas, RPE, VO2máx, limiar, aquecimento, intervalo, base, afinação, cadência, rampa… |
+| **Ginásio** | série, repetição, descanso, RIR, 1RM, volume, superssérie, circuito, AMRAP, EMOM, tempo, modalidade, grupo muscular, composto/isolamento, programa, descarga, progressão |
+| **Ciclismo, remo e corrida** | potência, ritmo /500 m, ritmo médio, velocidade, remadas totais, voga (SPM), drag, damper, split, inclinação, VAM… |
+| **Saúde** | HRV, rMSSD, FC de repouso, sono, stress, Body Battery, SpO2, pressão arterial, indicador, diário, análises, longevidade |
+
+**Enter** num termo abre-o por inteiro (com **Editar**, **Apagar** e **Fechar**). **+ Novo termo**
+acrescenta um teu ao separador onde estás (separador, termo e definição numa janela grande). A
+**pesquisa** do topo procura no nome **e na definição**, em todos os separadores. Os termos de
+origem podem ser **editados** (a tua versão fica à parte e podes **repor o texto original**) e
+**apagados** (ficam escondidos; **Repor os termos de origem**, no fim da lista, traz tudo de volta;
+os teus não mudam). Os termos de origem estão nos dois idiomas.
+Ficam na tabela `glossary` (só as tuas alterações e os teus termos) e vão no backup, componente
+**Glossário**.
+
+### Aspeto: tamanho da letra
+
+**Definições → Aspeto → Tamanho da letra** (80 a 150 %): muda o texto de toda a aplicação, com
+**pré-visualização imediata** (uma amostra com valores, como os de uma sessão) antes de guardares.
+Na **configuração de cada sessão** (ciclismo, remo, corrida/natação e ginásio) há a mesma linha
+**Tamanho da letra**, com a pré-visualização ao lado; o que escolhes aí fica como a opção geral.
+Os ecrãs que já estavam abertos adotam o novo tamanho quando os voltas a abrir.
+
+### Barra do bloco e cores de aviso
+
+Numa sessão com um **treino carregado** há uma barra horizontal com o tempo do **bloco** atual
+— no **ciclismo**, **remo**, **corrida/natação** e **ginásio**. Quando falta pouco para o fim do
+bloco a barra passa a **amarelo**, depois a **vermelho** e, nos últimos instantes, a **preto**.
+Os limiares (em % do bloco que **falta**) e o interruptor estão em **Definições → Avançado →
+Aspeto…** (`block_bar_*`); por omissão 25 %, 10 % e 3 %, e a Perennia arruma-os sempre pela ordem
+amarelo > vermelho > preto. No **ginásio** só há barra nos exercícios e blocos medidos em
+**tempo** (os de repetições não têm).
+
+### Gráfico ao vivo (configurável)
+
+No ciclismo, remo e corrida/natação, o painel do **gráfico** da sessão mostra as métricas que
+escolheres, **só as do próprio desporto** (potência, FC, cadência e velocidade no ciclismo;
+potência, ritmo /500 m, voga, FC, velocidade e resistência no remo; ritmo, velocidade, FC e declive
+na corrida…). Escolhe-as em **Definições → Disposição → (desporto) → Gráfico ao vivo: métricas**
+(até `live_chart_max_series`). Cada métrica ocupa a sua própria escala (a legenda mostra o valor
+atual). Quando marcas uma **volta** (L, automática ou no fim de um bloco) aparece um **traço
+vertical** no gráfico nesse instante.
+
+### Ciclismo: a comparação com sessões anteriores
+
+A comparação (o «fantasma» de uma sessão tua passada) só existe numa **sessão livre** **e** com
+uma **rota .gpx** escolhida. Com um **treino carregado** (ou um teste, ou um challenge) a janela
+da sessão não oferece comparação.
+
+### Notas nas listas de exercícios e de artigos
+
+**Exercícios** e **Artigos** têm agora o campo **Notas**, um texto maior (Enter abre uma janela
+grande; até `note_max_chars` caracteres) para o que queiras guardar: dicas de execução, ajustes,
+onde comprar… A nota aparece na linha da lista («nota: …»), vai nos backups e nos .csv de
+exportação/importação (coluna `notas`).
+
+### Calendário: dias futuros e eventos
+
+- O **Diário de saúde** só se abre para **hoje e dias passados**: num dia futuro a linha não
+  aparece (é a mesma regra do «Planear treino», que só planeia de hoje para a frente).
+- Em **hoje e dias futuros** há **+ Planear evento**: pergunta o tipo (resistência ou força) e
+  abre logo o **Treinador**, que faz as perguntas e monta o plano até à data escolhida.
+- Um treino **agendado para o futuro** aparece no dia e abre-se a ficha (objetivo, blocos, alvos),
+  mas **sem o botão «Configurar sessão de treino»**: só se começa no próprio dia. O mesmo vale
+  para as sessões dos planos de X semanas.
+
+### Rato: botões laterais, e um controlador Bluetooth
+
+O botão lateral de **recuar** do rato faz o mesmo que **Esc** (volta atrás); o de **avançar**
+também, se ligares `mouse_forward_button`. Ambos se desligam em **Definições → Avançado**. Funciona
+em qualquer ecrã, inclusive nas janelas (e numa sessão pede o mesmo que o Esc).
+
+**Controlar a Perennia à distância (por exemplo projetada numa parede).** A Perennia já se
+controla só com o teclado, por isso serve qualquer **mini teclado ou «apresentador» (clicker)
+Bluetooth**: emparelha-se com o computador como qualquer teclado e a Perennia recebe as teclas.
+Não precisa de código nem de configuração. Os mais úteis:
+
+| Tecla do comando | Faz |
+|---|---|
+| **Página ↓ / Página ↑** (o «seguinte/anterior» dos apresentadores) | linha seguinte / anterior nas listas |
+| **Enter** | abre / ativa |
+| **Esc** | volta (numa sessão, pausa) |
+| **←/→** | muda o valor escolhido |
+| **P**, **L**, **N**, **F10** | pausa, volta, saltar bloco, terminar |
+
+Os atalhos de sessão são reconfiguráveis em **Definições → Atalhos de teclado**. Os comandos com
+poucas teclas (clickers de 2 a 4 botões) chegam para navegar e iniciar sessões; para escrever
+nomes ou valores precisas de um mini teclado com letras. Nas sessões de **remo** e no remo
+Página ↑/↓ continuam a ser **resistência** (como antes). Convém desligar a poupança de energia do
+comando e emparelhá-lo antes de abrir a Perennia.
+
+### Ronda 19: blocos, séries, complexos, pastas, histórico e Wi-Fi
+
+**Alterar ou saltar um bloco (todos os desportos).** Durante uma sessão por blocos podes **alterar**
+o bloco em curso: em ERG a intensidade (as teclas de resistência), no remo a resistência, na corrida
+a velocidade e a inclinação. Alterar **não salta** o bloco: ele só acaba quando termina ou quando
+carregas em **Saltar**. O valor do plano fica sempre guardado ao lado do que fizeste (tabela
+`block_events`, um registo por bloco e campo: o **primeiro** valor é o original, o último o atual,
+e quantas alterações houve). **Saltar** regista quanto do bloco foi feito (tempo, metros ou séries)
+face ao previsto. Isto aparece na **Análise da sessão** (coluna «Alterações e saltos» e «↷» nas
+séries saltadas). Opções: `block_edit_enabled` (desligada, a velocidade da passadeira fica presa à
+do bloco, como antes) e `block_change_scope` (a alteração vale só para o bloco em curso, ou até ao
+fim da sessão).
+
+**Corrida e remo.** Com o aparelho a mandar (passadeira FTMS, remo com resistência), a Perennia
+**aplica sozinha** a velocidade, a inclinação e a resistência do bloco; o que mudares à mão fica
+registado como alteração. Sem controlo do aparelho, só **regista** o que ele mede.
+
+**Corrigir uma série (ginásio).** Em **qualquer** sessão (treino carregado ou livre, a decorrer ou
+já terminada) corrige as repetições, a carga, o RPE ou os **segundos** cumpridos: botão **Séries** na
+sessão e **Editar séries** na análise. O que estava **planeado** (`planned_*`) e o que registaste
+**na hora** (`logged_*`) ficam guardados; a série corrigida marca-se com ✎ e a análise compara com o
+objetivo para se ver se foi cumprido.
+
+**Complexos de kettlebell.** Um complexo é um exercício feito de outros exercícios (Ginásio →
+Exercícios → **+ Novo complexo**): escolhes os exercícios, as repetições por ronda e a ordem. Vêm 6
+clássicos de origem. Num treino, o complexo entra como **um** exercício (as «repetições» são as
+rondas); durante a sessão vês os exercícios que o compõem e, ao corrigires as rondas, refazem-se as
+repetições de cada um (`strength_set_parts`). A **evolução** conta o exercício dentro e fora de
+complexos (`complexes.component_progress`) e a do complexo (rondas, carga, volume).
+
+**Treinos e exercícios de origem.** O catálogo passou a ter ~340 exercícios e há 25 treinos
+de força prontos (mais 3 que usam complexos). Entram **uma vez** (a definição `gym_catalog_workouts`
+guarda os que já entraram: se apagares um, não volta).
+
+**Definições → Pastas.** Um separador novo para escolher as pastas das **exportações**,
+**importações**, **backups**, **treinos** e **GPX** (opções `path_exports`, `path_imports`,
+`path_backups`, `path_workouts`, `path_gpx`; vazio = a de sempre). Cada linha mostra a pasta que
+está mesmo a ser usada e se está utilizável; uma pasta impossível cai na de sempre. As escolhidas
+**somam-se** às de sempre nas procuras (importações, treinos, GPX). As pastas dos `.fit` das sessões
+ficam na pasta de dados.
+
+**Planos de X semanas: JSON ou CSV.** Além do `.perennia-plan.json` (o formato completo) importa-se
+uma **tabela CSV** (`*.perennia-plan.csv`, feita no Excel/LibreOffice): uma linha por exercício de
+cada sessão, as linhas `# nome: …`, `# semanas: …`, `# rotacao: A,B` no topo, e `70|75|80` numa
+célula para um valor por semana. O botão do modelo grava os dois. Pela linha de comandos:
+`--plano-importar plano.perennia-plan.csv`. O CSV não tem valores diferentes por série (usa o JSON).
+
+**Histórico de outras apps (ETL com regras).** Backups e Sincronização → **Histórico**: importa o
+`.csv` do **TrainingPeaks**, do **Strava** (`activities.csv`) ou do **Garmin Connect** e normaliza-o
+com **regras** (JSON ou CSV) que dizem «quando o tipo for X → desporto Y, tipo de treino Z,
+etiquetas…». As regras correm sozinhas nas atividades novas (`etl_auto_apply`) e podes aplicá-las ao
+histórico já importado (**Ver o que mudaria** e **Aplicar**). O tipo original nunca se perde
+(`source_sport`); o que as regras não cobrem aparece no relatório «sem regra». Sem ficheiro, usam-se
+as regras de arranque (`etl_use_defaults`: «strengthening» → Ginásio · Força, etc.). Linha de
+comandos:
+
+```
+python main.py --historico-regras                       # grava regras-historico.json para editares
+python main.py --importar historico strava.csv          # TrainingPeaks, Strava ou Garmin (pelo cabeçalho)
+python main.py --historico-normalizar                   # só mostra o que mudaria
+python main.py --historico-normalizar --aplicar --regras minhas.json
+```
+
+As regras têm os campos `fonte`, `campo` (`tipo`, `titulo`, `desporto`), `operador` (`igual`,
+`contem`, `comeca`, `regex`), `valor`, e as ações `desporto`, `tipo_treino`, `etiquetas`,
+`remover_etiquetas`, `titulo_novo`, `ignorar`. Aplicam-se por ordem; a última que mandar num campo
+ganha. Os formatos do Strava e do Garmin Connect foram feitos a partir da documentação dos
+ficheiros, **sem testar com exportações reais**: se o cabeçalho for diferente, diz-me.
+
+**Sincronizar duas Perennia pelo Wi-Fi (PC ↔ Raspberry Pi).** Backups e Sincronização → **Wi-Fi**.
+A **fonte** envia, o **destino** recebe, na **mesma rede**:
+
+1. no **destino**: **Receber de outra Perennia** → mostra o endereço, a porta e um **PIN de uso
+   único**;
+2. na **fonte**: **Enviar para outra Perennia** → escreves o endereço e o PIN, escolhes as
+   componentes e o modo → **Enviar**.
+
+Linha de comandos (sem janela, bom para o Raspberry Pi):
+
+```
+python main.py --sync-receber                       # no destino: mostra o endereço e o PIN
+export PERENNIA_SYNC_PIN=12345678                   # na fonte (o PIN nunca vai como argumento)
+python main.py --sync-enviar 192.168.1.20 --componentes sessoes,saude --modo juntar
+```
+
+*Segurança:* canal **TLS** (cifrado, com um certificado que o destino cria na 1.ª vez em
+`<dados>/sync/`); a autenticação é o **PIN** (aleatório, 8 dígitos, de uso único, caduca em 5 min,
+3 tentativas) e inclui a impressão digital do certificado, por isso quem se pusesse no meio falhava;
+só aceita endereços da **rede local** (`sync_lan_only`); nunca envia nem aceita **credenciais**
+(Strava/GarminDB), e as definições **da máquina** (pastas `path_*` e `sync_*`, definições, atalhos,
+ecrã, aparelhos) não se sobrepõem; o destino faz um **backup de segurança** antes de repor.
+*Limites:* «Juntar» acrescenta o que é novo e ignora o que é igual, mas um registo **alterado** na
+fonte chega como novo (duplicado); «Substituir» deixa o destino igual à fonte nas componentes
+enviadas (o que só existia no destino perde-se, com cópia de segurança). Para duas máquinas que
+mudam as duas, usa uma como fonte de verdade. As opções estão em Definições → Avançado → Dados e
+backups (`sync_*`).
+
+**Desempenho (bottlenecks).** O que se mediu e corrigiu: o cálculo da Longevidade chamava dezenas de
+milhares de vezes a normalização de texto por cada cálculo (agora com cache: ~40 % do tempo da
+navegação por esses ecrãs); faltavam **índices** nas tabelas de detalhe lidas por sessão (voltas,
+esforços, resultados) — a Perennia cria-os no arranque (`perennia/core/indexes.py`; não apaga nem
+muda dados); e a base de dados usa agora `synchronous=NORMAL` + cache maior (`db_fast_writes`,
+`db_cache_mb`).
+
+### Ronda 20: métricas de saúde (adicionar, editar, descontinuar), perguntas «se sim, onde?» e feedback do treino
+
+**Onde se gerem as métricas.** Saúde → separador **Métricas** (era já aí; agora está completo):
+- **+ Nova métrica** (sim/não, número, escala 1–5, texto, escolha com opções, hora), **Enter**
+  edita, **A** *descontinua/reativa*, ←/→ muda a ordem. **Mostrar** filtra por grupo (Sono, Corpo,
+  Recuperação, Alimentação, **Digestão**, Mente, Atividade, **Dia e rotina**, Outras).
+- **Descontinuar** = deixa de se perguntar a partir de hoje, **o histórico fica** (os dias em que
+  tem valor continuam a mostrá-la e a entrar nas tendências); aparece em «Descontinuadas (n)» com
+  a data, e **Reativar** (A outra vez) traz-a de volta. **Apagar (com o histórico)** — no editor —
+  apaga também os valores (pede confirmação; não se desfaz).
+- **Importar / exportar .csv** (botão em baixo): o conjunto **«metricas»** — para as ~30 novas
+  que vais juntar: uma linha por pergunta (`metrica;tipo;unidade;grupo;opcoes;depende_de;resposta;
+  fonte;ativa`). Já existe (pelo nome)? atualiza; senão cria; «ativa» = não descontinua. As
+  dependências ligam-se no fim, por isso podem apontar para linhas do mesmo ficheiro. Um
+  tipo que mude numa métrica **que já tem valores** não é aplicado (o relatório diz-o).
+  Também está em Backups e Sincronização → CSV.
+
+**Perguntas «se sim, onde?».** No editor de uma métrica, **Depende de** (outra pergunta) e
+**Resposta que a ativa** (sim/não, ou uma das opções, ou «qualquer resposta»). A pergunta só
+aparece no diário quando a outra tem essa resposta (marcada com **↳**): «Como eram as fezes?» só
+depois de «Fiz cocó? = sim»; «Se não, onde estive?» quando «Passei o dia em casa? = não». Pode
+depender de **várias** (qualquer uma serve: «Qual a carne?» depende de «Carne branca» *ou*
+«Carne vermelha»). Uma pergunta que já tem resposta nesse dia **não desaparece** se mudares a
+principal. A completude do dia (n/total) só conta as perguntas que se aplicam.
+
+**O diário com muitas perguntas.** Linha **Mostrar** (todos os grupos ou um só), as escolhas
+abrem como **lista pendente** (Enter) e ←/→ continua a passar à seguinte.
+
+**Catálogo que vem com a Perennia** (63 perguntas, criadas **uma só vez**; se já tens uma com o
+mesmo nome ou chave, ignora; as que apagares ou descontinuares **não voltam**; desliga em
+Definições → Avançado → Saúde → «Saúde: acrescentar as métricas do catálogo»):
+- *Alimentação:* tipo de almoço/jantar (vegan, carnívoro, peixe, outro); tipo de refeição (fast food,
+  caseiro, pré-feita, congelada, outro); o que lanchei; almoço iniciou à hora normal (12h30–13h00);
+  jantar iniciou à hora normal (20h00–**20h45**); almoço/jantar fora de casa → **onde** (escritório,
+  casa dos pais, amigos, sogros, restaurante, outro); álcool, carne branca, carne vermelha, peixe
+  branco, peixe gorduroso, sobremesa e legumes ao almoço e ao jantar (→ *qual a carne*, *qual o
+  peixe*); doces ao lanche (→ *que doces*); refeição pesada (pequeno-almoço, almoço, lanche, jantar);
+  café e descafeinado ao pequeno-almoço, almoço e jantar.
+- *Digestão:* fiz cocó? → como eram as fezes (duras, normais, moles, líquidas), dificuldade em
+  evacuar, cor (clara, normal, escura).
+- *Sono:* os filhos deram descanso; levantei-me para fazer xixi; insónias; li antes de deitar;
+  telemóvel antes de deitar; stress ao adormecer; nasal strips; muito tempo na cama ao acordar.
+- *Dia e rotina:* passei o dia em casa? (→ onde, se não); dia de férias; dia produtivo; viagem;
+  atividade sexual; sintomas de alergia.
+- *Recuperação:* rotina de mobilidade diária; alongamentos; libertação miofascial.
+O que já existia (doces ao almoço/jantar, comer fora, álcool, café…) **não é duplicado**.
+*Nota:* «jantar na hora normal (20h00–2h45)» foi lido como **20h00–20h45**; o intervalo faz parte
+do **nome** da pergunta — muda-o no editor se for outro.
+
+**Feedback do treino do dia anterior.** No topo do Diário, «Treino anterior»: por cada sessão
+(qualquer desporto) concluída no(s) dia(s) antes do diário, o nome, o **veredito** da análise
+offline (a mesma do fim da sessão, usando o teu feedback se o deste), e — se a sessão foi
+exigente ou há dores — uma nota para a recuperação de hoje (sono, hidratação, proteína). Enter
+mostra o texto completo. Opções: ligar/desligar e quantos dias (Definições → Avançado → Saúde).
+
+**Base de dados (tudo local, SQLite).** Nada a fazer: ao abrir, a Perennia acrescenta sozinha à
+tabela `metric_defs` as colunas `parent_key`, `parent_value` e `discontinued_on`, e guarda em
+`settings` a marca `health_catalog_seeded` (as chaves do catálogo já criadas). O **backup** da
+componente *Saúde* leva as colunas novas e as duas marcas de «já criei as métricas»
+(`health_seeded`, `health_catalog_seeded` passaram de *Definições* para *Saúde*, para um restauro
+de Saúde não ressuscitar o que apagaste). Backups antigos restauram-se sem problema.
+
+**Revisões desta ronda.** *Segurança:* `.claude/` (e `.env*`, `*.pem`, `*.key`) no `.gitignore`;
+nenhuma palavra-passe escrita no código/scripts (Garmin: `PERENNIA_GARMIN_PASSWORD`; Wi-Fi:
+`PERENNIA_SYNC_PIN`, nunca como argumento); nenhum `shell=True`; o CSV de métricas e o catálogo
+usam sempre parâmetros SQL. *Setas → lista pendente:* o diário e o editor de métricas usam listas
+pendentes (grupo, tipo, fonte, depende de, resposta); as restantes setas que ficam são listas curtas
+(esforço 1–10, intervalos) ou datas (têm calendário). *Valores no código:* as 3 opções novas abaixo.
+
+### Ronda 21: a biblioteca de segmentos do Strava (para usares sem internet)
+
+**Duas maneiras de trazer segmentos, que se completam.**
+1. **Pesquisa por rota** (como antes, e mantém-se): na ficha da rota (ou na janela da sessão) →
+   **Segmentos do Strava → Atualizar do Strava**. Serve para uma rota nova em qualquer parte do
+   mundo, sem teres favoritos lá. Agora tudo o que a pesquisa encontra **fica também na
+   biblioteca**.
+2. **Biblioteca** (menu **Segmentos → separador Biblioteca**): os segmentos ficam guardados **neste
+   computador**, com o traçado, o teu PR e (com subscrição Strava) todos os teus esforços.
+
+**Importar para a biblioteca** (precisa de internet, uma vez): Segmentos → **Importar do Strava**
+(botão em cima, à direita, em qualquer separador).
+- **IDs ou ligações:** escreve ou cola (**Ctrl+V**; **Del** limpa) um ou vários —
+  `https://www.strava.com/segments/12345`, `67890`… separados por espaços, vírgulas ou linhas.
+  Diz quantos reconheceu.
+- **Importar os meus favoritos ⭐:** os segmentos que marcaste com ⭐ no Strava.
+- **Atualizar a biblioteca:** renova o PR e os esforços dos que já lá estão.
+- O que entra de cada segmento: nome, distância, inclinação (média e máxima), subida, categoria, cidade,
+  o **traçado**, o teu **PR** (e a data), o nº de esforços, o KOM e, se tiveres **subscrição Strava**,
+  **todos os teus esforços** (data, tempo, watts). Sem subscrição só entra o PR (o relatório diz-o).
+- **Limites:** o Strava aceita ~100 pedidos a cada 15 min; cada segmento custa 1 (2 com esforços), por
+  isso entram no máximo `strava_import_batch` (30) por vez; o que sobrar fica no campo, para
+  voltares a carregar em Importar. Se o Strava travar (429) diz quanto falta.
+- Precisa da permissão **read_all** (o teu PR): se em Definições → Strava aparecer «Permissões:
+  autoriza de novo», carrega em «Autorizar no browser» outra vez (uma só vez).
+
+**Usar offline.** Ao **importar um .gpx** (menu Rotas), a Perennia cruza a biblioteca com a rota **sem
+rede** e liga os segmentos que a rota percorre **no mesmo sentido e seguindo o traçado** (não basta
+começar e acabar perto: um desvio de centenas de metros não liga). Depois é como sempre: placa de
+entrada, comparação com o PR e tempo final. Também há:
+- **Ligar da biblioteca (sem internet)** na ficha de «Segmentos do Strava» da rota;
+- **Ligar às minhas rotas** no separador Biblioteca (todas as rotas de uma vez), útil depois de
+  importares segmentos novos.
+O **melhor tempo** de um segmento passa a ser o melhor entre os teus esforços do Strava
+importados e os que fazes na Perennia (os do Strava aparecem na lista de tempos do segmento, com a data).
+
+**A Biblioteca.** Lista (A–Z) com o PR, a distância, a inclinação, a cidade, quantos esforços e a
+quantas rotas está ligado (⭐ = favorito). Enter abre a ficha (números, rotas ligadas, esforços,
+**Atualizar do Strava**, **Ligar às minhas rotas**, **Tirar da biblioteca**); **Del** tira
+(com confirmação: perdem-se os esforços importados e as ligações, **os teus tempos da Perennia ficam**).
+
+**Se a pesquisa por rota falhar com «403».** A documentação do Strava diz que a pesquisa por rota
+(`/segments/explore`) pode estar limitada a apps com «Extended Access». Nesse caso a Perennia diz-te
+para importares por ID ou pelos favoritos (que não têm essa limitação). Isto não foi testado com a tua
+conta.
+
+**Opções novas** (Definições → Avançado → Ligações; ver a tabela das opções):
+`strava_auto_link`, `strava_library_autosave`, `strava_import_batch`, `strava_import_efforts`,
+`strava_efforts_max` e as que antes estavam no código: `strava_match_radius_m` (45 m),
+`strava_path_radius_m` (40 m), `strava_path_fraction` (85 %), `strava_tile_m`, `strava_max_tiles`,
+`strava_max_details`.
+
+**Base de dados (tudo local, SQLite).** Nada a fazer: ao abrir, a Perennia cria as tabelas
+`strava_library` (um segmento por linha, com o traçado) e `strava_library_efforts` (os esforços
+importados) e dois índices. O backup da componente **Segmentos** leva a biblioteca toda (com os
+esforços); `strava_tokens` (o acesso ao Strava) continua de fora, como as credenciais.
+
+**Revisões desta ronda.** *Segurança:* as chaves do Strava continuam só em ambiente
+(`PERENNIA_STRAVA_CLIENT_ID/SECRET`) ou na base local (nunca no código nem em argumentos); o IDs/ligações
+que escreves passam por uma expressão que só aceita números (não se usa como URL nem como SQL); o
+traçado é descodificado com limites (lixo não rebenta); nada do Strava vai para o agente de IA.
+*Erro corrigido (bottleneck/estabilidade):* os trabalhos do Strava corriam numa thread com **a mesma
+ligação à base de dados que o ecrã**, o que podia **fazer a SQLite estoirar** (vi-o nos testes); agora
+cada trabalho abre **a sua própria ligação** (`strava_job`), também na pesquisa por rota e na sessão.
+*Setas → lista pendente:* a ficha e a importação não usam setas para escolher valores (só botões e
+um campo de texto). *Valores no código:* as 6 constantes da pesquisa/ligação passaram a opções.
+
+### Ronda 22: Segment Pace e Segment KOM (no Challenge do ciclismo)
+
+Dois jogos novos em **Sessão de treino → Challenge**, para **qualquer segmento que já exista na
+Perennia** — a subir, plano ou a descer.
+
+**A preparação é curta**: os **Aparelhos**, **uma só linha «Segmento»** e o alvo. Não há rota, nem
+.gpx, nem auto lap, nem tamanho de letra. Enter na linha «Segmento» abre **uma janela com todos os
+segmentos, já separados em «Perennia» e «Strava»** (com a distância, a inclinação, o teu melhor tempo,
+o KOM e a rota a que pertencem); Enter escolhe.
+- **Segmento numa rota** (os da Perennia e os do Strava que já estão ligados a uma rota): joga-se
+  nessa rota, com a altimetria real.
+- **Segmento da biblioteca do Strava sem rota ligada**: a Perennia monta **um percurso só com ele** — o
+  traçado do segmento, com a **inclinação média** dele (a biblioteca não guarda a altimetria ponto a
+  ponto), mais a entrada antes e `seg_virtual_tail_m` (500 m) de estrada depois. A preparação avisa
+  («Percurso»). O tempo que fizeres conta como esforço do segmento (PR local) e a sessão fica sem rota.
+
+**Segment Pace — a Perennia conduz o esforço.** Dás um alvo e ela diz-te os watts de cada parte.
+- **Alvo** (lista pendente): **Tempo** (escreves `mm:ss`, ex. `12:30`), **O meu melhor + x %**
+  (`0` iguala o teu melhor; `-2` é 2 % mais depressa; o «melhor» é o menor entre o PR do Strava e o
+  teu melhor tempo aqui) ou **Potência média** (W; a Perennia diz que tempo dá).
+- **Como calcula.** O segmento parte-se em **secções de inclinação parecida** (nunca mais curtas que
+  250 m nem mais longas que 1000 m; nenhuma dura menos de 10 s). Para cada uma calcula os **watts por
+  física** (a tua massa, CdA, Crr e o perfil real da rota) de modo a que a soma dê **o tempo alvo**.
+  **Não é potência igual**: mais nas partes duras, menos nas fáceis e **a recuperar nas descidas**,
+  com a variação limitada a **± 20 %** em torno da média e nunca abaixo de **50 %** dela.
+- **Antes de começar** vês: o tempo previsto, a **potência média** (W, % FTP, W/kg), «**Cabe em ti?**»
+  (✓ possível · ⚠ no limite · ✗ fora do alcance, com a frase «pede X W = Y % da FTP; o teu máximo
+  estimado para esta duração é Z W», a partir da tua curva de potência dos últimos 90 dias) e os
+  **watts de cada secção**. Se nem à potência máxima se chega ao tempo, diz que está fora do alcance.
+- **Na sessão.** Começas **500 m antes** do segmento (a entrada; é opção). No segmento, o painel do
+  centro mostra o **sinal** `▶ 285 W` (os watts da secção em que estás), a secção, a inclinação e o que
+  falta; à direita do ecrã, a **guia** com a diferença em tempo (negativo = à frente). O
+  aviso «Secção 2/6 · 8,1 % · 285 W» aparece ao entrar em cada uma. **ERG ligado por omissão** (o rolo
+  põe os watts); desligado, segues o sinal. **Se te atrasas**, ao entrar numa secção nova os watts das
+  que faltam são **recalculados** (sem pedir mais do que a tua capacidade para o tempo que sobra).
+- **A guia no ecrã.** É uma linha no painel (a diferença em tempo), como os fantasmas das sessões
+  livres — **não há um ciclista desenhado na estrada em 3D** (a Perennia não desenha ciclistas).
+
+**Segment KOM — dá o máximo.** Dois alvos (lista pendente; só aparecem os que existem):
+**O meu KOM** (o melhor entre o PR do Strava e o melhor tempo teu aqui) e **KOM do segmento** (o tempo
+do Strava; só nos segmentos do Strava que o trazem; os segmentos da Perennia só têm o teu melhor).
+Esforço máximo, **sem ERG**, com **fantasmas** dos dois tempos (e a diferença ao vivo) e, por secção,
+o ritmo (watts) que o alvo pede. A tabela e o histórico são como no Pace.
+
+**Aviso honesto.** Os tempos do Strava foram feitos na estrada (vento, aspiração, curvas); aqui a
+física é a do rolo. Por isso, no KOM do segmento, a Perennia mostra **a potência de que precisas aqui**
+para esse tempo, sem fingir que são a mesma coisa. A precisão do plano é a da tua massa, CdA e Crr
+(Perfil) e do perfil de altitude do .gpx.
+
+**No fim** (resumo da sessão): uma linha por secção — **watts reais / watts do plano**, o tempo na
+secção contra o previsto e se **ganhaste ou perdeste** segundos. Fica guardado por segmento: na
+preparação vês as últimas sessões nesse segmento e, no menu do Challenge, o quadro dos melhores
+(tempo, data e segmento). O tempo conta também como esforço do segmento (PR, histórico do segmento).
+Terminar antes do fim do segmento grava «não concluído» (sem pontuação).
+
+**Funciona offline.** Tudo o que precisa — o segmento, o traçado, o teu PR e o KOM — vem do que já está
+guardado (biblioteca do Strava ou segmentos da Perennia). Para ter segmentos aqui: Segmentos →
+**Importar do Strava** (por ID ou favoritos) ou cria um sobre uma rota (menu Segmentos).
+
+**Opções novas** (Definições → Avançado → **Segment Pace e Segment KOM**; ver a tabela): `seg_pace_erg`
+(ligado), `seg_lead_in_m` (500 m; também há uma lista na preparação: 0, 250, 500, 1000, 2000 m),
+`seg_pace_variation_pct` (± 20 %), `seg_pace_floor_pct` (50 %), `seg_pace_replan`, `seg_pace_tol_pct`,
+`seg_section_min_m`, `seg_section_max_m`, `seg_section_grade_tol_pct`, `seg_grade_ref_pct`,
+`seg_hard_pct`, `seg_virtual_tail_m` (500 m). Constantes internas de precisão (não são preferências): passo da simulação 0,5 s,
+célula do perfil 25 m e limites da procura de watts.
+
+**Base de dados (tudo local, SQLite).** **Nada a fazer**: não há tabelas nem colunas novas. Os
+resultados vão para `game_results` (a tabela dos jogos do Challenge; o JSON `details` leva o
+segmento, o alvo e a tabela por secção) e os tempos para as tabelas de segmentos de sempre. As
+opções novas ficam em `settings` e vão no backup com as **Definições**; os resultados, com as **Sessões**.
+
+**Revisões desta ronda.** *Segurança:* nada de segredos novos; o texto do alvo só aceita números e
+`mm:ss` (uma expressão fixa, sem `eval`); sem comandos externos. *Erro corrigido:* a junção da última
+secção curta (uma atribuição com índice negativo trocava a secção errada — apanhado pelos testes).
+*Bottlenecks:* o plano resolve-se por bissecção, em milissegundos até a segmentos de 22 km (medi),
+por isso corre na preparação sem travar o ecrã; é guardado em cache enquanto não mudas o alvo.
+*Setas → lista pendente:* o segmento (janela própria), o alvo, o ERG e a entrada são listas (as setas
+continuam a funcionar nas três últimas); o tempo/%/watts do alvo escreve-se. *Valores no código:* 12 opções novas.
+
+### Ronda 23: o fim automático das sessões e os textos dentro das caixas
+
+**Quando o treino ou o challenge acaba, a sessão pára sozinha.** Em qualquer desporto, numa sessão
+que **não é livre**, quando termina o que estavas a fazer o **tempo pára** e aparece, por cima da
+sessão, um ecrã a dizer **«… concluído»**, com o menu de **guardar a sessão ou não** — exatamente como se
+tivesses carregado em «Terminar» (Sim, guardar · Não, continuar · Terminar sem guardar):
+
+| O que acabou | Onde | O ecrã diz |
+|---|---|---|
+| o último bloco de um treino | ciclismo, remo, corrida, natação, ginásio | **Treino concluído** |
+| um challenge/jogo (inclui Segment Pace e Segment KOM) | ciclismo e remo | **Challenge concluído** + o resultado (posição, tempo…) |
+| um teste de aptidão | remo | **Teste concluído** + o resultado |
+| a fuga (quando te apanham) | ciclismo | **Fuga terminada** |
+| o plano de voltas (sessões por voltas do ginásio, com plano) | ginásio | **Plano concluído** |
+
+- **A sessão livre nunca pára sozinha**: aí és tu que decides quando acaba (e uma sessão numa rota
+  também é livre — a rota dá a volta).
+- **«Não, continuar»** volta à sessão (continuas à vontade) e **não volta a perguntar** por aquele fim.
+- **Para desligar** isto: Definições → Avançado → *Sessões e aparelhos* → «Parar sozinho ao concluir o
+  treino ou challenge» (`session_auto_finish`). Desligado, só aparece o aviso «Treino concluído» e a
+  sessão continua.
+- **Se a janela de «concluído» tapa algo**: é a mesma do «Terminar» (Esc também a fecha).
+
+**Os textos ficam dentro das caixas.** Revi todos os ecrãs, janelas e avisos e corrigi o que saía fora:
+- as **linhas das listas** (o valor à direita já não passa por cima do rótulo nem sai da linha — fica
+  com reticências se for comprido, como «Material» e «Exercícios novos» nos programas);
+- a **linha de resumo do construtor de treinos** (duração, carga, IF, blocos, longevidade…) passava da
+  janela: agora corta-se à largura dela;
+- os **separadores** (a largura mede-se pela letra a sério e o texto nunca sai do separador);
+- as **caixas de métricas** da sessão de ciclismo (o valor e o nome medem-se, em vez de contar letras);
+- o **aviso de estado** («Começa a pedalar para arrancar»), a **placa** ao centro e os **avisos**;
+- os diálogos **«Terminar a sessão?»** e **«PAUSA»** (cabem em janelas estreitas);
+- o painel de **Recordes** já não fica por cima dos separadores numa janela pequena;
+- a nota do construtor de força («O que o atleta deve saber…»).
+
+Para isto não voltar a acontecer há um teste novo (`tests/test_round23.py`, com `tests/textfit.py`) que
+mede cada texto desenhado, com uma letra real, contra a caixa onde está e contra a janela — percorrendo
+todos os menus no tamanho **1024×640 (o mínimo)** e no **1280×760**.
+
+**Revisões desta ronda.** *Base de dados:* nada a alterar (tudo em `settings`/tabelas que já existem;
+a opção nova vai no backup com as **Definições**). *Segurança:* revi o código, os scripts (`.bat`, `.sh`,
+`build`) e a configuração: `.claude/` está no `.gitignore` (e `.env*`, `*.pem`, `*.key`, `*.db`,
+`GarminConnectConfig.json*`); nenhuma palavra-passe nem segredo escritos (só as variáveis de ambiente
+`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_SYNC_PIN`, `PERENNIA_STRAVA_CLIENT_ID/SECRET`); a palavra-passe do
+Garmin vai para um ficheiro temporário privado (0600) e nunca na linha de comandos; sem `shell=True`,
+`eval`, `exec` nem `pickle`; o XML lê-se por `safexml`; repor um backup não escreve fora da pasta de
+dados. *Observação:* os tokens do Strava ficam em texto no ficheiro `.db` (permissões 0600 em
+Linux/macOS; no Windows, a pasta do utilizador) — não vão nos backups sem escolheres «Ligações».
+*Bottlenecks:* a medição de texto passou a ter cache (as listas voltavam a medir as mesmas linhas a
+cada tecla) e o construtor de treinos deixou de recalcular a escala vertical a cada barra (de
+quadrático para linear). *Setas → lista pendente:* percorri todas as linhas de escolha de todos os
+menus e as que têm muitas opções (≥ 8) já abrem uma lista com pesquisa; sobram só números (idade, peso,
+FTP…), que se escrevem. *Valores no código:* 1 opção nova (`session_auto_finish`).
+
+### Ronda 24: tags nas sessões e nos treinos (sempre em inglês)
+
+**Cada sessão leva o seu tipo, em qualquer desporto.** É automático e fica guardado com a sessão
+(ciclismo, remo, corrida, natação e ginásio, incluindo as sessões por voltas):
+
+| O que foi | Tags da sessão |
+|---|---|
+| sessão livre (também a que segue uma rota) | `Free Session` |
+| um treino (blocos, plano de voltas, treino de força guardado) | `Workout` + as tags do treino |
+| um jogo do Challenge | `Challenge` + o nome do jogo: `Adaptive Challenge`, `Zone Hero`, `Power Ladder`, `Warm-up`, `Elimination`, `Tug of War`, `Regatta`, `Segment Pace`, `Segment KOM` |
+| a fuga | `Challenge` + `Chase` |
+| os desafios do ginásio | `Challenge` + `Surprise`, `EMOM 20 min`, `Tabata x3`, `Treadmill Pyramid` ou `Rowing Pyramid` |
+| um teste | `Test` + o nome: `FTP 20 min`, `FTP Ramp`, `FTP 2x8 min`, `Sprint Test`, `1 min Test`, `5 min Test`, `Row 2000 m`, `Row 500 m`, `Row 30 min`, `Row 1 min` |
+
+Estas tags juntam-se às que já existiam (`Perennia`, `Indoor Cycling`…, o tipo de treino — ex.
+`Threshold` — e as tuas livres). **As tags são sempre em inglês**, seja qual for o idioma da
+Perennia — é o que permite pedir «tudo o que for X» sem depender da língua. O tipo de treino
+(`Recovery`, `Aerobic endurance`, `Tempo`, `Threshold`, `VO2max`…) também passou a mostrar-se em inglês.
+
+**Os treinos também têm tags.** No **construtor de treinos** (ciclismo, remo, corrida e natação) há uma
+linha **«Tags do treino»** (Enter abre uma janela: juntas as que quiseres — as que já existem aparecem
+a sugerir —, tiras com Enter na tag, e **Guardar tags**); no **construtor de força** é o botão **«Tags: n»**
+do cabeçalho; nos **planos de voltas** (ginásio) é a linha **«Tags do plano»** (guarda o plano para as sessões o herdarem). O «editor simples» de força não tem tags: usa o construtor de blocos. Quando fazes uma sessão desse treino, **ela herda as tags** (e
+`Workout`); na janela do fim da sessão podes tirar as que não quiseres para essa sessão. Mudar as
+tags do treino depois **não mexe** nas sessões que já fizeste. O **tipo de treino** do construtor passou
+a ser uma **lista pendente** (era com as setas).
+
+**Ir buscar tudo para uma ou mais tags** — *Estatísticas gerais → Análise AdHoc* (fonte «Sessões»):
+- campos novos: **Tipo de sessão (tag)** (`Free Session`, `Workout`, `Challenge`, `Test`), **Jogo ou
+  teste (tag)** e **Tags** (todas as tags da sessão numa só coluna, separadas por ` | ` — assim saem no .csv);
+- filtro **Tags** com três operadores: **tem todas**, **tem alguma**, **não tem nenhuma**. Escrevem-se as
+  tags separadas por vírgulas (maiúsculas e acentos não contam) ou juntam-se das que existem
+  («+ Juntar uma tag que existe»). Ex.: `Challenge, Zone Hero` com «tem todas» → só os Zone Hero;
+  `Chase, Tug of War` com «tem alguma» → fugas e cabos de guerra, de todos os desportos;
+- dá para fazer gráficos com o tipo de sessão ou o jogo na **legenda** e **exportar em .csv**.
+Por baixo (para quem usa a base de dados diretamente): `tags.sessions_with(db, "Challenge, Chase",
+"any")`, `tags.workouts_with(...)` e `tags.tag_counts(db)`.
+
+**Sessões antigas.** Ao abrir a versão nova (e sempre que se abre a Análise AdHoc) a Perennia dá o tipo
+às sessões que ainda não o têm, a partir do que já ficou guardado (o tipo da sessão, o jogo, o teste de
+FTP, o treino). É feito **uma vez** e não mexe no que já tem tags. As atividades importadas (Garmin,
+Strava, TrainingPeaks) continuam com as tags que as regras do histórico lhes deram.
+
+**Revisões desta ronda.** *Base de dados:* **uma tabela nova**, `workout_tags` (`sport`, `workout_id`,
+`tag`) — criada sozinha ao abrir; `session_tags` ganhou o género `activity` (o tipo de sessão; é só
+um valor novo na coluna `kind`, sem mudar o esquema) e dois índices (`tag` e `session_id`).
+**Não tens de fazer nada** nem correr scripts. *Backup/import:* `workout_tags` vai na componente
+«Treinos» (a `session_tags` já ia em «Histórico de sessões»); um restauro de sessões antigas sem tags
+recebe o tipo no arranque seguinte. *Rebuild:* sem pacotes nem módulos novos — o atalho/ícone continuam
+a funcionar com a versão atual; se usas o executável empacotado, refaz com `build.sh` /
+`build_windows.bat` e volta a correr `criar_atalho_windows.bat`. *Segurança:* sem alterações de
+superfície — as tags são texto limitado a 32 letras, gravado com parâmetros SQL (nada de texto montado
+à mão), e apagar uma atividade carregada apaga também as suas tags. *Valores no código:* nenhuma opção
+nova — os nomes das tags são fixos e em inglês de propósito (é o que as torna comparáveis).
+
+### Ronda 25: o Conditioning como agregador de remo, passadeira e ginásio
+
+**O que é.** Uma sessão de Conditioning é feita de **blocos de remo, passadeira e ginásio**, pela
+ordem que quiseres. Está em *Ginásio → Conditioning* (e no menu da força). Há três formas de a fazer:
+- **Sessão livre** (nova): sem plano — vais abrindo blocos à medida que treinas (Espaço/L, «Nova volta»);
+- **Montar um treino e começar**: juntas os blocos, começas, e guardar o treino é opcional;
+- **um treino guardado** (os planos de Conditioning da lista) — um treino é um agregador de blocos.
+
+No construtor (plano de voltas) há os blocos **Passadeira**, **Remo**, **Força** (um exercício),
+**Descanso**, **Cardio** e o novo **+ Bloco de ginásio (tempo)**: um bloco de ginásio com duração (ex.
+15 min) onde marcas os exercícios durante a sessão. O bloco **conta o tempo todo**, mesmo que lá dentro
+abras outro exercício ou um descanso; quando acaba, passa ao bloco seguinte. O subtítulo do construtor
+mostra o tempo por desporto (`Remo 5:00 · Corrida 18:00 · Ginásio 35:00`).
+
+**De que desporto é cada bloco.** Passadeira → **corrida**; remo → **remo**; força e outro cardio →
+**ginásio**. Um **descanso conta para o bloco de antes** (um descanso no início conta para o primeiro).
+
+**Os .fit.** No fim gravam-se **vários .fit** na pasta `strength`:
+- o **total** (`…_Conditioning.fit`, treino cardio), com todas as voltas;
+- **um por desporto** (`…_rowing.fit`, `…_running.fit`, `…_gym.fit`): cada um junta **tudo o que foi
+  desse desporto**, mesmo que separado no tempo. Exemplo: 5 min remo, 10 passadeira, 15 ginásio,
+  5 passadeira, 10 ginásio, 3 passadeira, 10 ginásio → 4 ficheiros: o total, remo (5 min), passadeira
+  (10 + 5 + 3 = 18 min) e ginásio (15 + 10 + 10 = 35 min). Nos .fit por desporto o relógio **pára entre
+  blocos** (eventos de stop/start), por isso o tempo de treino é só o desse desporto. Remo = remo indoor,
+  passadeira = corrida em passadeira, ginásio = treino de força.
+
+O resumo do fim mostra a secção **«Por desporto · um .fit cada»** (tempo, blocos, distância, séries,
+FC e o nome do .fit).
+
+**Tags.** `Conditioning` é **obrigatória** e há **uma tag por desporto feito** (`Rowing`, `Running`,
+`Gym`), mais `Free Session`/`Workout`/`Challenge` como nas outras sessões. Para as contas baterem
+certo, **todas as outras sessões passaram a ter a tag do seu desporto** (`Cycling`, `Running`,
+`Rowing`, `Swimming`, `Gym`) — as antigas recebem-na sozinhas.
+
+**Contar sem perder a noção.**
+- *Quantos Conditioning fiz:* Análise AdHoc → «Sessões» → filtro Tags «tem todas» `Conditioning`
+  (o desporto destas sessões aparece como **Conditioning**; o campo **«Desportos (tags)»** diz
+  `Rowing + Running + Gym`).
+- *Quantas corridas fiz, contando as de dentro do Conditioning:* Tags «tem todas» `Running` (a corrida
+  sozinha e o Conditioning com passadeira); com `Running, Conditioning` só as de dentro.
+- **Fonte nova «Sessões por desporto (o Conditioning repartido)»**: uma linha por desporto praticado —
+  cada sessão normal é uma linha; um Conditioning dá **uma linha por parte** (Corrida 18 min · 3 blocos;
+  Ginásio 35 min…), com o campo **«Dentro de um Conditioning»** (Sim/Não). Contas linhas de Corrida e
+  tens todas as corridas, separáveis por esse campo; somas a duração e o tempo **não conta duas vezes**
+  (a carga do Conditioning é repartida pelas partes na proporção do tempo).
+- Nos **históricos da corrida e do remo** aparece uma secção **«Dentro de um Conditioning»** com as
+  sessões que tiveram passadeira/remo (o tempo e os blocos desse desporto; Enter abre a sessão). O
+  histórico do ginásio mostra, em cada Conditioning, o tempo de cada desporto.
+
+**Sessões de Conditioning antigas.** Ao abrir a versão nova, recebem `Conditioning`, as tags dos
+desportos e as partes por desporto, calculadas a partir das voltas gravadas (os .fit por desporto
+só existem nas sessões novas).
+
+**O «Treino livre» do ginásio** (o outro modo por voltas) não se reparte: continua uma sessão de ginásio.
+
+**Revisões desta ronda.** *Base de dados:* **uma tabela nova**, `conditioning_parts` (`session_id`,
+`sport`, `seq`, `blocks`, `laps`, `timer_s`, `span_s`, `start_t_s`, `distance_km`, `avg_hr`, `max_hr`,
+`sets`, `reps`, `load`, `fit_path`) — criada sozinha; `session_tags` ganhou o género `sport` (sem mudar
+o esquema). **Não tens de fazer nada.** *Backup/import:* `conditioning_parts` vai em «Histórico de
+sessões» (os .fit por desporto vão com a pasta `strength`, como o total). *Rebuild:* sem pacotes nem
+módulos novos; se usas o executável, refaz com `build.sh` / `build_windows.bat` e volta a correr
+`criar_atalho_windows.bat`. *Segurança:* sem superfície nova (os nomes dos .fit vêm do nome da sessão
+já limpo pelo `naming`, e o SQL usa parâmetros). *Opções novas:* nenhuma — o mapa bloco → desporto
+(passadeira → corrida, remo → remo, força/cardio → ginásio, descanso → bloco de antes) é a regra do
+Conditioning. *Corrigido:* na Análise AdHoc e nas consultas de tags, o tipo de treino aparecia pela chave
+interna (`endurance`) em vez do nome (`Aerobic endurance`). *Corrigido:* o campo das tags no .fit tinha 64 bytes e contava letras em vez de
+bytes (o «·» ocupa 2): com um tipo de treino comprido (`Aerobic endurance`), a tag `Perennia` ficava
+de fora. Agora o campo tem 128 bytes (a norma FIT deixa cada ficheiro escolher) e conta-se em bytes.
+
+### Ronda 26: tags ao criar treinos e o construtor de Conditioning por blocos
+
+**Tags em todos os construtores de treino.** Ao criar ou editar um treino, de qualquer desporto,
+há sempre as tags:
+- **construtor de blocos** (ciclismo, remo, corrida, natação): a linha **«Tags do treino»**;
+- **construtor de força / ginásio** (todas as modalidades): o botão **«Tags: n»** do cabeçalho;
+- **construtor de Conditioning**: a linha **«Tags»**.
+
+Cada um mostra primeiro as **automáticas** — as mesmas que a sessão desse treino vai ter sozinha,
+e que não se tiram — e depois as tuas (Enter junta; as que já existem aparecem a sugerir):
+
+| Treino | Tags automáticas |
+|---|---|
+| ciclismo | `Workout` · `Cycling` · `Indoor Cycling` · `Perennia` |
+| corrida / remo / natação | `Workout` · `Running` / `Rowing` / `Swimming` · `Indoor …` · `Perennia` |
+| ginásio | `Workout` · `Gym` · **a modalidade** (`Strength`, `Mobility`, `HIIT`, `Yoga`…) · `Indoor Strength` · `Perennia` |
+| Conditioning | `Conditioning` · `Workout` · **um por desporto dos blocos** (`Cycling`, `Running`, `Rowing`, `Gym`) · `Perennia` |
+
+O tipo de treino (`Threshold`, `Recovery`…) continua na sua linha própria. **Novo nas sessões:** uma
+sessão de ginásio passa a levar também a tag da **modalidade** do treino (ex. `Gym` + `Mobility`).
+
+**Saíram os sítios onde se criava um treino sem tags:** o «+ Criar treino (editor simples)» do ginásio
+e a lista antiga de treinos de força (menu da força → Construtor) passam a abrir o **construtor por
+blocos**; a Surpresa → «Ajustar antes de começar» também.
+
+**O construtor de Conditioning (novo).** *Ginásio → Conditioning → + Criar treino de Conditioning*
+(ou «Montar um treino e começar», ou Enter/E num treino da lista). Numa só página:
+- **em cima, a faixa dos blocos**: um retângulo por bloco, da cor do desporto e da largura do tempo;
+  **arrasta um bloco com o rato** para o pôr noutro sítio; um clique escolhe-o;
+- **por baixo, a lista**: o nome, as tags, os blocos (`1. Ciclismo · Sweet spot · 32:00`, com o resumo:
+  ERG/Manual, passos, modalidade) e os botões;
+- **+ Adicionar bloco**: escolhes o desporto numa lista — **Ciclismo, Passadeira, Remo, Ginásio ou
+  Descanso**. Nos três primeiros perguntas **Manual ou ERG**; no ginásio, **a modalidade** (lista).
+  Abre-se **o construtor desse desporto** (o mesmo de sempre, «responsive»: o de blocos para
+  ciclismo/passadeira/remo, o de força para o ginásio), com o botão **«Adicionar bloco a treino de
+  Conditioning»** em baixo (no ginásio, no cabeçalho). O bloco volta para o treino, a seguir ao
+  escolhido. O descanso entra logo; o tempo muda-se com ←/→ na linha (Shift: ±1 min) ou escrevendo
+  minutos;
+- num bloco: **Enter** edita-o no construtor do desporto (o botão diz «Atualizar bloco…»),
+  **D** duplica, **Alt+↑/↓** (ou Shift+←/→) muda-o de lugar, **Del** tira; também há as linhas
+  «Duplicar o bloco» e «Tirar o bloco»;
+- **▶ Começar** (não precisa de guardar) e **Guardar** (Ctrl+S). Os planos antigos abrem como blocos
+  (cada volta vira um bloco).
+
+**Na sessão** cada bloco é uma volta planeada. O aviso ao centro mostra o bloco, o tempo que falta e o
+**passo em curso** com o alvo (ex. `Passo 2: FTP 95–105 % · 238–263 W · 8:00`). Num bloco de
+**ciclismo ERG** a app **põe a potência de cada passo no rolo** (se o rolo aceitar comandos); num
+bloco Manual só mostra o alvo. O **ciclismo** passou a ser um desporto do Conditioning: há a volta
+«Bicicleta», a parte por desporto e o **.fit de ciclismo** (rolo, indoor cycling), e o histórico do
+ciclismo mostra o que foi feito dentro de um Conditioning.
+
+**Revisões desta ronda.**
+- *Base de dados:* **nada a fazer** — os treinos de Conditioning continuam em `lap_plans` (cada item
+  leva agora o bloco completo em `cond`); sem tabelas novas.
+- *Backup/import:* sem alterações (os planos já iam em «Treinos»; as opções novas em «Definições»).
+- *Rebuild:* há **um módulo novo** (`perennia/ui/conditioning_builder.py`, `perennia/core/conditioning.py`)
+  mas sem pacotes novos: refaz o executável com `build.sh` / `build_windows.bat` e volta a correr
+  `criar_atalho_windows.bat`.
+- *Segurança:* sem superfície nova; `.claude/`, `.env*`, `*.db`, `*.pem`, `*.key` no `.gitignore`;
+  as passwords só por variáveis de ambiente (`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_STRAVA_CLIENT_SECRET`,
+  `PERENNIA_SYNC_PIN`); nenhum comando leva uma password; SQL com parâmetros (os poucos nomes de tabela
+  montados no código são fixos).
+- *Opções novas (Definições → Avançado → Sessões):* `cond_rest_default_s` (um descanso novo, 120 s) e
+  `cond_gym_block_default_s` (um bloco de ginásio sem exercícios, 900 s).
+- *Setas → listas:* o desporto e a modalidade do bloco escolhem-se numa lista; Manual/ERG com botões.
+- *Bottlenecks:* o construtor de Conditioning lê o contexto de intensidade (FTP, limiares) uma vez por
+  desporto e só refaz as durações quando os blocos mudam (antes seriam várias consultas à BD por bloco
+  a cada tecla).
+- *Textos:* o aviso ao centro da sessão (título e linha de baixo) passou a cortar o texto à largura da
+  caixa; um teste mede o construtor de Conditioning, os construtores em modo bloco e a janela das tags
+  a 1024×640 e 1280×760.
+
+### Definições → Avançado (as opções afináveis)
+
+Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
+Avançado**. Os números mudam com ←/→ (Shift: 10 passos) ou escrevendo o valor (só conta se estiver
+dentro dos limites); as escolhas abrem uma lista (Enter ou clique); o texto escreve-se. Como o resto
+das Definições, **só fica gravado com Guardar** (Ctrl+S). Cada linha diz quando o valor já não é o
+de omissão. Não estão disponíveis durante uma sessão.
+
+| Opção | Limites | Por omissão | Para quê |
+|---|---|---|---|
+| **Sessões e aparelhos** | | | |
+| Contagem antes de começar (`session_countdown_s`) | 0 a 60 s | 15 s | segundos de contagem antes de qualquer sessão (0 = começa logo) |
+| Parar sozinho ao concluir o treino ou challenge (`session_auto_finish`) | ligado/desligado | ligado | quando acaba o último bloco, o challenge, o teste ou o plano de voltas o tempo pára e abre-se o ecrã de guardar (a sessão livre nunca pára sozinha) |
+| Conditioning: um descanso novo dura (`cond_rest_default_s`) | 10 a 900 s | 120 s | o tempo de um bloco de descanso acabado de juntar ao treino de Conditioning (ronda 26) |
+| Conditioning: bloco de ginásio sem exercícios (`cond_gym_block_default_s`) | 60 a 3600 s | 900 s | quanto conta um bloco de ginásio em que só marcas os exercícios na sessão (ronda 26) |
+| Pausa automática ao fim de (`auto_pause_after_s`) | 1 a 30 s | 3 s | segundos sem pedalar até a sessão pausar (se a pausa automática estiver ligada) |
+| Aparelho sem dados ao fim de (`device_stale_after_s`) | 2 a 30 s | 5 s | segundos sem receber um valor até um sensor contar como perdido |
+| Procura Bluetooth: duração (`ble_scan_s`) | 3 a 30 s | 8 s | quanto tempo a procura de aparelhos Bluetooth escuta (mais tempo encontra mais) |
+| Procura ANT+: duração (`ant_scan_s`) | 3 a 60 s | 12 s | quanto tempo a procura de aparelhos ANT+ escuta (mais tempo encontra mais) |
+| Duração dos avisos (`message_seconds`) | 2 a 20 s | 6 s | quanto tempo fica no topo a mensagem («Guardado», «Exportado»…) |
+| Passadeira: velocidade máxima à partida (`treadmill_start_speed_max_kmh`) | 8 a 40 km/h | 25 km/h | o máximo que a lista de velocidades da passadeira oferece ao começar |
+| Força: passo da carga (`strength_load_step_kg`) | 0.25 a 20 kg | 2.5 kg | quanto muda a carga de uma série com cada toque nas setas |
+| Força: passo do RPE (`strength_rpe_step`) | 0.1 a 1 | 0.5 | quanto muda o RPE de uma série com cada toque nas setas |
+| **Treinos e importação** | | | |
+| Tolerância do alvo de potência (`workout_tolerance_pct`) | 1 a 25 % | 5 % | ± % do alvo que conta como «no alvo» durante um treino |
+| Tolerância na revisão da sessão (`review_tolerance_pct`) | 1 a 25 % | 6 % | ± % do limiar, na revisão, quando o bloco não define outra |
+| Exportar: potência do bloco «livre» (`export_freeride_pct`) | 20 a 100 % FTP | 50 % FTP | os formatos .erg/.mrc não têm blocos livres: pedala-se a esta % do FTP |
+| Rotas GPX: distância entre pontos (`gpx_resample_step_m`) | 1 a 50 m | 5 m | as rotas importadas são reamostradas a esta distância (vale para as novas) |
+| **Ligações externas** | | | |
+| Strava: porta do retorno local (`strava_redirect_port`) | 1024 a 65535 | 8723 | a porta onde a Perennia espera o regresso do Strava (só nesta máquina) |
+| Strava: tolerância ao ligar um segmento à rota (`strava_match_radius_m`) | 10 a 150 m | 45 m | o início e o fim do segmento têm de estar a esta distância da rota |
+| Strava: tolerância ao traçado do segmento (`strava_path_radius_m`) | 10 a 150 m | 40 m | a rota tem de seguir o traçado do segmento com este desvio no máximo |
+| Strava: parte do traçado que tem de coincidir (`strava_path_fraction`) | 50 a 100 % | 85 % | evita ligar um segmento que só começa e acaba perto da rota |
+| Strava: tamanho de cada janela de pesquisa (`strava_tile_m`) | 500 a 10000 m | 3000 m | a pesquisa por rota divide-a em janelas deste comprimento |
+| Strava: janelas de pesquisa por rota, máximo (`strava_max_tiles`) | 3 a 100 | 30 | cada janela é um pedido ao Strava (limite ~100 a cada 15 min) |
+| Strava: segmentos com PR por pesquisa, máximo (`strava_max_details`) | 5 a 90 | 40 | cada um é mais um pedido (o teu PR e o traçado) |
+| Strava: ligar a biblioteca ao importar uma rota (`strava_auto_link`) | sim / não | sim | ao importar um .gpx, os segmentos da biblioteca que a rota percorre ligam-se sozinhos (sem internet) |
+| Strava: guardar na biblioteca o que a pesquisa achar (`strava_library_autosave`) | sim / não | sim | o que «Atualizar do Strava» (por rota) encontra fica na biblioteca |
+| Strava: segmentos por importação, máximo (`strava_import_batch`) | 5 a 80 | 30 | o resto fica para a importação seguinte |
+| Strava: importar os meus esforços (`strava_import_efforts`) | sim / não | sim | precisa de subscrição Strava; sem ela só entra o PR |
+| Strava: esforços por segmento, máximo (`strava_efforts_max`) | 20 a 1000 | 200 | cada 200 é um pedido ao Strava |
+| Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 60 a 21600 s | 3600 s | a sincronização é interrompida se demorar mais do que isto |
+| Garmin: linhas do relato (`garmin_log_lines`) | 4 a 60 | 14 | quantas linhas do que o GarminDB vai dizendo se mostram no ecrã da sincronização |
+| Garmin: tamanho de cada linha do relato (`garmin_log_line_chars`) | 60 a 1000 car. | 300 | as linhas do GarminDB mais compridas são cortadas no ecrã |
+| Saúde: respeitar a Fonte dos indicadores (`health_respect_source`) | ligado / desligado | ligado | uma importação não substitui um valor que já lá está de outra origem quando a Fonte do indicador não é a dela; desligado, a última a gravar ganha |
+| **Análise AdHoc** | | | |
+| CSV: separador de valores (`adhoc_csv_sep`) | ;, ,, Tab, | | ; (ponto e vírgula) | o que se propõe ao exportar (escolhe-se de novo em cada exportação) |
+| CSV: separador decimal (`adhoc_csv_decimal`) | «.» ponto, «,» vírgula | «.» ponto | igual ao separador de valores não pode ser: usa-se o ponto |
+| CSV: UTF-8 com BOM (`adhoc_csv_bom`) | ligado / desligado | ligado | o Excel abre bem os acentos |
+| CSV: pasta das exportações (`adhoc_export_dir`) | texto | (vazio) | vazio = a pasta «exports» dentro da pasta de dados |
+| Gráfico: categorias no eixo X (`adhoc_max_categories`) | 2 a 120 | 15 | as categorias a mais ficam agrupadas em «Outros» |
+| Gráfico: séries na legenda (`adhoc_max_series`) | 1 a 7 | 6 | as séries a mais ficam agrupadas em «Outros» |
+| Gráfico: pontos na dispersão (`adhoc_max_points`) | 10 a 2000 | 400 | acima disto desenha-se uma amostra |
+| Gráfico: classes do histograma (`adhoc_bins`) | 2 a 40 | 10 | quando o eixo X é um número, agrupa-se em classes |
+| Dataset: linhas da pré-visualização (`adhoc_preview_rows`) | 1 a 16 | 12 | (o .csv leva sempre todas as linhas) |
+| Filtros por vista (`adhoc_max_filters`) | 1 a 10 | 6 |  |
+| **Agente de IA e tokens** | | | |
+| Caracteres por token (estimativa) (`agent_chars_per_token`) | 1.5 a 8 | 3.5 | serve só para estimar os tokens antes de enviar; em português e com JSON costuma ser ~3,5 |
+| Máximo de tokens da resposta (`agent_max_output_tokens`) | 64 a 8192 | 1024 | o limite que se pede ao fornecedor para a resposta |
+| Avisar acima de (tokens) (`agent_warn_tokens`) | 500 a 200000 | 8000 | um pedido maior do que isto mostra um aviso antes de enviar |
+| Preço por milhão de tokens enviados (`agent_price_in_per_mtok`) | 0 a 1000 | 0 | 0 = não mostra o custo; vê o preço no site do fornecedor |
+| Preço por milhão de tokens da resposta (`agent_price_out_per_mtok`) | 0 a 1000 | 0 |  |
+| Moeda do custo (`agent_currency`) | texto | US$ |  |
+| **Saúde e pressão arterial** | | | |
+| Pressão arterial: média diária (`bp_daily_mode`) | média das médias dos períodos, média de todas as medições | média das médias dos períodos | «períodos»: manhã e noite pesam o mesmo, mesmo com números de medições diferentes |
+| Pressão arterial: ignorar a 1.ª medição (`bp_discard_first`) | ligado / desligado | desligado | em cada período com 3 ou mais medições, a primeira não conta para a média (costuma sair mais alta) |
+| Pressão alta: máxima a partir de (`bp_high_sys`) | 110 a 180 mmHg | 135 mmHg | limiar para medições em casa (135/85 é o valor habitual das recomendações) |
+| Pressão alta: mínima a partir de (`bp_high_dia`) | 60 a 120 mmHg | 85 mmHg |  |
+| Pressão baixa: máxima abaixo de (`bp_low_sys`) | 70 a 110 mmHg | 90 mmHg |  |
+| Pressão baixa: mínima abaixo de (`bp_low_dia`) | 40 a 80 mmHg | 60 mmHg |  |
+| Pressão muito alta: máxima a partir de (`bp_crisis_sys`) | 150 a 220 mmHg | 180 mmHg | acima disto a Perennia diz para repetires a medição e contactares um médico |
+| Pressão muito alta: mínima a partir de (`bp_crisis_dia`) | 95 a 140 mmHg | 110 mmHg |  |
+| Período «manhã» até às (`bp_morning_until_h`) | 6 a 14 h | 12 h | a hora da medição sugere o período (podes sempre escolher outro) |
+| Período «tarde» até às (`bp_afternoon_until_h`) | 14 a 22 h | 19 h |  |
+| Assistente de saúde: período recente (`health_window_days`) | 3 a 60 d | 14 d | os dias mais recentes, que se comparam com o período de base |
+| Assistente de saúde: período de base (`health_baseline_days`) | 14 a 365 d | 90 d |  |
+| Sono: mínimo desejável (`health_sleep_min_h`) | 4 a 10 h | 7 h |  |
+| FC em repouso: subida que merece aviso (`health_rhr_rise_bpm`) | 1 a 20 bpm | 5 bpm | média recente acima da de base por este valor |
+| HRV: descida que merece aviso (`health_hrv_drop_pct`) | 3 a 50 % | 15 % |  |
+| Bebidas alcoólicas: máximo por semana (`health_alcohol_week_max`) | 0 a 30 | 7 |  |
+| Peso: variação que merece aviso (`health_weight_change_pct`) | 0.5 a 10 % | 2 % | diferença entre a média recente e a de base |
+| Assistente de saúde: dias mínimos de registo (`health_min_days`) | 1 a 14 d | 3 d | com menos dias do que isto no período, não tira conclusões sobre a métrica |
+| Dias seguidos de treino que pedem descanso (`health_streak_rest_days`) | 3 a 30 d | 10 d |  |
+| Diário: feedback do treino de ontem (`health_day_feedback`) | sim / não | sim | no topo do diário, o resumo (e a análise offline) das sessões dos dias anteriores |
+| Diário: dias de treino a resumir (`health_feedback_days`) | 1 a 7 d | 1 d | 1 = só o dia anterior ao do diário |
+| Saúde: acrescentar as métricas do catálogo (`health_catalog_seed`) | sim / não | sim | na primeira abertura cria as perguntas de alimentação, digestão, sono e rotina (uma só vez) |
+| **Treinador e Assistente de saúde** | | | |
+| Treinador: aconselhamento (`advisor_coach_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) | as regras funcionam já, sem rede; o LLM local e o agente online ficam preparados (mostram o pedido e os tokens, sem enviar) |
+| Assistente de saúde: aconselhamento (`advisor_health_mode`) | Regras da Perennia, LLM local, Agente online | Regras da Perennia (offline, já funciona) |  |
+| Agente online: fornecedor (`advisor_online_provider`) | Claude, ChatGPT, Gemini, Outro | Claude (Anthropic) | a chave vem SEMPRE de uma variável de ambiente (ver RUN.md); nunca se escreve aqui |
+| Agente online: modelo (`advisor_online_model`) | texto | (vazio) | o nome do modelo no fornecedor (vazio: o de omissão do fornecedor) |
+| LLM local: endereço (`advisor_local_url`) | texto | http://127.0.0.1:11434 | onde o teu LLM local (Ollama, LM Studio, llama.cpp) escuta — só no teu computador |
+| LLM local: modelo (`advisor_local_model`) | texto | (vazio) | por exemplo «qwen2.5:7b» ou «llama3.1:8b» |
+| LLM local: janela de contexto (`advisor_local_context_tokens`) | 1024 a 262144 tokens | 8192 tokens | um pedido maior do que isto não cabe no modelo local: a Perennia avisa |
+| Construtor: feedback do Treinador ao vivo (`coach_live_feedback`) | ligado / desligado | ligado | depois de pedires feedback uma vez, o veredicto atualiza-se enquanto editas |
+| Subida máxima da forma (CTL) por semana (`coach_ramp_max_per_week`) | 1 a 12 | 5 | acima disto o Treinador diz que a semana é carga a mais |
+| Forma (TSB) abaixo da qual se alivia (`coach_tired_tsb`) | -50 a 0 | -20 |  |
+| Forma (TSB) abaixo da qual se descansa (`coach_overload_tsb`) | -70 a -5 | -30 |  |
+| Forma (TSB) acima da qual se está fresco (`coach_fresh_tsb`) | -5 a 30 | 5 |  |
+| Treino pesado: vezes a carga habitual (`coach_heavy_factor`) | 1.1 a 4 | 1.5 | a carga de um treino a dividir pela carga típica das tuas sessões recentes |
+| Treino pesado demais: vezes a carga habitual (`coach_very_heavy_factor`) | 1.2 a 6 | 2.2 |  |
+| Treinador: dias de histórico que conta (`coach_history_days`) | 14 a 180 d | 42 d |  |
+| Evento: dias de afinação antes (`coach_taper_days`) | 2 a 21 d | 7 d |  |
+| Evento: semanas que vão para o calendário (`coach_plan_weeks_max`) | 1 a 52 | 16 | o plano mais comprido do que isto só agenda as primeiras semanas |
+| Disponibilidade por omissão: dia de semana (`coach_weekday_minutes`) | 0 a 300 min | 60 min |  |
+| Disponibilidade por omissão: dia de fim de semana (`coach_weekend_minutes`) | 0 a 600 min | 180 min |  |
+| Evento: hidratos por hora (`coach_carbs_g_per_h`) | 20 a 120 g | 60 g | para esforços até à duração «evento longo» |
+| Evento longo: hidratos por hora (`coach_carbs_long_g_per_h`) | 30 a 120 g | 80 g |  |
+| Evento longo a partir de (`coach_long_event_h`) | 1 a 8 h | 2.5 h |  |
+| Evento: líquidos por hora (`coach_fluid_ml_per_h`) | 200 a 1200 ml | 600 ml |  |
+| Longevidade: eixo fraco abaixo de (`coach_weak_axis_score`) | 10 a 90 | 50 | os eixos do índice de longevidade abaixo desta nota entram no caminho proposto |
+| Longevidade: duração de cada fase (`coach_path_weeks`) | 2 a 12 | 4 |  |
+| Evento: treino longo necessário (`coach_long_share_pct`) | 40 a 100 % | 75 % | a parte da duração do evento a que o teu treino mais longo deve chegar antes |
+| Evento: partida «cedo» antes das (`coach_early_start_h`) | 5 a 11 h | 9 h | antes desta hora, a refeição que conta é o jantar da véspera |
+| Treino: máximo em Z5 ou acima (`coach_z5_max_min`) | 5 a 90 min | 30 min | acima disto o Treinador avisa |
+| Treino: máximo em Z4 (`coach_z4_max_min`) | 10 a 180 min | 60 min |  |
+| Força: progressão exigente (repetições) (`coach_reps_week_soft_pct`) | 1 a 20 % | 6 % | subida por semana acima da qual o objetivo passa de «realista» a «exigente» |
+| Força: progressão muito ambiciosa (repetições) (`coach_reps_week_hard_pct`) | 2 a 40 % | 12 % |  |
+| Força: progressão exigente (kg) (`coach_load_week_soft_pct`) | 0.5 a 10 % | 2.5 % |  |
+| Força: progressão muito ambiciosa (kg) (`coach_load_week_hard_pct`) | 1 a 20 % | 5 % |  |
+| Força: ritmo muito denso (`coach_reps_per_min_dense`) | 10 a 80 rep/min | 30 rep/min | repetições por minuto (num evento com limite de tempo) que já pedem aviso |
+| Força: ritmo acima do possível (`coach_reps_per_min_max`) | 15 a 120 rep/min | 45 rep/min |  |
+| **Dados e backups** | | | |
+| Backup: tamanho máximo ao repor (`backup_restore_max_mb`) | 64 a 1.04858e+06 MB | 4096 MB | um backup que, descomprimido, passe disto é recusado (defesa contra ficheiros feitos para encher o disco) |
+| **Planos de treino (ginásio)** | | | |
+| Carga inicial por omissão (`plan_default_start_kg`) | 0 a 200 kg | 20 kg | a carga sugerida ao começar um plano quando ainda não há histórico do exercício (20 kg = a barra vazia) |
+| Arredondar as cargas a (`plan_round_kg`) | 0.5 a 10 kg | 2.5 kg | o salto mais pequeno que os teus discos permitem |
+| Descanso por omissão (`plan_default_rest_s`) | 15 a 600 s | 120 s | quando o plano não diz o descanso de um exercício |
+| «Adiar o que falta»: dias (`plan_shift_days`) | 1 a 28 d | 7 d |  |
+| «Baixar tudo»: percentagem (`plan_deload_pct`) | 2.5 a 50 % | 10 % | quanto o botão de Recalcular cargas tira a todas as progressões |
+| Importar plano: tamanho máximo (`plan_import_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de plano maior do que isto é recusado |
+| **Blocos e pastas (ronda 19)** | | | |
+| Alterar o bloco durante a sessão (`block_edit_enabled`) | sim/não | sim | desligada, a velocidade da passadeira fica presa à do bloco |
+| Âmbito da alteração (`block_change_scope`) | bloco / sessão | bloco | a alteração vale só para o bloco em curso ou até ao fim da sessão |
+| Pasta das exportações (`path_exports`) | texto | (vazio) | vazio = «exports» na pasta de dados |
+| Pasta das importações (`path_imports`) | texto | (vazio) | onde se procuram ficheiros a importar |
+| Pasta dos backups (`path_backups`) | texto | (vazio) | onde se gravam e procuram os backups |
+| Pasta dos treinos (`path_workouts`) | texto | (vazio) | onde se procuram treinos e planos |
+| Pasta dos GPX (`path_gpx`) | texto | (vazio) | onde se procuram rotas .gpx |
+| **Histórico de outras apps (ronda 19)** | | | |
+| Aplicar regras ao importar (`etl_auto_apply`) | sim/não | sim | normaliza as atividades novas depois de importar |
+| Regras de arranque (`etl_use_defaults`) | sim/não | sim | sem ficheiro de regras, usam-se as de arranque |
+| Ficheiro de regras (`etl_rules_file`) | texto | (vazio) | vazio = `regras-historico.json` na pasta das importações |
+| Tamanho máximo das regras (`etl_rules_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de regras maior é recusado |
+| **Sincronização Wi-Fi e base de dados (ronda 19)** | | | |
+| Porta (`sync_port`) | 1024 a 65535 | 8765 | a porta TCP do destino |
+| Dígitos do PIN (`sync_pin_digits`) | 6 a 12 | 8 | o PIN do destino é aleatório e de uso único |
+| Validade do PIN (`sync_pin_ttl_s`) | 30 a 3600 s | 300 s | o destino fecha sozinho |
+| Tentativas de PIN (`sync_max_attempts`) | 1 a 10 | 3 | depois de tantos PIN errados o destino fecha |
+| Tempo limite (`sync_timeout_s`) | 5 a 600 s | 30 s | quanto se espera por uma resposta |
+| Tamanho máximo (`sync_max_mb`) | 16 a 16384 MB | 1024 MB | um pacote maior não se envia nem se recebe |
+| Só rede local (`sync_lan_only`) | sim/não | sim | recusa endereços fora da rede local |
+| Custo do PIN (`sync_kdf_iterations`) | 10000 a 2000000 | 200000 | iterações do PBKDF2 (igual nos dois lados) |
+| Modo (`sync_mode`) | juntar / substituir | juntar | como o destino repõe o que recebe |
+| Componentes (`sync_components`) | texto | (vazio) | vazio = todos os dados (sem definições, ecrã, atalhos, aparelhos, ficheiros nem credenciais) |
+| Gravações rápidas (`db_fast_writes`) | sim/não | sim | `synchronous=NORMAL` com WAL |
+| Cache da base de dados (`db_cache_mb`) | 2 a 512 MB | 16 MB | memória do SQLite para páginas lidas |
+| **Perfil por desporto** | | | |
+| Janela dos melhores valores (`profile_days`) | 30 a 730 d | 180 d | os melhores esforços (potência, 1RM, tempos) contam-se neste período |
+| Janela do treino recente (`profile_recent_weeks`) | 2 a 26 | 8 | as séries por semana de cada capacidade contam-se nestas semanas |
+| Tabela de referência (`profile_reference`) | homens, mulheres | homens | a tabela de potência por duração com que o ciclismo te compara |
+| Perfil «completo»: diferença máxima (`profile_flat_spread`) | 2 a 30 | 8 | se a melhor e a pior duração diferirem menos do que isto (em 100), és um ciclista completo |
+| Trepador: peso até (`profile_climber_max_kg`) | 45 a 90 kg | 68 kg | com o limiar como ponto forte: abaixo deste peso és trepador, acima és rolador / contrarrelogista |
+| Capacidade fraca abaixo de (`profile_weak_score`) | 10 a 90 | 50 |  |
+| Agachamento: bom nível (`profile_squat_bw`) | 0.5 a 3.5 × peso | 1.5 × peso | a 1RM estimada a dividir pelo teu peso que vale 100 pontos |
+| Peso morto: bom nível (`profile_deadlift_bw`) | 0.5 a 4 × peso | 2 × peso |  |
+| Supino: bom nível (`profile_bench_bw`) | 0.3 a 3 × peso | 1.25 × peso |  |
+| Press militar: bom nível (`profile_press_bw`) | 0.2 a 2 × peso | 0.75 × peso |  |
+| Remada: bom nível (`profile_row_bw`) | 0.3 a 2.5 × peso | 1 × peso |  |
+| Elevações: bom nível (`profile_pullups`) | 1 a 50 rep. | 12 rep. |  |
+| Flexões: bom nível (`profile_pushups`) | 5 a 150 rep. | 40 rep. |  |
+| Fundos: bom nível (`profile_dips`) | 1 a 60 rep. | 15 rep. |  |
+| Suspensão na barra: bom nível (`profile_hang_s`) | 15 a 300 s | 90 s |  |
+| Farmer's carry: bom nível (`profile_carry_bw`) | 0.2 a 2.5 × peso | 1 × peso | a carga total nas duas mãos a dividir pelo teu peso |
+| Prancha: bom nível (`profile_plank_s`) | 20 a 600 s | 120 s |  |
+| Mãos: séries por semana (`profile_grip_sets`) | 1 a 40 | 6 | as séries semanais que valem 100 pontos de treino desta capacidade |
+| Tendões: séries por semana (`profile_tendon_sets`) | 1 a 40 | 8 |  |
+| Explosividade: séries por semana (`profile_power_sets`) | 1 a 40 | 8 |  |
+| Mobilidade: minutos por semana (`profile_mobility_min`) | 5 a 300 min | 40 min |  |
+| Tronco: séries por semana (`profile_core_sets`) | 1 a 40 | 8 |  |
+| Força: séries pesadas por semana (`profile_strength_sets`) | 2 a 80 | 20 | séries de exercícios de força com carga, por semana |
+| Condicionamento: minutos por semana (`profile_conditioning_min`) | 5 a 300 min | 30 min |  |
+| Peso do que mediste na nota (`profile_measured_weight_pct`) | 0 a 100 % | 60 % | numa capacidade com medição: esta parte vem do que mediste, o resto do que treinas |
+| Desequilíbrio entre padrões abaixo de (`profile_balance_pct`) | 20 a 95 % | 60 % | avisa quando as séries de puxar (ou de empurrar) ficam abaixo desta parte das do padrão oposto |
+| Perfil de resistência a partir de (`profile_endurance_keep_pct`) | 70 a 100 % | 92 % | remo, corrida e natação: a velocidade da melhor sessão longa em % da curta |
+| Perfil de velocidade até (`profile_speed_keep_pct`) | 50 a 95 % | 82 % |  |
+
+| **Aspeto, barra de bloco e gráfico ao vivo** | | | |
+| Tamanho da letra (`ui_font_pct`) | 80 a 150 % | 100 % | o tamanho de todo o texto (100 % = o de origem); vê-se logo em Definições → Aspeto e nas sessões |
+| Barra do bloco: avisar com cores (`block_bar_colors`) | ligado / desligado | ligado | a barra do bloco passa a amarelo, vermelho e preto quando o bloco está a acabar |
+| Barra do bloco: amarelo quando falta (`block_bar_yellow_pct`) | 2 a 90 % | 25 % | percentagem do bloco que falta para a barra ficar amarela |
+| Barra do bloco: vermelho quando falta (`block_bar_red_pct`) | 1 a 60 % | 10 % | tem de ser menor do que o do amarelo |
+| Barra do bloco: preto quando falta (`block_bar_black_pct`) | 0 a 30 % | 3 % | os últimos momentos (0 = nunca fica preta); tem de ser menor do que o do vermelho |
+| Gráfico ao vivo: máximo de métricas (`live_chart_max_series`) | 1 a 5 | 3 | quantas linhas o gráfico ao vivo mostra ao mesmo tempo |
+| Gráfico ao vivo: pontos (`live_chart_points`) | 30 a 240 | 90 | em quantos pontos se resume a sessão no gráfico (mais = mais pormenor) |
+| **Notas, glossário e rato** | | | |
+| Notas: tamanho máximo (`note_max_chars`) | 200 a 20000 car. | 4000 | das notas dos exercícios, dos artigos e dos conceitos do glossário |
+| Glossário: tamanho máximo do termo (`glossary_term_chars`) | 20 a 200 car. | 80 | o nome de um termo do glossário não passa disto |
+| Botões laterais do rato voltam atrás (`mouse_back_button`) | ligado / desligado | ligado | o botão de «recuar» do rato faz o mesmo que Esc |
+| Botão «avançar» do rato também volta (`mouse_forward_button`) | ligado / desligado | desligado | liga se o teu rato tem o par trocado |
+| **Segment Pace e Segment KOM (ronda 22)** | | | |
+| Segment Pace: ERG ligado (`seg_pace_erg`) | ligado / desligado | **ligado** | ligado: o rolo põe os watts da secção; desligado: segues o sinal da guia (vale ao abrir a preparação; mudas em cada sessão) |
+| Entrada antes do segmento (`seg_lead_in_m`) | 0 a 5000 m | **500 m** | a sessão começa tantos metros antes do segmento (0 = parte do início, parado) |
+| Segment Pace: variação dos watts (`seg_pace_variation_pct`) | 0 a 50 % | **± 20 %** | quanto os watts de cada secção se afastam da média; 0 = potência igual |
+| Segment Pace: mínimo (descidas) (`seg_pace_floor_pct`) | 10 a 100 % da média | **50 %** | nenhuma secção pede menos do que isto |
+| Segment Pace: recalcular se te atrasas (`seg_pace_replan`) | ligado / desligado | ligado | ao entrar numa secção nova, recalcula os watts das que faltam |
+| Segment Pace: tolerância do alvo (`seg_pace_tol_pct`) | 0,1 a 10 % | 1 % | chegar até esta % acima do tempo alvo conta como cumprido |
+| Secções: comprimento mínimo (`seg_section_min_m`) | 100 a 2000 m | 250 m | o segmento parte-se em secções de inclinação parecida |
+| Secções: comprimento máximo (`seg_section_max_m`) | 250 a 10000 m | 1000 m | uma secção mais comprida parte-se |
+| Secções: mudança de inclinação (`seg_section_grade_tol_pct`) | 0,5 a 6 % | 1,5 % | uma mudança desta ordem abre uma secção nova |
+| Variação: diferença de inclinação de referência (`seg_grade_ref_pct`) | 1 a 12 % | 4 % | uma secção tão afastada da inclinação média leva a variação toda |
+| Viabilidade: «no limite» a partir de (`seg_hard_pct`) | 70 a 100 % da capacidade | 95 % | acima disto o alvo avisa que é no limite |
+| Segmentos sem rota: estrada depois do fim (`seg_virtual_tail_m`) | 100 a 5000 m | 500 m | um segmento da biblioteca sem rota joga-se num percurso só com ele; isto é a estrada acrescentada depois do fim |
+
+Estas opções ficam na tabela `settings` da base local e vão nos backups com as **Definições**.
+Nenhuma guarda segredos.
 
 ### Treinos que vêm com a aplicação
 
@@ -1260,22 +2486,24 @@ já feitas daquele exercício.
 
 1. **Espaço** (ou Enter na primeira linha) começa a série.
 2. **Espaço** outra vez termina-a. Fica registada com o que está nos campos
-   (repetições, carga e RPE, que começam com o que o plano pede) e com a FC
+   (repetições e carga, que começam com o que o plano pede) e com a FC
    média dessa série. Começa o descanso, em contagem decrescente; fica
    vermelho quando passa do tempo.
-3. **Durante o descanso, os campos corrigem a série que acabou**: se saíram 5
-   em vez de 6, ou se foi mais duro, ←/→ (Shift para passos maiores) ou
-   escreve o número. A carga que puseres passa para a série seguinte.
+3. **Durante o descanso, a linha do exercício corrige a série que acabou**: se saíram 5
+   em vez de 6, ←/→ (Shift para passos maiores) ou
+   escreve o número; a carga muda com **[** e **]**. A carga que puseres passa para a série seguinte.
 4. **Espaço** começa a série seguinte. Quando um exercício acaba, passa ao
    seguinte; o painel diz qual vem.
 
-Também podes: mudar de exercício (linha **Exercício**, ←/→), **+ Série
-extra**, **Saltar exercício**, **Pausa** (P). **Terminar o treino** (ou Esc,
-ou a seta Voltar) pergunta primeiro. No fim tens o resumo por exercício, com
+Também podes: **+ Série extra**, **Saltar** (o exercício, mesmo a meio de uma série; **N** salta o
+bloco), **Pausa** (P, que abre o aviso **PAUSA**). **Terminar o treino** (F10, ou a seta Voltar)
+pergunta primeiro; Esc só pausa. No fim tens o resumo por exercício, com
 a 1RM estimada, e o `.fit` fica na pasta `strength/`.
 
-A **1RM estimada** usa a fórmula de Epley contando as repetições que ficaram
-em reserva: 6 repetições a RPE 8 contam como 8. Só vale até umas 12–15
+A **1RM estimada** usa a fórmula de Epley. Como a sessão já não pede o RPE, uma série conta como
+feita até ao limite (6 repetições contam como 6); se uma série tem RPE registado (treinos antigos,
+séries editadas depois, ou importadas), conta as repetições em reserva: 6 repetições a RPE 8 contam
+como 8. Só vale até umas 12–15
 repetições no total; acima disso não se calcula. O **volume** é carga ×
 repetições; nos exercícios com o peso do corpo (elevações, flexões…) entra a
 parte do teu peso que o exercício move.
@@ -1351,6 +2579,8 @@ No menu do ciclismo, **Challenge** junta:
     se gasta e recupera.
   - **Cabo de guerra:** contra um bot que puxa por ondas; a corda anda com a
     diferença entre a tua % da FTP e a dele.
+  - **Segment Pace** e **Segment KOM** (ronda 22): sobre um segmento da Perennia, com os watts
+    por secção e o ERG (Pace) ou o máximo contra o teu KOM e o do segmento (KOM). Ver a «Ronda 22».
 
 **Nenhum alvo dura menos de 10 segundos**, para o rolo fazer a transição sem
 solavancos. Escolhes a duração, o número de bots e a rota (a estrada é só
@@ -1397,7 +2627,8 @@ desativam.
 
 ### Configurações sonoras (bips)
 
-Em **Definições → Configurações sonoras** escolhes os **bips** que avisam do fim (ou do princípio)
+Em **Definições → Configurações sonoras** (também durante uma sessão, onde se aplicam já ao voltar)
+escolhes os **bips** que avisam do fim (ou do princípio)
 de um **bloco**, de uma **série** ou de um **descanso** — para perceberes que o tempo está a
 acabar sem olhar para o ecrã. O bip é um tom gerado pela própria Perennia (sem ficheiros nem
 dependências); se o computador não tiver som, toca o «beep» do terminal (o sino, que em muitos PC
@@ -1415,20 +2646,23 @@ dependências); se o computador não tiver som, toca o «beep» do terminal (o s
 - **De origem**: os **últimos 5 segundos, um bip por segundo**, mais o bip longo no fim.
 - **Visível**: os últimos 5 segundos **vêem-se sempre**, mesmo com o som desligado: a caixa do tempo
   (em cima, ao centro) **pisca a vermelho** e mostra **5 · 4 · 3 · 2 · 1** (no ciclismo, o número
-  aparece grande ao centro, no topo).
+  aparece grande ao centro, no topo). **No ginásio** não há relógio no topo: a contagem vai para a
+  métrica **Série / descanso**, que pisca; sem essa métrica no ecrã, o aviso ao centro mostra o número.
 - Onde conta: nos **descansos** e nas **séries com tempo** do ginásio, e nos **blocos de tempo** dos
   treinos de ciclismo, corrida e remo (blocos por distância não têm contagem). A regra «só nos
   descansos» não se aplica ao ciclismo (os blocos de ciclismo não têm descanso à parte). As
   regras que mudares valem a partir da sessão seguinte.
 
-### Terminar uma sessão (ciclismo, corrida e remo)
+### Terminar uma sessão (todos os desportos)
 
 O **ciclismo é a base** e a corrida e o remo fazem agora **exatamente o mesmo**:
 
-- **P** pausa e retoma. **Esc não termina**: pausa e diz «P retomar · F10 terminar
-  e guardar». **F10** (ou o botão de voltar) abre o diálogo **«Terminar a
+- **P** pausa e retoma. **Esc não termina**: pausa e abre o aviso **PAUSA** (com **Retomar
+  sessão** e **Terminar treino**; P ou Esc retomam, F10 termina). **F10** (ou o botão de voltar)
+  abre o diálogo **«Terminar a
   sessão?»** — o mesmo do ciclismo, com **Sim, terminar** · **Não, continuar** ·
-  **Terminar sem guardar (D)**. Enquanto o diálogo está aberto a sessão fica parada.
+  **Terminar sem guardar (D)**. Enquanto o diálogo está aberto a sessão fica parada. Se a
+  sessão estava no PAUSA, «Não» volta a ele.
 - No diálogo: **Enter, S ou Y** terminam · **Esc ou N** voltam (e retomam, se foi o
   diálogo que parou a sessão) · **D** termina sem guardar (nada de .fit nem estatísticas).
 - **Sim, terminar** abre a **janela das etiquetas** (ver abaixo); **Enter, Enter** termina
@@ -1482,7 +2716,7 @@ saíram da Saúde). O índice (0–100) existe para **1 dia, 1 semana, 1 mês, 3
 seguinte (↑ ↓ =: a tendência) e, à direita, o **radar** mostra **onde o corpo tem estado mais
 ou menos concentrado** no período escolhido.
 
-A fórmula (`velo/core/longevity.py`): nove **eixos** — aeróbio, limiar, VO2máx, anaeróbio,
+A fórmula (`perennia/core/longevity.py`): nove **eixos** — aeróbio, limiar, VO2máx, anaeróbio,
 força, potência, mobilidade, estabilidade (isométricos, tendões) e recuperação. Cada sessão
 dá **minutos a cada eixo**: ciclismo pelo tempo em cada zona de potência, corrida, remo e
 natação pelo tempo em cada zona de FC (Z1 recuperação · Z2–Z3 aeróbio · Z4 limiar · Z5 VO2máx
@@ -1577,13 +2811,29 @@ O cartão **Saúde** tem:
   a confeção, "comi doces ao almoço?", "comi doces ao jantar?", "comi fora?",
   proteína, álcool, cafés, água e hora de deitar. Cada métrica tem uma
   **nota** (tecla **N**) e o dia tem uma nota livre.
-- **Métricas do diário:** cria as tuas com **+ Nova métrica** (em baixo, à direita, como os
+- **Métricas do diário** (ver «Ronda 20» acima: descontinuar, apagar, perguntas «se sim, onde?»,
+  catálogo e CSV): cria as tuas com **+ Nova métrica** (em baixo, à direita, como os
   outros botões de adicionar; sim/não, número, escala 1–5, texto, escolha ou hora), liga e
   desliga (**A**) e ordena (←/→). Dá para chegares às
   tuas ~50 e passar delas.
+- **Fonte dos indicadores.** Cada indicador tem o campo **Fonte** (em **Métricas → Enter**, numa
+  lista): *Qualquer (automática)*, *Manual*, *GarminDB (Garmin)*, *HRV4Training*, *Ficheiro CSV*,
+  *Balança / aparelho*, *Análises clínicas* ou *Outra*. Mostra-se na lista de métricas e, no
+  **Diário**, por baixo de cada valor («Fonte: GarminDB (Garmin)»; num valor já gravado vale a
+  **origem com que foi gravado**, num dia vazio a Fonte do indicador). Os indicadores de origem
+  vêm com a sua fonte (os passos são do Garmin, a prontidão do HRV4Training, o resto «Manual»
+  ou «Qualquer» quando mais do que uma fonte os dá); os que as importações criam herdam a da
+  origem. **Impacto nas sincronizações:** quando a Fonte do indicador é uma e a importação vem de
+  outra, a importação **não substitui um valor que já lá esteja** de outra origem (preenche só os
+  dias vazios) e o relatório diz quantos ficaram («N mantidos»); com a Fonte *Qualquer*, ou
+  quando a importação é da própria Fonte, grava e substitui como antes. Desliga-se em
+  **Avançado → Ligações externas → Saúde: respeitar a Fonte** (`health_respect_source`). A coluna
+  `fonte` do .csv da Saúde fixa a origem de cada linha. Na base de dados é a coluna
+  `metric_defs.source` (criada sozinha nas bases anteriores) e, por valor, `daily_values.source`.
 - **Tendências:** o gráfico de qualquer métrica nos últimos 14 a 365 dias.
-- **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências** e
-  **Métricas**. (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
+- **A Saúde está em separadores**: **Análises**, **Diários**, **Tendências**,
+  **Métricas**, **Pressão arterial**, **Assistente de saúde** e **os que criares** (ver abaixo).
+  (Os **Testes de longevidade** passaram para o menu **Longevidade**.)
 - **Análises:** a lista das **colheitas** (uma por data, com o laboratório e o número de
   resultados; **+ Nova análise** em baixo, à direita). **Enter numa colheita** abre-a: todos
   os resultados, por área, cada um com o **valor atual, a tendência e os 3 valores
@@ -1617,6 +2867,147 @@ O cartão **Saúde** tem:
   métricas novas se ligares essa opção. Põe os ficheiros na pasta `imports/`
   (dentro da pasta dos dados) ou em Transferências.
 
+### Pressão arterial (várias medições por dia, por período)
+
+Separador **Pressão arterial** da Saúde. Cada medição é um registo: **dia, período, hora, máxima,
+mínima, pulsação e nota**. Fazes as que quiseres por dia.
+
+- **+ Medição** abre a janela. O período vem sugerido pela hora (manhã / tarde / noite) e
+  escolhe-se numa lista. **«Guardar e mais uma»** grava e deixa a janela pronta para a seguinte
+  do mesmo período — é assim que fazes **3 medições de manhã** de seguida. **«Guardar e sair»**
+  fecha.
+- **Cada período tem a sua média** (3 medições de manhã → um valor da manhã; 3 à noite → um
+  valor da noite) e **o dia tem a média diária**. A lista mostra, por dia, a média diária e as
+  dos períodos com o número de medições: `126/82 · Manhã 130/84 (3) · Noite 122/80 (3)`.
+- **Enter num dia** abre as medições desse dia, por período; Enter numa medição edita-a ou
+  apaga-a. **Outro dia…** abre o calendário.
+- **Períodos** (botão): muda os nomes ou cria os teus (até 6), por exemplo «Antes do treino».
+  Se tirares um período, as medições dele não se perdem: ficam «Sem período».
+- **Média diária:** por omissão é a **média das médias dos períodos** (manhã e noite pesam o
+  mesmo); podes mudar para a média de todas as medições. Também podes mandar **ignorar a 1.ª
+  medição** de cada período com 3 ou mais. Ambas em Definições → Avançado → Saúde e pressão
+  arterial (ao guardar, as médias são refeitas).
+- **Classificação** (baixa / normal / alta / muito alta) pelos limiares das opções (135/85 por
+  omissão, o valor habitual para medições em casa). Não é um diagnóstico.
+- No **Diário**, as duas linhas antigas da tensão passaram a **uma linha «Pressão arterial»**
+  que mostra a média do dia e abre as medições. A média diária continua a alimentar as
+  **Tendências** (métricas «Tensão arterial (máxima)» e «(mínima)»), a longevidade e a AdHoc.
+- Os valores que já tinhas no diário passaram, sozinhos, a medições «Sem período».
+- **Exportar:** AdHoc Analysis → fonte **Pressão arterial** (uma medição por linha, com a média
+  do período e a do dia ao lado), ou `python main.py --adhoc-exportar bp`.
+
+### Separadores da Saúde criados por ti
+
+Como as disciplinas do ginásio: o botão **+ Separador** (em cima, à direita, em quase todos os
+separadores da Saúde) pede um nome e cria um separador novo (Fisioterapia, Dentista,
+Suplementos…). **Todo o separador tem a componente Notas**: **+ Nota** (data, título e texto);
+Enter numa nota edita-a ou apaga-a. **Mudar o nome** e **Apagar separador** (apaga também as
+notas, com confirmação) estão em baixo. O módulo próprio de cada separador fica para depois; a
+base (separador, notas, backup, e o que o Assistente de saúde lê) já existe.
+
+### O Assistente de saúde
+
+Separador **Assistente de saúde** da Saúde. Conhece as **análises**, a **pressão arterial**, o
+**diário** (sono, FC em repouso, HRV, peso, cintura, hábitos), **as notas dos teus separadores**
+e **sinais do treino** (carga, forma, FC das sessões). Mostra uma linha por componente, com o
+que acha; **Enter abre** cada uma:
+
+| Componente | O que olha |
+|---|---|
+| **Avaliação geral** | uma linha por componente e o que merece atenção primeiro |
+| **Análises clínicas** | o que está fora do intervalo (e se já estava nas anteriores), o que se mexeu muito dentro do intervalo, o que o médico disse |
+| **Pressão arterial** | a média recente, por período, a tendência face à base; uma medição isolada muito alta é sempre assinalada |
+| **Recuperação e sono** | sono, FC em repouso e HRV recentes face à tua base; dores, stress, energia |
+| **Corpo** | peso e cintura face à base |
+| **Hábitos diários** | álcool por semana, doces, refeições fora, água, passos, cafés |
+| **Sinais do treino** | carga crónica, fadiga, forma, dias seguidos, FC máxima vista |
+| **Os teus separadores** | as notas mais recentes de cada separador teu |
+
+Compara o **período recente** (14 dias) com o **de base** (90 dias); as janelas e todos os
+limiares estão em Definições → Avançado → Saúde e pressão arterial. Numa colheita, o botão
+**Assistente de saúde** abre a leitura dessa colheita. **O que existia para o médico fica como
+estava** (comentários por resultado e comentário geral): o assistente é mais uma leitura, não a
+substitui. **Não faz diagnósticos**; diz quando é caso para falar com um médico.
+
+### O Treinador
+
+Cartão **Treinador** no ecrã inicial. Tem cinco separadores:
+
+- **Hoje** — o que fazer hoje (descanso, fácil, qualidade…) a partir da tua forma, da carga de
+  ontem, da recuperação (sono, FC em repouso, HRV, dores), do que está no calendário e do teu
+  eixo mais fraco da longevidade; e os **comportamentos** a cuidar. **«Abrir este treino no
+  construtor»** programa-o.
+- **Eventos** — planear um evento numa data. **+ Evento de resistência** ou **+ Evento de
+  força** abrem as perguntas do Treinador:
+  - *Resistência* (ciclismo, corrida, remo, natação): nome, data, prioridade, **a rota (.gpx)**
+    — escolhida numa lista das rotas importadas, preenche a distância e a subida —, a
+    **velocidade média pretendida**, a **hora de partida**, a **disponibilidade** (minutos por
+    dia de semana e por dia de fim de semana), **férias de/até** (um período em que podes
+    treinar mais; sem férias fica limitado ao dia a dia e ao fim de semana) e notas.
+  - *Força*: nome, data, prioridade, **limite de tempo** (ex.: 5 min), sessões por semana e os
+    **objetivos** — cada um com o exercício (lista dos teus exercícios, ou escrito), a unidade
+    (repetições, kg, segundos, metros), o objetivo e **o que fazes hoje**. Serve para «200
+    flexões e 50 elevações em 5 min» e para «flexões, elevações, peso morto, agachamento e
+    saco de areia».
+  - **Enter num evento** abre o plano: quanto falta, **se é realista** (na bicicleta: a potência
+    média que a velocidade pede face à tua FTP e ao que se aguenta nessa duração; o teu treino
+    mais longo face ao evento; na força: a progressão por semana de cada objetivo e o ritmo em
+    repetições por minuto), a disponibilidade, as **fases** (base → construção → específica →
+    afinação, com datas), a **alimentação e hidratação** (hidratos e líquidos por hora, totais,
+    e as refeições acertadas pela hora de partida) e as **perguntas** sobre o que ficou por
+    dizer. **«Pôr no calendário»** agenda as sessões propostas (dentro dos minutos de cada dia;
+    nas férias há mais dias); voltar a pôr substitui as anteriores; **«Tirar do calendário»**
+    desfaz. Apagar o evento tira também as sessões dele.
+- **Desafios** — todos os teus desafios com o que o Treinador acha. **Enter** (ou o botão
+  **Treinador** no detalhe de um desafio) abre o feedback: onde estás, **longe ou perto**, o
+  que falta por semana, e a pergunta **«Quão importante é este desafio para ti?»** (lista:
+  baixa / média / alta). Com a resposta, **ajusta os treinos**: propõe as sessões por semana e
+  **«Pôr no calendário»** agenda-as (prioridade alta: 4 semanas; média: 2; baixa: não mexe).
+- **Longevidade** — o **caminho para a longevidade**: o índice, os teus pontos fortes, as
+  **fraquezas** (eixos abaixo de 50) e as **fases** propostas (4 semanas cada, duas fraquezas de
+  cada vez: mais aeróbio, força, VO2máx…), com o que fazer em cada uma; a primeira fase pode ir
+  para o calendário. O mesmo abre-se no menu Longevidade (**Treinador: caminho para a
+  longevidade**).
+- **Programar treino** — escolhes o **desporto** (ciclismo, corrida, remo), o **foco**
+  (recuperação, Z2, tempo, sweet spot, limiar, VO2máx, anaeróbio) e a **duração**; o Treinador
+  mostra o treino que faria e o feedback dele, e **«Abrir no construtor»** abre-o no construtor
+  de treinos, por guardar, para ajustares. Se estiveres cansado, encurta o bloco principal.
+
+**Feedback a um treino construído.** No construtor de treinos, o botão **Treinador** dá o
+feedback ao treino que lá está, **tendo em conta a tua forma atual**: a carga face à carga típica
+das tuas sessões, como ficas no dia seguinte (TSB), a duração face ao teu treino mais longo, a
+recuperação, os minutos em Z4 e Z5, a falta de aquecimento, blocos fortes seguidos. Um treino
+pesado demais para a forma que tens é apanhado, com uma sugestão concreta e o botão **«Aplicar a
+versão mais leve»** (tira repetições até a carga descer; fica por guardar). **Só aparece depois
+de pedires**; a partir daí o veredicto fica **ao vivo** na linha por baixo do título e
+atualiza-se a cada alteração (desliga-se em Definições → Avançado → «Construtor: feedback do
+Treinador ao vivo»). O Treinador programa treinos de ciclismo, corrida e remo; para a força,
+planeia as sessões no calendário (ainda não preenche o construtor de força).
+
+### Aconselhamento: regras, LLM local ou agente online
+
+O Treinador e o Assistente de saúde têm, no topo, a linha **Aconselhamento** (lista):
+
+| Modo | O que é | Estado |
+|---|---|---|
+| **Regras da Perennia (offline)** | as regras descritas acima, com os limiares das opções; sem rede e sem IA | **funciona já** |
+| **LLM local (offline)** | um modelo a correr no teu computador (Ollama, LM Studio, llama.cpp); nada sai da máquina | preparado, **por ligar** |
+| **Agente online** | Claude, ChatGPT, Gemini ou outro compatível; **os dados do pedido seriam partilhados com o fornecedor** | preparado, **por ligar** |
+
+Nos dois modos com LLM, **antes de qualquer envio** vês: os **tokens do pedido** (≈), se **cabe
+na janela do modelo local** ou o **custo máximo** no online, os **dados partilhados** (as
+categorias autorizadas; **nada do Strava**), e **«Ver o que seria enviado»** mostra o pedido
+inteiro, os tokens por partes e deixa desligar categorias. Podes juntar **a tua pergunta**.
+Como as chamadas ainda não estão ativas, o botão Enviar fica desligado e o ecrã mostra a leitura
+das regras. A escolha guarda-se por figura.
+
+- **Chave do fornecedor: só por variável de ambiente** — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+  `GEMINI_API_KEY` ou `PERENNIA_AI_API_KEY` (outro). Nunca se escreve na aplicação nem fica na
+  base; o ecrã só diz «definida» ou «em falta».
+- **LLM local:** o endereço (por omissão `http://127.0.0.1:11434`; ou a variável
+  `PERENNIA_LLM_URL`) e o nome do modelo estão em Definições → Avançado. Se o endereço não for
+  deste computador, o ecrã avisa que isso já não seria offline.
+
 ### Sincronização (GarminDB)
 
 Em **Backups e Sincronização → Sincronização** (o botão da barra do topo; a Sincronização já
@@ -1628,14 +3019,17 @@ base da Perennia. As opções gravam-se logo. Cada fonte tem o seu separador:
   hora, escolha ou texto) e a `nota` do dia. **Descarregar o modelo (.csv)** dá o cabeçalho e
   uma linha de exemplo; **Exportar o diário (.csv)** dá o que já tens, no mesmo formato.
   Colunas desconhecidas ignoram-se e os valores inválidos contam-se (não param a importação).
+  Há duas colunas extra: `nota` e **`fonte`** (de onde vêm os valores dessa linha: `manual`,
+  `garmin`, `hrv4training`, `csv`, `device`, `lab`, `other`; vazia = `csv`). Ver «Fonte dos
+  indicadores» na Saúde.
   Também por `--csv-modelo saude`, `--csv-exportar saude` e `--importar saude ficheiro.csv`.
 - **HRV4Training (.csv)** — o export da app (Definições → Exportar
   medições). Entra no diário da Saúde.
 - **Análises (.csv)** — uma linha por resultado: data, análise, valor (e,
   se quiseres, unidade, mínimo, máximo, laboratório), separador «,» ou «;»,
   datas AAAA-MM-DD ou DD/MM/AAAA. Também serve o Excel das análises.
-- **CSV** — **artigos, exercícios, grupos e subgrupos musculares, disciplinas, testes de
-  aptidão** e os **tipos de material**: para cada conjunto, **Descarregar o modelo
+- **CSV** — **artigos, exercícios (com a coluna `notas`), grupos e subgrupos musculares, disciplinas,
+  testes de aptidão, o glossário** (`separador;termo;definicao`) e os **tipos de material**: para cada conjunto, **Descarregar o modelo
   (.csv)** (o cabeçalho e uma linha de exemplo), **Exportar o que tenho (.csv)** e
   **importar** um .csv preenchido (a Perennia descobre o conjunto pelo cabeçalho; cria o que
   falta e atualiza o que já existe, pelo nome, sem duplicar). Os ficheiros são UTF-8
@@ -1696,6 +3090,33 @@ palavra-passe do Garmin fica só na configuração do GarminDB
    - **Pastas**: a das bases (por omissão `~/HealthData/DBs`) e a da
      configuração (por omissão `~/.GarminDb`; outra pasta vai como `-f`).
    - A linha **Comando** mostra o comando exato que vai correr.
+   - **Requisitos** (✓/✗, com o que fazer em cada ✗): GarminDB instalado, configuração
+     (`GarminConnectConfig.json`), utilizador, palavra-passe, pelo menos um tipo de dados e um
+     passo. **Sincronizar agora** só corre se estiver tudo o que é preciso e, se faltar algo, diz
+     o quê (e fica no relato) em vez de dar um erro do GarminDB.
+   - **O que está a acontecer.** Ao sincronizar, o ecrã mostra os **passos** (✓ feito · ▶ a decorrer
+     · ✗ falhou · – saltado): *verificar os requisitos → escrever o intervalo na configuração (se
+     for o caso) → correr o GarminDB (descarregar → importar → analisar) → importar para a
+     Perennia → concluído*, cada um com o seu pormenor (por exemplo «saúde: 1 240 valores em 31
+     dias · atividades: 12 (3 novas)»), e por baixo as **últimas linhas que o GarminDB vai
+     escrevendo**, ao vivo, como na linha de comandos (quantas: `garmin_log_lines`). Fica visível
+     depois, como «Última sincronização». Quando falha, a Perennia traduz as causas típicas em
+     português: verificação em dois passos (MFA), palavra-passe recusada, demasiados pedidos
+     (esperar ~30 min), configuração em falta, sem rede, sem permissão numa pasta. O GarminDB não
+     fica à espera de que escrevas nada: se pedir um código, falha logo e diz o que fazer.
+   - **Primeira vez? Passo a passo** abre a lista do que fazer num computador novo.
+
+   **Dar a Perennia a um colega — ele consegue sincronizar?** Sim, mas cada pessoa usa **a sua conta
+   Garmin** e o seu GarminDB; nada da tua conta viaja com a aplicação (a palavra-passe nunca é
+   gravada em disco). O colega precisa de: (1) instalar o GarminDB (`pip install garmindb`) no
+   computador dele; (2) em **Definições → Ligações externas → Garmin**, escrever o e-mail da
+   conta (a Perennia cria o `GarminConnectConfig.json` em `~/.GarminDb`); (3) definir a variável de
+   ambiente `PERENNIA_GARMIN_PASSWORD` com a palavra-passe **antes** de abrir a Perennia (ou
+   escrevê-la nas Definições: fica só na memória até fechar); (4) se a conta Garmin tem
+   verificação em dois passos, correr uma vez `garmindb_cli.py --download --latest` numa linha de
+   comandos para introduzir o código; (5) escolher o período e os dados e carregar em
+   **Sincronizar agora**. Sem GarminDB instalado a Perennia só importa o que já estiver nas
+   bases. Se o teu colega já tem o GarminDB a funcionar, basta apontar a «Pasta das bases».
 3. **Sincronizar agora** (o botão principal, ou Ctrl+S) corre o GarminDB e
    importa; **Só importar** lê o que já está nas bases, sem correr o
    GarminDB. Sem o GarminDB instalado, Sincronizar agora também só importa.
@@ -1735,21 +3156,21 @@ Copia-o para uma pen ou para a nuvem.
 | Componente | O que leva |
 |---|---|
 | Perfil do atleta | nome, peso, FTP e limiares |
-| Definições | unidades, tema, zonas, Geral, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
-| Atalhos de teclado | as teclas que mudaste |
+| Definições | unidades, tema, zonas, Geral (os passos seguintes do treino), **Avançado** (as opções afináveis: pausa automática, tolerâncias, tokens do agente, Análise AdHoc…), as **vistas guardadas** da AdHoc Analysis, os **períodos da pressão arterial**, o modo de **aconselhamento** do Treinador e do Assistente de saúde e a **importância dos desafios**, a contagem antes de começar, os bips, limites Não ERG dos aparelhos, a fórmula da Longevidade, preferências… |
+| Atalhos de teclado | as teclas que mudaste (volta, pausa, terminar, começar sem contagem e saltar bloco são as mesmas em todos os desportos). Um backup antigo, com um atalho por desporto, **volta já unificado** |
 | Ecrã da sessão | disposição do ecrã e métricas de sessão disponíveis em cada desporto |
 | Aparelhos | dispositivos emparelhados e calibrações |
 | Rotas | os .gpx: pontos, perfil, subidas |
 | Segmentos | os da Perennia e os do Strava |
 | Treinos | as listas de treinos de todos os desportos (com definição, objetivos, planos de voltas e as cópias das sessões) |
-| Ginásio e exercícios | exercícios, treinos de força e as suas estruturas |
+| Ginásio e exercícios | exercícios, treinos de força e as suas estruturas, **os planos de X semanas que importaste e os planos em curso** (as sessões no calendário vão com o Calendário) |
 | Inventário de artigos | bicicletas, sapatilhas, peças, com data e preço de compra |
 | Histórico de sessões | todas as sessões, com amostras, voltas, tempos em subidas e segmentos, jogos, importadas (Garmin, TrainingPeaks, com a TSS) — e os `.fit` |
 | Análises e feedback | o feedback e a análise de cada sessão, picos e curvas de potência |
 | Desafios | desafios e tentativas |
 | Testes de aptidão | testes, resultados, testes de FTP |
-| Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico |
-| Calendário | treinos planeados e notas do dia |
+| Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico, **as medições da pressão arterial** e **os separadores que criaste, com as notas** |
+| Calendário | treinos planeados, notas do dia e **os eventos do Treinador** (com as respostas) |
 | Ficheiros | treinos exportados, importações, a pasta `workouts` |
 | Ligações externas (credenciais) | Strava (chaves e sessão) e GarminDB (pastas) — **só se pedires** |
 
@@ -1858,6 +3279,23 @@ python main.py --importar saude ~/Transferências/perennia_saude.csv
 ```
 
 Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
+
+**A Análise AdHoc, em .csv** (as fontes `sessions`, `sets`, `daily`, `labs`, `tests`, `bp`; usa o separador
+e o decimal das Definições, se não os deres; grava na pasta `exports`, ou em `--destino`):
+
+```bash
+python main.py --adhoc-exportar sessions --destino ~/Documentos --nome minhas-sessoes --separador ";"
+python main.py --adhoc-exportar daily --vista "Peso por mês"
+```
+
+**Planos de X semanas** (o ficheiro modelo, importar, exportar; ver «Planos de treino de X
+semanas»):
+
+```bash
+python main.py --plano-modelo
+python main.py --plano-importar o-meu.perennia-plan.json
+python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
+```
 
 ### Rotas (menu do ecrã inicial)
 
@@ -1970,7 +3408,8 @@ trainer simulado. Serve todos os desportos, para testar sem cinta.
 2. Em **Definições → Strava** escreve o **Client ID** e o **Client Secret**
    (ficam só neste computador) e escolhe **Autorizar no browser**. Aceita na
    página do Strava; a janela diz "Strava ligado" e podes fechá-la.
-3. Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
+3. (Ver também a «Ronda 21»: a **biblioteca** de segmentos, por ID ou favoritos, que funciona sem
+   internet.) Na janela da sessão (linha **Segmentos do Strava**, Enter) ou na rota
    (**Rotas → a rota → Segmentos do Strava → Atualizar do Strava**): a Perennia procura os segmentos ao longo da rota, fica com os
    que a rota percorre no mesmo sentido, e vai buscar o teu **PR** e o número
    de esforços de cada um.
@@ -2048,6 +3487,9 @@ estatísticas gerais.
 
 ### O agente de IA (preparado, por ligar)
 
+(O **Treinador** e o **Assistente de saúde** usam o mesmo mecanismo de pedido e de tokens: ver
+«Aconselhamento: regras, LLM local ou agente online».)
+
 Em quase todos os ecrãs (não durante as sessões), **F1** pede o **resumo
 desta página** e **F2** o **resumo contextualizado**. O primeiro leva o que
 está no ecrã (linhas, valores, classificações, dados do gráfico). O segundo
@@ -2059,6 +3501,17 @@ O agente ainda não está ligado: o ecrã mostra **exatamente o que lhe seria
 enviado**, para veres a privacidade antes de o ligar. Ficam já estas regras:
 só saem as categorias autorizadas; **nada do Strava** (o acordo da API do
 Strava proíbe usar esses dados em IA); e o agente sugere, não diagnostica.
+
+**Quantos tokens vai gastar — antes de enviar.** O ecrã do agente mostra, por cima do pedido, uma
+**estimativa dos tokens**: o total, o peso de cada parte (instruções, a página, cada categoria do
+contexto), o máximo que a resposta pode ter e, se puseres os preços, **o custo** (do pedido e o pior
+caso com a resposta no limite). Acima do limite que definires aparece um **aviso** — e podes tirar
+categorias do contexto para o pedido encolher. A conta faz-se **no teu computador, sem rede e sem
+custo**: caracteres ÷ caracteres por token (3,5 por omissão, que em português e com JSON é uma boa
+aproximação). É uma **estimativa** (diz «≈»); o número exato só o fornecedor dá — a Anthropic tem um
+pedido gratuito, `count_tokens`, que fica para quando o agente estiver ligado. As opções (caracteres
+por token, máximo da resposta, limite do aviso, preços por milhão de tokens e a moeda) estão em
+Definições → Avançado → Agente de IA e tokens.
 
 ### Se a aplicação fechar a meio de uma sessão
 
@@ -2200,6 +3653,52 @@ minuto. Tens de pedalar para não ser apanhado.
   pelotão chegar. Uma pausa manual tira essa tentativa da classificação.
 - A classificação é por nível e por rota: a subir, a vantagem fecha mais
   devagar, por isso tempos de estradas diferentes não se comparam.
+
+### Segurança e segredos
+
+- **A palavra-passe do Garmin nunca vai para o disco nem para a linha de comandos.** Define a
+  variável de ambiente **`PERENNIA_GARMIN_PASSWORD`** (fica fora de qualquer ficheiro) ou escreve-a
+  nas Definições (fica **só na memória** até fechares a aplicação). Ao sincronizar, a Perennia
+  entrega-a ao GarminDB num ficheiro temporário privado (só o teu utilizador o lê) que apaga no fim,
+  mesmo que a sincronização falhe. Se a configuração do GarminDB ainda tiver uma palavra-passe em
+  claro (de uma versão antiga), ela é **retirada do ficheiro e da cópia `.bak`** na primeira
+  sincronização. Alternativa mais forte: o cofre do sistema (`secure_password` do GarminDB).
+- **Strava:** o *Client ID* e o *Client Secret* podem vir das variáveis de ambiente
+  **`PERENNIA_STRAVA_CLIENT_ID`** e **`PERENNIA_STRAVA_CLIENT_SECRET`** (nesse caso o segredo nem
+  chega à base de dados). A autorização usa um `state` aleatório (o retorno local só aceita o pedido
+  que a Perennia fez, e só em `127.0.0.1`).
+- **Ficheiros de fora** (`.gpx`, `.zwo`, `.tcx`) são lidos sem DTD nem entidades (recusam-se os que
+  as tragam) e com limite de tamanho. Um **backup** não pode escrever fora da pasta de dados (`..`,
+  caminhos absolutos e letras de unidade são recusados).
+- **A base de dados** fica com permissões só do dono (0600, em Linux/macOS). Os backups só levam as
+  *Ligações externas* (Strava) se o pedires.
+- **`.gitignore`:** `.claude/`, `.env*`, `*.db`, os `.fit`, `exports/`, `backups/`, chaves e
+  certificados nunca vão para o git.
+- Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
+  sempre em variáveis de ambiente.
+
+- **Sincronização Wi-Fi (ronda 19):** TLS + PIN de uso único (aleatório, caduca, 3 tentativas)
+  ligado à impressão digital do certificado; só rede local; nunca envia credenciais; o PIN vem de
+  `PERENNIA_SYNC_PIN` ou é pedido — **nunca como argumento** (ficaria no histórico da shell);
+  a chave privada do certificado (`<dados>/sync/key.pem`) só o teu utilizador a lê (0600). O destino
+  abre uma porta enquanto espera: fecha sozinho ao fim de 5 minutos. Se a tua rede não for de
+  confiança, não uses a sincronização nela.
+- **Planos CSV e regras do histórico:** são dados (nunca código), com limite de tamanho, validados
+  campo a campo; as expressões regulares das regras são verificadas antes de usar.
+
+- **Importar um plano de X semanas:** só JSON (dados, nunca código), com limite de tamanho, e
+  validado campo a campo antes de entrar; o material e a modalidade que o ficheiro não conheça
+  são ignorados; os nomes que traz só entram na base por consultas com parâmetros.
+- **Treinador e Assistente de saúde:** a chave de um agente online vem **só** de uma variável de
+  ambiente (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERENNIA_AI_API_KEY`);
+  nenhuma chamada a LLM está ativa nesta versão; o pedido que seria enviado vê-se inteiro antes.
+- **Repor um backup** recusa um ficheiro que, descomprimido, passe do máximo (4 GB por omissão;
+  Definições → Avançado → Dados e backups): um .zip pequeno pode ser feito para encher o disco.
+
+Limites conhecidos: os *tokens* de acesso do Strava ficam **em texto** na base local (protegida pelas
+permissões do ficheiro; o Windows ignora o 0600 e vale a pasta do teu utilizador); as ações do
+workflow do GitHub estão por etiqueta de versão e não por hash; e o `criar_atalho_windows.bat` usa
+`-ExecutionPolicy Bypass` só para o script do atalho.
 
 ---
 
@@ -2375,6 +3874,29 @@ uma vez.
 `build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
 dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
 
+**O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; as rondas 16 a 19 só juntam ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma; a ronda 19 acrescenta `cryptography` ao `requirements.txt`, ver abaixo):
+
+| Como abres a Perennia | O que fazer |
+|---|---|
+| `Perennia.bat` / `./perennia.sh` / `python main.py` | **nada**: já abrem o código novo |
+| um atalho que criaste com o `criar_atalho_windows.bat` (versão do projeto) | **nada**; se o atalho já não abrir, apaga-o e volta a correr `criar_atalho_windows.bat` |
+| a app construída (`dist\Perennia\Perennia.exe`) | **refazer**: apaga a pasta `build` e `dist` e corre `build_windows.bat` outra vez (o `packaging/perennia.spec` já aponta para `perennia`); depois `criar_atalho_windows.bat` para o atalho apontar para o novo `.exe` |
+| Mac / Linux | `./build.sh` |
+
+Os dados **ficam**: a pasta e a base são migradas sozinhas na primeira abertura (ver o topo deste
+guia). **Ronda 19:** corre `python -m pip install -r requirements.txt` uma vez (entra a biblioteca
+`cryptography`, que cria o certificado da sincronização Wi-Fi; sem ela a Perennia usa o programa
+`openssl`, se existir). Quem usa a app construída tem de a **refazer** (`build.sh` /
+`build_windows.bat`) para levar o módulo novo, e depois `criar_atalho_windows.bat`. **Ronda 20:** sem pacotes novos; quem usa a app construída
+refaz do mesmo modo para levar os módulos novos (`health_catalog`, `day_feedback`); a versão do
+projeto (`Perennia.bat`, `./perennia.sh`, `python main.py`) já abre o código novo. **Ronda 21:** sem pacotes novos; quem usa a app
+construída refaz do mesmo modo (módulo novo `strava_library`). **Autoriza o Strava outra vez uma
+vez** (Definições → Strava → «Autorizar no browser») para a Perennia ter a permissão `read_all`. **Ronda 22:** sem pacotes novos; quem usa a app
+construída refaz do mesmo modo (módulo novo `segment_pace` e o ecrã `pace_screens`), e depois
+`criar_atalho_windows.bat`; a versão do projeto já abre o código novo e o atalho continua a servir. **Ronda 23:** sem pacotes novos nem módulos novos; quem usa a app
+construída refaz do mesmo modo (`build.sh` / `build_windows.bat`) para levar o código alterado, e depois
+`criar_atalho_windows.bat`; a versão do projeto já abre o código novo e o atalho continua a servir.
+
 ### Mac, Linux, Raspberry Pi
 
 O empacotamento é sempre feito no sistema de destino: um `.exe` só se faz
@@ -2450,6 +3972,93 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 19 cria 3 tabelas e 4 colunas — sozinha, na primeira vez que são precisas** (**não tens de
+fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nada é apagado:
+
+| O quê | Como fica |
+|---|---|
+| tabela `block_events` | blocos alterados e saltados, com o original e o feito (por sessão, bloco e campo) |
+| tabela `exercise_complex_parts` | os exercícios de cada complexo, por ordem, com as repetições por ronda |
+| tabela `strength_set_parts` | o que se fez em cada exercício do complexo, por série |
+| colunas `strength_sets.logged_reps`, `logged_load_kg`, `edited_at` | o que registaste na hora, quando depois corriges a série (`planned_*` já existia) |
+| coluna `exercises.complex` | 1 nos complexos |
+| índices `ix_perf_*` | só aceleram leituras (`indexes.py`); criam-se no arranque |
+| definições novas (`gym_catalog_workouts`, `complex_seed_version`, `sync_last_host` e as opções novas) | só se criam quando são precisas |
+| exercícios e treinos de origem novos | entram uma vez, sem mexer nos teus |
+| `synced_activities` / `session_tags` | o histórico importado e normalizado usa as tabelas que já existiam |
+
+Os **backups** levam tudo (`block_events` e `strength_set_parts` em **Histórico de sessões**,
+`exercise_complex_parts` em **Ginásio e exercícios**); um backup feito antes da ronda 19 repõe-se
+na mesma. A pasta `<dados>/sync/` (certificado e pacotes temporários) **não** entra nos backups.
+
+**A ronda 17 cria 3 tabelas novas — sozinha** (**não tens de fazer nada** na base local; podes
+fazer um backup antes). Nenhuma tabela antiga muda de colunas:
+
+| O quê | Como fica |
+|---|---|
+| tabela `programs` | os planos de X semanas que importaste (o plano inteiro, em JSON) |
+| tabela `program_runs` | os planos em curso e terminados (início, dias da semana, cargas, e uma cópia do plano) |
+| tabela `program_days` | cada sessão de um plano em curso: a data, o treino e a entrada do calendário |
+| `strength_workouts.hidden = 2` | marca os treinos que pertencem a um plano em curso (não aparecem na Lista de treinos; a coluna já existia) |
+| `exercises`, `exercise_equipment`, `exercise_modalities` | ganham os exercícios que um plano pede, quando o começas |
+| `training_plan` | ganha uma linha por sessão do plano |
+| as opções novas de Definições → Avançado | uma definição por opção, só criada quando a mudas |
+
+O **perfil por desporto não guarda nada**: calcula-se na hora a partir das sessões. As tabelas
+criam-se com `CREATE TABLE IF NOT EXISTS` em `programs.ensure`. Os backups levam-nas com
+**Ginásio e exercícios**.
+
+**A ronda 16 cria 4 tabelas novas — sozinha, na primeira vez que são precisas** (**não tens de
+fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nenhuma tabela
+antiga muda de colunas:
+
+| O quê | Como fica |
+|---|---|
+| tabela `bp_readings` | as medições da pressão arterial (dia, período, hora, máxima, mínima, pulsação, nota, origem) |
+| tabela `health_tabs` | os separadores que criares na Saúde |
+| tabela `health_tab_notes` | as notas de cada separador |
+| tabela `coach_events` | os eventos do Treinador (com as respostas e as sessões que pôs no calendário) |
+| `daily_values` (tensão máxima e mínima) | passam a guardar a **média diária** das medições (origem `bp`); os valores que lá tinhas viram uma medição «Sem período» (automático e idempotente) |
+| definição `bp_periods` | os teus períodos, se os mudares |
+| definições `coach_challenge_priority`, `coach_plans` | a importância de cada desafio e as sessões que o Treinador pôs no calendário |
+| as opções novas de Definições → Avançado | uma definição por opção, só criada quando a mudas |
+
+As tabelas criam-se com `CREATE TABLE IF NOT EXISTS` em `bp.ensure`, `health_tabs.ensure` e
+`coach.ensure`. Os backups levam-nas: as três primeiras com a **Saúde**, `coach_events` com o
+**Calendário**, e as definições com as **Definições**.
+
+**A ronda 15 NÃO cria tabelas nem colunas — e é tudo automático** (**não tens de fazer nada** na
+base local; antes de abrires a versão nova podes fazer um backup). O que muda:
+
+| O quê | Como fica |
+|---|---|
+| a pasta de dados `VeloLocal`/`velolocal` | passa a `Perennia`/`perennia` (renomeada de uma vez, na primeira abertura) |
+| `velolocal.db` | passa a `perennia.db` |
+| `rides.fit_path` e outros caminhos; `source_format = 'velolocal'` | atualizados (idempotente: correr duas vezes não muda nada) |
+| definição `adhoc_state` | a última vista da AdHoc Analysis (JSON) |
+| definição `adhoc_views` | as vistas guardadas (lista de nome + vista, JSON) |
+| as opções de Definições → Avançado (tabela acima) | uma definição por opção, **só criada quando a mudas**; sem ela, vale o valor por omissão |
+
+Tudo isto são linhas da tabela `settings`: não há `ALTER TABLE`. Os backups levam-nas com as
+**Definições** (o conjunto «Definições» foi alargado: as opções do Avançado e as vistas da AdHoc já
+vão lá, mesmo as que se chamam `agent_…` ou `strava_…`, que não guardam segredos). A migração do
+nome antigo está toda em `perennia/legacy.py` e `Database._migrate`.
+
+**A ronda 14 NÃO cria tabelas nem colunas — e continua a ser tudo automático** (**não tens de fazer
+nada** para que fique guardado na base local: o que muda são só **definições**, na tabela `settings`,
+e a Perennia arruma-as sozinha ao abrir; antes de abrires a versão nova podes fazer um backup:
+*Backups e Sincronização → Exportar → Tudo*, ou `python main.py --backup`). O que muda:
+
+| Onde | O quê |
+|---|---|
+| definição `keymap` (tabela `settings`) | os atalhos de **volta, pausa, terminar e começar** eram um por desporto (`ride_lap`, `row_lap`, `run_lap`, `ride_pause`, `row_pause`, `run_pause`, `gym_pause`, `ride_finish`, `row_finish`, `run_finish`, `gym_finish`, `run_start`); agora são **um só para todos** (`lap`, `pause`, `finish`, `start_now`) e há ids novos: `skip_block` (saltar bloco), `ride_res_up`/`ride_res_down` e `row_res_up`/`row_res_down` (resistência), `row_fields`, `speed_up`/`speed_down` e `incline_up`/`incline_down` (corrida) e `run_total`. **Ao abrir**, a Perennia reescreve **uma vez** o que já tinhas mudado para os ids novos (fica a primeira tecla que encontra, pela ordem ciclismo, remo, corrida, ginásio) e apaga os ids antigos; se não tinhas mudado nada, nada acontece. Vai no backup, componente «Atalhos de teclado»; um **backup antigo** repõe-se na mesma e fica já unificado |
+| definição `gym_auto_end_timed` (opcional) | as séries **por tempo** do ginásio (a prancha de 40 s) terminam sozinhas quando a contagem chega a zero. Não existe na base: vale **ligado**. (Não há opção para isto nas Definições; quem quiser desligar escreve `false` nesta chave.) Vai no backup, componente «Definições» |
+| `strength_sets.rpe` | a sessão de ginásio já **não pede o RPE**: nas séries novas a coluna fica vazia; as antigas mantêm o que tinham. A 1RM estimada só conta as repetições em reserva quando há RPE |
+| `session_countdown_s`, `sound_rules`, `workout_lookahead` | continuam como estavam; agora podem mudar-se durante uma sessão (Definições → Geral e Configurações sonoras) |
+
+Os **backups** continuam a levar tudo e nenhuma tabela ficou por tratar; **nada** do que aqui está
+precisa de um script de migração à mão.
+
 **A ronda 13 acrescenta UMA coluna — e continua a ser tudo automático** (**não tens de fazer nada**
 para que fique guardado na base local: ao abrir a versão nova a Perennia acrescenta a coluna sozinha,
 sem tocar nos dados que já lá estão; antes de abrires a versão nova podes fazer um backup: *Backups e
@@ -2504,7 +4113,9 @@ de segurança, faz um backup antes: Backups, ou `python main.py --backup`.)
 | Tabela / coluna / definição | Para quê |
 |---|---|
 | `workout_types` (`sport`, `workout_id`, `wtype`) | o **tipo de treino** de cada treino (o do construtor); vazio = «Automático» |
-| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `session` (Perennia, Indoor…) ou `custom` |
+| `session_tags` (`sport`, `session_id`, `tag`, `kind`) | as **etiquetas** de cada sessão: `workout_type`, `activity` (Free Session, Challenge…, ronda 24), `sport` (Cycling, Running…, Conditioning: um por desporto, ronda 25), `session` (Perennia, Indoor…) ou `custom` |
+| `workout_tags` (`sport`, `workout_id`, `tag`) | as **tags de cada treino** (ronda 24); as sessões desse treino herdam-nas |
+| `conditioning_parts` (`session_id`, `sport`, …) | as **partes por desporto** de uma sessão de Conditioning (ronda 25): tempo, blocos, distância, FC, carga e o .fit desse desporto |
 | `tag_catalog` (`tag`) | as etiquetas livres já usadas (para sugerir ao escreveres) |
 | `muscle_groups` (`key`, `name_pt`, `name_en`) e `muscle_subgroups` | os **grupos e subgrupos musculares**; os de origem são criados uma vez (só se a tabela estiver vazia) |
 | `exercises.subgroup_id` | o subgrupo muscular de cada exercício (`exercises.category` continua a guardar a chave do grupo) |
@@ -2604,7 +4215,68 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (865 testes a passar).
+**Verificado com testes automáticos nesta versão** (1146 testes a passar).
+
+*Novidades da ronda 17 (testes novos em `tests/test_round17.py`):* os **planos de treino de X
+semanas** — o formato (validação com o sítio do erro, valores por semana, séries diferentes,
+progressão linear com rampas, superséries e circuitos), os 31 planos de origem, o
+ficheiro modelo e a sua cópia em `packaging/planos/`, importar/exportar (interface e linha de
+comandos), começar (datas nos dias escolhidos, exercícios e material criados, cargas), o plano em
+curso (feito/próxima, recalcular cargas, adiar, terminar, concluir) e o backup; e o **perfil por
+desporto** — tipo de ciclista (sprinter, puncheur, trepador, rolador, completo), perfil de força
+(as oito capacidades, deficiências, desequilíbrios, ligação aos planos) e velocidade contra
+resistência no remo, corrida e natação; o separador **Perfil** em todos os desportos; e as
+opções do Avançado, que são agora 120. **Os planos são versões gerais dos métodos, escritas a
+partir do que está publicado e não conferidas com as fontes originais nesta sessão; as escalas
+do perfil (a tabela de potência e os «bons níveis» de força) são aproximações minhas, não
+validadas por um treinador.** A progressão linear não se adapta sozinha a uma sessão falhada:
+usa «Recalcular cargas». Sem hardware real, sem Windows/macOS.
+
+*Novidades da ronda 16 (testes novos em `tests/test_round16.py`):* a **pressão arterial** com
+várias medições por dia e por período (média de cada período, média diária nas duas formas,
+ignorar a 1.ª, validação, períodos teus, migração dos valores antigos do diário, AdHoc e backup);
+os **separadores da Saúde criados por ti**, com Notas; o **Assistente de saúde** (avaliação geral
+e por componente, com os limiares nas opções); o **Treinador** (avaliação da sessão, eventos de
+resistência e de força com perguntas, viabilidade, fases, alimentação e calendário, feedback aos
+desafios com a importância, caminho para a longevidade, sugestão do dia, treino programado para o
+construtor e feedback a um treino construído, com versão mais leve e veredicto ao vivo); o
+**aconselhamento** em três modos (regras; LLM local e agente online preparados, com tokens, janela
+e custo à vista, chave só por variável de ambiente e nada do Strava); o **limite de tamanho ao
+repor um backup**; a piscina passou a escolher-se numa lista; e as opções do Avançado são agora
+86. **O LLM local e o agente online não foram ligados nem testados contra um modelo real**
+(continuamos offline): só o pedido, os tokens e os ecrãs. As regras do Treinador e do Assistente
+são heurísticas de treino e de leitura de registos, testadas na lógica, **não validadas por um
+treinador ou por um médico**. Sem hardware real, sem Windows/macOS.
+
+*Novidades da ronda 15 (testes novos em `tests/test_round15.py`, e os antigos atualizados):* o
+**nome Perennia em todo o lado** (o pacote `velo/` passa a `perennia/`; a pasta de dados, a base e
+os ficheiros antigos migram sozinhos e de forma idempotente; o nome antigo só existe em
+`perennia/legacy.py`); a **segurança** (a palavra-passe do Garmin só em memória ou na variável
+`PERENNIA_GARMIN_PASSWORD` e entregue ao GarminDB por um ficheiro temporário privado; o Strava por
+variáveis de ambiente e com `state`; XML de fora sem DTD; backups que não escrevem fora da pasta de
+dados; a base com permissões do dono; `.claude/`, `.env*`, `*.fit`, `exports/` no `.gitignore`;
+permissões mínimas no workflow do GitHub); as **listas pendentes** (Enter abre uma lista com pesquisa
+onde antes só havia ←/→ — exercícios, rotas, etc.; ←/→ continuam a passar ao seguinte); a
+**estimativa de tokens** (e de custo) no ecrã do agente antes de enviar; a **AdHoc Analysis** (as
+cinco fontes, filtros, os cinco tipos de gráfico, o .csv com nome, separador e decimal, a proteção
+contra fórmulas, as vistas guardadas e o `--adhoc-exportar`); **Definições → Avançado** com
+31 opções afináveis (a tabela está em «Definições → Avançado», mais atrás) e os backups a
+levá-las com as Definições. **Não foi testado com hardware real, com Windows/macOS nem com um
+GarminDB verdadeiro** (a entrega da palavra-passe por `password_file` está testada contra um
+substituto, não contra o programa real).
+
+*Novidades da ronda 14 (testes novos em `tests/test_round14.py`, `tests/test_ui_walk.py` e nos de
+backup, e os antigos atualizados):* o aviso **PAUSA** nos cinco desportos (P, Esc, os botões
+Retomar e Terminar, F10/D, o «Não» que volta ao PAUSA, nada antes de a sessão começar); Dispositivos
+e Definições a **pôr a sessão em pausa** e o PAUSA à espera ao voltar; as Definições durante a
+sessão (os cinco separadores, só o desporto da sessão, só os passos seguintes e o tema, as unidades e
+o idioma, perguntar antes de sair com alterações); os **atalhos únicos** (a mesma tecla em todos os
+desportos, a migração dos antigos, os novos: saltar bloco, velocidade, declive, resistência); o
+**ginásio** (sem cronómetro nem RPE, a contagem decrescente na métrica Série / descanso ou no aviso ao
+centro, a série por tempo a contar para trás, o descanso com o tempo na coluna das repetições, o
+Saltar a meio de uma série); o **robô** que percorre todos os menus e carrega em teclas ao acaso em
+cada sessão (`SEEDS=30 python -m unittest tests.test_ui_walk`); e os backups (os atalhos antigos
+voltam unificados, a base unifica-os ao abrir).
 
 *Novidades da ronda 13 (13 testes novos em `tests/test_round13.py`, e os antigos atualizados):* a
 janela de **Dispositivos** por ligação (os blocos Bluetooth, ANT+ e SEM HARDWARE pela ordem

@@ -15,9 +15,9 @@ pyglet_stub.install()
 from pyglet.window import key  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import feedback_screens as fs  # noqa: E402
-from velo.ui import health_screens as hs  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import feedback_screens as fs  # noqa: E402
+from perennia.ui import health_screens as hs  # noqa: E402
 
 
 class TestBackWithChangesAsks(tg.GuiCase):
@@ -28,7 +28,7 @@ class TestBackWithChangesAsks(tg.GuiCase):
                          ["Sair sem guardar", "Cancelar", "Sair e guardar"])
 
     def test_goal_popup(self):
-        from velo.ui.goal_popup import GoalPopup
+        from perennia.ui.goal_popup import GoalPopup
         self.pick("Lista de treinos")
         self.pick("Tempo 3×15")
         self.pick("Editar")

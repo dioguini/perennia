@@ -18,16 +18,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import gym  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.core import strength_analysis as sa  # noqa: E402
-from velo.core import strength_builder as sb  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
+from perennia.core import gym  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.core import strength_analysis as sa  # noqa: E402
+from perennia.core import strength_builder as sb  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import exercise_stats_screens as ess  # noqa: E402
-from velo.ui import strength_analysis_screens as sas  # noqa: E402
-from velo.ui import strength_builder_screens as sbs  # noqa: E402
+from perennia.ui import exercise_stats_screens as ess  # noqa: E402
+from perennia.ui import strength_analysis_screens as sas  # noqa: E402
+from perennia.ui import strength_builder_screens as sbs  # noqa: E402
 
 
 class _Db(unittest.TestCase):
@@ -256,7 +256,7 @@ class TestBuilderGui(tg.GuiCase):
         self.assertIn("Pernas e peito", names)
         b.set_focus(("start_session",))
         self.press(key.ENTER)
-        from velo.ui import sport_screens as ss
+        from perennia.ui import sport_screens as ss
         scr = self.screen()
         self.assertIsInstance(scr, ss.StrengthSessionScreen)
         self.assertEqual(scr.session.labels, ["A", "B1", "B2"])
@@ -311,7 +311,7 @@ class TestBuilderGui(tg.GuiCase):
         self.app._on_key_press(key.S, key.MOD_CTRL)
         self.press(key.ENTER)                           # OK do «Treino guardado»
         from datetime import date, timedelta
-        from velo.core import calendar_view as cv
+        from perennia.core import calendar_view as cv
         plan = cv.planned_for(self.app.db, date.today() + timedelta(days=1))
         self.assertEqual([p.workout_id for p in plan], [b.wid])
         self.press(key.ESCAPE)
@@ -356,7 +356,7 @@ class TestBuilderGui(tg.GuiCase):
         self.app._on_draw()
         self.press(key.ESCAPE)
         self.press(key.F)
-        from velo.ui.feedback_screens import FeedbackScreen
+        from perennia.ui.feedback_screens import FeedbackScreen
         self.assertIsInstance(self.screen(), FeedbackScreen)
 
     def test_gym_stats_reach_exercise_statistics(self):

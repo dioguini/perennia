@@ -19,26 +19,26 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import endurance as en  # noqa: E402
-from velo.core import fit, gym, inventory, stats  # noqa: E402
-from velo.core import intensity as it  # noqa: E402
-from velo.core import laps_session as ls  # noqa: E402
-from velo.core import rowing as rw  # noqa: E402
-from velo.core import strength as st  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.core.ride import Reading  # noqa: E402
-from velo.core.sports import AutoLap  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import endurance as en  # noqa: E402
+from perennia.core import fit, gym, inventory, stats  # noqa: E402
+from perennia.core import intensity as it  # noqa: E402
+from perennia.core import laps_session as ls  # noqa: E402
+from perennia.core import rowing as rw  # noqa: E402
+from perennia.core import strength as st  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.core.ride import Reading  # noqa: E402
+from perennia.core.sports import AutoLap  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import builder_screens as bs  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
-from velo.ui import gym_screens as gs  # noqa: E402
-from velo.ui import hub_screens as hs  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
-from velo.ui import stats_screens as sts  # noqa: E402
-from velo.ui import session_setup  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import builder_screens as bs  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import gym_screens as gs  # noqa: E402
+from perennia.ui import hub_screens as hs  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
+from perennia.ui import stats_screens as sts  # noqa: E402
+from perennia.ui import session_setup  # noqa: E402
 
 
 class HR:
@@ -276,7 +276,7 @@ class TestEndurance(Base):
     def test_library_and_swim_tests(self):
         self.assertGreaterEqual(len(en.workouts(self.db, "running")), 4)
         self.assertGreaterEqual(len(en.workouts(self.db, "swimming")), 3)
-        from velo.core import fitness_tests as ft
+        from perennia.core import fitness_tests as ft
         names = [x["name"] for x in ft.tests(self.db, "swimming")]
         self.assertIn("400 m", names)
 
@@ -297,9 +297,9 @@ class TestRowingAndRideExtras(Base):
                                               ).fetchone()["n"], 0)
 
     def test_ride_autolap_by_time_and_discard(self):
-        from velo.core.ride import RideEngine
-        from velo.io.sim import SimulatedTrainer
-        from velo.io.hub import SensorHub
+        from perennia.core.ride import RideEngine
+        from perennia.io.sim import SimulatedTrainer
+        from perennia.io.hub import SensorHub
         hub = SensorHub()
         hub.add_source(SimulatedTrainer(base_power=200), role="trainer", is_trainer=True)
         e = RideEngine(self.db, self.db.athlete(), sensors=hub, trainer=hub, kind="free",
@@ -415,7 +415,7 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.press(key.RIGHT)
         self.assertEqual(b.block.extra["cadence_lo"], 90)
         self.app._on_key_press(key.S, key.MOD_CTRL)
-        from velo.core import workout_meta as wm
+        from perennia.core import workout_meta as wm
         meta = wm.get(self.app.db, "cycling", b.wid)
         self.assertEqual(meta["control"], "erg")
         self.assertEqual(meta["blocks"][1]["tol"], 2)
@@ -434,7 +434,7 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.press(key.RIGHT)
         self.assertNotEqual(b.list.selected.value, before)
         self.app._on_key_press(key.S, key.MOD_CTRL)
-        from velo.core import workout_meta as wm
+        from perennia.core import workout_meta as wm
         self.assertEqual(wm.get(self.app.db, "cycling", b.wid)["mode"], "level")
         self.assertIn("Níveis do rolo · Manual", wm.label(self.app.db, "cycling", b.wid))
 
@@ -455,7 +455,7 @@ class TestBlockBuilderGui(tg.GuiCase):
         self.press(key.RIGHT)
         self.assertEqual(b.block.extra["incline_pct"], 0.5)
         self.app._on_key_press(key.S, key.MOD_CTRL)
-        from velo.core import workout_meta as wm
+        from perennia.core import workout_meta as wm
         meta = wm.get(self.app.db, "running", b.wid)
         self.assertEqual(meta["control"], "manual")
         self.assertEqual(meta["blocks"][1]["incline_pct"], 0.5)
@@ -662,7 +662,7 @@ class TestSportsGui(tg.GuiCase):
         self.assertIsNot(scr, self.screen())
 
     def test_swim_crash_recovery(self):
-        from velo.ui import endurance_screens as es_
+        from perennia.ui import endurance_screens as es_
         self.press(key.ESCAPE)
         self.pick("Natação")                     # sem «sessão de treino»: um treino da lista
         es_.start(self.app, "swimming")

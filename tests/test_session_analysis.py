@@ -15,12 +15,12 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import feedback as fbm  # noqa: E402
-from velo.core import session_review as rv  # noqa: E402
+from perennia.core import feedback as fbm  # noqa: E402
+from perennia.core import session_review as rv  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import session_analysis as sa  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import session_analysis as sa  # noqa: E402
 
 
 class Base(tg.GuiCase):
@@ -32,7 +32,7 @@ class Base(tg.GuiCase):
         return self.app.db.insert_workout("Dois blocos", steps, "builder", None, 5)
 
     def _ride(self, wid=None, seconds=150):
-        from velo.ui.session_setup import SessionSetup
+        from perennia.ui.session_setup import SessionSetup
         setup = SessionSetup(self.app, "cycling", kind="workout" if wid else "free",
                              workout_id=wid, route_id=None if wid else self.route_id)
         self.app.push(setup)
@@ -152,7 +152,7 @@ class TestFeedbackTab(Base):
 
 class TestOtherSports(tg.GuiCase):
     def test_running_and_gym_open_with_tabs(self):
-        from velo.ui import endurance_screens as es
+        from perennia.ui import endurance_screens as es
         self.press(key.ESCAPE)
         self.pick("Corrida")
         self.pick("Sessão de treino")

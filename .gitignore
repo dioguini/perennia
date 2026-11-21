@@ -10,3 +10,33 @@ build.sh.bak
 
 # ficheiros que os testes escrevem na pasta de trabalho
 strength/
+
+# pasta do Claude Code (definições locais, memória e permissões do assistente)
+.claude/
+
+# segredos e dados pessoais: nunca vão para o git
+.env
+.env.*
+*.pem
+*.key
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+GarminConnectConfig.json*
+.GarminDb/
+backups/
+
+# ficheiros pessoais do PyCharm (o resto de .idea/ fica, é só configuração do projeto)
+.idea/workspace.xml
+.idea/dataSources/
+.idea/dataSources.*
+.idea/httpRequests/
+.idea/shelf/
+.idea/usage.statistics.xml
+
+# sessões gravadas e exportações pessoais (dados teus, não código)
+*.fit
+exports/
+rides/

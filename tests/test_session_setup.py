@@ -15,16 +15,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import fitness_tests as ft  # noqa: E402
-from velo.core import rowing as rw  # noqa: E402
-from velo.core import workout_meta as wm  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import fitness_tests as ft  # noqa: E402
+from perennia.core import rowing as rw  # noqa: E402
+from perennia.core import workout_meta as wm  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import brief as br  # noqa: E402
-from velo.ui import endurance_screens as es  # noqa: E402
-from velo.ui import session_setup as ss  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import brief as br  # noqa: E402
+from perennia.ui import endurance_screens as es  # noqa: E402
+from perennia.ui import session_setup as ss  # noqa: E402
 
 
 class FakeStrava:
@@ -363,7 +363,6 @@ class TestStartCountdown(tg.GuiCase):
     def test_running_waits_15_s_then_starts_by_itself(self):
         ses = self._free_run()
         self.assertTrue(ses.counting)
-        self.press(key.SPACE)                          # durante a contagem não começa
         for _ in range(28):                            # 14 s
             self.app._tick(0.5)
         self.assertFalse(ses.engine.started)
@@ -373,6 +372,24 @@ class TestStartCountdown(tg.GuiCase):
             self.app._tick(0.5)
         self.assertFalse(ses.counting)
         self.assertTrue(ses.engine.started)
+
+    def test_space_starts_at_once_without_the_countdown(self):
+        ses = self._free_run()
+        self.assertTrue(ses.counting)
+        self.app._tick(1.0)
+        self.press(key.SPACE)                          # «Começar sem contagem»
+        self.assertFalse(ses.counting)
+        self.app._tick(0.5)
+        self.assertTrue(ses.engine.started)
+
+    def test_start_now_shortcut_can_be_changed(self):
+        self.app.db.set("keymap", {"start_now": ["B", []]})
+        ses = self._free_run()
+        self.app._tick(1.0)
+        self.press(key.SPACE)                          # a antiga já não faz nada
+        self.assertTrue(ses.counting)
+        self.press(key.B)
+        self.assertFalse(ses.counting)
 
     def test_escape_during_the_countdown_cancels(self):
         ses = self._free_run()

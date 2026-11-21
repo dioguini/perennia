@@ -18,16 +18,16 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402
 
-from velo.core import fit, fitness_tests as ft, rowing as rw, stats  # noqa: E402
-from velo.core import laps_session as ls  # noqa: E402
-from velo.core.db import Athlete, Database  # noqa: E402
-from velo.io import rower as rio  # noqa: E402
+from perennia.core import fit, fitness_tests as ft, rowing as rw, stats  # noqa: E402
+from perennia.core import laps_session as ls  # noqa: E402
+from perennia.core.db import Athlete, Database  # noqa: E402
+from perennia.io import rower as rio  # noqa: E402
 
 tg = sys.modules.get("test_gui") or importlib.import_module("tests.test_gui")
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import rowing_screens as rs  # noqa: E402
-from velo.ui import sport_screens as ss  # noqa: E402
-from velo.ui import session_setup  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import rowing_screens as rs  # noqa: E402
+from perennia.ui import sport_screens as ss  # noqa: E402
+from perennia.ui import session_setup  # noqa: E402
 
 
 class Clock:

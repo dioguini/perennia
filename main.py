@@ -14,17 +14,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from velo import paths  # noqa: E402
+from perennia import paths  # noqa: E402
 
 
 def self_test() -> int:
     """Confirma que o núcleo funciona nesta máquina, sem abrir janela."""
     import tempfile, time
-    from velo.core import climbs, fit, gpx, physics
-    from velo.core.db import Athlete, Database
-    from velo.core.ride import RideEngine
-    from velo.io.hub import SensorHub
-    from velo.io.sim import SimulatedTrainer
+    from perennia.core import climbs, fit, gpx, physics
+    from perennia.core.db import Athlete, Database
+    from perennia.core.ride import RideEngine
+    from perennia.io.hub import SensorHub
+    from perennia.io.sim import SimulatedTrainer
 
     sample_gpx = paths.resource("tests", "teste.gpx")
     if not sample_gpx.exists():
@@ -78,8 +78,10 @@ def main() -> int:
                         help="repõe um backup e sai (antes guarda o que tens agora)")
     parser.add_argument("--componentes", default=None,
                         help="só estas componentes, separadas por vírgulas (ex.: rotas,sessoes)")
-    parser.add_argument("--modo", default="substituir", choices=("substituir", "juntar"),
-                        help="na reposição: substituir (cópia exata) ou juntar (acrescenta)")
+    parser.add_argument("--modo", default=None, choices=("substituir", "juntar"),
+                        help="na reposição: substituir (cópia exata, o de omissão) ou juntar "
+                             "(acrescenta); na sincronização Wi-Fi o de omissão é o das "
+                             "Definições")
     parser.add_argument("--credenciais", action="store_true",
                         help="no backup, incluir as credenciais (Strava)")
     parser.add_argument("--importar", nargs=2, default=None, metavar=("TIPO", "FICHEIRO"),
@@ -88,11 +90,52 @@ def main() -> int:
                              "(um .fit ou .tcx, guardado no desporto respetivo) ou csv (artigos, "
                              "exercícios, grupos musculares… — descobre o conjunto pelo "
                              "cabeçalho) ou saude (o .csv do diário de saúde por data)")
+    parser.add_argument("--historico-normalizar", action="store_true",
+                        help="aplica as regras de normalização ao histórico já importado "
+                             "(TrainingPeaks, Strava, Garmin…): mostra o que mudaria; com "
+                             "--aplicar grava; com --regras usa esse ficheiro (JSON/CSV)")
+    parser.add_argument("--aplicar", action="store_true",
+                        help="com --historico-normalizar: grava as alterações (sem isto, só "
+                             "mostra)")
+    parser.add_argument("--regras", default=None, metavar="FICHEIRO",
+                        help="ficheiro de regras de normalização (JSON ou CSV)")
+    parser.add_argument("--historico-regras", nargs="?", const="", default=None,
+                        metavar="PASTA",
+                        help="grava o ficheiro de regras de arranque para editares e sai")
+    parser.add_argument("--sync-receber", action="store_true",
+                        help="sincronização Wi-Fi, lado DESTINO: escuta, mostra o endereço e um "
+                             "PIN de uso único, recebe e repõe (com backup de segurança)")
+    parser.add_argument("--sync-enviar", default=None, metavar="ENDERECO",
+                        help="sincronização Wi-Fi, lado FONTE: envia os dados para o destino "
+                             "nesse endereço. O PIN vem da variável PERENNIA_SYNC_PIN ou é "
+                             "pedido (nunca como argumento); usa --componentes e --modo")
+    parser.add_argument("--porta", type=int, default=None,
+                        help="porta da sincronização Wi-Fi (por omissão a das Definições)")
     parser.add_argument("--csv-modelo", default=None, metavar="CONJUNTO",
                         help="grava o modelo .csv de um conjunto (artigos, exercicios, grupos, "
                              "disciplinas, testes, material) e sai")
     parser.add_argument("--csv-exportar", default=None, metavar="CONJUNTO",
                         help="exporta um conjunto para .csv e sai")
+    parser.add_argument("--adhoc-exportar", default=None, metavar="FONTE",
+                        help="exporta para .csv uma fonte da Análise AdHoc e sai (sessions, "
+                             "sets, daily, labs, tests ou bp); com --vista usa os campos e filtros "
+                             "dessa vista guardada")
+    parser.add_argument("--vista", default=None,
+                        help="com --adhoc-exportar: o nome de uma vista guardada")
+    parser.add_argument("--nome", default=None,
+                        help="com --adhoc-exportar: o nome do ficheiro (sem pastas)")
+    parser.add_argument("--separador", default=None,
+                        help="com --adhoc-exportar: ; , | ou tab (por omissão, o das Definições)")
+    parser.add_argument("--decimal", default=None,
+                        help="com --adhoc-exportar: . ou , (por omissão, o das Definições)")
+    parser.add_argument("--plano-modelo", nargs="?", const="", default=None, metavar="PASTA",
+                        help="grava o ficheiro modelo de um plano de X semanas e a descrição do "
+                             "formato (por omissão na pasta «planos» dos dados) e sai")
+    parser.add_argument("--plano-importar", default=None, metavar="FICHEIRO",
+                        help="importa um plano de X semanas (*.perennia-plan.json) e sai")
+    parser.add_argument("--plano-exportar", default=None, metavar="CHAVE",
+                        help="exporta um plano da biblioteca para .json e sai («lista» mostra "
+                             "as chaves); com --destino escolhe a pasta")
     parser.add_argument("--testar-hr-ant", nargs="?", const=30.0, default=None, type=float,
                         metavar="SEGUNDOS",
                         help="testa só a FC por ANT+ (cinta ou relógio a transmitir) e sai: abre "
@@ -106,13 +149,21 @@ def main() -> int:
     if args.backup is not None or args.restore:
         return backup_cli(args)
     if args.testar_hr_ant is not None:
-        from velo.io import ant
+        from perennia.io import ant
         res = ant.hr_test(args.testar_hr_ant)
         return 0 if res["valid"] else 1
     if args.importar:
         return import_cli(args)
+    if args.sync_receber or args.sync_enviar:
+        return sync_cli(args)
+    if args.historico_normalizar or args.historico_regras is not None:
+        return history_cli(args)
     if args.csv_modelo or args.csv_exportar:
         return csv_cli(args)
+    if args.adhoc_exportar:
+        return adhoc_cli(args)
+    if args.plano_modelo is not None or args.plano_importar or args.plano_exportar:
+        return plan_cli(args)
 
     try:
         import pyglet  # noqa: F401
@@ -124,7 +175,7 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    from velo.ui.app import App, _default_data_dir
+    from perennia.ui.app import App, _default_data_dir
     try:
         fullscreen = False if args.window else args.fullscreen
         app = App(data_dir=args.data_dir, width=args.width, height=args.height,
@@ -145,13 +196,13 @@ def main() -> int:
 
 def csv_cli(args) -> int:
     """O modelo ou a exportação de um conjunto em .csv, sem abrir a janela."""
-    from velo.core import csv_sync
-    from velo.core.db import Database
-    from velo.core.workout_download import downloads_dir
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import csv_sync
+    from perennia.core.db import Database
+    from perennia.core.workout_download import downloads_dir
+    from perennia.datadir import data_dir_for, database_path
     key = args.csv_modelo or args.csv_exportar
     if key == "saude":                       # os campos do diário de saúde, por data
-        from velo.core import health_csv
+        from perennia.core import health_csv
         db = Database(database_path(data_dir_for(args.data_dir)))
         try:
             print(health_csv.write(db, args.destino or downloads_dir(),
@@ -172,15 +223,79 @@ def csv_cli(args) -> int:
     return 0
 
 
+def adhoc_cli(args) -> int:
+    """O .csv da Análise AdHoc pela linha de comandos, sem abrir a janela."""
+    from perennia.core import adhoc
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    sep = "\t" if (args.separador or "").lower() in ("tab", "\\t") else args.separador
+    db = Database(database_path(data_dir))
+    try:
+        path, n = adhoc.cli_export(db, data_dir, args.adhoc_exportar, args.destino, args.vista,
+                                   args.nome, sep, args.decimal)
+    except (ValueError, OSError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 2
+    finally:
+        db.close()
+    print(f"{path}  ({n} linhas)")
+    return 0
+
+
+def plan_cli(args) -> int:
+    """Planos de X semanas pela linha de comandos: o ficheiro modelo, importar e exportar."""
+    from perennia.core import programs
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    folder = Path(args.destino) if args.destino else Path(data_dir) / "planos"
+    if args.plano_modelo is not None:
+        if args.plano_modelo:
+            folder = Path(args.plano_modelo)
+        try:
+            for p in programs.write_template(folder):
+                print(p)
+        except OSError as e:
+            print(f"Erro: {e}", file=sys.stderr)
+            return 2
+        return 0
+    db = Database(database_path(data_dir))
+    try:
+        if args.plano_importar:
+            key = programs.import_file(db, args.plano_importar)
+            plan = programs.get(db, key)
+            print(f"Plano importado: {plan['name']} ({plan['weeks']} semanas, "
+                  f"{programs.total_sessions(plan)} sessões) — chave {key}")
+            return 0
+        if args.plano_exportar == "lista":
+            for p in programs.library(db):
+                print(f"{p['key']:28} {p['name']}")
+            return 0
+        plan = programs.get(db, args.plano_exportar)
+        if plan is None:
+            print("Plano desconhecido: " + args.plano_exportar
+                  + "\nVê as chaves com: --plano-exportar lista", file=sys.stderr)
+            return 2
+        print(programs.export_file(plan, folder))
+        return 0
+    except (programs.PlanError, OSError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 2
+    finally:
+        db.close()
+
+
 def import_cli(args) -> int:
     """Importações pela linha de comandos, sem abrir a janela."""
-    from velo.core import file_import
-    from velo.core.db import Database
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import file_import
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
     kind, path = args.importar
     if kind not in file_import.KINDS:
         print("Tipo desconhecido: " + kind + "\nExistem: hrv4training, analises, "
-              "trainingpeaks, atividade, csv, saude", file=sys.stderr)
+              "trainingpeaks, historico (TrainingPeaks, Strava ou Garmin Connect), "
+              "atividade, csv, saude", file=sys.stderr)
         return 2
     if not Path(path).is_file():
         print(f"Erro: não encontro {path}", file=sys.stderr)
@@ -197,11 +312,79 @@ def import_cli(args) -> int:
     return 0
 
 
+def sync_cli(args) -> int:
+    """Sincronização Wi-Fi entre duas Perennia, sem abrir a janela."""
+    import getpass
+    import os as _os
+    from perennia.core import backup, lan_sync
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    db = Database(database_path(data_dir))
+    keys = [k.strip() for k in args.componentes.split(",") if k.strip()] \
+        if args.componentes else None
+    try:
+        if args.sync_receber:
+            rx = lan_sync.Receiver(db, data_dir, pin=_os.environ.get("PERENNIA_SYNC_PIN") or None,
+                                   port=args.porta)
+            port = rx.open()
+            addrs = ", ".join(lan_sync.local_addresses()) or "?"
+            print(f"Destino à espera em {addrs} porta {port} (válido {int(rx.ttl)} s).")
+            if not _os.environ.get("PERENNIA_SYNC_PIN"):
+                print(f"PIN (de uso único): {rx.pin}")
+            print("Na outra máquina: python main.py --sync-enviar ENDERECO (o PIN vai na "
+                  "variável PERENNIA_SYNC_PIN ou é pedido).")
+            if not rx.wait():
+                print("Nada recebido: " + (rx.message or "terminado"), file=sys.stderr)
+                return 1
+            rep = rx.apply(lambda n: print(f"  {n}…"))
+            print(lan_sync.report_text(rep))
+            return 0
+        pin = _os.environ.get("PERENNIA_SYNC_PIN") or getpass.getpass("PIN do destino: ")
+        mode = {"substituir": "replace", "juntar": "merge"}.get(args.modo)
+        rep = lan_sync.send(db, data_dir, args.sync_enviar, pin, args.porta, keys, mode,
+                            lambda n: print("  " + n))
+        print(f"Enviado: {rep['bytes'] / 1048576:.1f} MB · componentes {', '.join(rep['keys'])}"
+              f" · modo {rep['mode']}")
+        return 0
+    except (lan_sync.SyncError, backup.BackupError) as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+
+
+def history_cli(args) -> int:
+    """Regras de normalização do histórico importado (sem abrir a janela)."""
+    from perennia.core import folders, history_etl
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    db = Database(database_path(data_dir))
+    try:
+        if args.historico_regras is not None:
+            folder = args.historico_regras or str(folders.ensure_dir(db, data_dir, "imports"))
+            print("Ficheiro de regras gravado: " + str(history_etl.write_template(folder)))
+            return 0
+        try:
+            rules = history_etl.load_rules(args.regras) if args.regras else None
+            rep = history_etl.normalize(db, rules, dry_run=not args.aplicar)
+        except (history_etl.RulesError, OSError) as e:
+            print(f"Erro: {e}", file=sys.stderr)
+            return 1
+        print(history_etl.report_text(rep))
+        if rep["dry_run"] and rep["changed"]:
+            print("(só uma simulação: junta --aplicar para gravar)")
+        return 0
+    finally:
+        db.close()
+
+
 def backup_cli(args) -> int:
     """Backups pela linha de comandos, sem abrir a janela."""
-    from velo.core import backup
-    from velo.core.db import Database
-    from velo.datadir import data_dir_for, database_path
+    from perennia.core import backup
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
     data_dir = data_dir_for(args.data_dir)
     keys = [k.strip() for k in args.componentes.split(",")] if args.componentes else None
     unknown = [k for k in keys or [] if k not in backup.BY_KEY]

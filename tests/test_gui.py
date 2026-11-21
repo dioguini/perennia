@@ -22,15 +22,15 @@ pyglet_stub.install()
 
 from pyglet.window import key  # noqa: E402  (vem da pyglet falsa)
 
-from velo.core import climbs as climbs_mod  # noqa: E402
-from velo.core import gpx  # noqa: E402
-from velo.core.db import Athlete  # noqa: E402
-from velo.core.i18n import PT, set_language  # noqa: E402
-from velo.gfx.world import PRESETS, World  # noqa: E402
-from velo.io.sim import SimulatedTrainer  # noqa: E402
-from velo.ui import app as app_mod  # noqa: E402
-from velo.ui import tag_popup as tagpop  # noqa: E402
-from velo.ui import session_setup  # noqa: E402
+from perennia.core import climbs as climbs_mod  # noqa: E402
+from perennia.core import gpx  # noqa: E402
+from perennia.core.db import Athlete  # noqa: E402
+from perennia.core.i18n import PT, set_language  # noqa: E402
+from perennia.gfx.world import PRESETS, World  # noqa: E402
+from perennia.io.sim import SimulatedTrainer  # noqa: E402
+from perennia.ui import app as app_mod  # noqa: E402
+from perennia.ui import tag_popup as tagpop  # noqa: E402
+from perennia.ui import session_setup  # noqa: E402
 
 GPX = Path(__file__).parent / "teste.gpx"
 
@@ -82,7 +82,7 @@ class GuiCase(unittest.TestCase):
 
     def open_routes(self) -> None:
         """O menu Rotas (ecrã inicial): é lá que estão as rotas .gpx."""
-        from velo.ui import route_screens
+        from perennia.ui import route_screens
         self.app.push(route_screens.RoutesScreen(self.app))
 
     def pick_mode(self, mode: str) -> None:
@@ -248,7 +248,7 @@ class TestLibraryAndImport(GuiCase):
         picker = self.screen()
         picker._import(GPX)
         self.assertEqual(len(self.app.db.routes()), before + 1)
-        from velo.ui import route_screens
+        from perennia.ui import route_screens
         self.assertIsInstance(self.screen(), route_screens.RouteOverview)
 
     def test_import_of_a_broken_file_shows_an_error(self):
@@ -262,7 +262,7 @@ class TestLibraryAndImport(GuiCase):
     def test_route_detail_lists_the_climb_and_its_board(self):
         self.open_routes()
         self.pick("Serra de Teste")
-        from velo.ui import route_screens
+        from perennia.ui import route_screens
         self.assertIsInstance(self.screen(), route_screens.RouteOverview)
         labels = self.labels()
         self.assertTrue(any("Subida 1" in x for x in labels), labels)
@@ -332,7 +332,7 @@ class TestSettingsScreen(GuiCase):
         self.pick("Definições")
         self.select("Pausa automática")
         self.press(key.ENTER)                         # Enter abre a lista, não muda
-        from velo.ui.pickers import ChoicePopup
+        from perennia.ui.pickers import ChoicePopup
         self.assertIsInstance(self.screen(), ChoicePopup)
         self.assertEqual(self.screen().options, ["Ligado", "Desligado"])
         self.press(key.ESCAPE)
@@ -515,7 +515,7 @@ class TestSettingsScreen(GuiCase):
         self.assertEqual(seen, set(PRESETS))
 
     def _boxes(self):
-        from velo.core import boxes, metrics
+        from perennia.core import boxes, metrics
         return boxes.load(self.app.db, metrics.REGISTRY)
 
     def test_boxes_editor_adds_orders_and_limits(self):
@@ -646,7 +646,7 @@ class TestDeviceScreen(GuiCase):
         screen.update(0.1)
 
     def test_ant_scan_lists_the_pedals_and_hides_the_trainer_twin(self):
-        from velo.io import ant
+        from perennia.io import ant
         assioma = ant.AntDiscovered(4321, ant.DEVICE_POWER, "ANT+ Potência #4321")
         twin = ant.AntDiscovered(555, ant.DEVICE_POWER, "ANT+ Potência #555 (do rolo)",
                                  trainer_twin=True)
@@ -685,7 +685,7 @@ class TestDeviceScreen(GuiCase):
         self.assertTrue("pyusb" in screen.note or "ANT" in screen.note, screen.note)
 
     def test_connect_my_devices_uses_ant_first(self):
-        from velo.io import ant
+        from perennia.io import ant
         pedals = ant.AntDiscovered(4321, ant.DEVICE_POWER, "ANT+ Potência #4321")
         self.app.db.remember_device(pedals.device_id, "ant", pedals.name, ["power_meter"],
                                     0, role="power_meter")
@@ -871,7 +871,7 @@ class TestRideFlow(GuiCase):
         fit_path = summary.result.get("fit_path")
         self.assertIsNotNone(fit_path)
         self.assertTrue(Path(fit_path).exists())
-        from velo.core import fit
+        from perennia.core import fit
         self.assertGreater(fit.verify(fit_path)["messages"][fit.MSG_RECORD], 50)
 
     def test_summary_closes_back_to_the_menu(self):
@@ -1035,7 +1035,7 @@ class TestRideFlow(GuiCase):
             self.assertTrue(sy <= ln.y <= sy + sh and sy <= ln.y2 <= sy + sh)
 
     def test_boxes_with_seven_metrics_switch_to_inline_rows(self):
-        from velo.core import boxes, metrics as mm
+        from perennia.core import boxes, metrics as mm
         bx = boxes.load(self.app.db, mm.REGISTRY)
         bx[0]["metrics"] = ["power_3s", "avg_power", "np", "wkg", "avg_wkg", "torque",
                             "avg_torque"]
@@ -1056,7 +1056,7 @@ class TestRideFlow(GuiCase):
         self.assertGreater(mid_top - mid_bottom, 150)
 
     def test_workout_plan_shows_current_and_next_steps(self):
-        from velo.core.workout_library import WORKOUTS
+        from perennia.core.workout_library import WORKOUTS
         self.app.db.set("workout_lookahead", 2)
         self.pick("Lista de treinos")
         self.pick("VO2máx 5×4")
@@ -1080,7 +1080,7 @@ class TestRideFlow(GuiCase):
         self.press(key.UP)                                # ERG: +5 % de intensidade
         self.assertAlmostEqual(ride.engine.state.intensity, 1.05)
 
-    def test_pause_button_click_toggles_manual_pause(self):
+    def test_pause_button_click_opens_the_pause_popup(self):
         ride = self._start_ride()
         ride.world.build_all()
         ride.preparing = False
@@ -1090,15 +1090,34 @@ class TestRideFlow(GuiCase):
         self.app._on_mouse_press(*click)
         self.assertTrue(ride.engine.manual_pause)
         self._run(ride, 1)
-        self.assertIn("PAUSA", ride.hud._paused_label.text)
+        self.assertTrue(ride.hud.pause_popup)                  # «PAUSA» ao centro
+        self.assertEqual(ride.hud.pause_dialog.title.text, "PAUSA")
+        self.assertEqual(ride.hud.pause_dialog.resume_label.text, "Retomar sessão")
+        self.assertEqual(ride.hud.pause_dialog.finish_label.text, "Terminar treino")
         self.assertIn("Retomar", ride.hud._pause_label.text)
         t0 = ride.engine.state.t_s
         self._run(ride, 10)
         self.assertEqual(ride.engine.state.t_s, t0)
-        self.app._on_mouse_press(*click)
+        # «Retomar sessão» (clique no botão do popup)
+        d = ride.hud.pause_dialog
+        self.app._on_mouse_press(int(d.resume.x + d.resume.width / 2),
+                                 int(d.resume.y + d.resume.height / 2), 1, 0)
         self.assertFalse(ride.engine.paused)
+        self.assertFalse(ride.hud.pause_popup)
         self._run(ride, 5)
         self.assertGreater(ride.engine.state.t_s, t0)
+        # e outra vez: o botão de pausa abre o popup e P retoma
+        self.app._on_mouse_press(*click)
+        self.assertTrue(ride.hud.pause_popup)
+        self.press(key.P)
+        self.assertFalse(ride.engine.paused)
+        # «Terminar treino» no popup pergunta se termina
+        self.press(key.P)
+        self.assertTrue(ride.hud.pause_popup)
+        self.app._on_mouse_press(int(d.finish.x + d.finish.width / 2),
+                                 int(d.finish.y + d.finish.height / 2), 1, 0)
+        self.assertTrue(ride.hud.finish_dialog.visible)
+        self.assertFalse(ride.hud.pause_popup)
 
     def test_hud_says_to_start_pedalling(self):
         self.app.hub.sources[0].base_power = 0
@@ -1137,7 +1156,7 @@ class TestRideFlow(GuiCase):
         self.assertTrue(ride.engine.finished)
         fits = list(Path(rides_dir).glob("perennia_*.fit"))
         self.assertEqual(len(fits), 1)
-        from velo.core.db import Database
+        from perennia.core.db import Database
         db = Database(Path(self.tmp) / "perennia.db")
         row = db.conn.execute("SELECT status FROM rides WHERE id = ?", (ride_id,)).fetchone()
         self.assertEqual(row["status"], "completed")
@@ -1160,7 +1179,7 @@ class TestRideFlow(GuiCase):
         self.assertIsInstance(summary, app_mod.SummaryScreen)
         self.assertTrue(Path(summary.result["fit_path"]).exists())
         # só 45 s de sessão: o .fit tem os dados até ao momento de parar
-        from velo.core import fit
+        from perennia.core import fit
         records = fit.verify(summary.result["fit_path"])["messages"][fit.MSG_RECORD]
         self.assertTrue(40 <= records <= 50, records)
 
@@ -1266,14 +1285,14 @@ class TestWorkoutAndFtpScreens(GuiCase):
             '<SteadyState Duration="600" Power="0.95" Cadence="90"/>'
             '</workout></workout_file>')
         self.pick("Carregar do computador")
-        from velo.core.workout_library import WORKOUTS
+        from perennia.core.workout_library import WORKOUTS
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS))   # os de origem
         self.screen().pick(zwo)
         self.assertIn("Guardar «Teste» na lista", self.screen().title_text)
         self.pick("Guardar na lista")
         self.assertEqual(len(self.app.db.workouts()), len(WORKOUTS) + 1)
         self.pick("Teste")
-        from velo.ui import brief
+        from perennia.ui import brief
         self.assertIsInstance(self.screen(), brief.CyclingBrief)
         self.assertTrue(self.screen().brief_data.goal)        # objetivo (sugerido)
         self.pick("Configurar sessão")
@@ -1297,9 +1316,14 @@ class TestWorkoutAndFtpScreens(GuiCase):
         self.pick("Configurar sessão")
         setup = self.screen()
         self.assertTrue(setup.erg)
-        self.pick("Modo ERG")                   # Enter não muda valores
+        self.pick("Modo ERG")                   # Enter abre a lista; não muda o valor
+        from perennia.ui import pickers
+        self.assertIsInstance(self.screen(), pickers.ChoicePopup)
         self.assertTrue(setup.erg)
-        self.press(key.RIGHT)
+        self.press(key.ESCAPE)                  # fechar a lista deixa tudo como estava
+        self.assertIs(self.screen(), setup)
+        self.assertTrue(setup.erg)
+        self.press(key.RIGHT)                   # ←/→ passam ao valor seguinte
         self.assertFalse(setup.erg)
 
     def test_ftp_protocols_are_listed_and_startable(self):
@@ -1353,7 +1377,7 @@ class TestChallengeScreen(GuiCase):
         self.assertEqual(self.app.db.active_attempt(1)["progress"], 0.0)
         self.app.pop()
         self.pick("Adicionar desafio")
-        from velo.ui import challenge_screens as chs_
+        from perennia.ui import challenge_screens as chs_
         self.assertIsInstance(self.screen(), chs_.ChallengePopup)
 
     def test_create_a_distance_challenge_with_decimals(self):
@@ -1507,17 +1531,20 @@ class TestHomeScreen(GuiCase):
         home = self.screen()
         self.assertIsInstance(home, app_mod.HomeScreen)
         titles = [tile.title_text for tile in home.tiles]
-        self.assertEqual(titles[:6], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
-                                      "Saúde"])
-        self.assertEqual(titles[6:], ["Rotas", "Segmentos", "Estatísticas gerais",
+        self.assertEqual(titles[:7], ["Ciclismo", "Remo", "Corrida", "Natação", "Ginásio",
+                                      "Saúde", "Treinador"])
+        self.assertEqual(titles[7:], ["Rotas", "Segmentos", "Estatísticas gerais",
                                       "Inventário de artigos", "Exercícios", "Longevidade"])
         self.assertTrue(all(tile.icon is not None for tile in home.tiles))
         # os desportos em cima, o resto em baixo — todos do mesmo tamanho
-        self.assertGreater(home.tiles[0].bg.y, home.tiles[6].bg.y)
-        self.assertEqual(home.tiles[0].bg.y, home.tiles[5].bg.y)
-        # a segunda fila (também seis cartões) alinha com a primeira
-        self.assertEqual(home.tiles[6].bg.x, home.tiles[0].bg.x)
-        self.assertEqual(home.tiles[11].bg.x, home.tiles[5].bg.x)
+        self.assertGreater(home.tiles[0].bg.y, home.tiles[7].bg.y)
+        self.assertEqual(home.tiles[0].bg.y, home.tiles[6].bg.y)      # o Treinador em cima
+        # a segunda fila (seis cartões) fica ao centro, por baixo dos sete de cima
+        self.assertGreater(home.tiles[7].bg.x, home.tiles[0].bg.x)
+        self.assertLess(home.tiles[7].bg.x, home.tiles[1].bg.x)
+        self.assertLess(home.tiles[12].bg.x + home.tiles[12].bg.width,
+                        home.tiles[6].bg.x + home.tiles[6].bg.width)
+        self.assertEqual(len(home.tiles), 13)
         sizes = {(round(tl.bg.width), round(tl.bg.height)) for tl in home.tiles}
         self.assertEqual(len(sizes), 1, sizes)
         for tl in home.tiles:                        # o título não fica por baixo do ícone
@@ -1530,7 +1557,7 @@ class TestHomeScreen(GuiCase):
 
     def test_home_calendar_opens_a_day_to_add_things(self):
         from datetime import date, timedelta
-        from velo.core import calendar_view as cv
+        from perennia.core import calendar_view as cv
         wid = self.app.db.workouts()[0]["id"]
         when = date.today() + timedelta(days=2)
         cv.plan_add(self.app.db, when, "cycling", wid, "Plano A")
@@ -1541,7 +1568,7 @@ class TestHomeScreen(GuiCase):
         self.press(key.DOWN, key.DOWN)                           # dos cartões para o calendário
         self.assertTrue(home.cal.focused)
         self.press(key.RIGHT, key.RIGHT, key.ENTER)
-        from velo.ui import day_popups as dp
+        from perennia.ui import day_popups as dp
         day = self.screen()
         self.assertIsInstance(day, dp.DayPopup)               # o dia é uma janela
         self.assertEqual(day.day, when)
@@ -1549,8 +1576,10 @@ class TestHomeScreen(GuiCase):
         self.assertTrue(any("Plano A" in x for x in labels))
         buttons = [i.label for i in day.list.items if i.button]
         self.assertEqual(buttons[0], "Nota do dia")
-        self.assertTrue(buttons[1].startswith("Diário de saúde"))
-        self.assertEqual(buttons[2], "+ Planear treino")
+        # um dia futuro não tem diário de saúde; tem o treino e o evento (com o Treinador)
+        self.assertFalse(any(b.startswith("Diário de saúde") for b in buttons))
+        self.assertIn("+ Planear treino", buttons)
+        self.assertIn("+ Planear evento", buttons)
         self.assertTrue(day.note_text.text)                    # a secção da nota, por baixo
 
     def test_running_hub_and_back_arrow_returns(self):
@@ -1558,7 +1587,7 @@ class TestHomeScreen(GuiCase):
         self.pick("Corrida")
         hub = self.screen()
         self.assertEqual(hub.tab_labels(), ["Treinar", "Lista de treinos", "Histórico",
-                                            "Estatísticas"])
+                                            "Perfil", "Estatísticas"])
         b = hub.back_button.bg
         self.app._on_mouse_press(int(b.x + 5), int(b.y + 5), 1, 0)
         self.assertIsInstance(self.screen(), app_mod.HomeScreen)
@@ -1567,7 +1596,7 @@ class TestHomeScreen(GuiCase):
         self.press(key.ESCAPE)
         home = self.screen()
         self.press(key.DOWN)                        # para a fila de baixo
-        self.assertTrue(home.tiles[6].selected)
+        self.assertTrue(home.tiles[7].selected)
         self.press(key.RIGHT, key.RIGHT, key.ENTER)
         self.assertIsInstance(self.screen(), app_mod.StatsScreen)    # as gerais
         self.assertEqual(type(self.screen()).__name__, "GeneralStatsScreen")
@@ -1608,7 +1637,7 @@ class TestHomeScreen(GuiCase):
         self.pick("Não")
         self.assertIsInstance(self.screen(), app_mod.MainMenu)
 
-    def test_settings_and_quit_are_off_during_a_session(self):
+    def test_quit_is_off_and_settings_are_limited_during_a_session(self):
         self.open_routes()
         self.pick("Serra de Teste")
         self.pick("Começar")
@@ -1616,24 +1645,40 @@ class TestHomeScreen(GuiCase):
         ride = self.screen()
         self.assertIsInstance(ride, app_mod.RideScreen)
         self.app._tick(0.1)
-        self.assertFalse(self.app.topbar.enabled["settings"])
+        self.assertTrue(self.app.topbar.enabled["settings"])    # abre, mas só com algumas opções
         self.assertFalse(self.app.topbar.enabled["quit"])
-        self.press(key.F8)
-        self.assertIs(self.screen(), ride)
         self.app.press_ctrl_q = None
         self.app._on_key_press(key.Q, key.MOD_CTRL)
-        self.assertIs(self.screen(), ride)
-        # os dispositivos continuam disponíveis, por cima da sessão, que não para
+        self.assertIs(self.screen(), ride)                       # sair continua barrado
+        ride.preparing = False
+        for _ in range(20):
+            self.app._tick(0.5)
+        # os dispositivos abrem por cima da sessão e **põem-na em pausa**
+        t0 = ride.engine.state.t_s
         self.press(key.F4)
         self.assertIsInstance(self.screen(), app_mod.DeviceScreen)
-        t0 = ride.engine.state.t_s
-        ride.preparing = False
+        self.assertTrue(ride.engine.manual_pause)
         for _ in range(10):
             self.app._tick(0.5)
-        self.assertGreater(ride.engine.state.t_s, t0)
+        self.assertEqual(ride.engine.state.t_s, t0)
         self.assertFalse(ride.engine.finished)
         self.press(key.ESCAPE)
         self.assertIs(self.screen(), ride)
+        self.assertTrue(ride.hud.pause_popup)                    # ao voltar: o popup «PAUSA»
+        self.assertTrue(ride.engine.manual_pause)
+        self.press(key.P)                                        # retoma
+        self.assertFalse(ride.engine.manual_pause)
+        self.assertFalse(ride.hud.pause_popup)
+        # as Definições também: abrem por cima, com só as abas permitidas
+        self.press(key.F8)
+        sett = self.screen()
+        self.assertIsInstance(sett, app_mod.SettingsScreen)
+        self.assertTrue(ride.engine.manual_pause)
+        self.assertEqual(sett.tab_labels(), ["Geral", "Desportos", "Ecrã e idioma",
+                                             "Atalhos de teclado", "Configurações sonoras"])
+        self.press(key.ESCAPE)
+        self.assertIs(self.screen(), ride)
+        self.assertTrue(ride.hud.pause_popup)
 
     def test_lost_device_is_announced_once(self):
         now = [0.0]
@@ -1794,7 +1839,7 @@ class TestPygletCompat(unittest.TestCase):
 
     def _with_fake_label(self, fake_cls):
         import pyglet.text
-        from velo.gfx import compat
+        from perennia.gfx import compat
         original, compat._label_style = pyglet.text.Label, None
         pyglet.text.Label = fake_cls
         try:

@@ -13,11 +13,11 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from velo.core import climbs as climbs_mod
-from velo.core import fit, gpx, metrics, physics, units
-from velo.core.db import Athlete, Database, Lap, RideSummary, RoutePoint, Sample
-from velo.core.i18n import EN, PT, missing_keys, set_language, t
-from velo.core.route_index import RouteIndex
+from perennia.core import climbs as climbs_mod
+from perennia.core import fit, gpx, metrics, physics, units
+from perennia.core.db import Athlete, Database, Lap, RideSummary, RoutePoint, Sample
+from perennia.core.i18n import EN, PT, missing_keys, set_language, t
+from perennia.core.route_index import RouteIndex
 
 GPX = Path(__file__).parent / "teste.gpx"
 
@@ -558,7 +558,7 @@ class TestNumberInput(unittest.TestCase):
 
 class TestChallengeText(unittest.TestCase):
     def test_targets_keep_the_unit_the_rider_typed(self):
-        from velo.core import boards
+        from perennia.core import boards
         self.assertEqual(boards.challenge_target_text("distance_m", 5_000_340.0, "km"),
                          "5000.34 km")
         self.assertEqual(boards.challenge_target_text("ascent_m", 23_500.0, "km"),
@@ -568,7 +568,7 @@ class TestChallengeText(unittest.TestCase):
                          "1.2 / 23.5 km")
 
     def test_long_durations_use_days(self):
-        from velo.core import boards
+        from perennia.core import boards
         self.assertEqual(boards.long_duration(3600 * 5), "5:00:00")
         self.assertEqual(boards.long_duration(86400 * 12 + 3600 * 4), "12 d 4 h")
 
@@ -585,7 +585,7 @@ class TestChallengeText(unittest.TestCase):
 
 class TestRankedWithMe(unittest.TestCase):
     def setUp(self):
-        from velo.core import boards
+        from perennia.core import boards
         self.rank = boards.ranked_with_me
         self.fmt = lambda v: f"{v:.0f}"
 
@@ -618,7 +618,7 @@ class TestRankedWithMe(unittest.TestCase):
 
 class TestChaseLevels(unittest.TestCase):
     def test_waves_raise_the_power_every_minute(self):
-        from velo.core.chase import Chase, minutes_to_ftp, LEVELS
+        from perennia.core.chase import Chase, minutes_to_ftp, LEVELS
         c = Chase("normal", 250, 80.0, 0.32, 0.004)
         self.assertEqual(c.watts_at(0), 150)
         self.assertEqual(c.watts_at(59.9), 150)
@@ -628,7 +628,7 @@ class TestChaseLevels(unittest.TestCase):
         self.assertLess(minutes_to_ftp(LEVELS["hard"]), minutes_to_ftp(LEVELS["easy"]))
 
     def test_stationary_rider_is_caught_quickly(self):
-        from velo.core.chase import Chase
+        from perennia.core.chase import Chase
         c = Chase("easy", 250, 80.0, 0.32, 0.004)
         kinds = []
         for _ in range(int(120 / 0.05)):
@@ -680,7 +680,7 @@ class TestLeftRightBalance(unittest.TestCase):
 
 class TestActivityNaming(unittest.TestCase):
     def setUp(self):
-        from velo.core import naming
+        from perennia.core import naming
         self.n = naming
         self.when = time.mktime((2026, 10, 26, 9, 30, 0, 0, 0, -1))
 
@@ -784,7 +784,7 @@ class TestFrozenPaths(unittest.TestCase):
         return patches
 
     def test_windows_exe(self):
-        from velo import paths
+        from perennia import paths
         with tempfile.TemporaryDirectory() as d:
             exe = str(Path(d) / "Perennia" / "Perennia.exe")
             internal = str(Path(d) / "Perennia" / "_internal")
@@ -803,7 +803,7 @@ class TestFrozenPaths(unittest.TestCase):
                     p.stop()
 
     def test_mac_app_bundle_points_next_to_the_app(self):
-        from velo import paths
+        from perennia import paths
         with tempfile.TemporaryDirectory() as d:
             exe = str(Path(d) / "Perennia.app" / "Contents" / "MacOS" / "Perennia")
             ps = self._frozen(exe)
@@ -834,7 +834,7 @@ class TestFrozenPaths(unittest.TestCase):
 
 class TestSmoothDrawing(unittest.TestCase):
     def test_monotone_cubic_passes_through_points_without_overshoot(self):
-        from velo.core.curves import monotone_cubic
+        from perennia.core.curves import monotone_cubic
         xs = [0.0, 0.2, 0.5, 1.0]
         ys = [900.0, 600.0, 350.0, 250.0]           # curva de potência: sempre a descer
         sx, sy = monotone_cubic(xs, ys, 101)
@@ -846,7 +846,7 @@ class TestSmoothDrawing(unittest.TestCase):
             self.assertLessEqual(b, a + 1e-9)       # nunca sobe entre pontos medidos
 
     def test_log_positions_spread_durations(self):
-        from velo.core.curves import log_positions
+        from perennia.core.curves import log_positions
         pos = log_positions([1, 10, 100, 1000])
         for got, want in zip(pos, (0.0, 1 / 3, 2 / 3, 1.0)):
             self.assertAlmostEqual(got, want)
@@ -886,7 +886,7 @@ class TestMetricCatalog(unittest.TestCase):
             self.assertIn(mid, metrics.REGISTRY)
 
     def test_disabled_metrics_are_hidden(self):
-        from velo.core import boxes
+        from perennia.core import boxes
         with tempfile.TemporaryDirectory() as d:
             db = Database(Path(d) / "v.db")
             allm = metrics.available()
@@ -900,7 +900,7 @@ class TestMetricCatalog(unittest.TestCase):
 
 class TestZoneRanges(unittest.TestCase):
     def test_power_zones_in_watts_and_wkg(self):
-        from velo.core import zones
+        from perennia.core import zones
         set_language(PT)
         zs = zones.power_zones(250, 72.0)
         self.assertEqual(len(zs), 7)
@@ -910,7 +910,7 @@ class TestZoneRanges(unittest.TestCase):
         self.assertEqual(zs[3].name, "Limiar")
 
     def test_gauge_position_and_fill_within_zone(self):
-        from velo.core import zones
+        from perennia.core import zones
         zs = zones.power_zones(250, 72.0)
         g = zones.gauge(206.25, zs)               # a meio da Z3 (188–225)
         self.assertEqual(g.zone.n, 3)
@@ -925,15 +925,15 @@ class TestZoneRanges(unittest.TestCase):
             self.assertAlmostEqual(a1, b0)        # contíguos
 
     def test_hr_zone_range(self):
-        from velo.core import zones
+        from perennia.core import zones
         z = zones.zone_for(150, zones.hr_zones(165))
         self.assertEqual((z.n, z.range_text()), (3, "137–155 bpm"))
 
 
 class TestWorkoutLibrary(unittest.TestCase):
     def test_every_builtin_workout_is_sound(self):
-        from velo.core import workout_library as wl
-        from velo.core.workouts import Workout
+        from perennia.core import workout_library as wl
+        from perennia.core.workouts import Workout
         names = [n for n, _, _, _ in wl.WORKOUTS]
         self.assertEqual(len(names), len(set(names)))
         for name, category, description, steps in wl.WORKOUTS:
@@ -947,7 +947,7 @@ class TestWorkoutLibrary(unittest.TestCase):
             self.assertTrue(any(st.text_cue for st in steps), name)
 
     def test_seed_adds_once_and_respects_deletions(self):
-        from velo.core import workout_library as wl
+        from perennia.core import workout_library as wl
         with tempfile.TemporaryDirectory() as d:
             db = Database(Path(d) / "v.db")
             self.assertEqual(wl.seed(db), len(wl.WORKOUTS))
@@ -959,7 +959,7 @@ class TestWorkoutLibrary(unittest.TestCase):
             db.close()
 
     def test_plan_shows_current_and_next_steps(self):
-        from velo.core.workouts import Step, Workout, WorkoutRunner
+        from perennia.core.workouts import Step, Workout, WorkoutRunner
         wk = Workout("t", [Step("steady", 300, "pct_ftp", 50, 50),
                            Step("steady", 600, "pct_ftp", 106, 106, 90, 90, "Força"),
                            Step("ramp", 180, "pct_ftp", 60, 40),
@@ -994,7 +994,7 @@ class TestZonesAndBoxes(unittest.TestCase):
         self.assertEqual(metrics.value("avg_hr_zone", state), 3)
 
     def test_lthr_is_estimated_when_missing(self):
-        from velo.core.ride import estimate_lthr
+        from perennia.core.ride import estimate_lthr
         self.assertEqual(estimate_lthr(Athlete(lthr=168)), 168)
         self.assertEqual(estimate_lthr(Athlete(max_hr=190)), 171)
         self.assertEqual(estimate_lthr(Athlete(birth_year=time.localtime().tm_year - 40)),
@@ -1007,7 +1007,7 @@ class TestZonesAndBoxes(unittest.TestCase):
         self.assertEqual(metrics.formatted("power_lr", state)[1], "115 / 125 W")
 
     def test_boxes_load_repairs_bad_settings(self):
-        from velo.core import boxes
+        from perennia.core import boxes
         with tempfile.TemporaryDirectory() as d:
             db = Database(Path(d) / "v.db")
             self.assertEqual(len(boxes.load(db, metrics.REGISTRY)), 6)   # por omissão
@@ -1059,7 +1059,7 @@ class TestStatsPeriods(unittest.TestCase):
 
     def test_streaks_in_days_and_weeks(self):
         from datetime import timedelta
-        from velo.core import stats
+        from perennia.core import stats
         t = self.today
         for back in (0, 1, 2, 5, 6, 7, 8):          # hoje, ontem, anteontem; e uma série antiga
             self.ride(t - timedelta(days=back))
@@ -1072,7 +1072,7 @@ class TestStatsPeriods(unittest.TestCase):
         self.assertEqual(st2["days"], 3)              # não se perde a meio do dia
 
     def test_heatmap_grid(self):
-        from velo.core import stats
+        from perennia.core import stats
         self.ride(self.today, minutes=75)
         grid = stats.heatmap(self.db, 16, today=self.today)
         self.assertEqual((len(grid), len(grid[0])), (16, 7))
@@ -1081,7 +1081,7 @@ class TestStatsPeriods(unittest.TestCase):
 
     def test_series_by_week_and_month_with_empty_buckets(self):
         from datetime import timedelta
-        from velo.core import stats
+        from perennia.core import stats
         self.ride(self.today, km=40)
         self.ride(self.today - timedelta(days=1), km=20)
         self.ride(self.today - timedelta(days=14), km=50)
@@ -1096,7 +1096,7 @@ class TestStatsPeriods(unittest.TestCase):
 
     def test_percentile_of_the_current_week(self):
         from datetime import timedelta
-        from velo.core import stats
+        from perennia.core import stats
         for w, km in enumerate((10, 20, 30, 40, 80)):    # 5 semanas, a atual a 80 km
             self.ride(self.today - timedelta(days=7 * (4 - w)), km=km)
         pct = stats.percentile_now(self.db, "distance", "week", today=self.today)
@@ -1107,7 +1107,7 @@ class TestStatsPeriods(unittest.TestCase):
 
     def test_power_curve_keeps_the_date_of_each_best(self):
         from datetime import timedelta
-        from velo.core import stats
+        from perennia.core import stats
         self.ride(self.today - timedelta(days=30), curve=[(60, 500.0), (1200, 270.0)])
         self.ride(self.today, curve=[(60, 450.0), (1200, 285.0)])
         detail = {p["duration_s"]: p for p in stats.power_curve_detail(self.db)}
@@ -1117,7 +1117,7 @@ class TestStatsPeriods(unittest.TestCase):
         self.assertEqual(detail[1200]["date"], "2026-10-28")
 
     def test_power_profile_position(self):
-        from velo.core import stats
+        from perennia.core import stats
         self.ride(self.today, curve=[(5, 1000.0), (60, 600.0), (300, 350.0), (1200, 300.0)])
         prof = {p["duration_s"]: p for p in stats.power_profile(self.db, "male", 75.0)}
         self.assertAlmostEqual(prof[3600]["wkg"], 300 * 0.95 / 75)    # limiar = 95 % de 20 min
@@ -1128,7 +1128,7 @@ class TestStatsPeriods(unittest.TestCase):
         self.assertGreater(women[300]["position"], prof[300]["position"])
 
     def test_time_in_zones_from_samples(self):
-        from velo.core import stats
+        from perennia.core import stats
         rid = self.ride(self.today)
         self.db.append_samples(rid, [Sample(t_s=i, dist_m=i * 8.0, power_w=100 if i < 30
                                             else 250, hr_bpm=150) for i in range(60)])

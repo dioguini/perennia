@@ -30,8 +30,12 @@ Linux / Raspberry Pi: descompacta e corre ./Perennia/Perennia
   Pedalar      → Importar .gpx: põe os teus .gpx na pasta "gpx" ao lado da
                  aplicação (ou em Transferências) e escolhe-os na lista.
 
-Durante a sessão: L = volta · P = pausa · F10 ou "■ Terminar" = acabar e
-gravar · F11 = ecrã inteiro.
+Durante a sessão (as mesmas teclas em todos os desportos):
+  L = volta · P = pausa (aparece o aviso PAUSA ao centro) · N = saltar bloco ·
+  Espaço = começar sem esperar pela contagem · F10 ou "■ Terminar" = acabar e
+  gravar · F4 = Dispositivos e F8 = Definições (a sessão fica em pausa) ·
+  F11 = ecrã inteiro.
+  Todas as teclas podem ser mudadas em Definições → Atalhos de teclado.
 
 
 3. ONDE FICAM OS DADOS
@@ -41,8 +45,10 @@ Windows: %APPDATA%\Perennia  (escreve isto na barra do Explorador)
 macOS:   ~/Library/Application Support/Perennia
 Linux:   ~/.local/share/perennia
 
-(Quem já usava a versão anterior, VeloLocal, continua com a pasta antiga:
-VeloLocal / velolocal. A aplicação usa-a sozinha e não perde nada.)
+(Quem já usava a versão anterior, que tinha outro nome, não tem de fazer
+nada: na primeira vez que abre a Perennia, a pasta e a base de dados antigas
+são renomeadas sozinhas e fica tudo como estava. Se quiseres, faz antes um
+backup.)
 
 Lá estão a base de dados e a pasta "rides" com os .fit de cada sessão,
 prontos para enviares ao Strava, Garmin Connect ou Intervals.icu.
