@@ -50,6 +50,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 28** — **Guia da passadeira manual**: para passadeiras sem ligação (como a NordicTrack T 7.0),
+  num treino por blocos a sessão avisa antes de cada mudança («daqui a 8 s · 12,6 km/h · 2,0 %») com
+  **quantos toques** dar em cada botão («▲ velocidade ×42 · ▲ inclinação ×4») e um bip; o passo da
+  velocidade e o tempo do aviso escolhem-se nas Definições.
 - **Ronda 27** — **Glossário das análises** (Saúde): 67 componentes (hemoglobina, ferritina, ácido
   fólico, testosterona, leucócitos…) com o que é, o que faz subir e descer, o que é bom e mau e as
   estratégias para ficar no intervalo (editável, com os teus); **rato por cima** de um resultado mostra

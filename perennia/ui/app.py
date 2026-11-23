@@ -3220,7 +3220,22 @@ class SettingsScreen(Screen):
                                         "how much your treadmill's incline moves at a time: "
                                         "the builder and the GPX converter round to it · "
                                         "←/→ 0.1 · 0.5 · 1"),
-                              data="lim:treadmill_incline_step")]
+                              data="lim:treadmill_incline_step"),
+                         Item(tr("Passo da velocidade", "Speed step"),
+                              value=f"{self._guide_cfg()['speed_step']:g} km/h",
+                              detail=tr("quanto sobe a velocidade a cada toque no botão da tua "
+                                        "passadeira: o guia conta os toques por isto · ←/→ 0,1 · "
+                                        "0,2 · 0,5 · 1", "how much the speed moves per press on "
+                                        "your treadmill: the guide counts presses with it · "
+                                        "←/→ 0.1 · 0.2 · 0.5 · 1"),
+                              data="lim:treadmill_speed_step"),
+                         Item(tr("Aviso antes de cada mudança", "Warning before each change"),
+                              value=f"{self._guide_cfg()['lead_s']} s",
+                              detail=tr("passadeira sem ligação: quantos segundos antes de um "
+                                        "bloco novo a sessão diz o que carregar · ←/→ ±1",
+                                        "treadmill without a link: how many seconds before a "
+                                        "new block the session says what to press · ←/→ ±1"),
+                              data="lim:treadmill_guide_lead_s")]
             else:
                 rows.append(Item(tr("Sem aparelho a configurar", "No device to set up"),
                                  detail=tr("a natação e o ginásio não usam aparelhos com níveis",
@@ -3261,6 +3276,22 @@ class SettingsScreen(Screen):
             self.save()
         self.app.push(_layouts().LayoutEditor(self.app, sport))
 
+    def _guide_cfg(self) -> dict:
+        """O passo da velocidade e o aviso do guia da passadeira (com o rascunho)."""
+        from perennia.core import treadmill_guide as tg
+        sp = self.get("treadmill_speed_step", tg.DEFAULT_SPEED_STEP)
+        lead = self.get("treadmill_guide_lead_s", tg.DEFAULT_LEAD_S)
+        try:
+            sp = float(sp)
+        except (TypeError, ValueError):
+            sp = tg.DEFAULT_SPEED_STEP
+        try:
+            lead = int(lead)
+        except (TypeError, ValueError):
+            lead = tg.DEFAULT_LEAD_S
+        return {"speed_step": sp if sp in tg.SPEED_STEPS else tg.DEFAULT_SPEED_STEP,
+                "lead_s": max(tg.LEAD_RANGE[0], min(tg.LEAD_RANGE[1], lead))}
+
     def _limits(self) -> dict:
         from perennia.core import workout_meta as wm
         lim = wm.device_limits(self.app.db)
@@ -3298,6 +3329,17 @@ class SettingsScreen(Screen):
         elif name == "treadmill_max_incline":
             self.put("treadmill_max_incline", max(0.0, min(40.0, lim["treadmill_max_incline"]
                                                            + 0.5 * unit)))
+        elif name == "treadmill_speed_step":
+            from perennia.core import treadmill_guide as tg
+            order = list(tg.SPEED_STEPS)
+            cur = self._guide_cfg()["speed_step"]
+            i = order.index(cur) if cur in order else 0
+            self.put("treadmill_speed_step", order[(i + unit) % len(order)])
+        elif name == "treadmill_guide_lead_s":
+            from perennia.core import treadmill_guide as tg
+            lo, hi = tg.LEAD_RANGE
+            self.put("treadmill_guide_lead_s",
+                     max(lo, min(hi, int(self._guide_cfg()["lead_s"]) + unit)))
         elif name == "treadmill_incline_step":
             from perennia.core import workout_meta as wm
             order = list(wm.INCLINE_STEPS)

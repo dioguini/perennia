@@ -2171,6 +2171,29 @@ lembrado). Também se põe onde quiseres em *Definições → Desportos → Cicl
   aparecem como **≈ os necessários com o teu peso e a tua bicicleta** para esse tempo — não os do dono
   do KOM. À saída do segmento o painel desaparece; o tempo fica nos esforços como sempre.
 
+### Ronda 28: o guia da passadeira manual
+
+Para passadeiras **sem ligação** à Perennia (por exemplo a NordicTrack T 7.0 de 2010, NETL81810.0,
+que só tem os botões ▲/▼ de velocidade e de inclinação e o leitor de cartões iFit): num **treino de
+corrida por blocos**, a Perennia diz-te o que carregar.
+
+- Ao meio do ecrã aparece o cartão **Passadeira**. No princípio diz **«Põe a passadeira em 8,4 km/h ·
+  0,0 %»**. Durante o bloco mostra o que está em vigor e o que vem a seguir.
+- **Antes de cada mudança** (por omissão 10 s antes), o cartão fica amarelo e conta:
+  **«DAQUI A 8 s · 12,6 km/h · 0,0 %»** e, grande, **«▲ velocidade ×42»**. Toca **um bip** quando o
+  aviso começa. A partir de 10 toques lembra que podes manter o botão carregado.
+- **No momento da mudança** fica verde, **«AGORA»**, durante 8 s, com os mesmos toques.
+- Entre dois blocos iguais não diz nada.
+- A velocidade de cada bloco vem do construtor (treinos manuais de passadeira) ou, num treino por
+  ritmo, do ritmo do bloco (a meio do intervalo), arredondado ao passo da tua passadeira. A sessão
+  conta a distância com essa velocidade.
+- Em *Definições → Desportos → Corrida → Sessões Não ERG*:
+  - **Passo da velocidade**: quanto sobe a velocidade a cada toque (0,1 · 0,2 · 0,5 · 1 km/h; a T 7.0
+    sobe 0,1). Junta-se ao **Passo da inclinação** que já existia.
+  - **Aviso antes de cada mudança**: de 3 a 30 s.
+- Com uma passadeira que a Perennia comanda (hoje só a SEM HARDWARE) o cartão não aparece, porque
+  ela muda sozinha.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4040,6 +4063,10 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 28 NÃO cria tabelas nem colunas** (**não tens de fazer nada**). Há só duas definições novas
+(tabela `settings`, componente «Definições» do backup): `treadmill_speed_step` (o passo da velocidade,
+0,1 km/h por omissão) e `treadmill_guide_lead_s` (o aviso antes de cada mudança, 10 s por omissão).
+
 **A ronda 27 cria 1 tabela — sozinha, na primeira vez que é precisa** (**não tens de fazer nada** na
 base local; antes de abrires a versão nova podes fazer um backup: *Backups e Sincronização → Exportar
 → Tudo*, ou `python main.py --backup`). Nada é apagado nem alterado:
@@ -4295,7 +4322,13 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1467 testes a passar).
+**Verificado com testes automáticos nesta versão** (1474 testes a passar).
+
+*Novidades da ronda 28 (7 testes novos em `tests/test_round28.py`):* o guia da passadeira manual —
+os toques com o sinal certo e o passo da passadeira, as fases (início, aviso, agora, sem nada a fazer
+entre blocos iguais, fim), o bip uma vez por bloco, a dica de manter o botão, as velocidades tiradas
+do ritmo e arredondadas, a distância contada pela velocidade do guia, nada com uma passadeira
+comandada nem na corrida livre, e as duas opções novas das Definições.
 
 *Novidades da ronda 27 (23 testes novos em `tests/test_round27.py`, e os antigos atualizados):* o
 glossário das análises (67 componentes completos nos dois idiomas, os nomes dos boletins a ligarem-se
