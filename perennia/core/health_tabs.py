@@ -15,7 +15,7 @@ from .db import Database, now_iso
 from .i18n import tr
 
 NAME_MAX = 40
-RESERVED = ("labs", "diary", "bp", "trends", "metrics", "assistant")
+RESERVED = ("labs", "labs_glossary", "diary", "bp", "trends", "metrics", "assistant")
 
 
 def ensure(db: Database) -> None:

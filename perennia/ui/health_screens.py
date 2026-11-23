@@ -212,7 +212,7 @@ class HealthMenu(Screen):
 
     TABBED = True
     # os separadores fixos; a seguir vêm os que criaste (`health_tabs`), um por cada
-    TAB_KEYS = ("labs", "diary", "trends", "metrics", "bp", "assistant")
+    TAB_KEYS = ("labs", "labs_glossary", "diary", "trends", "metrics", "bp", "assistant")
     CUSTOM = "tab:"
 
     @staticmethod
@@ -253,7 +253,9 @@ class HealthMenu(Screen):
 
     def tab_labels(self) -> list[str]:
         from perennia.core import health_tabs
-        fixed = {"labs": tr("Análises", "Lab results"), "diary": tr("Diários", "Daily logs"),
+        from perennia.ui import lab_glossary_screens as lgs
+        fixed = {"labs": tr("Análises", "Lab results"), "labs_glossary": lgs.tab_name(),
+                 "diary": tr("Diários", "Daily logs"),
                  "trends": tr("Tendências", "Trends"), "metrics": tr("Métricas", "Metrics"),
                  "bp": tr("Pressão arterial", "Blood pressure"),
                  "assistant": tr("Assistente de saúde", "Health assistant")}
@@ -282,6 +284,10 @@ class HealthMenu(Screen):
         if k == "labs":
             self.inner = None
             self._labs()
+        elif k == "labs_glossary":
+            from perennia.ui import lab_glossary_screens as lgs
+            self.inner = None
+            lgs.glossary_tab(self)
         elif k == "diary":
             self.inner = None
             self._diary()
@@ -376,6 +382,8 @@ class HealthMenu(Screen):
         if r.get("doctor_feedback"):
             rows.append(Item(tr("Comentário do médico", "Doctor's comment"),
                              detail=_excerpt(r.get("doctor_feedback"), 160), enabled=False))
+        from perennia.core import lab_glossary as lg
+        self._gloss = lg.all_entries(a.db)          # uma vez por relatório (o rato por cima)
         for area, panel, results in labs.grouped_results(a.db, r["id"]):
             head = area if area and area != "—" else tr("Resultados", "Results")
             rows.append(Item(head + (f" · {panel}" if panel else ""), header=True))
@@ -393,8 +401,10 @@ class HealthMenu(Screen):
         self.chrome.set(self.TITLE(),
                         f"{r['done_on']}" + (f" · {r['lab']}" if r.get("lab") else "") + " · "
                         + tr("valor atual e os 3 anteriores · Enter num resultado escreve o "
-                             "comentário do médico", "current value and the 3 before · Enter "
-                             "on a result writes the doctor's comment"), self.footer())
+                             "comentário do médico · G abre o glossário · rato por cima mostra "
+                             "o resumo", "current value and the 3 before · Enter on a result "
+                             "writes the doctor's comment · G opens the glossary · hover shows "
+                             "the summary"), self.footer())
         self.list.set_items(rows, keep_index=True)
 
     def _labs_list(self, reps: list[dict]) -> None:
@@ -465,9 +475,26 @@ class HealthMenu(Screen):
                   else tr("primeira vez", "first time")) + " · " + ref_text(x)
         if x.get("doctor_comment"):
             detail = "🩺 " + _excerpt(x["doctor_comment"], 60) + " · " + detail
+        from perennia.core import lab_glossary as lg
+        g = lg.match(self.app.db, x["marker"], getattr(self, "_gloss", None))
+        tip = lg.tooltip(g) + "\n" + tr("G abre a ficha no glossário.",
+                                         "G opens the glossary card.") if g else ""
         return Item(f"{name}{mark}", value=f"{labs.value_text(x)} {x['unit'] or ''}{trend}",
                     detail=detail, action=lambda rid=x["id"], nm=name: self._edit_comment(
-                        rid, nm), data=("result", x["id"]))
+                        rid, nm), data=("result", x["id"]), tip=tip)
+
+    def _open_glossary_of_selected(self) -> bool:
+        """G num resultado: abre a ficha do componente no glossário das análises."""
+        it = self.list.items[self.list.index] if self.list.items else None
+        if it is None or not (isinstance(it.data, tuple) and it.data[:1] == ("result",)):
+            return False
+        row = self.app.db.conn.execute("SELECT marker FROM lab_results WHERE id = ?",
+                                       (it.data[1],)).fetchone()
+        if row is None:
+            return False
+        from perennia.ui import lab_glossary_screens as lgs
+        lgs.open_for_marker(self.app, row["marker"])
+        return True
 
     def _edit_general(self) -> None:
         r = health.lab_report(self.app.db, self.report_id)
@@ -493,9 +520,22 @@ class HealthMenu(Screen):
     def on_key(self, symbol: int, modifiers: int) -> bool:
         if self.inner is not None and symbol != key.TAB:
             return self.inner.on_key(symbol, modifiers)
+        if symbol == key.G and not modifiers and self.tab_key() == "labs" \
+                and self.report_id is not None and not self._search_typing():
+            if self._open_glossary_of_selected():
+                self._swallow_g = True            # o «g» não vai para a pesquisa
+                return True
         return super().on_key(symbol, modifiers)
 
+    def _search_typing(self) -> bool:
+        box = getattr(self, "search_box", None)
+        return bool(box is not None and getattr(box, "focused", False))
+
     def on_text(self, text: str) -> bool:
+        if getattr(self, "_swallow_g", False):
+            self._swallow_g = False
+            if text.lower() == "g":
+                return True
         if self.inner is not None:
             return self.inner.on_text(text)
         return super().on_text(text)
@@ -1070,6 +1110,8 @@ class LabsList(Screen):
 class ParameterCatalog(Screen):
     def enter(self) -> None:
         a = self.app
+        from perennia.core import lab_glossary as lg
+        gloss = lg.all_entries(a.db)
         rows = []
         area = None
         for p in labs.parameters(a.db):
@@ -1082,9 +1124,10 @@ class ParameterCatalog(Screen):
                 rng += " ✎"
             if p.get("area") and p["area"] != area:
                 area = p["area"]
+            g = lg.match(a.db, p["name"], gloss)
             rows.append(Item(p["short_name"] or p["name"], value=p["unit"] or "",
                              detail=rng, action=lambda pid=p["id"]: a.push(
-                                 ParameterEditor(a, pid))))
+                                 ParameterEditor(a, pid)), tip=lg.tooltip(g) if g else ""))
         if not rows:
             rows.append(Item(tr("Ainda sem parâmetros: importa o Excel das análises.",
                                 "No parameters yet: import the lab Excel."), enabled=False))
@@ -1196,6 +1239,8 @@ class LabReportEditor(SnapshotUnsaved, EditScreen):
                 Item(tr("Notas", "Notes"), value=_excerpt(self.notes, 50) or "—",
                      action=self._edit_notes)]
         if self.report_id:
+            from perennia.core import lab_glossary as lg
+            gloss = lg.all_entries(a.db)
             groups = labs.grouped_results(a.db, self.report_id)
             show_headers = len(groups) > 1 or (groups and groups[0][0] != "—")
             for area, panel, results in groups:
@@ -1207,7 +1252,8 @@ class LabReportEditor(SnapshotUnsaved, EditScreen):
                     mark = {"high": " ▲", "low": " ▼"}.get(flag, "")
                     ref = ref_text(x)
                     name = labs.short_name(x["marker"]) if x.get("parameter_id") else x["marker"]
-                    rows.append(Item(f"{name}{mark}",
+                    g = lg.match(a.db, x["marker"], gloss)
+                    rows.append(Item(f"{name}{mark}", tip=lg.tooltip(g) if g else "",
                                      value=f"{labs.value_text(x)} {x['unit'] or ''}",
                                      detail=(ref + (" · " + x["comment"] if x["comment"]
                                                     else "")),

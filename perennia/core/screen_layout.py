@@ -42,6 +42,11 @@ PANELS: dict[str, dict[str, tuple]] = {
                   (0, 15, 24, 1), (8, 1)),
         "chart": ("Gráfico ao vivo", "Live chart", "potência, FC… ao longo da sessão",
                   "power, HR… through the session", None, (6, 3)),
+        "map": ("Mapa da rota", "Route map", "a rota vista de cima e onde estás (tecla M)",
+                "the route from above and where you are (M key)", None, (4, 3)),
+        "segment": ("Segmento ao vivo", "Live segment",
+                    "ao entrares num segmento: KOM, o teu melhor e tu",
+                    "when you enter a segment: KOM, your best and you", None, (8, 3)),
     },
     "rowing": {
         "metrics": ("Quadrados de métricas", "Metric tiles", "12 campos por página (V muda)",

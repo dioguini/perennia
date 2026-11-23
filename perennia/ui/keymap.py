@@ -42,6 +42,8 @@ ACTIONS = (
     # ciclismo
     ("ride_res_up", "ride", "PLUS", (), "Aumentar resistência", "Increase resistance"),
     ("ride_res_down", "ride", "MINUS", (), "Diminuir resistência", "Decrease resistance"),
+    ("ride_map", "ride", "M", (), "Mapa da rota (mostrar / esconder)",
+     "Route map (show / hide)"),
     # remo
     ("row_res_up", "rowing", "PLUS", (), "Aumentar resistência", "Increase resistance"),
     ("row_res_down", "rowing", "MINUS", (), "Diminuir resistência", "Decrease resistance"),

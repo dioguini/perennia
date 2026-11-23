@@ -708,8 +708,9 @@ class TestHealthUI(tg.GuiCase):
 
     def test_tabs(self):
         m = self.open_health()
-        self.assertEqual(m.tab_labels(), ["Análises", "Diários", "Tendências", "Métricas",
-                                          "Pressão arterial", "Assistente de saúde"])
+        self.assertEqual(m.tab_labels(), ["Análises", "Glossário das análises", "Diários",
+                                          "Tendências", "Métricas", "Pressão arterial",
+                                          "Assistente de saúde"])
 
     def test_three_readings_in_a_row_give_one_value(self):
         from perennia.ui import health_extra_screens as hx
@@ -831,7 +832,7 @@ class TestHealthUI(tg.GuiCase):
         self.assertEqual(m.tab_labels()[-1], "Fisio")
         self.pick("Apagar separador")
         self.pick("Apagar")
-        self.assertEqual(len(m.tab_labels()), 6)
+        self.assertEqual(len(m.tab_labels()), 7)          # 6 fixos + o glossário das análises (ronda 27)
         self.assertEqual(health_tabs.tabs(self.app.db), [])
         # um nome repetido ou vazio não cria nada
         hx.new_tab(m)
