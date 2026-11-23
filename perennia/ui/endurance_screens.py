@@ -182,6 +182,67 @@ class EndurancePreview(BriefScreen):
 
 
 
+class GuideCard:
+    """O guia da passadeira manual (ver `perennia.core.treadmill_guide`): um cartão ao meio do
+    ecrã com o que pôr na passadeira — «DAQUI A 8 s · 12,5 km/h · 2,0 %» e, grande, os toques
+    «▲ velocidade ×25 · ▲ inclinação ×2». Fica amarelo no aviso e verde no «AGORA»."""
+
+    W, H = 760, 176
+
+    def __init__(self, batch):
+        from perennia.gfx import theme
+        self.outline = pyglet.shapes.Rectangle(0, 0, 10, 10, color=P_BORDER(), batch=batch)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=batch)
+        self.band = pyglet.shapes.Rectangle(0, 0, 10, 6, color=theme.P.accent[:3], batch=batch)
+        self.title = make_label("", font_size=13, bold=True, color=DIM, anchor_x="center",
+                                anchor_y="top", batch=batch)
+        self.line = make_label("", font_size=26, bold=True, color=TEXT, anchor_x="center",
+                               anchor_y="center", batch=batch)
+        self.presses = make_label("", font_size=22, bold=True, color=ACCENT, anchor_x="center",
+                                  anchor_y="bottom", batch=batch)
+        self.hint = make_label("", font_size=10, color=DIM, anchor_x="center",
+                               anchor_y="bottom", batch=batch)
+        self.visible = True
+        self.kind = ""
+        self.show(False)
+
+    def layout(self, cx: float, cy: float, max_w: float | None = None) -> None:
+        w = min(self.W, max_w) if max_w else self.W
+        x, y = cx - w / 2, cy - self.H / 2
+        self.outline.x, self.outline.y, self.outline.width, self.outline.height = \
+            x - 1, y - 1, w + 2, self.H + 2
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y, w, self.H
+        self.band.x, self.band.y, self.band.width = x, y + self.H - 6, w
+        self.title.x, self.title.y = cx, y + self.H - 16
+        self.line.x, self.line.y = cx, y + self.H / 2 + 14
+        self.presses.x, self.presses.y = cx, y + 28
+        self.hint.x, self.hint.y = cx, y + 8
+
+    def set(self, st: dict) -> None:
+        from perennia.gfx import theme
+        self.kind = st.get("kind", "")
+        self.title.text = st.get("title", "")
+        self.line.text = st.get("line", "")
+        self.presses.text = st.get("presses_text", "")
+        self.hint.text = st.get("hint", "") or ""
+        col = {"soon": theme.P.warn, "now": theme.P.good, "start": theme.P.accent}.get(
+            self.kind, theme.P.border)
+        self.band.color = col[:3]
+        self.title.color = theme.rgba(col) if self.kind in ("soon", "now", "start") else DIM
+
+    def show(self, on: bool) -> None:
+        if on == self.visible:
+            return
+        self.visible = on
+        for r in (self.outline, self.bg, self.band):
+            r.opacity = 255 if on else 0
+        if not on:
+            self.title.text = self.line.text = self.presses.text = self.hint.text = ""
+
+    def texts(self) -> list[str]:
+        return [self.title.text, self.line.text, self.presses.text, self.hint.text]
+
+
 class RunControls:
     """Corrida livre: **velocidade** e **inclinação** ao meio do ecrã, em dois cartões, cada um
     com − valor +. A velocidade muda de 0,1 em 0,1 km/h e a inclinação de 0,5 em 0,5 % (o passo
@@ -316,6 +377,10 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         self.clock = CountdownBadge(app.window, batch=b)   # só os últimos segundos de um bloco
         self.controls = RunControls(b)       # corrida livre: velocidade e inclinação
         self.controls.show(False)
+        # um treino numa passadeira sem ligação: o que carregar e quando (ver treadmill_guide)
+        from perennia.core import treadmill_guide as _tg
+        self.guide = _tg.Guide.for_engine(self.engine, app.db)
+        self.guide_card = GuideCard(b)
         self.cells = []
         from perennia.core import layouts as _lay
         for _ in range(max(1, len(_lay.keys(app.db, self.engine.sport)))):    # nº de métricas
@@ -384,6 +449,10 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
         cy = ((mt[1] + low) / 2 if mt is not None else self.app.window.height / 2)
         cx = (sx + sw / 2) if st is not None else self.app.window.width / 2
         self.controls.layout(cx, cy)
+        if st is not None:      # no fundo do painel do estado, por baixo do plano do bloco
+            self.guide_card.layout(cx, sy + 26 + GuideCard.H / 2, sw - 20)
+        else:
+            self.guide_card.layout(cx, cy)
         self._layout_finish()
 
     def on_resize(self, w: int, h: int) -> None:
@@ -497,6 +566,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
                 size -= 2
             val.font_size = size
         self.refresh_buttons()
+        self._update_guide()
         free_run = e.sport == "running" and e.workout is None
         if free_run != self.controls.visible:
             self.controls.show(free_run)
@@ -654,7 +724,42 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             lines.append(tr("A seguir: ", "Next: ") + f"{nxt.duration_text()} · {t_}")
         return "\n".join(lines)
 
+    def _update_guide(self) -> None:
+        """O cartão da passadeira manual: o que pôr agora, o aviso antes da mudança e os toques
+        (com um bip quando o aviso começa)."""
+        g, e = self.guide, self.engine
+        if g is None or e.workout is None:
+            self.guide_card.show(False)
+            return
+        from perennia.core import treadmill_guide as _tg
+        wk = e.workout
+        idx = len(wk.steps) if wk.step is None else wk.idx
+        st = g.state(idx, _tg.step_left_seconds(e), wk.step_t, started=e.started)
+        self.guide_card.show(True)
+        self.guide_card.set(st)
+        if st.get("beep") and e.started and not e.paused:
+            try:
+                if self.app.db.get("sound_on", True):
+                    self.app.beeper.beep("short")
+            except Exception:
+                pass
+
+    def _guide_speed(self, idx: int) -> None:
+        """Num treino por ritmo (sem velocidade no bloco), a sessão conta a distância com a
+        velocidade que o guia mandou pôr."""
+        g, e = self.guide, self.engine
+        if g is None or not (0 <= idx < len(g.targets)):
+            return
+        has_block = idx < len(e.block_speeds) and e.block_speeds[idx]
+        t_ = g.targets[idx]
+        if t_.speed and not has_block:
+            e.set_speed(t_.speed)
+
     def _event(self, kind: str, data: dict) -> None:
+        if kind == "started":
+            self._guide_speed(0)
+        elif kind == "step":
+            self._guide_speed(int(data.get("idx") or 0))
         msg = {"started": tr("A contar!", "Go!"),
                "lap": tr("Volta {n} marcada", "Lap {n} marked", n=data.get("no")),
                "workout_done": tr("Treino concluído!", "Workout done!"),
