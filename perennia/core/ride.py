@@ -289,6 +289,8 @@ class RideEngine:
             segs = []
         self.strava = _segments.SegmentTracker(segs) if segs else None
         self.strava_results: list[dict] = []
+        # o segmento em tempo real (KOM, o teu melhor e tu): {chave: (entrada em s, painel)}
+        self._seg_live: dict[str, tuple[float, Any]] = {}
 
         self.state = RideState(
             ftp_w=athlete.ftp_w, lthr=estimate_lthr(athlete), route=self.route,
@@ -1128,6 +1130,34 @@ class RideEngine:
                     pass
                 self.strava_results.append(dict(data))
             self._emit(kind, **data)
+        self._feed_segment_live()
+
+    def _feed_segment_live(self) -> None:
+        """Os segmentos em que estás: o painel ao vivo de cada um (criado à entrada) recebe a
+        potência de agora, para os W/kg desde a entrada."""
+        if self.strava is None or self.route is None:
+            return
+        for seg, t0 in self.strava.active:
+            cur = self._seg_live.get(seg.key)
+            if cur is None or cur[0] != t0:
+                try:
+                    from . import segment_live as _sl
+                    cur = (t0, _sl.build(self.db, self.athlete, self.route, seg))
+                except Exception:
+                    continue
+                self._seg_live[seg.key] = cur
+            cur[1].feed(self._t, self.state.power_w)
+
+    def segment_snapshot(self) -> dict | None:
+        """O segmento em que estás agora, para o painel: a altimetria, onde estão o KOM, o teu
+        melhor e tu, e a tabela (tempos, Δ e W/kg). None fora de um segmento."""
+        cur = self.active_segment()
+        if cur is None:
+            return None
+        live = self._seg_live.get(cur["segment"].key)
+        if live is None:
+            return None
+        return live[1].snapshot(cur["elapsed_s"], cur["frac"])
 
     def _track_game(self) -> None:
         """Jogos de segmento (Pace/KOM): a posição a cada frame, para cronometrar as

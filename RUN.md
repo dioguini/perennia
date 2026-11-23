@@ -2103,6 +2103,74 @@ ciclismo mostra o que foi feito dentro de um Conditioning.
   caixa; um teste mede o construtor de Conditioning, os construtores em modo bloco e a janela das tags
   a 1024×640 e 1280×760.
 
+### Ronda 27: glossário das análises, rato por cima, Power BI, mapa e segmento ao vivo
+
+**Saúde → Glossário das análises (separador novo, logo a seguir a «Análises").** Um glossário só
+para as análises clínicas, com **67 componentes** de origem agrupados por categoria (hemograma,
+ferro e vitaminas, açúcar no sangue, lípidos, rim, fígado e proteínas, inflamação, tiroide,
+hormonas, minerais, músculo e esforço, outros): hemoglobina, hematócrito, leucócitos e cada tipo de
+glóbulo branco, plaquetas, ferritina, ferro sérico, transferrina e saturação, B12, ácido fólico,
+vitamina D, glicose, HbA1c, insulina, HOMA-IR, colesterol (total, HDL, LDL), triglicerídeos, Lp(a),
+ApoB, creatinina, ureia, TFG, ácido úrico, AST, ALT, GGT, fosfatase alcalina, bilirrubina, albumina,
+PCR, VS, homocisteína, TSH, T4/T3 livres, testosterona (total e livre), SHBG, estradiol, cortisol,
+LH, FSH, prolactina, DHEA-S, IGF-1, sódio, potássio, cálcio, magnésio, fósforo, zinco, CK, LDH, PSA.
+
+- Cada linha mostra o nome, a **descrição sumária** e, à direita, **o teu último valor** (com ▲/▼ se
+  ficou fora do intervalo). **Enter** abre a **ficha**: *O que é* · *O que faz subir* · *O que faz
+  descer* · *O que é bom* · *O que é mau* · *Estratégias para ficar no intervalo* — por exemplo, na
+  ferritina: «muita carne vermelha, suplementos, álcool… faz subir» e «se o ferro estiver mesmo a mais,
+  **doar sangue** regularmente é a forma mais eficaz de o baixar (com o médico)»; no ácido fólico:
+  «legumes de folha escura e crucíferas (**brócolos**, espinafres…), leguminosas…».
+- **Editar** muda o texto de um componente (o original volta com «Repor o texto original»);
+  **Apagar** esconde um de origem (volta com «Repor os de origem»); **+ Novo componente** junta um
+  teu. Os **nomes alternativos** (separados por vírgulas) são o que liga um componente aos nomes dos
+  teus boletins — «Ferritina (Electroquimiluminiscência)», «TGO/AST», «Colesterol HDL»… já se ligam
+  sozinhos (sem acentos e sem o método do laboratório entre parêntesis).
+- É **informação geral** para perceberes os resultados; **não substitui o médico**. Os textos são
+  escritos por mim a partir do que é consensual e não foram revistos por um médico.
+
+**O rato por cima (descrição sumária).** Nos resultados de uma colheita (Saúde → Análises → uma
+colheita), deixa o rato parado em cima de um resultado: aparece uma caixa com o **resumo** do
+componente e as **estratégias** para ficar no intervalo — sem ires ao glossário. A tecla **G** num
+resultado abre a ficha inteira. O mesmo aparece no editor da colheita, no catálogo de parâmetros e no
+próprio glossário. (A caixa é geral: qualquer linha com descrição pode passar a tê-la.)
+
+**Exportar para o Power BI.** *Backups e Sincronização → Exportar →* botão **Power BI** (ou
+`python main.py --powerbi`, ou `--powerbi PASTA`). Grava na pasta **Exportações/PowerBI** (sempre a
+mesma, reescrita a cada exportação):
+
+| Ficheiro | Para quê |
+|---|---|
+| `Perennia.pbids` | **duplo clique: abre o Power BI Desktop já ligado ao Excel** |
+| `Perennia_PowerBI.xlsx` | o modelo, uma folha por tabela: `Calendario`, `Desportos`, `Parametros`, `Atleta` e os factos `Sessoes` (todos os desportos e as importadas), `Voltas`, `PMC` (carga, CTL, ATL, TSB), `Curva_potencia`, `Analises` (com o componente do glossário e o estado Alto/Baixo/Normal), `Diario`, `Tensao_arterial`, `Testes`, `Segmentos`, `Series_ginasio`, `Feedback`, `Planeado` |
+| `csv/` | as mesmas tabelas em CSV e as **amostras ao segundo** (`Amostras.csv`) |
+| `Perennia_Medidas_DAX.txt` | medidas prontas a colar (horas, TSS por semana, CTL/ATL/TSB, % fora do intervalo, último valor…) e as ligações entre tabelas |
+| `Perennia_Amostras.pq` | a consulta Power Query para as amostras |
+| `LEIA-ME.txt` | os passos e as linhas de cada tabela |
+
+As tabelas ligam-se pelas colunas com o mesmo nome (`Data`, `Desporto`, `SessaoID`, `ParametroID`):
+o Power BI cria as ligações sozinho. Monta o relatório uma vez, guarda o `.pbix` onde quiseres e,
+depois de cada exportação nova, carrega em **Atualizar**. *Porque não um `.pbix` pronto?* O `.pbix`
+guarda o modelo num formato binário que só o Power BI Desktop escreve — a Perennia entrega o modelo
+pronto a ligar. As credenciais nunca entram.
+
+**Mapa da rota na sessão.** Numa sessão de ciclismo com uma rota (.gpx) — passeio livre ou treino com
+rota — aparece o **mapa** (a rota vista de cima): a parte feita a azul, os **segmentos a vermelho**, o
+início a verde e **tu** (ponto rosa com a seta no sentido em que vais). **M** mostra/esconde (fica
+lembrado). Também se põe onde quiseres em *Definições → Desportos → Ciclismo → Disposição dos painéis*
+(painel «Mapa da rota»).
+
+**Segmento ao vivo.** Ao entrares num segmento (Strava ou Perennia), aparece ao centro um painel com:
+- a **altimetria do segmento** (cores do declive) e três marcas: **KOM a vermelho**, **o teu melhor a
+  azul** e **tu agora a rosa** — onde cada um estaria **ao mesmo tempo** desde a entrada;
+- ao lado, a **tabela**: o tempo de cada um (o teu é a projeção ao ritmo de agora), **Δ** — quanto
+  estás atrás (+, vermelho) ou à frente (−, verde) de cada um **no mesmo ponto** — e os **W/kg**;
+- **o teu melhor**: se foi feito aqui, numa sessão com amostras, a posição e os W/kg são os
+  **verdadeiros** desse dia; senão (um PR do Strava) são **estimados** pela física do segmento (≈);
+- **o KOM**: só se sabe o tempo; a posição é estimada pela física (acompanha as rampas) e os W/kg
+  aparecem como **≈ os necessários com o teu peso e a tua bicicleta** para esse tempo — não os do dono
+  do KOM. À saída do segmento o painel desaparece; o tempo fica nos esforços como sempre.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -3932,7 +4000,7 @@ Tudo vive em **dois sítios, numa só pasta**:
 | `backups/` | os backups (`.zip`) feitos no menu Backups e as cópias automáticas antes de repor |
 | `rides/*.fit` | um ficheiro `.fit` por sessão de ciclismo, pronto a enviar para onde quiseres |
 | `strength/*.fit` | um `.fit` por treino de força |
-| `exports/` | os treinos que exportas no construtor (`.zwo`, `.erg`, `.mrc`, `.fit`) |
+| `exports/` | os treinos que exportas no construtor (`.zwo`, `.erg`, `.mrc`, `.fit`); em `exports/PowerBI/` o modelo para o Power BI |
 | `imports/` | onde pôr os ficheiros do HRV4Training e do Garmin para importar |
 
 A pasta é:
@@ -3971,6 +4039,18 @@ O que a ronda 8 acrescentou (tudo automático ao abrir):
 Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
+
+**A ronda 27 cria 1 tabela — sozinha, na primeira vez que é precisa** (**não tens de fazer nada** na
+base local; antes de abrires a versão nova podes fazer um backup: *Backups e Sincronização → Exportar
+→ Tudo*, ou `python main.py --backup`). Nada é apagado nem alterado:
+
+| Tabela / definição | Para quê |
+|---|---|
+| `lab_glossary` (`builtin_key`, `category`, `name`, `aliases`, `summary`, `what`, `up`, `down`, `good`, `bad`, `act`, `deleted`) | **só as tuas alterações** ao Glossário das análises: uma linha com `builtin_key` é a edição (ou, com `deleted`=1, a remoção) de um componente de origem; sem `builtin_key` é um componente teu. Os 67 de origem vivem no código. Vai no backup, componente «Glossário» |
+| definição `ride_map_on` | se o mapa da rota aparece na sessão de ciclismo (tecla M) |
+| definição `screen_layout_cycling` | passa a poder ter os painéis `map` e `segment` (sem eles ficam no sítio de origem) |
+
+O **Power BI** não escreve na base: lê-a e grava ficheiros na pasta Exportações/PowerBI.
 
 **A ronda 19 cria 3 tabelas e 4 colunas — sozinha, na primeira vez que são precisas** (**não tens de
 fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nada é apagado:
@@ -4215,7 +4295,19 @@ A aplicação também procura em `~/Downloads`, `~/Transferências`,
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1146 testes a passar).
+**Verificado com testes automáticos nesta versão** (1467 testes a passar).
+
+*Novidades da ronda 27 (23 testes novos em `tests/test_round27.py`, e os antigos atualizados):* o
+glossário das análises (67 componentes completos nos dois idiomas, os nomes dos boletins a ligarem-se
+ao componente certo, editar/repor/apagar/juntar, o último valor de cada um, o separador, a ficha com
+todas as secções, o editor e a tecla G); o texto do rato por cima (aparece com o rato parado, some ao
+mexer, fica dentro da janela); o Power BI (os ficheiros, o `.pbids`, as folhas do Excel, as tabelas e
+o componente das análises, o calendário, a pasta fixa, a linha de comandos e o botão); o segmento ao
+vivo (as três posições, as diferenças com o sinal certo, os W/kg do melhor tirados das amostras, a
+física do KOM, a passagem tirada das amostras, o painel que aparece e desaparece) e o mapa (o ponto no
+sítio certo, os segmentos a vermelho, a tecla M lembrada); e o backup do glossário das análises.
+**Os textos do glossário das análises foram escritos por mim e não foram revistos por um médico; o
+`.pbids` e o Excel foram verificados por estrutura, não abertos num Power BI Desktop real.**
 
 *Novidades da ronda 17 (testes novos em `tests/test_round17.py`):* os **planos de treino de X
 semanas** — o formato (validação com o sítio do erro, valores por semana, séries diferentes,

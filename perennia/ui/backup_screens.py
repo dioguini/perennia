@@ -219,6 +219,8 @@ class BackupScreen(Screen):
         items += [Item(sec.name, value=tr("Sim", "Yes") if "ligacoes" in self.chosen
                        else tr("Não", "No"), detail=sec.description,
                        action=lambda: self._toggle("ligacoes"), data=("comp", "ligacoes")),
+                  Item("Power BI", button=True,
+                       action=self._export_powerbi),
                   Item(tr("Exportar", "Export"), button=True, primary=True,
                        enabled=bool(self.chosen), action=self._export)]
         self.chrome.set(tr("Backups e reposição", "Backups and restore"),
@@ -254,6 +256,25 @@ class BackupScreen(Screen):
         a.notify(tr("Backup feito", "Backup done"),
                  f"{Path(m['path']).name} · {size_text(m['bytes'])} · {describe(m)} · "
                  + tr("Está em {p}", "It is in {p}", p=Path(m["path"]).parent))
+
+    def _export_powerbi(self) -> None:
+        """Tudo para o Power BI: o Excel do modelo, os CSV, o .pbids e as medidas (numa pasta
+        fixa, para o «Atualizar» do Power BI ler sempre o mesmo ficheiro)."""
+        from perennia.core import powerbi
+        a = self.app
+        try:
+            m = powerbi.export(a.db, a.data_dir)
+        except Exception as e:
+            a.notify(tr("Não foi possível exportar para o Power BI",
+                        "Could not export to Power BI"), str(e))
+            return
+        rows = sum(m["tables"].values())
+        a.notify(tr("Exportado para o Power BI", "Exported to Power BI"),
+                 tr("{t} tabelas · {n} linhas · abre o Perennia.pbids (ou o Excel) no Power BI "
+                    "Desktop; da próxima vez basta «Atualizar» · Está em {p}",
+                    "{t} tables · {n} rows · open Perennia.pbids (or the Excel) in Power BI "
+                    "Desktop; next time just «Refresh» · It is in {p}",
+                    t=len(m["tables"]), n=rows, p=m["path"]))
 
     # --------------------------------------------------------------- repor
 

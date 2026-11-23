@@ -235,9 +235,11 @@ COMPONENTS: tuple[Component, ...] = (
               "keeps your keys",
               settings=_is_ligacao, sensitive=True),
     Component("glossario", "Glossário", "Glossary",
-              "os termos que acrescentaste e as edições ou remoções dos termos de origem",
-              "the terms you added and the edits or removals of the built-in terms",
-              tables=("glossary",)),
+              "os termos que acrescentaste e as edições ou remoções dos termos de origem (no "
+              "Glossário e no Glossário das análises)",
+              "the terms you added and the edits or removals of the built-in terms (in the "
+              "Glossary and the Lab glossary)",
+              tables=("glossary", "lab_glossary")),
 )
 BY_KEY = {c.key: c for c in COMPONENTS}
 # o que não entra: estado interno e caches que se refazem sozinhas
@@ -259,7 +261,8 @@ ENSURE_MODULES = ("calendar_view", "endurance", "feedback", "fitness_tests", "ga
                   "garmin_sync", "gym", "health", "inventory", "labs", "laps_session",
                   "objectives", "peaks", "rowing", "segments", "session_workouts",
                   "muscles", "strength_builder", "tags", "workout_meta", "bp", "health_tabs",
-                  "coach", "programs", "glossary", "block_log", "complexes", "indexes")
+                  "coach", "programs", "glossary", "block_log", "complexes", "indexes",
+                  "lab_glossary")
 
 
 def prepare(db) -> None:

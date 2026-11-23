@@ -140,6 +140,9 @@ def main() -> int:
                         metavar="SEGUNDOS",
                         help="testa só a FC por ANT+ (cinta ou relógio a transmitir) e sai: abre "
                              "um único canal e escreve o que chega, ao segundo")
+    parser.add_argument("--powerbi", nargs="?", const="", default=None, metavar="PASTA",
+                        help="exporta tudo para o Power BI (Excel + CSV + .pbids + medidas DAX) "
+                             "e sai; por omissão na pasta Exportações/PowerBI")
     parser.add_argument("--destino", default=None,
                         help="pasta onde gravar os .csv (por omissão, Transferências)")
     args = parser.parse_args()
@@ -162,6 +165,8 @@ def main() -> int:
         return csv_cli(args)
     if args.adhoc_exportar:
         return adhoc_cli(args)
+    if args.powerbi is not None:
+        return powerbi_cli(args)
     if args.plano_modelo is not None or args.plano_importar or args.plano_exportar:
         return plan_cli(args)
 
@@ -221,6 +226,22 @@ def csv_cli(args) -> int:
     finally:
         db.close()
     return 0
+
+
+def powerbi_cli(args) -> int:
+    """A pasta para o Power BI (todas as tabelas), sem abrir a janela."""
+    from perennia.core import powerbi
+    from perennia.core.db import Database
+    from perennia.datadir import data_dir_for, database_path
+    data_dir = data_dir_for(args.data_dir)
+    db = Database(database_path(data_dir))
+    try:
+        return powerbi.cli_export(db, data_dir, args.powerbi or None)
+    except OSError as e:
+        print(f"Erro: {e}", file=sys.stderr)
+        return 2
+    finally:
+        db.close()
 
 
 def adhoc_cli(args) -> int:

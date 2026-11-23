@@ -294,6 +294,11 @@ class Screen:
         if not self.MODAL and self._search_prepare():
             self.search_box.draw()
 
+    def tooltip_at(self, x: float, y: float) -> str:
+        """O texto do rato por cima neste ponto (por omissão o `tip` da linha da lista)."""
+        lst = getattr(self, "list", None)
+        return lst.tip_at(x, y) if lst is not None else ""
+
     def draw(self) -> None:
         self.chrome.set_footer_limit(self.list.buttons_left)
         if self._search_prepare() and self.MODAL:
@@ -1673,6 +1678,14 @@ class RideScreen(Screen):
             return True
         if symbol == key.N:                      # saltar o bloco do treino em curso
             self._skip_block()
+            return True
+        if symbol == key.M and hud is not None:  # o mapa da rota
+            if self.engine.state.route is None:
+                hud.toast(tr("Sem rota (.gpx) não há mapa", "No route (.gpx), no map"))
+            else:
+                on = hud.toggle_map()
+                hud.toast(tr("Mapa ligado", "Map on") if on else tr("Mapa desligado",
+                                                                       "Map off"))
             return True
         if symbol == key.F10:
             self._ask_finish()
@@ -4772,10 +4785,16 @@ class App:
 
         self.topbar = TopBar(self.window)
         self._topbar_texts()
+        # o texto do rato por cima (Item.tip): aparece com o rato parado um instante
+        from perennia.ui.widgets import Tooltip
+        self.tooltip = Tooltip(self.window)
+        self._hover: tuple[float, float] | None = None
+        self._hover_still = 0.0
         self.window.push_handlers(
             on_draw=self._on_draw, on_key_press=self._on_key_press,
             on_text=self._on_text,
             on_mouse_press=self._on_mouse_press, on_mouse_drag=self._on_mouse_drag,
+            on_mouse_motion=self._on_mouse_motion,
             on_mouse_release=self._on_mouse_release, on_mouse_scroll=self._on_mouse_scroll,
             on_resize=self._on_resize,
             on_close=self._on_close,
@@ -5329,7 +5348,34 @@ class App:
 
     # --------------------------------------------------------------- ciclo
 
+    def _on_mouse_motion(self, x: int, y: int, dx: int = 0, dy: int = 0) -> None:
+        self._hover = (x, y)
+        self._hover_still = 0.0
+        self.tooltip.text = ""
+
+    def tooltip_text(self) -> str:
+        """O texto do rato por cima, agora (vazio se o rato mexeu há pouco)."""
+        from perennia.ui.widgets import Tooltip
+        screen = self.current
+        if self._hover is None or self._hover_still < Tooltip.DELAY_S or screen is None \
+                or screen.counting:
+            return ""
+        try:
+            return screen.tooltip_at(*self._hover) or ""
+        except Exception:
+            return ""
+
+    def _draw_tooltip(self) -> None:
+        text = self.tooltip_text()
+        if not text:
+            self.tooltip.text = ""
+            return
+        if text != self.tooltip.text:
+            self.tooltip.show(text, *self._hover)
+        self.tooltip.draw()
+
     def _tick(self, dt: float) -> None:
+        self._hover_still += dt
         if self.auto_running and self._auto_result is not None:
             self._collect_auto_connect()
         screen = self.current
@@ -5389,6 +5435,7 @@ class App:
             screen.draw()
             self.topbar.draw()
             self._draw_message(below or screen)
+            self._draw_tooltip()
             return
         if not isinstance(screen, RideScreen):
             self.window.projection = pyglet.math.Mat4.orthogonal_projection(
@@ -5410,6 +5457,7 @@ class App:
         self.topbar.draw()
         if not isinstance(screen, RideScreen):
             self._draw_message(screen)
+        self._draw_tooltip()
         if self._fps is not None:
             self._fps.draw()
 

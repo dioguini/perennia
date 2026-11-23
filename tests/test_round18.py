@@ -109,7 +109,7 @@ class TestGlossaryCore(CoreCase):
 
     def test_backup_component_exists(self):
         c = backup.BY_KEY["glossario"]
-        self.assertEqual(c.tables, ("glossary",))
+        self.assertEqual(c.tables, ("glossary", "lab_glossary"))   # + o das análises (r27)
         self.assertIn("glossary", backup.ENSURE_MODULES)
 
 

@@ -66,7 +66,7 @@ _BUTTON_RULES = (
     (r"^guardar|^save", "ui_save"),
     (r"^cancelar|^fechar|^cancel|^close|^nao\b|^no\b", "ui_close"),
     (r"^editar|^edit", "ui_edit"),
-    (r"^exportar|^export|^descarregar|^download", "export"),
+    (r"^exportar|^export|^descarregar|^download|^power bi", "export"),
     (r"^importar|^import|^carregar|^trazer|upload", "ui_import"),
     (r"^planear|^plan", "calendar"),
     (r"^configurar|^definicoes|^settings", "gear"),

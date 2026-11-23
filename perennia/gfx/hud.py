@@ -372,6 +372,12 @@ class Hud:
         self.block_cfg = _bb.Config.from_db(db)       # amarelo, vermelho e preto no fim do bloco
 
         self.batch = pyglet.graphics.Batch()
+        # o mapa da rota (tecla M) e o segmento ao vivo (aparece sozinho num segmento)
+        from perennia.gfx.route_panels import RouteMap, SegmentPanel
+        self.route_map = RouteMap()
+        self.segment_panel = SegmentPanel()
+        self.map_on = bool(db.get("ride_map_on", True))
+        self._map_route = None
         self.finish_dialog = FinishDialog()           # o diálogo de confirmação, por cima
         self.pause_dialog = PauseDialog()             # «PAUSA»: retomar ou terminar
         self.toasts: list[Toast] = []
@@ -736,10 +742,19 @@ class Hud:
         self._sign_bg.y, self._sign_bg.height = mid_y - 70, 140
         self._sign_title.x, self._sign_title.y = w // 2, mid_y + 20
         self._sign_sub.x, self._sign_sub.y = w // 2, mid_y - 28
+        self._sign_y0 = (mid_y - 70, mid_y + 20, mid_y - 28)     # a placa no sítio de origem
         self._paused_label.x, self._paused_label.y = w // 2, mid_bottom + 70
         self._status_bg.x, self._status_bg.width = w // 2 - sw_ // 2, sw_
         self._status_bg.y, self._status_bg.height = mid_bottom + 70 - 27, 54
         self._mid_zone = (mid_bottom, mid_top)
+
+        # ---------------- mapa (em baixo, à esquerda da coluna da direita) e segmento (ao
+        # centro, por baixo da faixa da subida)
+        mw = int(max(180, min(300, center_w * 0.42)))
+        mh = int(max(140, min(240, (mid_top - mid_bottom) * 0.5)))
+        self.route_map.layout(right_x - 14 - mw, mid_bottom + 4, mw, mh)
+        sw2 = int(min(720, max(420, center_w)))
+        self.segment_panel.layout(w // 2 - sw2 // 2, mid_top - 64 - 160, sw2, 160)
 
         if self.arrangement is not None:
             self._layout_arranged(w, h, top)
@@ -870,6 +885,13 @@ class Hud:
             self.live_chart = Chart(int(x + 40), int(y + 22), int(w_ - 56), int(h_ - 50))
             self._chart_rect = r
             self._chart_due = 2.0                     # refaz já
+        # mapa e segmento ao vivo (sem retângulo, ficam onde a disposição de origem os põe)
+        r = rect("map")
+        if r is not None:
+            self.route_map.layout(*r)
+        r = rect("segment")
+        if r is not None:
+            self.segment_panel.layout(*r)
         # rota completa
         r = rect("strip")
         sx, sy, sw, sh = r if r else (off, off, 200, 30)
@@ -1113,6 +1135,7 @@ class Hud:
         self._update_strip(state)
         self._update_trace(engine, state, now)
         self._update_chart(state, now)
+        self._update_route_panels(engine, state)
 
         self.paused = engine.paused
         self.status = state.status
@@ -1127,6 +1150,34 @@ class Hud:
         self._status_bg.opacity = HUD_A if text else 0
         self._pause_label.text = (t("ride.resume_btn") if state.status == "paused"
                                   else t("ride.pause_btn"))
+
+    # ------------------------------------------------- mapa e segmento ao vivo
+
+    def toggle_map(self) -> bool:
+        """M: mostra ou esconde o mapa da rota (e fica lembrado)."""
+        self.map_on = not self.map_on
+        try:
+            self.db.set("ride_map_on", self.map_on)
+        except Exception:
+            pass
+        return self.map_on
+
+    def _update_route_panels(self, engine, state) -> None:
+        route = getattr(state, "route", None)
+        self.route_map.visible = bool(self.map_on and route is not None)
+        if route is not None and self._map_route is not route:
+            segs = list(getattr(getattr(engine, "strava", None), "segments", []) or [])
+            self.route_map.set_route(route.points, segs)
+            self._map_route = route
+        if self.route_map.visible:
+            self.route_map.update(state.pos_m, route.total_m)
+        snap = None
+        if hasattr(engine, "segment_snapshot"):
+            try:
+                snap = engine.segment_snapshot()
+            except Exception:
+                snap = None
+        self.segment_panel.update(snap)
 
     # ---------------------------------------------------------------- caixas
 
@@ -1683,6 +1734,15 @@ class Hud:
         fade = 1.0 if age < self.sign.duration - 0.8 else \
             max(0.0, (self.sign.duration - age) / 0.8)
         self._sign_bg.opacity = int(190 * fade)
+        # com o segmento ao vivo aberto, a placa desce para baixo dele (não se tapam)
+        y0 = getattr(self, "_sign_y0", None)
+        if y0 is not None:
+            shift = 0.0
+            if self.segment_panel.visible:
+                top = y0[0] + 140
+                shift = min(0.0, (self.segment_panel.rect[1] - 8) - top)
+            self._sign_bg.y = y0[0] + shift
+            self._sign_title.y, self._sign_sub.y = y0[1] + shift, y0[2] + shift
         from perennia.ui.widgets import fit_text
         room = getattr(self, "_center_w", 640) - 30
         self._sign_title.text = fit_text(self.sign.title, room, 30, True)
@@ -1756,10 +1816,12 @@ class Hud:
         self.window.projection = Mat4.orthogonal_projection(
             0, self.window.width, 0, self.window.height, -255, 255)
         self.window.view = Mat4()
+        self.route_map.draw()                 # por baixo do resto (as placas ficam por cima)
         self.batch.draw()
         self.board_panel.draw()
         if self._chart_rect is not None and self.live_chart is not None:
             self.live_chart.draw()
+        self.segment_panel.draw()
         self.pause_dialog.draw()
         self.finish_dialog.draw()
         glEnable(GL_DEPTH_TEST)

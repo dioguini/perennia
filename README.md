@@ -50,6 +50,13 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 27** — **Glossário das análises** (Saúde): 67 componentes (hemoglobina, ferritina, ácido
+  fólico, testosterona, leucócitos…) com o que é, o que faz subir e descer, o que é bom e mau e as
+  estratégias para ficar no intervalo (editável, com os teus); **rato por cima** de um resultado mostra
+  o resumo (G abre a ficha); **Exportar para o Power BI** (Excel em modelo em estrela + CSV + `.pbids`
+  + medidas DAX, pasta fixa para «Atualizar»); **mapa da rota** na sessão (tecla M); e o **segmento ao
+  vivo**: a altimetria com o KOM (vermelho), o teu melhor (azul) e tu (rosa), as diferenças no mesmo
+  ponto e os W/kg. Base de dados: uma tabela nova (`lab_glossary`), criada sozinha.
 - **Ronda 26** — **Tags ao criar treinos**: todos os construtores (blocos, força/ginásio, Conditioning)
   mostram as tags automáticas (desporto, modalidade no ginásio, `Workout`, `Indoor …`) e juntam as tuas;
   saíram os editores sem tags. **Construtor de Conditioning por blocos**: blocos de ciclismo, passadeira,

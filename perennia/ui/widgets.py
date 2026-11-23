@@ -157,6 +157,7 @@ class Item:
     cols: tuple = ()              # colunas à frente do valor (à direita): «10», «22 kg»…
     indent: int = 0               # recuo do rótulo (níveis): filhos de um título de secção
     dropdown: object = None       # uma lista de escolha (ver `Dropdown`): Enter/clique abre-a
+    tip: str = ""                 # o texto que aparece ao passar o rato por cima (ver Tooltip)
 
     def __post_init__(self):
         if self.top:
@@ -665,6 +666,24 @@ class ListView:
                 it.action()
                 return True
         return False
+
+    def item_at(self, mx: float, my: float) -> int | None:
+        """O índice da linha (ou do botão) debaixo do rato, ou None."""
+        for idx, x, bw, y, bh in self._button_rects:
+            if x <= mx <= x + bw and y <= my <= y + bh:
+                return idx
+        for idx, x, row_y, col_w in self._cells:
+            top = row_y + self.row_h // 2
+            if top - self.row_h <= my <= top and x - 10 <= mx <= x + col_w + 10:
+                return idx
+        return None
+
+    def tip_at(self, mx: float, my: float) -> str:
+        """O texto do rato por cima (`Item.tip`) da linha debaixo do rato."""
+        idx = self.item_at(mx, my)
+        if idx is None or idx >= len(self.items):
+            return ""
+        return self.items[idx].tip or ""
 
     def on_mouse_press(self, mx: int, my: int) -> bool:
         for idx, x, bw, y, bh in self._button_rects:
@@ -2574,3 +2593,55 @@ class StartCountdown:
         self.hint.text = tr("prepara-te · Esc cancela", "get ready · Esc cancels")
         self.hint.x, self.hint.y = w / 2, y + 24
         self.batch.draw()
+
+
+class Tooltip:
+    """A caixa com a descrição que aparece ao deixar o rato parado em cima de uma coisa que a
+    tem (`Item.tip`): ao lado do cursor, com várias linhas, sem sair da janela."""
+
+    DELAY_S = 0.35
+    MAX_W = 460
+    PAD = 10
+
+    def __init__(self, window):
+        self.window = window
+        self.batch = pyglet.graphics.Batch()
+        self.border = pyglet.shapes.Rectangle(0, 0, 10, 10, color=BORDER, batch=self.batch)
+        self.bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=TOOLTIP, batch=self.batch)
+        self.label = make_label("", font_size=11, color=TEXT, anchor_y="top", batch=self.batch)
+        self.text = ""
+
+    @staticmethod
+    def lines_of(text: str, width: float, size: float = 11) -> int:
+        """Quantas linhas ocupa o texto partido em `width` píxeis (estimativa)."""
+        n = 0
+        for para in (text or "").split("\n"):
+            px = text_px(para, size) if para else 0.0
+            n += max(1, int(px // max(1.0, width)) + (1 if px % max(1.0, width) else 0))
+        return max(1, n)
+
+    def show(self, text: str, mx: float, my: float) -> None:
+        self.text = text
+        self.bg.color, self.border.color, self.label.color = TOOLTIP, BORDER, TEXT
+        w_win, h_win = self.window.width, self.window.height
+        widest = max((text_px(p, 11) for p in text.split("\n")), default=0.0)
+        inner = min(self.MAX_W, max(80.0, widest + 4))
+        lines = self.lines_of(text, inner)
+        h = lines * 17 + 2 * self.PAD
+        w = inner + 2 * self.PAD
+        x = mx + 16
+        if x + w > w_win - 8:
+            x = max(8, mx - 16 - w)
+        y_top = my - 14
+        if y_top - h < 8:
+            y_top = min(h_win - 8, my + 14 + h)
+        self.bg.x, self.bg.y, self.bg.width, self.bg.height = x, y_top - h, w, h
+        b = self.border
+        b.x, b.y, b.width, b.height = x - 1, y_top - h - 1, w + 2, h + 2
+        set_wrap(self.label, inner)
+        self.label.text = text
+        self.label.x, self.label.y = x + self.PAD, y_top - self.PAD
+
+    def draw(self) -> None:
+        if self.text:
+            self.batch.draw()
