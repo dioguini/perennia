@@ -156,6 +156,28 @@ def block_seconds(b: Block, ctx: it.Context) -> float:
     return b.dur / max(0.3, ctx.speed_mps(b.mid()))
 
 
+SPRINT_WORDS = ("sprint", "tudo", "maximo", "máximo", "all out", "all-out", "a fundo", "max")
+SPRINT_MAX_S = 30.0           # um bloco livre até 30 s num treino estruturado é um sprint
+SPRINT_PCT = 200.0            # um sprint conta como ~200 % da FTP (Z7, neuromuscular)
+ALLOUT_PCT = 130.0            # um esforço «a fundo» mais longo (até 2 min) conta como Z6
+
+
+def effective_pct(b: Block) -> float:
+    """A intensidade (% do limiar) com que um bloco conta para a carga e para as zonas. Um bloco
+    livre (sem alvo) conta a 50 %, menos os sprints: um bloco livre curto (até 30 s), ou que diga
+    «sprint», «tudo», «a fundo» ou «máximo», conta como esforço máximo."""
+    if b.lo is not None:
+        return b.mid()
+    text = f"{b.cue} {b.goal}".lower()
+    flagged = any(w in text for w in SPRINT_WORDS)
+    secs = b.dur if b.dur_type == "time" else None
+    if secs is not None and secs <= SPRINT_MAX_S and (flagged or b.kind == "active"):
+        return SPRINT_PCT
+    if flagged and (secs is None or secs <= 120):
+        return ALLOUT_PCT
+    return 50.0
+
+
 def estimate(blocks: list[Block], ctx: it.Context) -> dict:
     """Duração, distância (dos blocos por distância), TSS/carga e tempo por zona."""
     secs = dist = load = 0.0
@@ -165,8 +187,42 @@ def estimate(blocks: list[Block], ctx: it.Context) -> dict:
         secs += s
         if b.dur_type == "distance":
             dist += b.dur
-        pct = b.mid() if b.lo is not None else 50.0
+        pct = effective_pct(b)
         load += s / 3600 * (pct / 100) ** 2 * 100
         zones[it.zone(pct) - 1] += s
     if_ = (load / (secs / 3600) / 100) ** 0.5 if secs else 0.0
+    # o IF e a TSS como os de uma sessão: pela potência normalizada (NP) do perfil do treino,
+    # segundo a segundo (as rampas sobem aos poucos) — assim o planeado compara-se com o feito
+    np_if = profile_if(blocks, ctx)
+    if np_if is not None:
+        if_ = np_if
+        load = secs / 3600 * if_ ** 2 * 100
     return {"seconds": secs, "meters": dist, "tss": load, "if": if_, "zones": zones}
+
+
+PROFILE_MAX_S = 6 * 3600          # acima disto, o IF fica pelo cálculo por blocos
+
+
+def profile(blocks: list[Block], ctx: it.Context) -> list[float]:
+    """A intensidade (% do limiar) segundo a segundo, como a sessão a vai pedir."""
+    out: list[float] = []
+    for b in blocks:
+        n = int(round(block_seconds(b, ctx)))
+        if n <= 0:
+            continue
+        if b.ramp:
+            a, z = float(b.lo), float(b.end_pct)
+            out.extend(a + (z - a) * (k + 0.5) / n for k in range(n))
+        else:
+            out.extend([effective_pct(b)] * n)
+        if len(out) > PROFILE_MAX_S:
+            return []
+    return out
+
+
+def profile_if(blocks: list[Block], ctx: it.Context) -> float | None:
+    """O IF do treino pela NP do perfil (None se for curto de mais ou longo de mais)."""
+    from .physics import normalized_power
+    series = profile(blocks, ctx)
+    np_pct = normalized_power(series) if series else None
+    return np_pct / 100.0 if np_pct else None

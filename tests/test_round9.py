@@ -445,10 +445,14 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
         for (hl, label, value, detail), cell in zip(b.list._rows, b.list._cells):
             idx = cell[0]
             if b.list.items[idx].head:
-                xs[b.list.items[idx].label] = (value.x, value.anchor_x)
+                # o valor começa sempre HEAD_VALUE_X depois do início da sua coluna
+                xs[b.list.items[idx].label] = (value.x - cell[1], value.anchor_x, cell[1])
         self.assertEqual(len(xs), 4)                               # tipo, tags, nome, objetivo
-        self.assertEqual(len({v for v in xs.values()}), 1)         # o mesmo x, à esquerda
-        self.assertEqual(next(iter(xs.values()))[1], "left")
+        self.assertEqual({v[0] for v in xs.values()}, {b.HEAD_VALUE_X})
+        self.assertEqual({v[1] for v in xs.values()}, {"left"})
+        # numa grelha 2 × 2 (ronda 30): o nome por baixo do tipo, o objetivo por baixo das tags
+        self.assertEqual(xs["Nome do treino"][2], xs["Tipo de treino"][2])
+        self.assertEqual(xs["Objetivo do treino"][2], xs["Tags do treino"][2])
 
     def test_goal_popup_cancel_and_unsaved_question(self):
         from perennia.ui.goal_popup import GoalPopup

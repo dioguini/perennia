@@ -2257,6 +2257,51 @@ corrida por blocos**, a Perennia diz-te o que carregar.
   omissão de `--backup`, `--csv-modelo/--csv-exportar`, `--plano-modelo/--plano-exportar`,
   `--adhoc-exportar` e `--powerbi` passaram para a pasta `data/out` respetiva.
 
+### Ronda 30: o impacto de um treino por potência (plano e feito)
+
+**No construtor, logo ao criar o treino**, à direita do gráfico aparece o painel **Impacto do
+treino** (numa janela com pelo menos 1100 px de largura; mais estreita, fica no subtítulo como
+antes), que acompanha cada mudança nos blocos:
+
+- o **IF** (grande) e a **TSS** e a duração. O IF calcula-se como o de uma sessão: pela **potência
+  normalizada (NP) do perfil do treino**, segundo a segundo (as rampas sobem aos poucos) — por isso
+  um treino de intervalos tem um IF maior do que a média dos blocos, como no TrainerRoad;
+- o **efeito em cada sistema do desporto**, de 0 a 5 (como o *Training Effect*: 0–0,9 sem efeito,
+  1–1,9 pouco, 2–2,9 mantém, 3–3,9 melhora, 4–4,9 melhora muito, 5 excessivo), com uma barra na cor
+  da zona: **Resistência** (Z2), **Tempo** (Z3), **Limiar** (Z4), **VO2máx** (Z5), **Anaeróbio** (Z6)
+  e **Sprint** (Z7). O tempo em cada zona dá minutos a cada sistema (Z3 também conta um pouco para a
+  Resistência, Z4 para o Tempo…), e o efeito satura: `5 · (1 − e^(−minutos ÷ referência))`, com a
+  referência de cada sistema (90 min de Resistência, 40 de Tempo, 25 de Limiar, 12 de VO2máx, 5 de
+  Anaeróbio, 1,5 de Sprint dão ≈ 3,2, «melhora»). O sistema principal fica a azul;
+- a **característica do teu perfil** que o treino puxa (no ciclismo: Sprint 5 s, Anaeróbio 1 min,
+  VO2máx 5 min, Limiar/FTP — ver «Perfil por desporto») com o teu nível de agora, e **★ o teu ponto
+  fraco** quando o treino trabalha a duração mais fraca do teu perfil;
+- o **impacto no índice de longevidade**: quanto sobe num mês (e numa semana, em três meses) se o
+  fizeres hoje, e os eixos onde mais mexe.
+
+Os **blocos livres de sprint** (por exemplo «SPRINT! Tudo durante 15 s», sem alvo) passaram a contar
+como esforço máximo (≈ 200 % da FTP, Z7) em vez de 50 %: um bloco livre até 30 s, ou que diga
+«sprint», «tudo», «a fundo» ou «máximo». Isto vale para o IF, a TSS, as zonas e a longevidade.
+
+O cabeçalho do construtor (Tipo, Tags, Nome, Objetivo) passou a uma grelha 2 × 2: já não fica por
+baixo da paleta dos blocos.
+
+**No fim da sessão desse treino** (ciclismo e remo, com potência), o resumo e a **Análise → Geral**
+mostram:
+
+- a linha **IF feito · alvo** (por exemplo «0,86 · 0,89 — abaixo do alvo (−0,03) · 97 % do alvo»;
+  dentro de ±0,03 é «no alvo»), e o **Foco do treino** (o sistema principal: feito / plano);
+- o painel **Treino: feito vs plano** (no resumo do ciclismo fica no lugar da classificação): o IF
+  feito, o alvo, a percentagem e o veredicto a cores; a TSS feita e a planeada; cada sistema com a
+  **barra do plano a laranja por baixo da barra do que fizeste** (e um traço onde o plano acaba); e a
+  longevidade feita e planeada (num mês, numa semana, em três meses);
+- o radar **O que treinou** com o polígono do plano (a laranja) sobreposto ao do que a sessão fez (a
+  azul), e a linha **Longevidade** com o valor do plano à frente.
+
+O plano é o treino como estava quando a sessão começou (a cópia que a sessão guarda), e o impacto do
+plano no índice mede-se no mesmo dia e contra a mesma base da sessão, para comparar de igual para
+igual. Uma sessão livre (sem treino), a corrida e a natação não têm esta comparação.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4225,6 +4270,14 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 30 NÃO cria tabelas nem colunas e não grava nada novo** (**não tens de fazer nada**): o
+impacto de um treino e a comparação plano/feito calculam-se na hora (`perennia/core/workout_impact.py`)
+a partir do que já está na base — os passos do treino (e a cópia que a sessão guardou, em
+`session_workouts`), as amostras de potência (`ride_samples`, `row_samples`, e a cache `ride_zone_cache`)
+e o perfil. Muda só **a estimativa** de um treino no construtor e no Treinador: o IF e a TSS passam a
+ser os da NP do perfil, e os blocos livres de sprint contam como esforço máximo (as sessões já feitas
+não mudam).
+
 **A ronda 29 NÃO cria tabelas nem colunas** (**não tens de fazer nada**: na primeira vez, os dados
 da pasta antiga são **copiados** para `data/` — ver acima — e a base copiada fica com os caminhos dos
 `.fit` corrigidos; os originais ficam). O que muda na base:
@@ -4502,7 +4555,18 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1501 testes a passar).
+**Verificado com testes automáticos nesta versão** (1517 testes a passar).
+
+*Novidades da ronda 30 (16 testes novos em `tests/test_round30.py`):* o efeito por sistema (satura,
+vai para o sistema certo, os níveis), os sprints livres a contar como esforço máximo, o IF pela NP do
+perfil (igual a 1,0 numa hora a 100 %, acima da média por blocos nos intervalos), o treino de VO2máx
+(IF, TSS, foco, longevidade), o veredicto do IF (no alvo, acima, abaixo) e a comparação, o ponto
+fraco do perfil; uma sessão inteira com um treino (plano contra feito, as amostras, a longevidade
+medida contra a mesma base), as sessões sem comparação (livre, corrida) e o remo pelas amostras de
+potência; o painel do construtor (aparece logo, acompanha os blocos, sai numa janela estreita), o
+cabeçalho em 2 × 2 sem sobreposição; e o fim da sessão (a linha do IF, o painel no lugar da
+classificação, o radar com o plano sobreposto, a análise e o resumo de uma sessão livre sem nada
+disto).
 
 *Novidades da ronda 29 (26 testes novos em `tests/test_round29.py`, e os antigos atualizados à
 organização nova):* a pasta `data/` (a estrutura, os modelos copiados uma vez sem escrever por cima,

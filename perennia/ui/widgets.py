@@ -233,6 +233,7 @@ class ListView:
     head_stack: bool = False      # as linhas `head` uma por baixo da outra
     head_value_x: float | None = None   # nas linhas `head`: o valor começa aqui (à esquerda,
     #                                   no mesmo sítio em todas), em vez de à direita
+    head_cols: int = 1            # com `head_stack`: as linhas `head` numa grelha de N colunas
 
     def __init__(self, x: int, y: int, width: int, visible_rows: int = 10):
         self.x, self.y, self.width = x, y, width
@@ -441,9 +442,12 @@ class ListView:
             slots.append((idx, self.x + c * (col_w + self.COL_GAP), self.y - r * self.row_h,
                           col_w, c))
         if heads and self.head_stack:
+            hc = max(1, int(self.head_cols))
+            hw = (self.head_w - self.COL_GAP * (hc - 1)) / hc
             for j, idx in enumerate(heads):
-                slots.append((idx, self.head_x, self.head_y - j * self.row_h, self.head_w,
-                              "h"))
+                r, c = divmod(j, hc)
+                slots.append((idx, self.head_x + c * (hw + self.COL_GAP),
+                              self.head_y - r * self.row_h, hw, "h"))
         elif heads:
             hw = (self.head_w - self.COL_GAP * (len(heads) - 1)) / len(heads)
             for j, idx in enumerate(heads):
@@ -490,6 +494,9 @@ class ListView:
             lab_w = text_px(item.label, 13 if item.header else 14, item.header) \
                 + item.indent * self.INDENT_PX
             v_max = min(avail * 0.8, max(avail * 0.4, avail - lab_w))
+            head_left = c == "h" and self.head_stack and self.head_value_x is not None
+            if head_left:                      # o valor vai do head_value_x até ao fim
+                v_max = col_w - self.head_value_x - 8
             shown_value = (fit_text(item.value, v_max - text_px(mark, 13), 13) + mark
                            if item.value else "")
             value.text = shown_value
@@ -512,7 +519,11 @@ class ListView:
                 label.color = (TEXT if item.enabled else DIM) if idx != self.index \
                     else ACCENT
             ind = item.indent * self.INDENT_PX
-            if below or not d:
+            if head_left:                      # rótulo à esquerda, valor a seguir: sem nota
+                label.text = fit_text(item.label, self.head_value_x - 12 - ind, 14)
+                label.x, label.y = x + ind, row_y
+                detail.text = ""
+            elif below or not d:
                 if not item.header:
                     label.text = fit_text(item.label, free - ind, 14)
                     label.x, label.y = x + ind, row_y + (6 if d else 0)
