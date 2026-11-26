@@ -16,7 +16,7 @@ faz o autoteste e, se quiseres, configura o GarminDB e o atalho.
 ./perennia_setup.sh                             # ou perennia_setup.bat: prepara tudo
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1501 testes
+python -m unittest discover -s tests -t .       # 1517 testes
 ```
 
 **Os teus dados ficam todos em `data/`**, dentro da pasta do projeto (e nunca vão para o git):
@@ -58,6 +58,13 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 30** — **O impacto de um treino por potência**: no construtor, logo ao criar, o painel
+  **Impacto do treino** mostra o **IF** (pela NP do perfil do treino) e a TSS, o **efeito em cada
+  sistema do desporto** (Resistência, Tempo, Limiar, VO2máx, Anaeróbio, Sprint, de 0 a 5), a
+  característica do teu perfil que puxa (★ o teu ponto fraco) e o **impacto no índice de
+  longevidade**. No fim da sessão desse treino: o **IF feito contra o alvo** e o painel **feito vs
+  plano**, com as barras do plano sobrepostas às do que fizeste e o radar da longevidade com os dois
+  polígonos.
 - **Ronda 29** — **Tudo numa pasta `data/`** na raiz do projeto: `data/in/…` (gpx, treinos, planos,
   csv, atividades, analises, hrv4training, trainingpeaks, historico, backups) e `data/out/…` (sessoes
   por desporto, treinos, planos, csv, powerbi, backups, relatorios); cada módulo lê e grava na sua
@@ -499,6 +506,7 @@ perennia/core/           lógica — sem interface, sem rádio, inteiramente tes
   complexes.py       complexos de kettlebell: exercícios feitos de exercícios, evolução
   gym_catalog.py     os exercícios e treinos de força que vêm com a aplicação (catálogo)
   folders.py         as pastas de data/: in/<categoria>, out/<categoria>, garmin/ (fixas)
+  workout_impact.py  o impacto de um treino (IF, sistemas, longevidade): planeado e feito
   plan_csv.py        planos de X semanas em CSV (a via fácil, além do JSON)
   history_etl.py     histórico de outras apps: importar e normalizar com regras
   lan_sync.py        sincronizar duas Perennia pelo Wi-Fi (fonte → destino, TLS + PIN)
@@ -591,7 +599,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1501 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1517 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

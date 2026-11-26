@@ -2,6 +2,8 @@
 
 Serve ao índice de longevidade e à página de cada sessão (o que treinou: Z2 →
 100 % aeróbio). Desenha com linhas e pontos; os eixos levam o nome e o valor.
+`set_overlay` junta um segundo polígono, noutra cor, para comparar (o planeado de um treino
+com o que a sessão fez).
 """
 from __future__ import annotations
 
@@ -13,6 +15,8 @@ import pyglet.shapes
 
 from perennia.gfx.compat import label as make_label
 from perennia.ui.widgets import ACCENT, DIM, GRID, TEXT, _line
+
+OVERLAY = (240, 134, 44)          # a cor do polígono sobreposto (o planeado)
 
 MAX_AXES = 16
 RINGS = (25, 50, 75, 100)
@@ -40,6 +44,13 @@ class RadarChart:
                                 anchor_y="center", batch=self.batch)
         self.caption = make_label("", font_size=13, bold=True, color=ACCENT, anchor_x="center",
                                   anchor_y="center", batch=self.batch)
+        # o polígono sobreposto (planeado), por baixo do principal
+        self.overlay: list[float] | None = None
+        self._edges2 = [_line(0, 0, 0, 0, OVERLAY, self.batch) for _ in range(MAX_AXES)]
+        self._dots2 = [pyglet.shapes.Circle(0, 0, 3, color=OVERLAY, batch=self.batch)
+                       for _ in range(MAX_AXES)]
+        self.legend = make_label("", font_size=10, color=DIM, anchor_x="center",
+                                 anchor_y="center", batch=self.batch)
 
     # ------------------------------------------------------------ dados
 
@@ -51,6 +62,13 @@ class RadarChart:
         """`values`: [(rótulo, 0–100, texto do valor)] — pelo menos três para haver polígono."""
         self.values = list(values)[:MAX_AXES]
         self.empty.text = empty if not self.values else ""
+        self._place()
+
+    def set_overlay(self, fracs: list[float] | None, legend: str = "") -> None:
+        """Um segundo polígono (valores 0–100 pela mesma ordem dos eixos), a laranja; None
+        tira-o. `legend` aparece por baixo do título."""
+        self.overlay = None if fracs is None else list(fracs)[:MAX_AXES]
+        self.legend.text = legend if fracs is not None else ""
         self._place()
 
     # --------------------------------------------------------- geometria
@@ -69,7 +87,21 @@ class RadarChart:
     def _place(self) -> None:
         n = len(self.values)
         self.empty.x, self.empty.y = self.cx, self.cy
-        self.caption.x, self.caption.y = self.cx, self.cy + self.radius + 58
+        lift = 16 if self.legend.text else 0          # com legenda, o título sobe uma linha
+        self.caption.x, self.caption.y = self.cx, self.cy + self.radius + 58 + lift
+        self.legend.x, self.legend.y = self.cx, self.cy + self.radius + 56
+        ov = self.overlay if self.overlay is not None and len(self.overlay) == n else None
+        for i in range(MAX_AXES):
+            e2, d2 = self._edges2[i], self._dots2[i]
+            if ov is None or i >= n or n < 3:
+                e2.opacity = d2.opacity = 0
+                continue
+            f = max(0.0, min(100.0, ov[i])) / 100.0
+            f2 = max(0.0, min(100.0, ov[(i + 1) % n])) / 100.0
+            e2.x, e2.y = self.point(i, n, f)
+            e2.x2, e2.y2 = self.point((i + 1) % n, n, f2)
+            d2.x, d2.y = e2.x, e2.y
+            e2.opacity = d2.opacity = 230
         for k, ring in enumerate(self._rings):
             for i, ln in enumerate(ring):
                 if i < n and n >= 3:

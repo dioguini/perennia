@@ -260,7 +260,15 @@ def blocks_mins(blocks, sport: str, bounds=None) -> dict:
         lo = getattr(b, "lo", None)
         if secs <= 0:
             continue
-        pct = 70.0 if lo is None else b.mid()
+        if lo is None:                   # livre: um sprint curto conta como esforço máximo
+            try:
+                from .blocks import effective_pct
+                pct = effective_pct(b)
+            except Exception:
+                pct = 70.0
+            pct = 70.0 if pct == 50.0 else pct
+        else:
+            pct = b.mid()
         z = sum(1 for x in bounds if pct >= x)
         _add(acc, POWER_ZONE_AXIS[min(z, len(POWER_ZONE_AXIS) - 1)], secs / 60.0)
     return acc
