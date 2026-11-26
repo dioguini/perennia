@@ -66,44 +66,63 @@ def seed_rides(db, n: int = 30) -> None:
 
 
 class TestGarminPassword(unittest.TestCase):
-    """A palavra-passe do Garmin só existe na memória; durante a execução vai para um ficheiro
-    temporário privado (referido por `password_file`) e tudo é desfeito no fim."""
+    """A palavra-passe do Garmin é pedida a cada sincronização e não fica em lado nenhum: durante
+    a execução vai para um ficheiro temporário privado em `data/garmin/config` (referido por
+    `password_file`) e tudo é desfeito no fim (ronda 29)."""
 
     def setUp(self):
+        from perennia.core import folders
+        self._root = folders._ROOT
         self.tmp = Path(tempfile.mkdtemp())
+        self.data = self.tmp / "data"
+        folders.set_root(self.data)
         self.db = Database(self.tmp / "p.db")
-        self.cfg_dir = self.tmp / "cfg"
-        self.cfg_dir.mkdir()
-        self.db.set("garmindb_config_dir", str(self.cfg_dir))
+        self.cfg_dir = folders.garmin_config_dir()
         self.path = garmin_sync.config_path(self.db)
-        garmin_sync.set_session_password(None)
-        os.environ.pop(garmin_sync.ENV_PASSWORD, None)
 
     def tearDown(self):
-        garmin_sync.set_session_password(None)
-        os.environ.pop(garmin_sync.ENV_PASSWORD, None)
+        from perennia.core import folders
+        folders._ROOT = self._root
+        os.environ.pop("PERENNIA_GARMIN_PASSWORD", None)
 
     def all_text(self) -> str:
         return "\n".join(p.read_text(encoding="utf-8", errors="ignore")
-                         for p in self.cfg_dir.rglob("*") if p.is_file())
+                         for p in self.tmp.rglob("*") if p.is_file())
 
-    def test_write_credentials_never_stores_the_password(self):
-        garmin_sync.write_credentials(self.path, "daniel", SECRET)
-        self.assertNotIn(SECRET, self.all_text())
-        self.assertEqual(garmin_sync.credentials(self.path), ("daniel", True))
-        self.assertEqual(garmin_sync.password_source(self.path), "session")
-        # outra escrita (com o ficheiro já a existir) cria o .bak, também sem a palavra-passe
-        garmin_sync.write_credentials(self.path, "daniel2", SECRET)
-        self.assertTrue(self.path.with_name(self.path.name + ".bak").exists())
-        self.assertNotIn(SECRET, self.all_text())
+    def run_download(self, password, runner=None):
+        opts = garmin_sync.Options(stats=["activities"])
+        opts.download = True
+        from perennia.core import importers
+        orig = importers.garmindb_cli
+        importers.garmindb_cli = lambda: "/usr/bin/garmindb_cli.py"
 
-    def test_environment_variable_wins(self):
+        def ok_runner(cmd, **kw):
+            class R:
+                returncode, stdout, stderr = 0, "ok", ""
+            return R()
+        try:
+            return garmin_sync.run_garmindb(self.db, opts, runner=runner or ok_runner,
+                                            password=password)
+        finally:
+            importers.garmindb_cli = orig
+
+    def test_config_lives_in_data_garmin_and_has_only_the_user(self):
+        self.assertEqual(self.path.parent, self.data / "garmin" / "config")
         garmin_sync.write_credentials(self.path, "daniel")
-        os.environ[garmin_sync.ENV_PASSWORD] = SECRET
-        self.assertEqual(garmin_sync.password_source(self.path), "env")
+        self.assertEqual(garmin_sync.credentials(self.path), ("daniel", True))
+        cfg = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertEqual(cfg["credentials"]["password"], "")
+        self.assertIsNone(cfg["credentials"]["password_file"])
+        self.assertFalse(cfg["directories"]["relative_to_home"])
+        self.assertEqual(Path(cfg["directories"]["base_dir"]),
+                         (self.data / "garmin" / "bases").resolve())
+        # outra escrita (com o ficheiro já a existir) cria o .bak
+        garmin_sync.write_credentials(self.path, "daniel2")
+        self.assertTrue(self.path.with_name(self.path.name + ".bak").exists())
+        self.assertEqual(garmin_sync.credentials(self.path)[0], "daniel2")
 
     def test_run_uses_a_private_file_and_cleans_up(self):
-        garmin_sync.write_credentials(self.path, "daniel", SECRET)
+        garmin_sync.write_credentials(self.path, "daniel")
         seen = {}
 
         def fake_runner(cmd, **kw):
@@ -118,42 +137,81 @@ class TestGarminPassword(unittest.TestCase):
             class R:
                 returncode, stdout, stderr = 0, "ok", ""
             return R()
-
-        opts = garmin_sync.Options(stats=["activities"])
-        opts.download = True
-        from perennia.core import importers
-        orig = importers.garmindb_cli
-        importers.garmindb_cli = lambda: "/usr/bin/garmindb_cli.py"
-        try:
-            ok, _out = garmin_sync.run_garmindb(self.db, opts, runner=fake_runner)
-        finally:
-            importers.garmindb_cli = orig
+        ok, _out = self.run_download(SECRET, fake_runner)
         self.assertTrue(ok)
         self.assertEqual(seen["content"], SECRET)                # o ficheiro tinha-a…
         self.assertFalse(seen["config_has_secret"])              # …mas a configuração não
         self.assertNotIn(SECRET, " ".join(seen["cmd"]))          # nem a linha de comandos
+        self.assertIn(str(self.cfg_dir), seen["cmd"])            # -f data/garmin/config
+        self.assertEqual(seen["file"].parent.parent, self.cfg_dir)   # dentro de data/garmin
         if os.name == "posix":
             self.assertEqual(seen["mode"], 0o600)
         self.assertFalse(seen["file"].exists())                  # e o ficheiro desapareceu
+        self.assertFalse(seen["file"].parent.exists())
         cfg = json.loads(self.path.read_text(encoding="utf-8"))
         self.assertIsNone(cfg["credentials"]["password_file"])
+        self.assertNotIn(SECRET, self.all_text())                # em lado nenhum
+
+    def test_the_file_goes_away_even_when_garmindb_fails(self):
+        garmin_sync.write_credentials(self.path, "daniel")
+
+        def boom(cmd, **kw):
+            raise RuntimeError("caiu")
+        ok, _out = self.run_download(SECRET, boom)
+        self.assertFalse(ok)
+        self.assertEqual([p for p in self.cfg_dir.iterdir() if p.is_dir()], [])
         self.assertNotIn(SECRET, self.all_text())
 
     def test_run_without_password_explains_what_is_missing(self):
         garmin_sync.write_credentials(self.path, "daniel")
         with self.assertRaises(garmin_sync.PasswordMissing):
-            with garmin_sync.password_for_run(self.db):
+            with garmin_sync.password_for_run(self.db, None):
                 pass
+        ok, out = self.run_download(None)
+        self.assertFalse(ok)
+        self.assertIn("palavra-passe", out)
 
-    def test_legacy_plain_password_is_scrubbed_and_adopted(self):
+    def test_a_password_written_in_the_config_is_removed_and_not_used(self):
         cfg = garmin_sync.new_config()
         cfg["credentials"].update(user="daniel", password=SECRET)
         self.path.write_text(json.dumps(cfg), encoding="utf-8")
         self.path.with_name(self.path.name + ".bak").write_text(json.dumps(cfg),
                                                                 encoding="utf-8")
-        garmin_sync.adopt_legacy_password(self.path)
+        ok, _out = self.run_download(None)
+        self.assertFalse(ok)                                     # não a usa: pede-a
         self.assertNotIn(SECRET, self.all_text())                # saiu do ficheiro e do .bak
-        self.assertEqual(garmin_sync.session_password(), SECRET)  # e ficou na memória
+
+    def test_no_environment_variable_and_no_memory(self):
+        self.assertFalse(hasattr(garmin_sync, "ENV_PASSWORD"))
+        self.assertFalse(hasattr(garmin_sync, "set_session_password"))
+        garmin_sync.write_credentials(self.path, "daniel")
+        os.environ["PERENNIA_GARMIN_PASSWORD"] = SECRET          # já não serve para nada
+        ok, _out = self.run_download(None)
+        self.assertFalse(ok)
+
+    def test_interactive_login_runs_attached_and_cleans_up(self):
+        garmin_sync.write_credentials(self.path, "daniel")
+        seen = {}
+
+        def call(cmd, **kw):
+            seen["cmd"] = cmd
+            pf = Path(json.loads(self.path.read_text("utf-8"))["credentials"]["password_file"])
+            seen["file"] = pf
+            seen["had"] = pf.read_text("utf-8") == SECRET
+            return 0
+        from perennia.core import importers
+        orig = importers.garmindb_cli
+        importers.garmindb_cli = lambda: "/usr/bin/garmindb_cli"
+        try:
+            code = garmin_sync.interactive_login(self.db, SECRET, call=call)
+        finally:
+            importers.garmindb_cli = orig
+        self.assertEqual(code, 0)
+        self.assertTrue(seen["had"])
+        self.assertEqual(seen["cmd"][1:3], ["-f", str(self.cfg_dir)])
+        self.assertIn("--download", seen["cmd"])
+        self.assertFalse(seen["file"].exists())
+        self.assertNotIn(SECRET, self.all_text())
 
     def test_timeout_comes_from_the_option(self):
         self.assertEqual(garmin_sync.SYNC_TIMEOUT_S, options.BY_KEY[
@@ -611,12 +669,11 @@ class TestAdHocCsv(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in folder.iterdir()),
                          ["dados-2.csv", "dados.csv", "sem-bom.csv"])
 
-    def test_export_dir_option(self):
+    def test_export_dir_is_data_out_relatorios(self):
         db = Database(Path(tempfile.mkdtemp()) / "e.db")
         data = Path(tempfile.mkdtemp())
-        self.assertEqual(adhoc.export_dir(db, data), data / "exports")
-        db.set("adhoc_export_dir", str(data / "meus"))
-        self.assertEqual(adhoc.export_dir(db, data), data / "meus")
+        self.assertEqual(adhoc.export_dir(db, data), data / "out" / "relatorios")
+        self.assertNotIn("adhoc_export_dir", options.BY_KEY)      # já não é configurável
 
 
 # ============================================================================ AdHoc (ecrã)
@@ -831,8 +888,7 @@ class TestAdHocExport(AdHocCase):
         scr.spec.fields = ["date", "name", "distance_km"]
         scr._touch()
         scr.enter()
-        folder = Path(tempfile.mkdtemp())
-        self.app.db.set("adhoc_export_dir", str(folder))
+        folder = Path(self.app.data_dir) / "out" / "relatorios"
         self.row(scr, "Exportar").action()
         pop = self.screen()
         self.assertIsInstance(pop, ads.AdHocExportPopup)
@@ -850,8 +906,7 @@ class TestAdHocExport(AdHocCase):
 
     def test_chart_numbers_can_be_exported_too(self):
         scr = self.open_adhoc()
-        folder = Path(tempfile.mkdtemp())
-        self.app.db.set("adhoc_export_dir", str(folder))
+        folder = Path(self.app.data_dir) / "out" / "relatorios"
         self.row(scr, "Exportar").action()
         pop = self.screen()
         pop.what = "chart"
@@ -863,8 +918,7 @@ class TestAdHocExport(AdHocCase):
 
     def test_path_in_the_name_cannot_escape_the_folder(self):
         scr = self.open_adhoc()
-        folder = Path(tempfile.mkdtemp()) / "ex"
-        self.app.db.set("adhoc_export_dir", str(folder))
+        folder = Path(self.app.data_dir) / "out" / "relatorios"
         self.row(scr, "Exportar").action()
         pop = self.screen()
         pop.name = "../../fora"
@@ -941,8 +995,6 @@ class TestAdvancedSettings(tg.GuiCase):
         scr = self.open_advanced()
         labels = {i.label for i in scr.list.items}
         for o in options.OPTIONS:
-            if o.group == "paths":              # as pastas têm o seu separador (Definições → Pastas)
-                continue
             self.assertIn(o.label, labels, o.key)
 
     def test_arrows_change_and_save_applies_to_the_code(self):
@@ -980,11 +1032,11 @@ class TestAdvancedSettings(tg.GuiCase):
         self.assertIsNotNone(item.dropdown)
         self.press(key.RIGHT)
         self.assertEqual(scr.draft["adhoc_csv_sep"], ",")
-        self.row(scr, "pasta das exportações")
-        scr.on_text("/tmp/xyz")
-        self.assertEqual(scr.draft["adhoc_export_dir"], "/tmp/xyz")
-        scr.text_backspace("opt_adhoc_export_dir")
-        self.assertEqual(scr.draft["adhoc_export_dir"], "/tmp/xy")
+        self.row(scr, "Moeda do custo")
+        scr.on_text("X")
+        self.assertEqual(scr.draft["agent_currency"], "US$X")
+        scr.text_backspace("opt_agent_currency")
+        self.assertEqual(scr.draft["agent_currency"], "US$")
 
     def test_cancel_discards(self):
         scr = self.open_advanced()

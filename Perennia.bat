@@ -4,7 +4,7 @@ rem  Perennia - abre a aplicacao SEM o PyCharm (Windows).
 rem
 rem  Duplo clique neste ficheiro. Usa o ambiente virtual do projeto (.venv ou
 rem  venv) e abre sem a janela preta da consola. Se algo correr mal, o erro
-rem  fica em perennia-erro.log, na pasta dos dados (%APPDATA%\Perennia).
+rem  fica em perennia-erro.log, na pasta dos dados (data\, aqui ao lado).
 rem ==========================================================================
 cd /d "%~dp0"
 
@@ -29,7 +29,7 @@ exit /b 0
 :semvenv
 echo.
 echo Nao encontrei o ambiente virtual do projeto (.venv).
-echo Cria-o uma vez (ver RUN.md, seccao 2) ou usa o PyCharm para o criar:
+echo Corre primeiro o perennia_setup.bat (cria-o e prepara tudo), ou cria-o a mao:
 echo     python -m venv .venv
 echo     .venv\Scripts\python -m pip install -r requirements.txt
 echo.

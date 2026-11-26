@@ -304,17 +304,7 @@ class TestManualUpload(tg.GuiCase):
 class TestResultsAndExport(tg.GuiCase):
     def setUp(self):
         super().setUp()
-        import tempfile
-        self.dl = tempfile.mkdtemp()
-        import os
-        os.environ["PERENNIA_DOWNLOADS"] = self.dl
-
-    def tearDown(self):
-        import os
-        import shutil
-        os.environ.pop("PERENNIA_DOWNLOADS", None)
-        shutil.rmtree(self.dl, ignore_errors=True)
-        super().tearDown()
+        self.dl = str(Path(self.tmp) / "out" / "treinos")      # data/out/treinos
 
     def _test_id(self, sport: str) -> int:
         from perennia.core import fitness_tests as ft
@@ -392,7 +382,7 @@ class TestResultsAndExport(tg.GuiCase):
         if not out.exists():                        # o nome é limpo para o sistema de ficheiros
             out = next(Path(self.dl).glob("*.txt"))
         self.assertIn(w["name"], out.read_text(encoding="utf-8"))
-        self.assertIn(self.dl, self.app._message)   # a mensagem diz onde ficou
+        self.assertIn(str(out.parent), self.app._message)   # a mensagem diz onde ficou
         # cancelar também volta aos detalhes
         self.pick("Exportar")
         self.press(key.ESCAPE)

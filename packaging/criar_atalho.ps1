@@ -12,7 +12,7 @@ if (Test-Path $exe) {
     if (-not (Test-Path $target)) { $target = Join-Path $root "venv\Scripts\pythonw.exe" }
     if (-not (Test-Path $target)) {
         Write-Host "Nao encontrei o ambiente virtual do projeto (.venv)."
-        Write-Host "Cria-o primeiro (RUN.md, seccao 2) ou faz o build (build_windows.bat)."
+        Write-Host "Corre primeiro o perennia_setup.bat ou faz o build (build_windows.bat)."
         exit 1
     }
     $args = '"' + (Join-Path $root "main.py") + '"'

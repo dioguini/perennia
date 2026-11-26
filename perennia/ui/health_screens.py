@@ -1481,7 +1481,9 @@ class MarkerHistoryScreen(EditScreen):
 
 
 class ImportScreen(Screen):
-    FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", ".")
+    """Importar análises (.xlsx/.csv), o .csv do HRV4Training ou um .csv com uma coluna de data.
+    Só procura nas pastas `data/in` desses tipos: analises, hrv4training e csv."""
+    FOLDERS = ("labs", "hrv4training", "csv")
     PATTERNS = ("*.csv", "*.json", "*.xlsx", "*.xlsm")
 
     def __init__(self, app, patterns: tuple | None = None):
@@ -1490,14 +1492,11 @@ class ImportScreen(Screen):
         self.patterns = patterns or self.PATTERNS
 
     def folders(self) -> list[Path]:
-        out = list(self.app.folder_list("imports"))
-        for f in self.FOLDERS:
-            out.append(Path(os.path.expanduser(f)))
-        return out
+        return [self.app.in_dir(k) for k in self.FOLDERS]
 
     def enter(self) -> None:
         a = self.app
-        a.folder("imports", create=True)
+        from perennia.core import folders as _f
         found: list[Path] = []
         for folder in dict.fromkeys(self.folders()):
             if folder.is_dir():
@@ -1517,22 +1516,25 @@ class ImportScreen(Screen):
                 tr("Análises (Excel)", "Labs (Excel)") if suf in (".xlsx", ".xlsm") else
                 "HRV4Training" if "hrv" in p.name.lower() or "measurement" in p.name.lower()
                 else "CSV")
-            rows.append(Item(p.name, value=kind, detail=str(p.parent),
+            rows.append(Item(p.name, value=kind, detail=_f.shown(p.parent, a.data_dir),
                              action=lambda q=p: self._import(q)))
         if len(rows) == n_fixed:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
                              detail=tr("Põe os ficheiros em {p}", "Put the files in {p}",
-                                       p=a.folder("imports"))))
+                                       p=" · ".join(_f.shown(f, a.data_dir)
+                                                    for f in self.folders()))))
         rows += [
             Item(tr("Como exportar do HRV4Training", "How to export from HRV4Training"),
                  detail=tr("Na app: exportar as medições (CSV) para o Google Drive; descarrega "
-                           "o ficheiro para Transferências.",
-                           "In the app: export measurements (CSV) to Google Drive; download it."),
+                           "o ficheiro e põe-no em data/in/hrv4training.",
+                           "In the app: export measurements (CSV) to Google Drive; download it "
+                           "and put it in data/in/hrv4training."),
                  enabled=False),
             Item(tr("Como exportar do Garmin", "How to export from Garmin"),
                  detail=tr("Garmin Connect (web): Gestão de dados → Exportar dados; descompacta "
-                           "e põe os JSON diários na pasta imports.",
-                           "Garmin Connect (web): Data Management → Export; unzip into imports."),
+                           "e põe os JSON diários em data/in/csv.",
+                           "Garmin Connect (web): Data Management → Export; unzip the daily "
+                           "JSON files into data/in/csv."),
                  enabled=False),
         ]
         self.chrome.set(tr("Importar dados", "Import data"),

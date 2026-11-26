@@ -8,8 +8,13 @@ dist/
 *.spec.bak
 build.sh.bak
 
-# ficheiros que os testes escrevem na pasta de trabalho
-strength/
+# OS TEUS DADOS: a base de dados, as sessões, os backups, o GarminDB… tudo em data/ (ver
+# perennia/core/folders.py). Nunca vão para o git. Os modelos que a Perennia copia para
+# data/in na primeira vez vêm de modelos/ (esses sim, no git).
+/data/
+
+# ficheiros que versões antigas dos testes escreviam na pasta de trabalho
+/strength/
 
 # pasta do Claude Code (definições locais, memória e permissões do assistente)
 .claude/
@@ -25,8 +30,9 @@ strength/
 *.sqlite
 *.sqlite3
 GarminConnectConfig.json*
+garmin_tokens.json
 .GarminDb/
-backups/
+/backups/
 
 # ficheiros pessoais do PyCharm (o resto de .idea/ fica, é só configuração do projeto)
 .idea/workspace.xml
@@ -38,5 +44,5 @@ backups/
 
 # sessões gravadas e exportações pessoais (dados teus, não código)
 *.fit
-exports/
-rides/
+/exports/
+/rides/

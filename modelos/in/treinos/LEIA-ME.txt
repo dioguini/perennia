@@ -1,0 +1,4 @@
+Põe aqui os treinos a importar:
+- ciclismo, remo, corrida e natação: .zwo (Zwift), .erg, .mrc (TrainerRoad, PerfPRO) ou .fit;
+- ginásio: .csv, .json, .txt ou .fit.
+A Perennia encontra-os em «Carregar do computador» / «Importar treino» de cada desporto.

@@ -64,6 +64,8 @@ class GuiCase(unittest.TestCase):
         except Exception:
             pass
         shutil.rmtree(self.tmp, ignore_errors=True)
+        from perennia.core import folders        # a pasta de dados volta à dos testes
+        folders._ROOT = None
 
     # auxiliares -----------------------------------------------------------
 

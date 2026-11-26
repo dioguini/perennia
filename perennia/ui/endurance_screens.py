@@ -361,7 +361,7 @@ class EnduranceSession(FinishFlow, ArrangedPanels, Screen):
             app.db, app.db.athlete(), cfg.get("sport", sport), sensors=app.hub,
             workout_id=workout_id or cfg.get("workout_id"),
             autolap=autolap if resume is None else cfg.get("autolap"),
-            pool_m=cfg.get("pool_m", pool_m), out_dir=app.data_dir / "endurance", resume=resume,
+            pool_m=cfg.get("pool_m", pool_m), out_dir=_session_dir(app, cfg.get("sport", sport)), resume=resume,
             route_id=route_id)
         if self.engine.sport == "running" and getattr(app, "treadmill", None) is not None:
             self.engine.treadmill = app.treadmill       # a passadeira simulada ou real
@@ -1004,3 +1004,9 @@ def _pretty(name) -> str:
 def _feedback():
     from perennia.ui import feedback_screens
     return feedback_screens
+
+
+def _session_dir(app, sport: str):
+    """`data/out/sessoes/corrida` ou `…/natacao`: onde fica o .fit da sessão."""
+    from perennia.core import folders
+    return folders.session_dir(sport, app.data_dir)

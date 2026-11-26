@@ -1126,10 +1126,10 @@ def RouteLibrary(app: "App"):            # noqa: N802 — compatibilidade
 
 
 class GpxPicker(Screen):
-    """Procura ficheiros .gpx em pastas prováveis; sem dependências de diálogo."""
+    """Os .gpx de `data/in/gpx` (só essa pasta; arrastar um ficheiro para a janela continua a
+    funcionar com um .gpx de qualquer sítio)."""
 
-    SEARCH = ("gpx", ".", "~/Downloads", "~/Documents", "~/Transferências",
-              "~/Área de Trabalho", "~/Desktop")
+    LIMIT = 200
 
     def __init__(self, app: "App", on_pick: Callable | None = None):
         super().__init__(app)
@@ -1137,29 +1137,25 @@ class GpxPicker(Screen):
 
     def enter(self) -> None:
         a = self.app
-        found: list[Path] = []
-        seen = set()
-        folders = [str(p) for p in paths.user_folder("gpx")] + list(self.SEARCH)
-        for folder in folders:
-            base = Path(os.path.expanduser(folder))
-            if not base.is_dir():
-                continue
-            try:
-                for p in sorted(base.glob("*.gpx"))[:40]:
-                    if p.resolve() not in seen:
-                        seen.add(p.resolve())
-                        found.append(p)
-            except OSError:
-                continue
-        items = [Item(p.name, value=str(p.parent),
-                      action=lambda q=p: self._import(q)) for p in found]
+        base = a.in_dir("gpx")
+        try:
+            found = sorted((p for p in base.iterdir()
+                            if p.is_file() and p.suffix.lower() == ".gpx"),
+                           key=lambda p: p.name.lower())[:self.LIMIT]
+        except OSError:
+            found = []
+        from perennia.core import folders as _f
+        items = [Item(p.name, action=lambda q=p: self._import(q)) for p in found]
         if not items:
-            items = [Item("Nenhum .gpx encontrado",
-                          detail="Põe ficheiros .gpx na pasta 'gpx' ao lado da "
-                                 "aplicação, ou em Downloads, e volta a abrir.",
+            items = [Item(tr("Nenhum .gpx encontrado", "No .gpx found"),
+                          detail=tr("Põe os ficheiros .gpx em {p} e volta a abrir (ou "
+                                    "arrasta um .gpx para a janela).",
+                                    "Put the .gpx files in {p} and open this again (or drag "
+                                    "a .gpx onto the window).", p=_f.shown(base, a.data_dir)),
                           enabled=False)]
-        self.chrome.set(t("lib.import_gpx"), f"{len(found)} ficheiros encontrados",
-                        self.footer())
+        self.chrome.set(t("lib.import_gpx"),
+                        tr("{n} ficheiros em {p}", "{n} files in {p}", n=len(found),
+                           p=_f.shown(base, a.data_dir)), self.footer())
         self.list.set_items(items)
 
     def _import(self, path: Path) -> None:
@@ -2798,11 +2794,10 @@ class SettingsScreen(Screen):
         for k, v in draft.items():
             if not k.startswith("@") and k not in ("theme", "display"):
                 db.set(k, v)
-        if "@garmin_user" in draft or "@garmin_password" in draft:
+        if "@garmin_user" in draft:
             from perennia.core import garmin_sync as gsync
             try:
-                gsync.write_credentials(gsync.config_path(db), draft.get("@garmin_user"),
-                                        draft.get("@garmin_password"))
+                gsync.write_credentials(gsync.config_path(db), draft.get("@garmin_user"))
             except OSError as e:
                 a.message(f"{t('common.error')}: {e}")
         if "units" in draft:
@@ -2888,16 +2883,6 @@ class SettingsScreen(Screen):
         if want != self.app.msaa_samples:
             text += " · " + t("set.msaa_restart")
         return text
-
-    def _garmin_pw_state(self, has_pw: bool) -> str:
-        from perennia.core import garmin_sync as gsync
-        src = gsync.password_source(gsync.config_path(self.app.db))
-        return {"env": tr("(variável de ambiente)", "(environment variable)"),
-                "session": tr("(só em memória)", "(memory only)"),
-                "keyring": tr("(cofre do sistema)", "(system keyring)"),
-                "file": tr("(ficheiro do GarminDB)", "(GarminDB file)"),
-                "config": tr("(em claro no ficheiro: sai ao sincronizar)",
-                             "(plain text in the file: removed on sync)")}.get(src, "")
 
     def _rows(self) -> dict[str, Item]:
         a = self.app
@@ -3010,20 +2995,17 @@ class SettingsScreen(Screen):
                                 detail=tr("o email da tua conta Garmin", "your Garmin account email"),
                                 data="text:garmin_user"),
             "garmin_password": Item(tr("Palavra-passe do Garmin Connect", "Garmin Connect password"),
-                                    value=("•" * len(pw) if pw is not None else
-                                           self._garmin_pw_state(has_pw)) + "▏",
-                                    detail=tr("nunca é gravada: fica só em memória até fechares a "
-                                              "Perennia. Para não a escreveres sempre, define a "
-                                              f"variável de ambiente {gsync.ENV_PASSWORD}",
-                                              "never saved: kept in memory until you close "
-                                              "Perennia. To avoid typing it every time, set the "
-                                              f"{gsync.ENV_PASSWORD} environment variable"),
-                                    data="text:garmin_password"),
+                                    value=tr("pedida a cada sincronização", "asked at each sync"),
+                                    enabled=False,
+                                    detail=tr("nunca é gravada em lado nenhum: escreves-a quando "
+                                              "sincronizas e é esquecida no fim",
+                                              "never saved anywhere: you type it when you sync "
+                                              "and it is forgotten at the end")),
             "garmin_cfg": Item(tr("Configuração do GarminDB", "GarminDB config"),
-                               value=str(gsync.config_path(a.db)), enabled=False,
-                               detail=tr("criada ao guardar, se ainda não existir (cópia .bak, sempre "
-                                         "sem palavra-passe)",
-                                         "created on save if missing (.bak copy, always "
+                               value=_folders_shown(gsync.config_path(a.db), a.data_dir),
+                               enabled=False,
+                               detail=tr("criada ao guardar, se ainda não existir (sempre sem "
+                                         "palavra-passe)", "created on save if missing (always "
                                          "without the password)")),
             "run_pace": Item(tr("Ritmo de limiar (corrida)", "Threshold pace (running)"),
                              value=hms(float(self.get("run_threshold_pace_s", 300))) + " /km",
@@ -3112,8 +3094,8 @@ class SettingsScreen(Screen):
         elif group == ("@paths",):
             from perennia.ui import option_screens
             items = option_screens.path_items(self)
-            foot = tr("Escreve o caminho · vazio = a pasta de sempre · Ctrl+S guardar",
-                      "Type the path · empty = the usual folder · Ctrl+S save")
+            foot = tr("Pastas fixas, dentro de data/: põe em data/in o que queres importar",
+                      "Fixed folders inside data/: put what you want to import in data/in")
         elif group == ("@options",):
             from perennia.ui import option_screens
             items = option_screens.items(self)
@@ -3461,8 +3443,6 @@ class SettingsScreen(Screen):
             if cur is None:
                 cur = gsync.credentials(gsync.config_path(self.app.db))[0]
             self.put("@garmin_user", (cur + text)[:120])
-        elif field == "garmin_password":
-            self.put("@garmin_password", ((self.get("@garmin_password", None) or "") + text)[:120])
         elif field.startswith("opt_"):
             if not _options_ui().text_input(self, field, text):
                 return
@@ -3479,12 +3459,6 @@ class SettingsScreen(Screen):
             if cur is None:
                 cur = gsync.credentials(gsync.config_path(self.app.db))[0]
             self.put("@garmin_user", cur[:-1])
-        elif field == "garmin_password":
-            cur = self.get("@garmin_password", None) or ""
-            if cur[:-1]:
-                self.put("@garmin_password", cur[:-1])
-            else:
-                self.draft.pop("@garmin_password", None)
         elif field.startswith("opt_"):
             if not _options_ui().text_backspace(self, field):
                 return
@@ -3938,7 +3912,6 @@ class BoxEditor(Screen):
 
 
 class WorkoutLibrary(Screen):
-    SEARCH = ("workouts", ".", "~/Downloads", "~/Documents")
     HAS_BOARD = True
 
     def side_board(self):
@@ -3961,20 +3934,21 @@ class WorkoutLibrary(Screen):
 
     def _scan_files(self) -> None:
         a = self.app
+        base = a.in_dir("workouts")
         found: list[Path] = []
-        folders = [str(p) for p in paths.user_folder("workouts")] + list(self.SEARCH)
-        for folder in dict.fromkeys(folders):
-            base = Path(os.path.expanduser(folder))
-            if base.is_dir():
-                for pattern in ("*.zwo", "*.mrc", "*.erg"):
-                    found.extend(sorted(base.glob(pattern))[:25])
-        items = [Item(p.name, value=str(p.parent),
-                      action=lambda q=p: self._import(q)) for p in found]
+        if base.is_dir():
+            for pattern in ("*.zwo", "*.mrc", "*.erg"):
+                found.extend(sorted(base.glob(pattern))[:50])
+        from perennia.core import folders as _f
+        items = [Item(p.name, action=lambda q=p: self._import(q)) for p in found]
         if not items:
-            items = [Item("Nenhum treino encontrado",
-                          detail="Põe ficheiros .zwo, .mrc ou .erg na pasta "
-                                 "'workouts' ao lado da aplicação.", enabled=False)]
-        self.chrome.set(t("wk.import"), f"{len(found)} ficheiros", self.footer())
+            items = [Item(tr("Nenhum treino encontrado", "No workout found"),
+                          detail=tr("Põe ficheiros .zwo, .mrc ou .erg em {p}.",
+                                    "Put .zwo, .mrc or .erg files in {p}.",
+                                    p=_f.shown(base, a.data_dir)), enabled=False)]
+        self.chrome.set(t("wk.import"), tr("{n} ficheiros em {p}", "{n} files in {p}",
+                                           n=len(found), p=_f.shown(base, a.data_dir)),
+                        self.footer())
         self.list.set_items(items)
 
     def _already_there(self, wk) -> bool:
@@ -4738,10 +4712,15 @@ class StatsScreen(Screen):
 class App:
     def __init__(self, data_dir: Path | None = None, width: int | None = None,
                  height: int | None = None, fullscreen: bool | None = None):
+        # tudo numa só pasta: <projeto>/data (ver perennia.core.folders); na primeira vez com a
+        # organização nova, os dados da pasta antiga do sistema são copiados para lá
+        import os as _os
+        explicit = data_dir is not None or bool(_os.environ.get("PERENNIA_DATA_DIR"))
         self.data_dir = Path(data_dir or _default_data_dir())
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.rides_dir = self.data_dir / "rides"
-        self.rides_dir.mkdir(exist_ok=True)
+        from perennia import datadir as _dd
+        self.migration = _dd.prepare(self.data_dir, migrate=not explicit)
+        from perennia.core import folders as _folders
+        self.rides_dir = _folders.session_dir("cycling", self.data_dir)
 
         self.db = Database(_database_path(self.data_dir))
         opt_mod.apply(self.db)                     # as opções afináveis (Definições → Avançado)
@@ -4859,6 +4838,12 @@ class App:
         self._unarchive_once()
         if aborted:
             self.message(f"{aborted} sessão(ões) incompleta(s) foram encerradas")
+        mig = self.migration or {}
+        if mig.get("from"):                   # 1.ª vez com data/: os dados antigos copiados
+            self.message(tr("Os teus dados foram copiados para {p} (os originais ficaram em "
+                            "{o}; ver MIGRADO.txt)",
+                            "Your data was copied to {p} (the originals stay in {o}; see "
+                            "MIGRADO.txt)", p=str(self.data_dir), o=mig["from"]))
         if self.db.checkpoints():
             # a aplicação fechou a meio de uma sessão: perguntar o que fazer
             from perennia.ui.sport_screens import RecoveryScreen
@@ -5115,19 +5100,15 @@ class App:
         return cues.CueTracker(cues.rules(self.db), self.beeper.beep,
                                on=cues.enabled(self.db), long_at_end=cues.end_beep(self.db))
 
-    def folder(self, key: str, create: bool = False) -> Path:
-        """A pasta de `exports`, `imports`, `backups` ou `workouts` (Definições → Pastas).
-        Com `create`, cria-a (se não der, usa a de sempre)."""
+    def in_dir(self, key: str) -> Path:
+        """`data/in/<pasta>`: onde se procuram os ficheiros a importar (ver core.folders)."""
         from perennia.core import folders
-        if create:
-            return folders.ensure_dir(self.db, self.data_dir, key)
-        return folders.resolve(self.db, self.data_dir, key)
+        return folders.in_dir(key, self.data_dir)
 
-    def folder_list(self, key: str) -> list[Path]:
-        """A pasta escolhida e a de sempre (sem repetir): onde procurar ficheiros."""
+    def out_dir(self, key: str) -> Path:
+        """`data/out/<pasta>`: onde se grava o que se exporta (ver core.folders)."""
         from perennia.core import folders
-        out = [folders.resolve(self.db, self.data_dir, key), folders.default(self.data_dir, key)]
-        return list(dict.fromkeys(out))
+        return folders.out_dir(key, self.data_dir)
 
     def message(self, text: str) -> None:
         self._message = text
@@ -5850,6 +5831,11 @@ def _layouts():
 
 
 from perennia.datadir import database_path as _database_path  # noqa: E402
+
+
+def _folders_shown(p, data_dir) -> str:
+    from perennia.core import folders
+    return folders.shown(p, data_dir)
 from perennia.datadir import default_data_dir as _default_data_dir  # noqa: E402
 
 

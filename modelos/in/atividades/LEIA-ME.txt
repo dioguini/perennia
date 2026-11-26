@@ -1,0 +1,2 @@
+Põe aqui uma atividade (.fit ou .tcx) para o Upload manual
+(Backups e Sincronização → Sincronização → Upload manual).

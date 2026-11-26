@@ -292,7 +292,7 @@ class TestPowerBI(Base):
                                       "Colesterol HDL": "45"})
         m = powerbi.export(db, d)
         folder = Path(m["path"])
-        self.assertEqual(folder.name, "PowerBI")
+        self.assertEqual(folder, Path(d) / "out" / "powerbi")      # data/out/powerbi
         for f in ("Perennia_PowerBI.xlsx", "Perennia.pbids", "Perennia_Medidas_DAX.txt",
                   "Perennia_Amostras.pq", "LEIA-ME.txt"):
             self.assertTrue((folder / f).exists(), f)

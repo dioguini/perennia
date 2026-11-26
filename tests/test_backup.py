@@ -67,7 +67,8 @@ class Base(unittest.TestCase):
         hub = SensorHub()
         hub.add_source(SimulatedTrainer(base_power=230), role="trainer", is_trainer=True)
         e = RideEngine(db, db.athlete(), route_id=rid, points=db.route_points(rid),
-                       climbs=db.climbs(rid), sensors=hub, trainer=hub, rides_dir=d / "rides")
+                       climbs=db.climbs(rid), sensors=hub, trainer=hub,
+                       rides_dir=d / "out" / "sessoes" / "ciclismo")
         for _ in range(600):
             hub.tick(0.5)
             e.update(0.5)
@@ -122,8 +123,8 @@ class TestExportAndRestore(Base):
         self.assertIn("LEIA-ME.txt", names)
         self.assertIn("06-rotas/routes.jsonl", names)
         self.assertIn("11-sessoes/rides.jsonl", names)
-        self.assertTrue(any(n.startswith("11-sessoes/ficheiros/rides/") and n.endswith(".fit")
-                            for n in names))
+        self.assertTrue(any(n.startswith("11-sessoes/ficheiros/out/sessoes/ciclismo/")
+                            and n.endswith(".fit") for n in names))
         self.assertIn("03-atalhos/settings.jsonl", names)
         self.assertFalse(man["secrets"])                         # credenciais: só se pedir
         self.assertFalse(any(n.startswith("18-ligacoes") for n in names))
@@ -138,8 +139,9 @@ class TestExportAndRestore(Base):
         theirs = {r[0] for r in db2.conn.execute("SELECT key FROM settings")}
         self.assertEqual(mine - theirs, {"strava_client_secret"})   # só as credenciais
         fit_path = db2.conn.execute("SELECT fit_path FROM rides").fetchone()[0]
-        self.assertTrue(fit_path.startswith(str(d2)))             # o caminho acompanha
-        self.assertTrue(Path(fit_path).exists())
+        self.assertTrue(fit_path.startswith(str(d2 / "out" / "sessoes" / "ciclismo")))
+        self.assertTrue(Path(fit_path).exists())                  # o caminho acompanha
+        self.assertTrue(Path(rep["safety"]).parent == d2 / "out" / "backups")
         self.assertEqual(db2.get("keymap"), {"pause": ["Q", []]})
         self.assertIsNone(db2.get("strava_client_secret"))
         self.assertEqual(db2.conn.execute("PRAGMA foreign_key_check").fetchall(), [])
@@ -265,7 +267,7 @@ class TestExportAndRestore(Base):
         ns = argparse.Namespace(data_dir=str(d), componentes="rotas,sessoes", modo="substituir",
                                 credenciais=False, backup="", restore=None)
         self.assertEqual(main_mod.backup_cli(ns), 0)
-        made = sorted((d / "backups").glob("perennia-backup_*.zip"))
+        made = sorted((d / "out" / "backups").glob("perennia-backup_*.zip"))
         self.assertEqual(len(made), 1)
         d2 = Path(tempfile.mkdtemp())
         self.dirs.append(d2)
@@ -308,11 +310,15 @@ class TestBackupMenu(tg.GuiCase):
         self.pick("Exportar")
         self.assertEqual(self.screen().title_text, "Backup feito")
         self.press(key.ENTER)
-        made = list((Path(self.tmp) / "backups").glob("*.zip"))
+        made = list((Path(self.tmp) / "out" / "backups").glob("*.zip"))   # data/out/backups
         self.assertEqual(len(made), 1)
         self.assertEqual([c["key"] for c in bk.inspect(made[0])["components"]], ["rotas"])
         # a rota desaparece… e volta com o backup
         self.app.db.delete_route(self.route_id)
+        scr.tab_named("Repor")
+        self.assertNotIn(made[0].name, [i.label for i in self.screen().list.items])
+        import shutil as _sh                              # o Repor só vê data/in/backups
+        _sh.copy2(made[0], Path(self.tmp) / "in" / "backups" / made[0].name)
         scr.tab_named("Repor")
         self.pick(made[0].name)
         pop = self.screen()
@@ -328,10 +334,12 @@ class TestBackupMenu(tg.GuiCase):
         self.press(key.ENTER)
         from perennia.ui.app import HomeScreen
         self.assertIsInstance(self.screen(), HomeScreen)
-        # a cópia de segurança aparece na lista do Repor
+        # a cópia de segurança fica em data/out/backups (o Repor só lista data/in/backups)
+        safety = list((Path(self.tmp) / "out" / "backups").glob("perennia-antes-de-repor*"))
+        self.assertEqual(len(safety), 1)
         self.app.push(bs.BackupScreen(self.app, tab=1))
         names = [i.label for i in self.screen().list.items]
-        self.assertTrue(any(n.startswith("perennia-antes-de-repor") for n in names))
+        self.assertFalse(any(n.startswith("perennia-antes-de-repor") for n in names))
 
     def test_dropping_a_backup_on_the_window_opens_the_restore(self):
         from perennia.ui import backup_screens as bs

@@ -99,7 +99,7 @@ class TestFormat(CoreCase):
     def test_the_template_is_valid_and_matches_the_packaged_file(self):
         t = pg.validate(pl.template_plan())
         self.assertEqual(t["weeks"], 4)
-        root = Path(__file__).resolve().parents[1] / "packaging" / "planos"
+        root = Path(__file__).resolve().parents[1] / "modelos" / "in" / "planos"   # → data/in
         on_disk = json.loads((root / "plano-modelo.perennia-plan.json").read_text("utf-8"))
         self.assertEqual(pg.validate(on_disk), t)
         self.assertEqual((root / "FORMATO-DO-PLANO.md").read_text("utf-8"), pl.FORMAT_DOC)
@@ -818,7 +818,7 @@ class TestPlansUI(tg.GuiCase):
         from perennia.ui import program_screens as ps
         self.app.push(ps.ProgramsScreen(self.app))
         self.pick("Ficheiro modelo")
-        folder = Path(self.app.data_dir) / "planos"
+        folder = Path(self.app.data_dir) / "out" / "planos"       # data/out/planos
         self.assertTrue((folder / "plano-modelo.perennia-plan.json").exists())
         self.assertTrue((folder / "FORMATO-DO-PLANO.md").exists())
         self.app.push(ps.ProgramDetail(self.app, "gzclp"))

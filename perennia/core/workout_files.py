@@ -23,8 +23,14 @@ from .i18n import tr
 
 EXTS = {"cycling": (".zwo", ".mrc", ".erg", ".fit"), "rowing": (".zwo", ".fit"),
         "running": (".zwo", ".fit"), "swimming": (".zwo", ".fit")}
-FOLDERS = ("workouts", ".", "~/Downloads", "~/Documents")
-PER_FOLDER = 25
+PER_FOLDER = 200
+
+
+def default_folders(key: str = "workouts") -> list[str]:
+    """Onde se procuram os ficheiros a importar: só a pasta `data/in/<pasta>` desse tipo
+    (`data/in/treinos` para os treinos). Ver `perennia.core.folders`."""
+    from . import folders
+    return [str(folders.in_dir(key))]
 
 
 @dataclass
@@ -56,12 +62,10 @@ class FileError(ValueError):
 
 
 def scan(sport: str, folders: list[str] | None = None) -> list[Path]:
-    """Os ficheiros de treino nas pastas do costume (a pasta «workouts» ao lado
-    da aplicação, Transferências, Documentos)."""
-    from perennia import paths
+    """Os ficheiros de treino de `data/in/treinos` (ou das pastas dadas)."""
     exts = EXTS.get(sport, ())
     if folders is None:
-        folders = [str(p) for p in paths.user_folder("workouts")] + list(FOLDERS)
+        folders = default_folders("workouts")
     found: list[Path] = []
     for folder in dict.fromkeys(folders):
         base = Path(os.path.expanduser(folder))

@@ -29,8 +29,6 @@ def items(screen) -> list[Item]:
     out: list[Item] = []
     on, off = tr("ligado", "on"), tr("desligado", "off")
     for group in opt_mod.GROUPS:
-        if group == "paths":                    # tem o seu separador (Definições → Pastas)
-            continue
         out.append(Item(opt_mod.group_name(group), header=True))
         for opt in (o for o in opt_mod.OPTIONS if o.group == group):
             value = value_of(screen, opt)
@@ -63,28 +61,37 @@ def items(screen) -> list[Item]:
 
 
 def path_items(screen) -> list[Item]:
-    """O separador «Pastas»: uma linha por pasta, com a que está mesmo a ser usada e se serve."""
+    """O separador «Pastas»: só informação — onde fica cada coisa dentro de `data/` (as pastas
+    são fixas: põe em `data/in/…` o que queres importar e encontras em `data/out/…` o que a
+    Perennia grava)."""
     from perennia.core import folders
-    out = [Item(tr("Onde ficam os ficheiros", "Where files go"), header=True)]
-    for key in folders.KEYS:
-        opt = opt_mod.BY_KEY[folders.OPTION[key]]
-        text = str(value_of(screen, opt))
-        ok, why = folders.check(text)
-        used = (folders.expand_text(text) if text and ok else
-                str(folders.default(screen.app.data_dir, key)))
-        status = ("" if ok else "⚠ ") + why
-        out.append(Item(folders.name(key), value=text + "▏",
-                        detail=f"{opt.hint} · " + tr("em uso: {p}", "in use: {p}", p=used)
-                        + " · " + status,
-                        data=TEXT_PREFIX + opt.key, indent=1))
-    out.append(Item(tr("Dica", "Tip"), header=True))
-    out.append(Item(tr("Podes usar ~ (a tua pasta) e variáveis, por exemplo ~/Dropbox/Perennia.",
-                       "You can use ~ (your home folder) and variables, e.g. ~/Dropbox/Perennia."),
-                    enabled=False))
-    out.append(Item(tr("As alterações só valem depois de Guardar. Os ficheiros que já tens não são "
-                       "movidos: copia-os tu para a pasta nova.",
-                       "Changes apply after Save. Existing files are not moved: copy them to the "
-                       "new folder yourself."), enabled=False))
+    d = screen.app.data_dir
+    out = [Item(tr("A pasta de dados", "The data folder"), header=True),
+           Item(tr("Tudo fica aqui", "Everything is here"), value=str(d), enabled=False,
+                detail=tr("a base de dados (perennia.db) e as pastas abaixo",
+                          "the database (perennia.db) and the folders below"))]
+    out.append(Item(tr("Para importar (põe aqui os ficheiros)", "To import (put files here)"),
+                    header=True))
+    for k in folders.IN:
+        out.append(Item(folders.name_in(k), value=folders.shown(folders.in_dir(k, d), d),
+                        enabled=False, indent=1))
+    out.append(Item(tr("O que a Perennia grava", "What Perennia saves"), header=True))
+    for k in folders.OUT:
+        out.append(Item(folders.name_out(k), value=folders.shown(folders.out_dir(k, d), d),
+                        enabled=False, indent=1))
+    out.append(Item("GarminDB", header=True))
+    out.append(Item(tr("Configuração (sem palavra-passe)", "Configuration (no password)"),
+                    value=folders.shown(folders.garmin_config_dir(d), d), enabled=False,
+                    indent=1))
+    out.append(Item(tr("Bases descarregadas", "Downloaded databases"),
+                    value=folders.shown(folders.garmin_bases_dir(d), d), enabled=False,
+                    indent=1))
+    out.append(Item(tr("Arrastar para a janela", "Drag onto the window"),
+                    value=tr("de qualquer sítio", "from anywhere"), enabled=False,
+                    detail=tr("as listas só mostram o que está em data/in; arrastar um "
+                              "ficheiro para a janela funciona com um ficheiro de qualquer sítio",
+                              "the lists only show what is in data/in; dragging a file onto "
+                              "the window works from anywhere")))
     return out
 
 

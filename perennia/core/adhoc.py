@@ -849,11 +849,9 @@ def safe_filename(name: str, default: str = "perennia-analise") -> str:
 
 
 def export_dir(db: Database, data_dir: Path | None) -> Path:
-    custom = str(option(db, "adhoc_export_dir") or "").strip()
-    if custom:
-        return Path(custom).expanduser()
+    """`data/out/relatorios`: onde ficam as exportações da Análise AdHoc."""
     from . import folders
-    return folders.resolve(db, data_dir if data_dir else Path.cwd(), "exports")
+    return folders.out_dir("reports", data_dir)
 
 
 def unique_path(folder: Path, filename: str) -> Path:

@@ -32,6 +32,10 @@ class CoreCase(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.db.save_athlete(Athlete(name="D", birth_year=1993, weight_kg=72.0, ftp_w=250,
                                      lthr=165))
+        from perennia.core import folders             # o GarminDB em <tmp>/data/garmin
+        old = folders._ROOT
+        folders.set_root(self.tmp / "data")
+        self.addCleanup(setattr, folders, "_ROOT", old)
 
 
 # ============================================================================ glossário
@@ -251,28 +255,20 @@ class TestSyncSteps(CoreCase):
         self.assertIsNone(gs.diagnose("tudo bem"))
 
     def test_preflight_lists_what_is_missing(self):
-        self.db.set("garmindb_config_dir", str(self.tmp / "cfg"))
-        old = os.environ.pop(gs.ENV_PASSWORD, None)
-        gs.set_session_password(None)
-        try:
-            checks = {c["key"]: c for c in gs.preflight(self.db, self.opts())}
-            self.assertFalse(checks["config"]["ok"])
-            self.assertIn("GarminConnectConfig.json", checks["config"]["fix"])
-            self.assertFalse(checks["password"]["ok"])
-            self.assertIn(gs.ENV_PASSWORD, checks["password"]["fix"])
-            self.assertTrue(checks["stats"]["ok"])
-            gs.write_credentials(gs.config_path(self.db), "eu@exemplo.pt")
-            os.environ[gs.ENV_PASSWORD] = "x"
-            checks = {c["key"]: c for c in gs.preflight(self.db, self.opts())}
-            self.assertTrue(checks["config"]["ok"] and checks["user"]["ok"]
-                            and checks["password"]["ok"])
-            self.assertEqual(gs.blocking_problems(list(checks.values())), [])
-            bad = gs.preflight(self.db, self.opts(stats=[]))
-            self.assertIn("stats", [c["key"] for c in gs.blocking_problems(bad)])
-        finally:
-            os.environ.pop(gs.ENV_PASSWORD, None)
-            if old:
-                os.environ[gs.ENV_PASSWORD] = old
+        checks = {c["key"]: c for c in gs.preflight(self.db, self.opts())}
+        self.assertFalse(checks["config"]["ok"])
+        self.assertIn("GarminConnectConfig.json", checks["config"]["fix"])
+        self.assertIn(str(Path("garmin") / "config"), checks["config"]["fix"])
+        # a palavra-passe nunca é um requisito guardado: é pedida ao sincronizar
+        self.assertTrue(checks["password"]["ok"])
+        self.assertFalse(checks["password"]["blocking"])
+        self.assertTrue(checks["stats"]["ok"])
+        gs.write_credentials(gs.config_path(self.db), "eu@exemplo.pt")
+        checks = {c["key"]: c for c in gs.preflight(self.db, self.opts())}
+        self.assertTrue(checks["config"]["ok"] and checks["user"]["ok"])
+        self.assertEqual(gs.blocking_problems(list(checks.values())), [])
+        bad = gs.preflight(self.db, self.opts(stats=[]))
+        self.assertIn("stats", [c["key"] for c in gs.blocking_problems(bad)])
 
     def test_streaming_run_feeds_the_log(self):
         cli = self.tmp / "fake.sh"
@@ -299,14 +295,14 @@ class TestSyncSteps(CoreCase):
 
     def test_sync_reports_each_step(self):
         import sqlite3
-        d = self.tmp / "dbs"
-        d.mkdir()
+        d = gs.db_dir(self.db)                            # data/garmin/bases/DBs
+        self.assertEqual(d, self.tmp / "data" / "garmin" / "bases" / "DBs")
+        d.mkdir(parents=True)
         c = sqlite3.connect(d / "garmin.db")
         c.execute("CREATE TABLE daily_summary (day TEXT PRIMARY KEY, steps INTEGER)")
         c.execute("INSERT INTO daily_summary VALUES ('2026-11-10', 9000)")
         c.commit()
         c.close()
-        self.db.set("garmindb_dir", str(d))
         log = gs.SyncLog()
         ok, msg, rep = gs.sync(self.db, self.opts(stats=["monitoring"]), run_source=False,
                                log=log)
@@ -326,23 +322,19 @@ class TestSyncSteps(CoreCase):
         gs_cli.chmod(0o755)
         old_path = os.environ["PATH"]
         os.environ["PATH"] = str(self.tmp) + os.pathsep + old_path
-        old_pw = os.environ.get(gs.ENV_PASSWORD)
-        os.environ[gs.ENV_PASSWORD] = "x"
         try:
-            self.db.set("garmindb_config_dir", str(self.tmp / "cfg"))
             gs.write_credentials(gs.config_path(self.db), "a@b.pt")
             log = gs.SyncLog()
-            ok, msg, rep = gs.sync(self.db, self.opts(), runner=lambda *a, **k: Res(), log=log)
+            ok, msg, rep = gs.sync(self.db, self.opts(), runner=lambda *a, **k: Res(), log=log,
+                                   password="x-segredo")
             self.assertFalse(ok)
             self.assertIn("recusou", msg)
             self.assertTrue(log.failed)
-            self.assertIn("a@b.pt", open(gs.config_path(self.db)).read())
-            self.assertNotIn('"x"', open(gs.config_path(self.db)).read())  # sem palavra-passe
+            text = open(gs.config_path(self.db)).read()
+            self.assertIn("a@b.pt", text)
+            self.assertNotIn("x-segredo", text)                 # sem palavra-passe
         finally:
             os.environ["PATH"] = old_path
-            os.environ.pop(gs.ENV_PASSWORD, None)
-            if old_pw:
-                os.environ[gs.ENV_PASSWORD] = old_pw
 
 
 class TestSyncUI(tg.GuiCase):
@@ -353,12 +345,11 @@ class TestSyncUI(tg.GuiCase):
         self.assertTrue(any(x.startswith("✗") or x.startswith("✓") for x in labels))
         self.assertTrue(any("Passo a passo" in x for x in labels))
         self.pick("Passo a passo")
-        self.assertTrue(any("PERENNIA_GARMIN_PASSWORD" in t for t in self.labels()))
+        self.assertTrue(any("não fica guardada" in t for t in self.labels()))
+        self.assertTrue(any("data/garmin" in t for t in self.labels()))
 
     def test_sync_now_without_requirements_says_what_is_missing(self):
-        import tempfile
-        self.app.db.set("garmindb_config_dir", tempfile.mkdtemp())
-        scr = self.open_sync("GarminDB")
+        scr = self.open_sync("GarminDB")                # sem configuração em data/garmin
         panel = scr.sync
         orig, orig_cli = gs.status, gs.importers.garmindb_cli
         try:
@@ -748,19 +739,26 @@ class TestSecurity(CoreCase):
         self.assertEqual(health.values_for(self.db, "2026-11-10")[m["id"]]["value"], "arroz")
         self.assertTrue(any(e["term"] == "Meu" for e in glossary.all_entries(self.db)))
 
-    def test_password_env_is_not_passed_to_the_child(self):
-        cli = self.tmp / "env.sh"
-        cli.write_text('#!/bin/sh\necho "pw=[$PERENNIA_GARMIN_PASSWORD]"\n')
+    def test_the_password_never_reaches_the_childs_arguments_or_environment(self):
+        cli = self.tmp / "garmindb_cli"
+        cli.write_text('#!/bin/sh\necho "args=$*"\nenv\n')
         cli.chmod(0o755)
-        os.environ[gs.ENV_PASSWORD] = "segredo"
+        gs.write_credentials(gs.config_path(self.db), "a@b.pt")
+        from perennia.core import importers
+        orig = importers.garmindb_cli
+        importers.garmindb_cli = lambda: str(cli)
         try:
-            log = gs.SyncLog()
-            ok, out = gs._run([str(cli)], None, 10, self.tmp, log)
+            log = gs.SyncLog(keep=500, line_chars=4000)
+            opts = gs.Options(stats=["sleep"])
+            opts.download = True
+            ok, out = gs.run_garmindb(self.db, opts.clean(), log=log, password="segredo-77")
         finally:
-            os.environ.pop(gs.ENV_PASSWORD, None)
-        self.assertTrue(ok)
-        self.assertEqual(log.snapshot()[1], ["pw=[]"])
-        self.assertNotIn("segredo", out)
+            importers.garmindb_cli = orig
+        self.assertTrue(ok, out)
+        lines = log.snapshot()[1]
+        self.assertTrue(any(x.startswith("args=-f ") for x in lines))
+        self.assertFalse(any("segredo-77" in x for x in lines))
+        self.assertNotIn("segredo-77", out)
 
     def test_log_lines_are_cut_and_options_respected(self):
         log = gs.SyncLog(keep=2, line_chars=30)

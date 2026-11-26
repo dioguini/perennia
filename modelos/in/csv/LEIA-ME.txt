@@ -1,0 +1,3 @@
+Põe aqui os .csv a importar em Backups e Sincronização → Sincronização → CSV
+(artigos, exercícios, grupos musculares, disciplinas, testes, glossário, saúde…).
+Os modelos de cada conjunto são gravados em data/out/csv.

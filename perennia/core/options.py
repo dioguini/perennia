@@ -64,7 +64,6 @@ GROUPS: dict[str, tuple[str, str]] = {
     "profile": ("Perfil por desporto", "Sport profile"),
     "display": ("Aspeto, barra de bloco e gráfico ao vivo", "Look, block bar and live chart"),
     "notes": ("Notas, glossário e rato", "Notes, glossary and mouse"),
-    "paths": ("Pastas", "Folders"),
     "pace": ("Segment Pace e Segment KOM", "Segment Pace and Segment KOM"),
 }
 
@@ -237,9 +236,6 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="it cannot equal the value separator: the dot is used then"),
     _o("adhoc_csv_bom", "adhoc", "CSV: UTF-8 com BOM", "CSV: UTF-8 with BOM", BOOL, True,
        hint_pt="o Excel abre bem os acentos", hint_en="Excel opens accents correctly"),
-    _o("adhoc_export_dir", "adhoc", "CSV: pasta das exportações", "CSV: export folder", TEXT, "",
-       hint_pt="vazio = a pasta das exportações (Definições → Pastas)",
-       hint_en="empty = the exports folder (Settings → Folders)"),
     _o("adhoc_max_categories", "adhoc", "Gráfico: categorias no eixo X", "Chart: X axis categories",
        INT, 15, lo=2, hi=120, step=1,
        hint_pt="as categorias a mais ficam agrupadas em «Outros»",
@@ -523,12 +519,6 @@ OPTIONS: tuple[Opt, ...] = (
                "etc.)",
        hint_en="with no rules file, the starter rules are used (strengthening → Gym · Strength, "
                "etc.)"),
-    _o("etl_rules_file", "workouts", "Histórico: ficheiro de regras",
-       "History: rules file", TEXT, "",
-       hint_pt="JSON ou CSV com as regras · vazio = «regras-historico.json» na pasta das "
-               "importações",
-       hint_en="JSON or CSV with the rules · empty = 'regras-historico.json' in the imports "
-               "folder"),
     _o("etl_rules_max_kb", "workouts", "Histórico: tamanho máximo das regras",
        "History: maximum rules size", INT, 512, lo=16, hi=8192, step=16, unit="kB",
        hint_pt="um ficheiro de regras maior do que isto é recusado",
@@ -710,25 +700,6 @@ OPTIONS: tuple[Opt, ...] = (
                 ("session", "até ao fim da sessão", "until the end of the session")),
        hint_pt="a alteração não salta o bloco: só acaba quando termina ou carregas em Saltar",
        hint_en="a change does not skip the block: it ends when it finishes or you press Skip"),
-    _o("path_exports", "paths", "Pasta das exportações", "Exports folder", TEXT, "",
-       hint_pt="treinos, planos e CSV que exportas · vazio = «exports» na pasta de dados",
-       hint_en="workouts, plans and CSV you export · empty = «exports» in the data folder"),
-    _o("path_imports", "paths", "Pasta das importações", "Imports folder", TEXT, "",
-       hint_pt="onde se procuram ficheiros a importar (a de sempre também conta) · vazio = "
-               "«imports» na pasta de dados",
-       hint_en="where to look for files to import (the usual one still counts) · empty = "
-               "«imports» in the data folder"),
-    _o("path_backups", "paths", "Pasta dos backups", "Backups folder", TEXT, "",
-       hint_pt="onde se gravam e procuram os backups · vazio = «backups» na pasta de dados",
-       hint_en="where backups are saved and looked for · empty = «backups» in the data folder"),
-    _o("path_workouts", "paths", "Pasta dos treinos e planos", "Workouts and plans folder", TEXT,
-       "", hint_pt="onde se guardam e procuram treinos e planos em ficheiro · vazio = «workouts» "
-                   "na pasta de dados (e ao lado da aplicação, para procurar)",
-       hint_en="where workout and plan files are saved and looked for · empty = «workouts» "
-               "next to the app"),
-    _o("path_gpx", "paths", "Pasta das rotas (.gpx)", "Routes folder (.gpx)", TEXT, "",
-       hint_pt="onde se procuram rotas · vazio = «gpx» ao lado da aplicação",
-       hint_en="where routes are looked for · empty = «gpx» next to the app"),
     _o("note_max_chars", "notes", "Notas: tamanho máximo", "Notes: maximum length", INT, 4000,
        lo=200, hi=20000, step=200, unit="car.",
        hint_pt="das notas dos exercícios, dos artigos e dos conceitos do glossário",
@@ -924,12 +895,6 @@ def apply(db) -> None:
         conn.execute("PRAGMA synchronous=" + ("NORMAL" if get(db, "db_fast_writes") else "FULL"))
         conn.execute(f"PRAGMA cache_size=-{int(get(db, 'db_cache_mb')) * 1024}")
         conn.execute("PRAGMA temp_store=MEMORY")
-    except Exception:
-        pass
-    try:                                   # as pastas escolhidas (Definições → Pastas)
-        from .. import paths
-        for name in ("workouts", "gpx", "imports", "backups"):
-            paths.set_configured(name, get(db, "path_" + name))
     except Exception:
         pass
     for opt in OPTIONS:

@@ -184,8 +184,8 @@ class RoutesScreen(Screen):
         a = self.app
         rows = a.db.routes()
         items = [Item(tr("+ Carregar .gpx", "+ Load .gpx"), top=True,
-                      detail=tr("procura nas pastas gpx, Transferências e Documentos",
-                                "looks in the gpx, Downloads and Documents folders"),
+                      detail=tr("os .gpx que estão em data/in/gpx",
+                                "the .gpx files in data/in/gpx"),
                       action=lambda: a.push(GpxPicker(a, on_pick=self._imported)))]
         for row in rows:
             done = routes_mod.times_done(a.db, row["id"])

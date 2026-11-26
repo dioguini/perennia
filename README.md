@@ -7,14 +7,22 @@ corrida, natação e ginásio. No ciclismo carrega um `.gpx`, pedala essa
 estrada em primeira pessoa com o declive real a comandar o trainer, e no fim
 guarda um `.fit`.
 
-**Para instalar e correr: [RUN.md](RUN.md).** Começa por
-`python main.py --self-test`, que verifica tudo sem precisar de hardware.
+**Para instalar e correr: [RUN.md](RUN.md).** A forma mais fácil é o **`perennia_setup`**
+(`perennia_setup.bat` no Windows, `./perennia_setup.sh` no macOS e no Linux): cria o ambiente,
+instala os requisitos, cria a pasta `data/` com a base de dados e o conteúdo de base, os modelos,
+faz o autoteste e, se quiseres, configura o GarminDB e o atalho.
 
 ```
+./perennia_setup.sh                             # ou perennia_setup.bat: prepara tudo
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1146 testes
+python -m unittest discover -s tests -t .       # 1501 testes
 ```
+
+**Os teus dados ficam todos em `data/`**, dentro da pasta do projeto (e nunca vão para o git):
+`data/in/<categoria>` para o que queres importar, `data/out/<categoria>` para o que a Perennia grava
+(o `.fit` de cada sessão em `data/out/sessoes/<desporto>`), `data/garmin` para o GarminDB e a base
+`data/perennia.db`.
 
 **Sem o PyCharm:** duplo clique em `Perennia.bat` (Windows) ou `./perennia.sh` (macOS, Linux) abre a
 aplicação com o ambiente do projeto; `criar_atalho_windows.bat` põe um atalho com ícone no Ambiente de
@@ -50,6 +58,14 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 29** — **Tudo numa pasta `data/`** na raiz do projeto: `data/in/…` (gpx, treinos, planos,
+  csv, atividades, analises, hrv4training, trainingpeaks, historico, backups) e `data/out/…` (sessoes
+  por desporto, treinos, planos, csv, powerbi, backups, relatorios); cada módulo lê e grava na sua
+  pasta e as listas de importação **só procuram em `data/in`** (já não em Transferências); os
+  **backups** exportam para `data/out/backups` e repõem-se de `data/in/backups`; os dados das versões
+  anteriores são **copiados** na primeira vez. **GarminDB** em `data/garmin`, e **a palavra-passe é
+  pedida a cada sincronização e não fica guardada em lado nenhum**. **`perennia_setup`** (`.bat`/`.sh`,
+  ou `main.py --setup`) prepara tudo num computador novo — ver «Dar a Perennia a um amigo» no RUN.md.
 - **Ronda 28** — **Guia da passadeira manual**: para passadeiras sem ligação (como a NordicTrack T 7.0),
   num treino por blocos a sessão avisa antes de cada mudança («daqui a 8 s · 12,6 km/h · 2,0 %») com
   **quantos toques** dar em cada botão («▲ velocidade ×42 · ▲ inclinação ×4») e um bip; o passo da
@@ -108,7 +124,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   repetições, a carga ou os segundos** de qualquer série (planeada ou livre, a decorrer ou
   terminada) sem perder o plano; **complexos de kettlebell** (exercícios feitos de exercícios, com
   evolução por exercício); **~340 exercícios e 25 treinos de força** de origem; **Definições →
-  Pastas** (exportações, importações, backups, treinos, GPX); **planos de X semanas em CSV** além
+  Pastas** (desde a ronda 29 só mostra as pastas fixas de `data/`); **planos de X semanas em CSV** além
   do JSON; **histórico de outras apps** (TrainingPeaks, Strava, Garmin Connect) normalizado por
   **regras** (`--importar historico`, `--historico-normalizar`); **sincronização por Wi-Fi** entre
   duas Perennia (`--sync-receber` / `--sync-enviar`, TLS + PIN de uso único, só rede local);
@@ -290,7 +306,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Upload manual** de uma atividade (.fit ou .tcx): vês o que o ficheiro tem
   e guardas no desporto respetivo; os testes têm a lista de resultados e
   janelas para registar, editar e apagar; qualquer treino se **exporta**
-  (nome e formato, para Transferências).
+  (nome e formato, para `data/out/treinos`).
 - **Barra do topo** com os aparelhos e o estado de cada um, e uma janela de
   dispositivos que funciona a meio da sessão. Avisa quando um aparelho se
   desliga. Também tem Backups e Sincronização, Definições (em separadores: Atleta, Geral,
@@ -338,7 +354,7 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   as sessões vão todas para o **calendário** com as cargas de cada semana, e é só
   fazer a do dia. **Importas os teus** no formato Perennia
   (`*.perennia-plan.json`); há um **ficheiro modelo** e a descrição do formato
-  (`packaging/planos/`).
+  (`modelos/in/planos/`, copiados para `data/in/planos`).
 - **Perfil por desporto** (separador «Perfil» em cada desporto): no ciclismo, que
   **tipo de ciclista** és (sprinter, puncheur, trepador, rolador, completo) pela
   curva de potência; no ginásio, o teu **perfil de força** (força máxima,
@@ -381,15 +397,17 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
 - **Agente de IA preparado** (F1 resumo da página, F2 resumo contextualizado),
   em pré-visualização até ser ligado. Antes de enviar mostra uma **estimativa
   dos tokens** (e do custo, se puseres os preços), com aviso acima de um limite.
-- **Segurança:** a palavra-passe do Garmin e os dados do Strava vêm de
-  **variáveis de ambiente** (`PERENNIA_GARMIN_PASSWORD`,
-  `PERENNIA_STRAVA_CLIENT_ID`, `PERENNIA_STRAVA_CLIENT_SECRET`) e nunca ficam
-  num ficheiro nem na linha de comandos; a base tem permissões só do dono;
+- **Segurança:** a palavra-passe do Garmin é **pedida a cada sincronização e não fica guardada
+  em lado nenhum** (vai ao GarminDB por um ficheiro temporário privado, apagado no fim); os dados do
+  Strava vêm de **variáveis de ambiente** (`PERENNIA_STRAVA_CLIENT_ID`,
+  `PERENNIA_STRAVA_CLIENT_SECRET`) e nunca ficam num ficheiro nem na linha de comandos; a pasta
+  `data/` (os teus dados) nunca vai para o git; a base tem permissões só do dono;
   `.gpx/.zwo/.tcx` lêem-se sem DTD; os backups não escrevem fora da pasta de
   dados. Detalhes em [RUN.md](RUN.md), «Segurança e segredos».
-- **Se vinhas da versão anterior** (que tinha outro nome) não tens de fazer nada: a
-  pasta de dados e a base são renomeadas sozinhas na primeira abertura (ver
-  [RUN.md](RUN.md)).
+- **Se vinhas de uma versão anterior** não tens de fazer nada: na primeira abertura os dados
+  da pasta antiga (e o GarminDB de `~/.GarminDb`/`~/HealthData`, sem a palavra-passe) são
+  **copiados** para `data/`, com os caminhos corrigidos; os originais ficam (ver [RUN.md](RUN.md),
+  secção 8).
 - **Recuperação**: se a aplicação fechar a meio, retoma-se a sessão onde
   estava (ou guarda-se como está).
 - Guarda tudo num **único ficheiro SQLite portátil** e escreve um **`.fit`**
@@ -427,7 +445,8 @@ volta e conta as voltas; só o botão de parar a fecha.
 
 ```
 main.py              ponto de entrada, autoteste e exportação AdHoc (--adhoc-exportar)
-perennia/datadir.py      onde ficam os dados de cada sistema
+perennia/datadir.py      a pasta data/ do projeto e a cópia (uma vez) dos dados das versões anteriores
+perennia/install.py      a instalação num computador novo (main.py --setup, o perennia_setup)
 perennia/legacy.py       o único sítio que conhece o nome antigo (migração automática)
 perennia/core/           lógica — sem interface, sem rádio, inteiramente testada
   db.py              SQLite: esquema, repositórios, portabilidade
@@ -479,7 +498,7 @@ perennia/core/           lógica — sem interface, sem rádio, inteiramente tes
   block_log.py       blocos alterados e saltados, com o original e o feito
   complexes.py       complexos de kettlebell: exercícios feitos de exercícios, evolução
   gym_catalog.py     os exercícios e treinos de força que vêm com a aplicação (catálogo)
-  folders.py         as pastas configuráveis (exportações, importações, backups, treinos, GPX)
+  folders.py         as pastas de data/: in/<categoria>, out/<categoria>, garmin/ (fixas)
   plan_csv.py        planos de X semanas em CSV (a via fácil, além do JSON)
   history_etl.py     histórico de outras apps: importar e normalizar com regras
   lan_sync.py        sincronizar duas Perennia pelo Wi-Fi (fonte → destino, TLS + PIN)
@@ -563,13 +582,16 @@ perennia/ui/             app.py (ecrãs) · sport_screens.py (força, construtor
                      widgets.py (inclui a barra do topo e os separadores)
 perennia/paths.py        onde está a aplicação (script ou executável)
 packaging/           receita do PyInstaller, ícone (.ico), atalho do Windows e LEIA-ME para os colegas
+perennia_setup.bat   instala e prepara tudo num computador novo (Windows); perennia_setup.sh no macOS e no Linux
 Perennia.bat         abre a aplicação sem o PyCharm (Windows); perennia.sh no macOS e no Linux
+modelos/             os ficheiros modelo copiados para data/in na primeira vez (LEIA-ME, .gpx, .zwo, planos)
+data/                OS TEUS DADOS (criada sozinha; nunca vai para o git): perennia.db, in/, out/, garmin/
 criar_atalho_windows.bat  o atalho «Perennia», com ícone, no Ambiente de trabalho
 build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1146 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1501 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

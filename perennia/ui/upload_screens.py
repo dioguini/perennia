@@ -141,8 +141,8 @@ class UploadPreview(PopupMixin, EditScreen):
 
 
 class ExportPopup(PopupMixin, EditScreen):
-    """Exportar um treino: o nome do ficheiro e o formato; OK grava-o na pasta
-    Transferências e a mensagem diz onde ficou. Cancelar (ou Esc) volta aos
+    """Exportar um treino: o nome do ficheiro e o formato; OK grava-o em
+    `data/out/treinos` e a mensagem diz onde ficou. Cancelar (ou Esc) volta aos
     detalhes do treino."""
 
     W, H = 760, 420
@@ -180,7 +180,9 @@ class ExportPopup(PopupMixin, EditScreen):
                 Item(tr("Formato", "Format"), value=label, data="cyc:format",
                      detail=tr("←/→ muda · Enter abre a lista", "←/→ changes · Enter opens "
                                "the list")),
-                Item(tr("Fica em", "Saved in"), value=str(wf.downloads_dir()), enabled=False),
+                Item(tr("Fica em", "Saved in"),
+                     value=_shown(wf.export_dir(data_dir=self.app.data_dir), self.app),
+                     enabled=False),
                 Item(tr("Cancelar", "Cancel"), button=True, action=self.app.pop),
                 Item("OK", button=True, primary=True, action=self.export)]
         self.chrome.set(tr("Exportar o treino", "Export the workout"),
@@ -195,11 +197,16 @@ class ExportPopup(PopupMixin, EditScreen):
             return
         ext = self.formats[self.fmt][0]
         try:
-            path = wf.export(self.app.db, self.sport, self.wid, ext, wf.downloads_dir(),
-                             self.name)
+            path = wf.export(self.app.db, self.sport, self.wid, ext,
+                             wf.export_dir(data_dir=self.app.data_dir), self.name)
         except Exception as e:
             self.app.message(f"{tr('Erro', 'Error')}: {e}")
             return
         self.exported = path
         self.app.pop()
         self.app.message(tr("Treino guardado em {p}", "Workout saved to {p}", p=str(path)))
+
+
+def _shown(p, app) -> str:
+    from perennia.core import folders
+    return folders.shown(p, app.data_dir)

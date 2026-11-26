@@ -126,3 +126,37 @@ class GoalPopup(SnapshotUnsaved, PopupMixin, Screen):
     def draw(self) -> None:
         super().draw()
         self.batch.draw()
+
+
+class PasswordPopup(GoalPopup):
+    """Escreve-se uma palavra-passe: aparece como «•••», não fica em lado nenhum (só passa à
+    função `on_save` e esquece-se) e Esc cancela sem perguntar."""
+
+    W, H = 640, 300
+
+    def __init__(self, app, title: str, subtitle: str, on_save):
+        super().__init__(app, title, subtitle, "", 200, on_save)
+
+    def enter(self) -> None:
+        super().enter()
+        self.chrome.set(self.title_text, self.sub_text, tr("Esc cancela", "Esc cancels"))
+        self.list.set_items([
+            Item(tr("Cancelar", "Cancel"), button=True, action=self.cancel),
+            Item(tr("Sincronizar", "Sync"), button=True, primary=True, action=self.save)])
+
+    def _render(self) -> None:
+        self.body.text = "•" * len(self.text) + "▏"
+        self.counter.text = ""
+
+    def has_unsaved(self) -> bool:            # nada a guardar: cancelar não pergunta
+        return False
+
+    def save(self) -> None:
+        value, self.text = self.text, ""
+        self.app.pop(force=True)
+        if value:
+            self.on_text_saved(value)
+
+    def cancel(self) -> None:
+        self.text = ""
+        self.app.pop(force=True)

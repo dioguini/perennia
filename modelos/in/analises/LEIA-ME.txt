@@ -1,0 +1,1 @@
+Põe aqui as análises clínicas (.xlsx do laboratório ou .csv).

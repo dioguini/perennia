@@ -367,23 +367,25 @@ class TestGarminSync(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.db = Database(self.tmp / "v.db")
-        self.folder = tg.Path(self.tmp / "HealthData" / "DBs")
+        from perennia.core import folders                  # data/garmin/{config,bases}
+        self._root = folders._ROOT
+        folders.set_root(self.tmp / "data")
+        self.folder = gsync.db_dir(self.db)
         from tests.test_connect import make_garmindb
         make_garmindb(self.folder)
         make_activities(self.folder, metric=False)
-        self.db.set("garmindb_dir", str(self.folder))
-        self.cfg_dir = self.tmp / ".GarminDb"
-        self.cfg_dir.mkdir()
+        self.cfg_dir = gsync.config_dir(self.db)
         (self.cfg_dir / "GarminConnectConfig.json").write_text(json.dumps({
             "credentials": {"user": "x", "password": "segredo"},
             "data": {"weight_start_date": "12/31/2019", "sleep_start_date": "12/31/2019",
                      "rhr_start_date": "12/31/2019", "hrv_start_date": "12/31/2019",
                      "monitoring_start_date": "12/31/2019"},
             "settings": {"metric": False}}))
-        self.db.set("garmindb_config_dir", str(self.cfg_dir))
 
     def tearDown(self):
         import shutil
+        from perennia.core import folders
+        folders._ROOT = self._root
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_command_follows_the_options(self):
@@ -409,7 +411,7 @@ class TestGarminSync(unittest.TestCase):
         orig = importers.garmindb_cli
         importers.garmindb_cli = lambda: "/usr/bin/garmindb_cli.py"
         try:
-            ok, msg, rep = gsync.sync(self.db, o, runner=runner)
+            ok, msg, rep = gsync.sync(self.db, o, runner=runner, password="escrita-agora")
         finally:
             importers.garmindb_cli = orig
         self.assertTrue(ok, msg)
@@ -469,11 +471,10 @@ class TestGarminSync(unittest.TestCase):
 
 class TestSyncTabGui(tg.GuiCase):
     def test_tab_options_and_history(self):
-        folder = Path(self.tmp) / "g"
+        folder = gsync.db_dir(self.app.db)                    # data/garmin/bases/DBs
         from tests.test_connect import make_garmindb
         make_garmindb(folder)
         make_activities(folder, metric=False)
-        self.app.db.set("garmindb_dir", str(folder))
         scr = self.open_sync()
         self.select("Período")
         self.press(key.RIGHT, key.RIGHT)                      # mais recente → tudo → intervalo

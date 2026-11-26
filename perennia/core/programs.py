@@ -6,7 +6,8 @@ Starting Strength, 5/3/1… Ao **começar** um plano, a Perennia cria o treino d
 daí para a frente é só abrir a sessão do dia e fazê-la.
 
 O formato Perennia de um plano (o mesmo para os que vêm com a aplicação e para os que
-importas; ver `packaging/planos/FORMATO-DO-PLANO.md` e o ficheiro modelo):
+importas; ver `modelos/in/planos/FORMATO-DO-PLANO.md` e o ficheiro modelo, que a Perennia
+copia para `data/in/planos`):
 
 ```json
 {
@@ -665,13 +666,12 @@ def write_template(folder: Path | str) -> list[Path]:
 
 
 def scan(folders: list[str] | None = None) -> list[Path]:
-    """Os ficheiros de plano (`*.perennia-plan.json`) nas pastas do costume."""
+    """Os ficheiros de plano (`*.perennia-plan.json` / `.csv`) de `data/in/planos` (ou das
+    pastas dadas)."""
     import os
-    from perennia import paths
-    from .workout_files import FOLDERS, PER_FOLDER
+    from .workout_files import PER_FOLDER, default_folders
     if folders is None:
-        folders = [str(p) for p in paths.user_folder("workouts")] + \
-                  [str(p) for p in paths.user_folder("imports")] + list(FOLDERS)
+        folders = default_folders("plans")
     found: list[Path] = []
     for folder in dict.fromkeys(folders):
         base = Path(os.path.expanduser(folder))

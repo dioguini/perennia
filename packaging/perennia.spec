@@ -17,7 +17,8 @@ ROOT = Path(SPECPATH).parent
 ICON = ROOT / "packaging" / "perennia.ico"          # o ícone do .exe (tools/make_app_icon.py)
 
 datas = [(str(ROOT / "tests" / "teste.gpx"), "tests"),
-         (str(ROOT / "perennia" / "assets"), "perennia/assets")]      # ícones
+         (str(ROOT / "perennia" / "assets"), "perennia/assets"),      # ícones
+         (str(ROOT / "modelos"), "modelos")]      # os modelos que vão para data/in na 1.ª vez
 binaries = []
 hidden = (collect_submodules("perennia")
           + collect_submodules("pyglet")      # a pyglet carrega módulos à medida

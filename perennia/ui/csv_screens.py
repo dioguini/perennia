@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from perennia.core import csv_sync as cs
 from perennia.core.i18n import t, tr
-from perennia.core.workout_download import downloads_dir
+from perennia.core import folders
 from perennia.ui.app import PopupMixin, Screen
 from perennia.ui.widgets import Item
 
@@ -29,7 +29,8 @@ class CsvDatasetPopup(PopupMixin, Screen):
                      action=lambda: self._write("template")),
                 Item(tr("Exportar o que tenho (.csv)", "Export what I have (.csv)"),
                      value=tr("{n} linhas", "{n} rows", n=len(d.export(self.app.db))),
-                     detail=tr("grava em {p}", "saved in {p}", p=str(downloads_dir())),
+                     detail=tr("grava em {p}", "saved in {p}",
+                               p=folders.shown(self._out(), self.app.data_dir)),
                      action=lambda: self._write("export"))]
         if d.importer is not None:
             rows.append(Item(tr("Importar", "Import"), header=True))
@@ -41,33 +42,30 @@ class CsvDatasetPopup(PopupMixin, Screen):
                 except Exception:
                     continue
             for p in found:
-                rows.append(Item(p.name, detail=str(p.parent),
+                rows.append(Item(p.name,
                                  action=lambda q=p: self._import(q)))
             if not found:
                 rows.append(Item(tr("Nenhum ficheiro deste conjunto", "No file of this set"),
                                  enabled=False,
-                                 detail=tr("põe o .csv em {p}, Transferências ou Documentos",
-                                           "put the .csv in {p}, Downloads or Documents",
-                                           p=self.app.folder("imports"))))
+                                 detail=tr("põe o .csv em {p} e volta a abrir",
+                                           "put the .csv in {p} and open this again",
+                                           p=folders.shown(self.app.in_dir("csv"),
+                                                           self.app.data_dir))))
         rows.append(Item(tr("Fechar", "Close"), button=True, primary=True, action=self.app.pop))
         self.chrome.set(d.label, d.help, "")
         self.list.set_items(rows, keep_index=True)
 
+    def _out(self):
+        return self.app.out_dir("csv")
+
     def _files(self) -> list:
-        import os
-        from pathlib import Path
-        out = []
-        bases = self.app.folder_list("imports") + [
-            Path(os.path.expanduser(f)) for f in ("~/Downloads", "~/Transferências",
-                                                  "~/Documents", "~/Documentos", "~/Desktop")]
-        for base in bases:
-            if base.is_dir():
-                out += sorted(base.glob("*.csv"))[:60]
-        return list(dict.fromkeys(out))
+        """Os .csv de `data/in/csv` (só essa pasta)."""
+        base = self.app.in_dir("csv")
+        return sorted(base.glob("*.csv"))[:200] if base.is_dir() else []
 
     def _write(self, what: str) -> None:
         try:
-            path = cs.write(self.app.db, self.key, downloads_dir(), what=what)
+            path = cs.write(self.app.db, self.key, self._out(), what=what)
         except Exception as e:
             self.app.message(f"{t('common.error')}: {e}")
             return

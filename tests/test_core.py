@@ -794,8 +794,11 @@ class TestFrozenPaths(unittest.TestCase):
             try:
                 self.assertTrue(paths.frozen())
                 self.assertEqual(paths.app_dir(), Path(exe).resolve().parent)
-                self.assertEqual(paths.user_folder("gpx")[0],
-                                 Path(exe).resolve().parent / "gpx")
+                from perennia import datadir                  # data/ ao lado do .exe
+                self.assertEqual(datadir.project_data_dir(),
+                                 Path(exe).resolve().parent / "data")
+                from perennia.core import folders             # os modelos vêm embutidos
+                self.assertEqual(folders.templates_dir(), Path(internal) / "modelos")
                 self.assertEqual(paths.resource("tests", "teste.gpx"),
                                  Path(internal) / "tests" / "teste.gpx")
             finally:

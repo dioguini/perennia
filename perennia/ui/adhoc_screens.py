@@ -934,8 +934,10 @@ class AdHocExportPopup(EditPopup):
                                                   "Excel opens accents correctly"),
                         dropdown=Dropdown([tr("Sim", "Yes"), tr("Não", "No")],
                                           0 if self.bom else 1, self._pick_bom)))
-        out.append(Item(tr("Pasta", "Folder"), value=fit_text(str(self.folder), 380, 12),
-                        enabled=False, detail=tr("muda nas Definições", "change in Settings")))
+        out.append(Item(tr("Pasta", "Folder"),
+                        value=fit_text(_shown(self.folder, self.app.data_dir), 380, 12),
+                        enabled=False, detail=tr("as exportações ficam sempre aqui",
+                                                 "exports always go here")))
         out.append(Item(tr("Conteúdo", "Contents"),
                         value=tr("{n} linhas · {m} colunas", "{n} rows · {m} columns",
                                  n=len(rows), m=len(cols)), enabled=False))
@@ -1061,3 +1063,8 @@ class SaveViewPopup(EditPopup):
             return False
         self.owner.view_name = " ".join(self.name.split())[:60]
         return True
+
+
+def _shown(p, data_dir) -> str:
+    from perennia.core import folders
+    return folders.shown(p, data_dir)
