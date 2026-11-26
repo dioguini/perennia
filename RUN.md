@@ -2,6 +2,17 @@
 
 Este guia leva-te do zero à aplicação a correr. Tudo funciona offline.
 
+**A forma mais fácil: o `perennia_setup`.** Na pasta do projeto, duplo clique em
+`perennia_setup.bat` (Windows) ou `./perennia_setup.sh` (macOS, Linux, Raspberry Pi). Cria o
+ambiente virtual, instala os requisitos, cria a pasta `data/` com a base de dados já com o
+conteúdo de base (treinos, exercícios do ginásio, métricas…) e os ficheiros modelo, faz o
+autoteste e, se quiseres, configura o GarminDB e o atalho. Pode correr-se outra vez sem estragar
+nada. Ver a secção 2 e «Dar a Perennia a um amigo» (secção 7).
+
+**Os teus dados ficam todos numa pasta: `data/`, dentro da pasta do projeto** (ao lado do
+`main.py`): `data/in/…` para o que queres importar, `data/out/…` para o que a Perennia grava e
+`data/garmin/…` para o GarminDB. Ver a secção 8. A pasta `data/` nunca vai para o git.
+
 **Se vens da versão antiga (VeloLocal), não tens de fazer nada à mão.** Na primeira vez que
 abres a Perennia, ela **renomeia** a pasta de dados antiga (`VeloLocal` / `velolocal`) para
 `Perennia` / `perennia` (uma só operação, na mesma pasta-mãe, sem copiar nada), a base `velolocal.db`
@@ -9,6 +20,7 @@ passa a `perennia.db`, e os caminhos e o formato das sessões antigas que estava
 são atualizados. Fica tudo na mesma. Se as duas pastas existirem, a nova ganha e a antiga fica
 intacta (nada se apaga). Os `.fit` novos chamam-se `perennia_<data>_<nome>.fit`. Daqui para a frente,
 **o nome VeloLocal só existe num ficheiro do código** (`perennia/legacy.py`, que faz esta migração).
+Desde a ronda 29, depois disso os dados são **copiados** para `data/` (ver a secção 8).
 
 ---
 
@@ -37,9 +49,40 @@ Se não tiveres Python, instala-o:
 
 ## 2. Instalar
 
+### A forma fácil: `perennia_setup`
+
+Na pasta do projeto (a que tem o `main.py`):
+
+- **Windows** — duplo clique em **`perennia_setup.bat`**.
+- **macOS, Linux, Raspberry Pi** — num terminal: `./perennia_setup.sh` (ou `bash perennia_setup.sh`).
+
+O script faz, por esta ordem (e diz o que fez em cada passo):
+
+1. confirma que há Python 3.11+; cria o ambiente virtual **`.venv`** (se ainda não existir) e
+   instala o `requirements.txt`;
+2. corre `python main.py --setup`, que cria a pasta **`data/`** com a estrutura toda e copia os
+   **ficheiros modelo** para `data/in` (um `.gpx`, um treino `.zwo`, o plano modelo, um `LEIA-ME`
+   em cada pasta); se houver dados de uma versão anterior na pasta do sistema, copia-os (ver a
+   secção 8);
+3. cria a **base de dados** `data/perennia.db` com o conteúdo de base: os treinos que vêm com a
+   aplicação, os exercícios e as modalidades do ginásio, os complexos, os testes de aptidão, as
+   métricas da Saúde e os glossários;
+4. corre o **autoteste** do núcleo;
+5. pergunta se queres o **GarminDB** (opcional): instala-o no `.venv`, pede o **e-mail** da conta
+   Garmin (fica em `data/garmin/config`) e faz o **primeiro login** — pede a palavra-passe (que
+   **não fica guardada**) e, se a conta tiver verificação em dois passos, o código MFA;
+6. pergunta se queres o **atalho** no Ambiente de trabalho;
+7. mostra o resumo.
+
+Pode correr-se **as vezes que quiseres**: o que já existe fica como está (os teus dados, os
+modelos que mudaste, a configuração do GarminDB). Com `python main.py --setup --sem-perguntas`
+não pergunta nada (sem GarminDB nem atalho).
+
+### À mão
+
 Abre um terminal na pasta do projeto (a que tem o `main.py`) e corre:
 
-### Linux, macOS, Raspberry Pi
+#### Linux, macOS, Raspberry Pi
 
 ```bash
 cd perennia
@@ -49,7 +92,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-### Windows (PowerShell)
+#### Windows (PowerShell)
 
 ```powershell
 cd perennia
@@ -154,7 +197,7 @@ de tarefas* (ou *Fixar no Iniciar*) e já a abres como qualquer outra app. Se j�
 2. Duplo clique em **`criar_atalho_windows.bat`** outra vez: o atalho passa a apontar para ele.
    (Ou arrasta o `Perennia.exe` para o Ambiente de trabalho com *Alt* carregado, para criar um atalho.)
 3. Para teres uma versão nova da app depois de um `git pull`, voltas a correr o `build_windows.bat`.
-   A pasta `dist` não vai para o git. Os dados ficam, que estão em `%APPDATA%\Perennia`.
+   A pasta `dist` não vai para o git. Os dados ficam, que estão em `data/` (fora de `dist`).
 
 No Mac e no Linux o empacotamento é o `./build.sh` (sai `dist/Perennia-mac.zip`, com a
 `Perennia.app` lá dentro: arrasta-a para a pasta *Aplicações*). O GitHub também a pode gerar sozinho
@@ -199,8 +242,8 @@ O ícone da aplicação está em `perennia/assets/app_icon.png` (janela) e `pack
    - **Livre** passa logo à preparação da sessão.
 4. Na **janela da sessão** escolhes tudo de uma vez: **Aparelhos** (Enter
    abre o emparelhamento), **Rota (.gpx)** (Enter abre a lista das tuas
-   rotas numa janela) ou **Carregar um .gpx novo** (procura na pasta `gpx/` ao lado do `main.py`, em Transferências
-   e em Documentos), **Segmentos do Strava** dessa rota, **Modo de sessão**
+   rotas numa janela) ou **Carregar um .gpx novo** (mostra os `.gpx` de `data/in/gpx`; ou arrasta um
+   `.gpx` de qualquer sítio para a janela), **Segmentos do Strava** dessa rota, **Modo de sessão**
    (sozinho ou comparação), ERG (nos treinos ERG) e **Auto lap**. A sessão
    livre precisa de uma rota; num treino a rota é opcional. **Por agora, as sessões de treino
    não desenham o mundo 3D**: o fundo é da cor do tema (a sessão livre, com rota, continua a ter
@@ -1318,9 +1361,9 @@ pelo formato abaixo.
 `.perennia-plan.json`. **«Ficheiro modelo»** (em Planos de X semanas) grava na pasta `planos`
 dos dados um **plano-modelo** que funciona e usa quase tudo o que o formato tem, e o
 **`FORMATO-DO-PLANO.md`** com a descrição campo a campo e os passos para traduzir um plano que
-já exista (os dois estão também em `packaging/planos/`). **«Exportar (.json)»** na ficha de
+já exista (os modelos vêm de `modelos/in/planos/` e a Perennia copia-os para `data/in/planos`). **«Exportar (.json)»** na ficha de
 qualquer plano dá-te um ponto de partida real. **«Importar plano…»** procura os ficheiros na
-pasta `workouts` ao lado da aplicação, em Transferências, em Documentos e na pasta `planos`.
+pasta `data/in/planos` (só aí). O ficheiro modelo e os planos exportados gravam-se em `data/out/planos`.
 Um ficheiro que não obedeça ao formato é **recusado com o campo e a razão**, e nada entra. Só
 se lê JSON (um plano não pode trazer código) e há limite de tamanho.
 
@@ -1330,7 +1373,7 @@ Pela linha de comandos:
 python main.py --plano-modelo                       # grava o modelo e o FORMATO-DO-PLANO.md
 python main.py --plano-importar o-meu.perennia-plan.json
 python main.py --plano-exportar lista               # as chaves dos planos
-python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
+python main.py --plano-exportar stronglifts_5x5          # em data/out/planos
 ```
 
 **Material e exercícios novos.** O Inventário de artigos ganhou os tipos **prensa de pernas,
@@ -1425,7 +1468,7 @@ leva um `'` à frente, para o Excel não a executar.
 **Pela linha de comandos** (sem abrir a janela), a mesma exportação:
 
 ```bash
-python main.py --adhoc-exportar sessions --destino ~/Documentos --nome as-minhas-sessoes --separador ";"
+python main.py --adhoc-exportar sessions --destino data/out/relatorios --nome as-minhas-sessoes --separador ";"
 python main.py --adhoc-exportar sessions --vista "Carga por semana"
 ```
 
@@ -1568,7 +1611,8 @@ complexos (`complexes.component_progress`) e a do complexo (rondas, carga, volum
 de força prontos (mais 3 que usam complexos). Entram **uma vez** (a definição `gym_catalog_workouts`
 guarda os que já entraram: se apagares um, não volta).
 
-**Definições → Pastas.** Um separador novo para escolher as pastas das **exportações**,
+**Definições → Pastas.** *(Desde a ronda 29 as pastas são fixas, dentro de `data/` — ver a secção
+8; o separador passou a só mostrar onde fica cada coisa.)* Um separador novo para escolher as pastas das **exportações**,
 **importações**, **backups**, **treinos** e **GPX** (opções `path_exports`, `path_imports`,
 `path_backups`, `path_workouts`, `path_gpx`; vazio = a de sempre). Cada linha mostra a pasta que
 está mesmo a ser usada e se está utilizável; uma pasta impossível cai na de sempre. As escolhidas
@@ -1701,7 +1745,7 @@ componente *Saúde* leva as colunas novas e as duas marcas de «já criei as mé
 de Saúde não ressuscitar o que apagaste). Backups antigos restauram-se sem problema.
 
 **Revisões desta ronda.** *Segurança:* `.claude/` (e `.env*`, `*.pem`, `*.key`) no `.gitignore`;
-nenhuma palavra-passe escrita no código/scripts (Garmin: `PERENNIA_GARMIN_PASSWORD`; Wi-Fi:
+nenhuma palavra-passe escrita no código/scripts (Garmin: pedida a cada sincronização desde a ronda 29; Wi-Fi:
 `PERENNIA_SYNC_PIN`, nunca como argumento); nenhum `shell=True`; o CSV de métricas e o catálogo
 usam sempre parâmetros SQL. *Setas → lista pendente:* o diário e o editor de métricas usam listas
 pendentes (grupo, tipo, fonte, depende de, resposta); as restantes setas que ficam são listas curtas
@@ -1896,7 +1940,7 @@ todos os menus no tamanho **1024×640 (o mínimo)** e no **1280×760**.
 a opção nova vai no backup com as **Definições**). *Segurança:* revi o código, os scripts (`.bat`, `.sh`,
 `build`) e a configuração: `.claude/` está no `.gitignore` (e `.env*`, `*.pem`, `*.key`, `*.db`,
 `GarminConnectConfig.json*`); nenhuma palavra-passe nem segredo escritos (só as variáveis de ambiente
-`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_SYNC_PIN`, `PERENNIA_STRAVA_CLIENT_ID/SECRET`); a palavra-passe do
+`PERENNIA_SYNC_PIN`, `PERENNIA_STRAVA_CLIENT_ID/SECRET`; a do Garmin é pedida a cada sincronização desde a ronda 29); a palavra-passe do
 Garmin vai para um ficheiro temporário privado (0600) e nunca na linha de comandos; sem `shell=True`,
 `eval`, `exec` nem `pickle`; o XML lê-se por `safexml`; repor um backup não escreve fora da pasta de
 dados. *Observação:* os tokens do Strava ficam em texto no ficheiro `.db` (permissões 0600 em
@@ -2090,8 +2134,8 @@ ciclismo mostra o que foi feito dentro de um Conditioning.
   mas sem pacotes novos: refaz o executável com `build.sh` / `build_windows.bat` e volta a correr
   `criar_atalho_windows.bat`.
 - *Segurança:* sem superfície nova; `.claude/`, `.env*`, `*.db`, `*.pem`, `*.key` no `.gitignore`;
-  as passwords só por variáveis de ambiente (`PERENNIA_GARMIN_PASSWORD`, `PERENNIA_STRAVA_CLIENT_SECRET`,
-  `PERENNIA_SYNC_PIN`); nenhum comando leva uma password; SQL com parâmetros (os poucos nomes de tabela
+  as passwords só por variáveis de ambiente (`PERENNIA_STRAVA_CLIENT_SECRET`, `PERENNIA_SYNC_PIN`; a
+  do Garmin, desde a ronda 29, é escrita a cada sincronização); nenhum comando leva uma password; SQL com parâmetros (os poucos nomes de tabela
   montados no código são fixos).
 - *Opções novas (Definições → Avançado → Sessões):* `cond_rest_default_s` (um descanso novo, 120 s) e
   `cond_gym_block_default_s` (um bloco de ginásio sem exercícios, 900 s).
@@ -2136,7 +2180,7 @@ resultado abre a ficha inteira. O mesmo aparece no editor da colheita, no catál
 próprio glossário. (A caixa é geral: qualquer linha com descrição pode passar a tê-la.)
 
 **Exportar para o Power BI.** *Backups e Sincronização → Exportar →* botão **Power BI** (ou
-`python main.py --powerbi`, ou `--powerbi PASTA`). Grava na pasta **Exportações/PowerBI** (sempre a
+`python main.py --powerbi`, ou `--powerbi PASTA`). Grava na pasta **`data/out/powerbi`** (sempre a
 mesma, reescrita a cada exportação):
 
 | Ficheiro | Para quê |
@@ -2194,6 +2238,25 @@ corrida por blocos**, a Perennia diz-te o que carregar.
 - Com uma passadeira que a Perennia comanda (hoje só a SEM HARDWARE) o cartão não aparece, porque
   ela muda sozinha.
 
+### Ronda 29: tudo numa pasta `data/`, o GarminDB sem palavra-passe guardada e o `perennia_setup`
+
+- **Uma pasta para tudo: `data/`**, dentro da pasta do projeto: `data/in/<categoria>` para o que
+  queres importar, `data/out/<categoria>` para o que a Perennia grava, `data/garmin` para o GarminDB e
+  a base em `data/perennia.db`. Cada módulo lê e grava na sua pasta. As listas de importação **só
+  procuram na pasta `data/in` certa** (já não em Transferências, Documentos ou Ambiente de trabalho);
+  arrastar para a janela funciona de qualquer sítio. Ver a secção 8.
+- **Backups como o resto:** exportar → `data/out/backups`; repor → só o que está em `data/in/backups`.
+- **As pastas deixaram de se configurar:** Definições → Pastas mostra onde fica cada coisa.
+- **Os dados das versões anteriores são copiados** para `data/` na primeira vez (os originais ficam).
+- **GarminDB:** a configuração e as bases em `data/garmin`; **a palavra-passe é pedida a cada
+  sincronização e não fica guardada em lado nenhum** (ver «Sincronização (GarminDB)»). O primeiro
+  login (o código MFA) faz-se no `perennia_setup` ou com `python main.py --garmin-login`.
+- **`perennia_setup`** (`.bat` no Windows, `.sh` no macOS/Linux): instala e prepara tudo num computador
+  novo — ver a secção 2 e «Dar a Perennia a um amigo» (secção 7).
+- Linha de comandos: `--setup` (com `--sem-perguntas`), `--garmin-login [E-MAIL]`; os destinos por
+  omissão de `--backup`, `--csv-modelo/--csv-exportar`, `--plano-modelo/--plano-exportar`,
+  `--adhoc-exportar` e `--powerbi` passaram para a pasta `data/out` respetiva.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -2243,7 +2306,6 @@ de omissão. Não estão disponíveis durante uma sessão.
 | CSV: separador de valores (`adhoc_csv_sep`) | ;, ,, Tab, | | ; (ponto e vírgula) | o que se propõe ao exportar (escolhe-se de novo em cada exportação) |
 | CSV: separador decimal (`adhoc_csv_decimal`) | «.» ponto, «,» vírgula | «.» ponto | igual ao separador de valores não pode ser: usa-se o ponto |
 | CSV: UTF-8 com BOM (`adhoc_csv_bom`) | ligado / desligado | ligado | o Excel abre bem os acentos |
-| CSV: pasta das exportações (`adhoc_export_dir`) | texto | (vazio) | vazio = a pasta «exports» dentro da pasta de dados |
 | Gráfico: categorias no eixo X (`adhoc_max_categories`) | 2 a 120 | 15 | as categorias a mais ficam agrupadas em «Outros» |
 | Gráfico: séries na legenda (`adhoc_max_series`) | 1 a 7 | 6 | as séries a mais ficam agrupadas em «Outros» |
 | Gráfico: pontos na dispersão (`adhoc_max_points`) | 10 a 2000 | 400 | acima disto desenha-se uma amostra |
@@ -2328,15 +2390,9 @@ de omissão. Não estão disponíveis durante uma sessão.
 | **Blocos e pastas (ronda 19)** | | | |
 | Alterar o bloco durante a sessão (`block_edit_enabled`) | sim/não | sim | desligada, a velocidade da passadeira fica presa à do bloco |
 | Âmbito da alteração (`block_change_scope`) | bloco / sessão | bloco | a alteração vale só para o bloco em curso ou até ao fim da sessão |
-| Pasta das exportações (`path_exports`) | texto | (vazio) | vazio = «exports» na pasta de dados |
-| Pasta das importações (`path_imports`) | texto | (vazio) | onde se procuram ficheiros a importar |
-| Pasta dos backups (`path_backups`) | texto | (vazio) | onde se gravam e procuram os backups |
-| Pasta dos treinos (`path_workouts`) | texto | (vazio) | onde se procuram treinos e planos |
-| Pasta dos GPX (`path_gpx`) | texto | (vazio) | onde se procuram rotas .gpx |
 | **Histórico de outras apps (ronda 19)** | | | |
 | Aplicar regras ao importar (`etl_auto_apply`) | sim/não | sim | normaliza as atividades novas depois de importar |
 | Regras de arranque (`etl_use_defaults`) | sim/não | sim | sem ficheiro de regras, usam-se as de arranque |
-| Ficheiro de regras (`etl_rules_file`) | texto | (vazio) | vazio = `regras-historico.json` na pasta das importações |
 | Tamanho máximo das regras (`etl_rules_max_kb`) | 16 a 8192 kB | 512 kB | um ficheiro de regras maior é recusado |
 | **Sincronização Wi-Fi e base de dados (ronda 19)** | | | |
 | Porta (`sync_port`) | 1024 a 65535 | 8765 | a porta TCP do destino |
@@ -2537,7 +2593,7 @@ No editor:
 - ←/→ num passo da lista muda-o de lugar; Del apaga-o.
 - Em cima vês a duração, a TSS e o IF estimados com a tua FTP.
 
-**Exportar** grava para a pasta `exports/` (o caminho aparece no ecrã), num
+**Exportar** grava para a pasta `data/out/treinos` (o caminho aparece no ecrã), num
 destes formatos ou em todos:
 
 | Formato | Para quê |
@@ -2955,8 +3011,8 @@ O cartão **Saúde** tem:
   a Perennia percebe as duas coisas. As colunas reconhecidas (data, rMSSD,
   FC, pontos de recuperação, passos, sono, stress…) vão para as métricas
   certas e ficam marcadas com a origem; as outras ignoram-se, ou criam
-  métricas novas se ligares essa opção. Põe os ficheiros na pasta `imports/`
-  (dentro da pasta dos dados) ou em Transferências.
+  métricas novas se ligares essa opção. Põe os ficheiros em `data/in/hrv4training`
+  (o HRV4Training), `data/in/analises` (as análises) ou `data/in/csv`.
 
 ### Pressão arterial (várias medições por dia, por período)
 
@@ -3127,11 +3183,12 @@ base da Perennia. As opções gravam-se logo. Cada fonte tem o seu separador:
   (com BOM, o Excel abre-os bem) com `;` a separar colunas (na importação aceita-se também
   `,` e tab) e `|` a separar listas dentro de uma célula (`Isométrico|Força`). Os grupos,
   subgrupos, modalidades (disciplinas) e material que não existirem **são criados**.
-  Gravam-se em Transferências. Os tipos de material são só de consulta.
+  Os modelos e as exportações gravam-se em `data/out/csv`; o .csv a importar põe-se em
+  `data/in/csv`. Os tipos de material são só de consulta.
 - **Upload manual** — **uma atividade** de cada vez, vinda do teu
   computador: um **.fit** (relógios Garmin, Wahoo, Zwift…) ou um **.tcx**.
-  Escolhe-o na lista (a Perennia procura em `imports/`, Transferências e
-  Documentos) ou **arrasta-o para a janela**. A Perennia lê-o e mostra, numa
+  Escolhe-o na lista (a Perennia procura só em `data/in/atividades`) ou
+  **arrasta-o para a janela** (de qualquer sítio). A Perennia lê-o e mostra, numa
   janela, o **nome**, o **desporto** (que podes mudar com ←/→), a data, o
   tempo total e em movimento, a distância, a subida, a FC, a potência, as
   calorias e o n.º de voltas; **Fazer upload** guarda a atividade no
@@ -3143,18 +3200,42 @@ base da Perennia. As opções gravam-se logo. Cada fonte tem o seu separador:
   **TSS do TrainingPeaks** e contam para a forma e a fadiga. Os treinos só
   planeados (sem tempo feito) ignoram-se; importar outra vez não duplica.
 
-Nos três, a lista mostra os ficheiros que a Perennia encontra em
-Transferências e na pasta `imports/` (ou arrasta o ficheiro para a janela);
+Cada separador mostra **só** os ficheiros da sua pasta em `data/in`: `data/in/hrv4training`,
+`data/in/analises`, `data/in/trainingpeaks`, `data/in/historico`, `data/in/csv` (o CSV e a Saúde) e
+`data/in/atividades` (o Upload manual). Ou arrasta o ficheiro para a janela, de qualquer sítio.
 Enter importa.
 
 E o [GarminDB](https://github.com/tcgoetz/GarminDB), que descarrega os dados do
-Garmin Connect para bases locais (`~/HealthData/DBs`). A Perennia **lê essas
-bases** e, se o GarminDB estiver instalado, corre-o por ti. A tua
-palavra-passe do Garmin fica só na configuração do GarminDB
-(`~/.GarminDb/GarminConnectConfig.json`); a Perennia nunca a lê.
+Garmin Connect para bases locais. A Perennia **lê essas bases** e, se o GarminDB estiver
+instalado, corre-o por ti. **Tudo fica dentro de `data/garmin`**:
 
-1. Instala e configura o GarminDB: `pip install garmindb`, e o ficheiro de
-   configuração com o teu utilizador.
+| Pasta | O quê |
+|---|---|
+| `data/garmin/config/GarminConnectConfig.json` | a configuração do GarminDB: o **utilizador** (o e-mail), as datas, os dados ligados — **sem palavra-passe** |
+| `data/garmin/config/garmin_tokens.json` | o **token** da sessão, que o próprio GarminDB guarda depois do login (não é a palavra-passe; é o que o deixa entrar sem pedir o código MFA de cada vez) |
+| `data/garmin/bases/DBs/` | as bases que o GarminDB cria (`garmin.db`, `garmin_activities.db`, …) |
+| `data/garmin/bases/Backups/` | as cópias de segurança das bases |
+
+A Perennia corre sempre o GarminDB com `-f data/garmin/config`, e a configuração aponta para
+`data/garmin/bases` (`directories.base_dir`, absoluto). Nada vai para `~/.GarminDb` nem para
+`~/HealthData` (quem já os tinha: na primeira vez são **copiados** para `data/garmin`, sem a
+palavra-passe — ver a secção 8).
+
+**A palavra-passe do Garmin é pedida a cada sincronização e não fica guardada em lado
+nenhum** — nem na base de dados, nem na configuração, nem nas cópias `.bak`, nem na linha de
+comandos, nem numa variável de ambiente, nem na memória da aplicação depois de acabar. Ao
+carregar em **Sincronizar agora** (com «descarregar» ligado) abre-se uma janela para a escreveres
+(aparece como `•••`). Enquanto o GarminDB corre, ela fica num ficheiro temporário privado (só o
+teu utilizador o lê) dentro de `data/garmin/config`, apontado por `credentials.password_file`; no
+fim (mesmo que falhe) é escrito por cima e apagado. **Só importar** (ler o que já está nas bases)
+não pede palavra-passe. Uma palavra-passe que estivesse escrita na configuração (à mão, ou das
+versões anteriores) é **retirada** antes de correr, e não é usada.
+
+1. Instala e configura o GarminDB: o **`perennia_setup`** faz tudo (responde «s» ao GarminDB:
+   instala-o, guarda o e-mail e faz o primeiro login com o código MFA, se a conta o tiver). Sem
+   o setup: `python -m pip install garmindb` no `.venv`, o e-mail em **Definições → Ligações
+   externas → Garmin** e, para o primeiro login (o código MFA), `python main.py --garmin-login`
+   numa linha de comandos.
 2. Escolhe as opções (ficam guardadas):
    - **Período**:
      - *Só o mais recente* — `--latest`: o GarminDB traz só o que falta desde
@@ -3178,12 +3259,11 @@ palavra-passe do Garmin fica só na configuração do GarminDB
      copiar de um relógio ligado por USB (`--copy`), importar para as bases
      do GarminDB (`--import`), analisar (`--analyze`) e voltar a descarregar
      o que já existe (`--overwrite`).
-   - **Pastas**: a das bases (por omissão `~/HealthData/DBs`) e a da
-     configuração (por omissão `~/.GarminDb`; outra pasta vai como `-f`).
+   - **Pastas do GarminDB**: fixas, `data/garmin/config` (vai como `-f`) e `data/garmin/bases`.
    - A linha **Comando** mostra o comando exato que vai correr.
    - **Requisitos** (✓/✗, com o que fazer em cada ✗): GarminDB instalado, configuração
-     (`GarminConnectConfig.json`), utilizador, palavra-passe, pelo menos um tipo de dados e um
-     passo. **Sincronizar agora** só corre se estiver tudo o que é preciso e, se faltar algo, diz
+     (`data/garmin/config/GarminConnectConfig.json`), utilizador, pelo menos um tipo de dados e um
+     passo (a palavra-passe não é um requisito guardado: é pedida ao sincronizar). **Sincronizar agora** só corre se estiver tudo o que é preciso e, se faltar algo, diz
      o quê (e fica no relato) em vez de dar um erro do GarminDB.
    - **O que está a acontecer.** Ao sincronizar, o ecrã mostra os **passos** (✓ feito · ▶ a decorrer
      · ✗ falhou · – saltado): *verificar os requisitos → escrever o intervalo na configuração (se
@@ -3194,25 +3274,21 @@ palavra-passe do Garmin fica só na configuração do GarminDB
      depois, como «Última sincronização». Quando falha, a Perennia traduz as causas típicas em
      português: verificação em dois passos (MFA), palavra-passe recusada, demasiados pedidos
      (esperar ~30 min), configuração em falta, sem rede, sem permissão numa pasta. O GarminDB não
-     fica à espera de que escrevas nada: se pedir um código, falha logo e diz o que fazer.
+     fica à espera de que escrevas nada: se pedir um código, falha logo e diz o que fazer
+     (`python main.py --garmin-login` numa linha de comandos, ou o `perennia_setup` outra vez).
    - **Primeira vez? Passo a passo** abre a lista do que fazer num computador novo.
 
    **Dar a Perennia a um colega — ele consegue sincronizar?** Sim, mas cada pessoa usa **a sua conta
-   Garmin** e o seu GarminDB; nada da tua conta viaja com a aplicação (a palavra-passe nunca é
-   gravada em disco). O colega precisa de: (1) instalar o GarminDB (`pip install garmindb`) no
-   computador dele; (2) em **Definições → Ligações externas → Garmin**, escrever o e-mail da
-   conta (a Perennia cria o `GarminConnectConfig.json` em `~/.GarminDb`); (3) definir a variável de
-   ambiente `PERENNIA_GARMIN_PASSWORD` com a palavra-passe **antes** de abrir a Perennia (ou
-   escrevê-la nas Definições: fica só na memória até fechar); (4) se a conta Garmin tem
-   verificação em dois passos, correr uma vez `garmindb_cli.py --download --latest` numa linha de
-   comandos para introduzir o código; (5) escolher o período e os dados e carregar em
-   **Sincronizar agora**. Sem GarminDB instalado a Perennia só importa o que já estiver nas
-   bases. Se o teu colega já tem o GarminDB a funcionar, basta apontar a «Pasta das bases».
+   Garmin**; nada da tua conta viaja com a aplicação (a pasta `data/` não vai para o git e a
+   palavra-passe nunca é gravada). O colega corre o **`perennia_setup`**, responde «s» ao GarminDB
+   (instala-o, escreve o e-mail dele e faz o primeiro login com o código MFA) e depois, na
+   Perennia, escolhe o período e os dados e carrega em **Sincronizar agora** — escrevendo a
+   palavra-passe quando a janela a pede. Ver «Dar a Perennia a um amigo» (secção 7).
 3. **Sincronizar agora** (o botão principal, ou Ctrl+S) corre o GarminDB e
    importa; **Só importar** lê o que já está nas bases, sem correr o
    GarminDB. Sem o GarminDB instalado, Sincronizar agora também só importa.
 4. Manutenção: **Cópia de segurança das bases** (`--backup`, um `.zip` em
-   `HealthData/Backups`) e **Reconstruir as bases** (`--rebuild_db`, quando o
+   `data/garmin/bases/Backups`) e **Reconstruir as bases** (`--rebuild_db`, quando o
    GarminDB o pedir numa mudança de versão). As duas perguntam antes.
 
 Entram na **Saúde**: passos, FC em repouso, FC mínima e máxima do dia, stress
@@ -3262,7 +3338,7 @@ Copia-o para uma pen ou para a nuvem.
 | Testes de aptidão | testes, resultados, testes de FTP |
 | Saúde | valores diários (HRV4Training incluído), métricas, análises clínicas com os comentários do médico, **as medições da pressão arterial** e **os separadores que criaste, com as notas** |
 | Calendário | treinos planeados, notas do dia e **os eventos do Treinador** (com as respostas) |
-| Ficheiros | treinos exportados, importações, a pasta `workouts` |
+| Ficheiros | o que está em `data/in` (treinos, planos, rotas, .csv… a importar) e o que exportaste para `data/out` (treinos, planos, .csv, relatórios); os backups, o Power BI e o GarminDB não entram |
 | Ligações externas (credenciais) | Strava (chaves e sessão) e GarminDB (pastas) — **só se pedires** |
 
 As credenciais ficam fora por omissão: quem tiver o ficheiro teria as tuas
@@ -3274,10 +3350,14 @@ chaves do Strava. Liga «Ligações externas» se o backup for só para ti.
 em `11-sessoes/ficheiros/`, um `manifest.json` com o que lá está (data,
 versão, quantos registos de cada tabela) e um `LEIA-ME.txt`.
 
-**Repor** — a lista mostra os backups que a Perennia encontra na pasta
-`backups`, em Transferências, Documentos e no Ambiente de trabalho. Para
-**trazer um backup** de outro sítio (o «upload»): **arrasta o .zip para a
-janela da Perennia**, em qualquer ecrã, ou põe-no numa dessas pastas.
+**Onde ficam.** Como as outras pastas: o que **exportas** vai para **`data/out/backups`** (e as
+cópias automáticas antes de repor também); o que queres **repor** põe-se em **`data/in/backups`**.
+
+**Repor** — a lista mostra **só** os backups que estão em `data/in/backups` (para repor um que
+fizeste, copia-o de `data/out/backups` para `data/in/backups`). Para **trazer um backup** de outro
+sítio (o «upload»): **arrasta o .zip para a janela da Perennia**, em qualquer ecrã, ou põe-no em
+`data/in/backups`. Um backup das versões anteriores (com os `.fit` em `rides/`, `rowing/`…) repõe-se
+na organização nova (`data/out/sessoes/ciclismo/`, …), com os caminhos corrigidos.
 Enter abre a janela da reposição:
 
 - marca as componentes a repor (por omissão, todas as que o ficheiro tem);
@@ -3325,23 +3405,23 @@ ficheiros, ligacoes.
 Sincronização, sem abrir a janela):
 
 ```bash
-python main.py --importar trainingpeaks ~/Transferências/workouts.csv
+python main.py --importar trainingpeaks data/in/trainingpeaks/workouts.csv
 ```
 
 ```bash
-python main.py --importar hrv4training ~/Transferências/MyMeasurements.csv
+python main.py --importar hrv4training data/in/hrv4training/MyMeasurements.csv
 ```
 
 ```bash
-python main.py --importar analises ~/Transferências/analises.csv
+python main.py --importar analises data/in/analises/analises.csv
 ```
 
 ```bash
-python main.py --importar atividade ~/Transferências/corrida.fit
+python main.py --importar atividade data/in/atividades/corrida.fit
 ```
 
 ```bash
-python main.py --importar csv ~/Transferências/perennia_exercicios.csv
+python main.py --importar csv data/in/csv/perennia_exercicios.csv
 ```
 
 (`atividade` lê um `.fit` ou `.tcx` e guarda-o no desporto respetivo, como o
@@ -3349,14 +3429,14 @@ Upload manual. `csv` importa um .csv de artigos, exercícios, grupos musculares,
 disciplinas ou testes — descobre o conjunto pelo cabeçalho.)
 
 **Modelos e exportações em CSV** (os mesmos da Sincronização → CSV; gravam em
-Transferências, ou na pasta de `--destino`):
+`data/out/csv`, ou na pasta de `--destino`):
 
 ```bash
 python main.py --csv-modelo exercicios
 ```
 
 ```bash
-python main.py --csv-exportar grupos --destino ~/Documentos
+python main.py --csv-exportar grupos
 ```
 
 O diário de saúde tem o seu conjunto, `saude` (o `--importar saude` lê o .csv por data):
@@ -3366,7 +3446,7 @@ python main.py --csv-modelo saude
 ```
 
 ```bash
-python main.py --importar saude ~/Transferências/perennia_saude.csv
+python main.py --importar saude data/in/csv/perennia_saude.csv
 ```
 
 Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `material`.
@@ -3375,7 +3455,7 @@ Os conjuntos são `artigos`, `exercicios`, `grupos`, `disciplinas`, `testes` e `
 e o decimal das Definições, se não os deres; grava na pasta `exports`, ou em `--destino`):
 
 ```bash
-python main.py --adhoc-exportar sessions --destino ~/Documentos --nome minhas-sessoes --separador ";"
+python main.py --adhoc-exportar sessions --nome minhas-sessoes --separador ";"
 python main.py --adhoc-exportar daily --vista "Peso por mês"
 ```
 
@@ -3385,7 +3465,7 @@ semanas»):
 ```bash
 python main.py --plano-modelo
 python main.py --plano-importar o-meu.perennia-plan.json
-python main.py --plano-exportar stronglifts_5x5 --destino ~/Documentos
+python main.py --plano-exportar stronglifts_5x5          # em data/out/planos
 ```
 
 ### Rotas (menu do ecrã inicial)
@@ -3430,8 +3510,8 @@ nos da Perennia, Editar e Apagar.
 
 Na ficha de qualquer treino (a que se abre ao escolhê-lo na Lista de
 treinos) há, em baixo à direita, **Exportar**. Abre uma janela onde dás o
-**nome do ficheiro** e escolhes o **formato**; **OK** grava-o na pasta
-**Transferências** (Downloads) e a mensagem do topo diz onde ficou;
+**nome do ficheiro** e escolhes o **formato**; **OK** grava-o em
+**`data/out/treinos`** e a mensagem do topo diz onde ficou;
 **Cancelar** (ou Esc) volta à ficha do treino. Um ficheiro que já exista
 não é substituído: o novo leva «_2», «_3»…
 
@@ -3450,8 +3530,8 @@ objetivos, Abrir no construtor e Exportar).
 
 Na **Sessão de treino** há agora **Do computador**, e nas listas de treinos
 **+ Carregar do computador**. Lê `.zwo`, `.fit` (treinos Garmin/Wahoo e os
-que a Perennia exporta) e, no ciclismo, `.mrc`/`.erg`, das pastas
-`workouts` (ao lado da aplicação), Transferências e Documentos.
+que a Perennia exporta) e, no ciclismo, `.mrc`/`.erg`, da pasta
+`data/in/treinos` (só essa).
 
 Ao escolher um ficheiro, a Perennia pergunta **«Guardar na lista de
 treinos?»** — para a lista não ir enchendo com treinos que só se fazem uma
@@ -3747,13 +3827,15 @@ minuto. Tens de pedalar para não ser apanhado.
 
 ### Segurança e segredos
 
-- **A palavra-passe do Garmin nunca vai para o disco nem para a linha de comandos.** Define a
-  variável de ambiente **`PERENNIA_GARMIN_PASSWORD`** (fica fora de qualquer ficheiro) ou escreve-a
-  nas Definições (fica **só na memória** até fechares a aplicação). Ao sincronizar, a Perennia
-  entrega-a ao GarminDB num ficheiro temporário privado (só o teu utilizador o lê) que apaga no fim,
-  mesmo que a sincronização falhe. Se a configuração do GarminDB ainda tiver uma palavra-passe em
-  claro (de uma versão antiga), ela é **retirada do ficheiro e da cópia `.bak`** na primeira
-  sincronização. Alternativa mais forte: o cofre do sistema (`secure_password` do GarminDB).
+- **A palavra-passe do Garmin é escrita a cada sincronização e não fica guardada em lado
+  nenhum** (desde a ronda 29): nem na base de dados, nem na configuração do GarminDB, nem nas cópias
+  `.bak`, nem na linha de comandos, nem numa variável de ambiente, nem na memória depois de acabar.
+  Ao sincronizar, a Perennia entrega-a ao GarminDB num ficheiro temporário privado (só o teu
+  utilizador o lê, dentro de `data/garmin/config`) que escreve por cima e apaga no fim, mesmo que a
+  sincronização falhe. Uma palavra-passe que esteja escrita na configuração (à mão, ou de uma versão
+  antiga) é **retirada do ficheiro e da cópia `.bak`** antes de correr, e não é usada. O GarminDB
+  guarda, ele próprio, o *token* da sessão (`data/garmin/config/garmin_tokens.json`) — não a
+  palavra-passe — e os backups da Perennia nunca o levam.
 - **Strava:** o *Client ID* e o *Client Secret* podem vir das variáveis de ambiente
   **`PERENNIA_STRAVA_CLIENT_ID`** e **`PERENNIA_STRAVA_CLIENT_SECRET`** (nesse caso o segredo nem
   chega à base de dados). A autorização usa um `state` aleatório (o retorno local só aceita o pedido
@@ -3763,8 +3845,10 @@ minuto. Tens de pedalar para não ser apanhado.
   caminhos absolutos e letras de unidade são recusados).
 - **A base de dados** fica com permissões só do dono (0600, em Linux/macOS). Os backups só levam as
   *Ligações externas* (Strava) se o pedires.
-- **`.gitignore`:** `.claude/`, `.env*`, `*.db`, os `.fit`, `exports/`, `backups/`, chaves e
-  certificados nunca vão para o git.
+- **`.gitignore`:** a pasta **`data/`** inteira (os teus dados: base, sessões, backups, GarminDB),
+  `.claude/`, `.env*`, `*.db`, os `.fit`, `GarminConnectConfig.json*`, `garmin_tokens.json`, chaves e
+  certificados nunca vão para o git. Os modelos que a Perennia copia para `data/in` vêm de
+  `modelos/` (esses sim, no git).
 - Lembra-te: **nunca coles chaves ou palavras-passe numa conversa** com um assistente; põe-nas
   sempre em variáveis de ambiente.
 
@@ -3936,11 +4020,42 @@ A Assioma Duo deixa ANT+ e uma ligação Bluetooth em simultâneo.
 
 ---
 
-## 7. Partilhar com colegas (sem Python)
+## 7. Partilhar com colegas
+
+### Dar a Perennia a um amigo (com o `perennia_setup`)
+
+A forma mais simples: dás-lhe **a pasta do projeto** e ele corre um script.
+
+1. **Tu**: dá-lhe o projeto **sem os teus dados** — ou o repositório do GitHub (a pasta `data/`
+   nunca vai para o git), ou um `.zip` da pasta do projeto **sem** a pasta `data/` (e sem `.venv`,
+   que é do teu computador). Atenção: a pasta `data/` tem a tua base de dados, as tuas sessões e
+   a configuração do teu GarminDB — não a envies.
+2. **O amigo** instala o **Python 3.11+** (no Windows, com a opção «Add python.exe to PATH»).
+3. **O amigo**, na pasta do projeto, corre **`perennia_setup.bat`** (Windows, duplo clique) ou
+   **`./perennia_setup.sh`** (macOS, Linux). O script cria o `.venv`, instala tudo, cria a pasta
+   `data/` com a **base de dados já com o conteúdo de base** (os treinos que vêm com a aplicação,
+   os exercícios e as modalidades do ginásio, os testes, as métricas da Saúde, os glossários) e os
+   **ficheiros modelo** em `data/in` (um `.gpx`, um treino `.zwo`, o plano modelo, um `LEIA-ME` em
+   cada pasta), e faz o autoteste.
+4. **GarminDB (opcional)**: o script pergunta. Se ele responder «s», instala o GarminDB, pede o
+   **e-mail da conta Garmin dele** e faz o **primeiro login** — escreve a palavra-passe (não fica
+   guardada) e, se a conta tiver verificação em dois passos, o código MFA. Daí para a frente, na
+   Perennia, cada **Sincronizar agora** pede a palavra-passe outra vez. Cada pessoa usa a sua
+   conta: nada da tua viaja.
+5. **Atalho (opcional)**: o script pergunta se cria o atalho «Perennia» no Ambiente de trabalho.
+6. No fim mostra o resumo (onde ficaram os dados, como abrir). Para abrir: o atalho,
+   `Perennia.bat` ou `./perennia.sh`.
+
+O script pode correr-se **outra vez** (para configurar o GarminDB mais tarde, ou depois de um
+`git pull`): o que já existe fica como está. Para o amigo **atualizar** a Perennia: `git pull`
+(ou substituir os ficheiros do projeto **mantendo a pasta `data/`**) e voltar a correr o
+`perennia_setup`.
+
+### Sem Python (a versão empacotada)
 
 Os teus colegas não precisam de Python, venv nem PyCharm. Tu crias uma vez a
 versão empacotada, com o Python e as bibliotecas lá dentro, e envias-lhes um
-`.zip`.
+`.zip`. A pasta `data/` nasce ao lado do executável na primeira vez que o abrem.
 
 ### No teu PC Windows
 
@@ -3962,8 +4077,9 @@ anos. Carrega em *Mais informações* → *Executar mesmo assim*. Só acontece
 uma vez.
 
 **Atualizar.** Quando houver versão nova, voltas a correr o
-`build_windows.bat` e envias o zip novo. Os colegas substituem a pasta; os
-dados deles estão noutro sítio (`%APPDATA%\Perennia`) e ficam.
+`build_windows.bat` e envias o zip novo. Os colegas substituem a aplicação mas
+**guardam a pasta `data/`** (os dados deles estão lá, ao lado do `.exe`): copiam-na
+para a pasta nova (ou fazem um backup antes e repõem-no).
 
 **O que refazer depois de um `git pull`** (a ronda 15 renomeou o pacote `velo/` para `perennia/`; as rondas 16 a 19 só juntam ficheiros novos dentro de `perennia/`, por isso a tabela é a mesma; a ronda 19 acrescenta `cryptography` ao `requirements.txt`, ver abaixo):
 
@@ -4015,22 +4131,68 @@ devem enviar.
 
 ## 8. Onde ficam os teus dados, e como os mudas de computador
 
-Tudo vive em **dois sítios, numa só pasta**:
+**Tudo numa só pasta: `data/`, dentro da pasta do projeto** (ao lado do `main.py`; na versão
+empacotada, ao lado do executável). Nada fica espalhado pelo computador:
 
-| | |
+```
+data/
+  perennia.db                a base de dados (o estado da aplicação)
+  in/                        o que a Perennia LÊ — põe aqui os ficheiros a importar
+    gpx/                     rotas (.gpx)
+    treinos/                 treinos (.zwo .erg .mrc .fit; ginásio: .csv .json .txt)
+    planos/                  planos de treino (.perennia-plan.csv / .json)
+    csv/                     conjuntos .csv (artigos, exercícios, saúde, glossário…)
+    atividades/              upload manual de uma atividade (.fit .tcx)
+    analises/                análises clínicas (.xlsx .csv)
+    hrv4training/            o export da app HRV4Training (.csv)
+    trainingpeaks/           o .csv de atividades do TrainingPeaks
+    historico/               históricos de atividades (e regras-historico.json)
+    backups/                 backups a repor (.zip)
+  out/                       o que a Perennia GRAVA
+    sessoes/ciclismo/ …      o .fit de cada sessão: ciclismo, remo, corrida, natacao, ginasio
+    treinos/                 treinos exportados
+    planos/                  planos exportados e o ficheiro modelo
+    csv/                     modelos e exportações em .csv
+    powerbi/                 o modelo para o Power BI
+    backups/                 os backups que fazes (e as cópias antes de repor)
+    relatorios/              as exportações da Análise AdHoc
+  garmin/
+    config/                  a configuração do GarminDB (sem palavra-passe) e o token de sessão
+    bases/                   o que o GarminDB descarrega (DBs/garmin.db, …)
+```
+
+- **As listas de importação só procuram na pasta `data/in` certa** — nada de Transferências,
+  Documentos ou Ambiente de trabalho. **Arrastar um ficheiro para a janela** continua a funcionar
+  com um ficheiro de qualquer sítio.
+- **As pastas não se configuram** (o separador **Definições → Pastas** só mostra onde fica cada
+  coisa). Para usar outra pasta de dados inteira: `python main.py --data-dir /outra/pasta` (ou a
+  variável `PERENNIA_DATA_DIR`); lá dentro a organização é a mesma.
+- Na primeira vez, a Perennia cria a estrutura e copia para `data/in` os **ficheiros modelo** que
+  vêm em `modelos/` (um `LEIA-ME.txt` em cada pasta, um `.gpx`, um treino `.zwo`, o plano modelo).
+  Um ficheiro que já lá esteja nunca é substituído.
+- **A pasta `data/` nunca vai para o git** (está no `.gitignore`): os teus dados ficam só no teu
+  computador.
+
+**Vens de uma versão anterior? Não tens de fazer nada.** As versões anteriores guardavam os dados
+na pasta do sistema (Windows `%APPDATA%\Perennia`, macOS `~/Library/Application Support/Perennia`,
+Linux `~/.local/share/perennia`) e o GarminDB em `~/.GarminDb` e `~/HealthData`. Na **primeira vez**
+que abres esta versão (ou corres o `perennia_setup`), se `data/` ainda não tem base de dados e essa
+pasta antiga tem, **tudo é copiado** para `data/`:
+
+| De | Para |
 |---|---|
-| `perennia.db` | base de dados SQLite: rotas, histórico, classificações, desafios, definições |
-| `backups/` | os backups (`.zip`) feitos no menu Backups e as cópias automáticas antes de repor |
-| `rides/*.fit` | um ficheiro `.fit` por sessão de ciclismo, pronto a enviar para onde quiseres |
-| `strength/*.fit` | um `.fit` por treino de força |
-| `exports/` | os treinos que exportas no construtor (`.zwo`, `.erg`, `.mrc`, `.fit`); em `exports/PowerBI/` o modelo para o Power BI |
-| `imports/` | onde pôr os ficheiros do HRV4Training e do Garmin para importar |
+| `perennia.db` | `data/perennia.db` (pela cópia do SQLite, com o que estiver no `-wal`) |
+| `rides/`, `rowing/`, `strength/`, `endurance/` | `data/out/sessoes/ciclismo`, `…/remo`, `…/ginasio`, `…/corrida` ou `…/natacao` |
+| `exports/`, `backups/` | `data/out/treinos`, `data/out/backups` |
+| `workouts/`, `gpx/`, `imports/` | `data/in/treinos`, `data/in/gpx`, e cada ficheiro de `imports/` para a pasta `data/in` do seu tipo |
+| os caminhos dos `.fit` gravados na base | passam a apontar para as cópias |
+| `~/HealthData` (as bases do GarminDB) | `data/garmin/bases` |
+| `~/.GarminDb/GarminConnectConfig.json` | `data/garmin/config` — **sem a palavra-passe** (se lá estivesse escrita, não é copiada), já a apontar para `data/garmin/bases` |
+| `~/.GarminDb/garmin_tokens.json` | `data/garmin/config` (o token da sessão, para não pedir o código MFA outra vez) |
 
-A pasta é:
-
-- **Windows**: `%APPDATA%\Perennia`
-- **macOS**: `~/Library/Application Support/Perennia`
-- **Linux / Raspberry Pi**: `~/.local/share/perennia`
+**Os originais ficam onde estavam** (nada é apagado): quando confirmares que está tudo em `data/`,
+apaga-os tu. Fica uma nota em `data/MIGRADO.txt` com a data e o que foi copiado, e a aplicação
+diz-te na primeira vez. As caches (que se refazem sozinhas) não se copiam.
 
 **A base de dados atualiza-se sozinha.** Ao abrir uma versão nova, a
 Perennia acrescenta o que faltar (tabelas e colunas novas) sem tocar no que
@@ -4063,6 +4225,23 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 29 NÃO cria tabelas nem colunas** (**não tens de fazer nada**: na primeira vez, os dados
+da pasta antiga são **copiados** para `data/` — ver acima — e a base copiada fica com os caminhos dos
+`.fit` corrigidos; os originais ficam). O que muda na base:
+
+| Onde | O quê |
+|---|---|
+| `rides.fit_path`, `row_sessions.fit_path`, `endurance_sessions.fit_path`, `strength_sessions.fit_path`, … (e `cache_path`) | na cópia, apontam para `data/out/sessoes/<desporto>/…` (as sessões novas já gravam aí) |
+| definições `path_exports`, `path_imports`, `path_backups`, `path_workouts`, `path_gpx`, `etl_rules_file`, `adhoc_export_dir` | deixaram de existir (as pastas são fixas); se estiverem na base, são ignoradas |
+| definições `garmindb_dir`, `garmindb_config_dir` | deixaram de ser usadas: o GarminDB vive sempre em `data/garmin` |
+| a palavra-passe do Garmin | nunca esteve na base e continua a não estar; deixou de haver a variável `PERENNIA_GARMIN_PASSWORD` e a palavra-passe «em memória»: é pedida a cada sincronização |
+
+Os **backups**: exportar grava em `data/out/backups`; repor lista só `data/in/backups`. Um backup
+**antigo** repõe-se na mesma — os ficheiros (`rides/…`, `exports/…`) vão para os sítios novos e os
+caminhos na base acompanham. A componente «Ficheiros» passou a levar o que está em `data/in` e o que
+exportaste para `data/out` (sem os backups, o Power BI e o GarminDB); o GarminDB (`data/garmin`)
+nunca entra num backup — volta a descarregar-se.
+
 **A ronda 28 NÃO cria tabelas nem colunas** (**não tens de fazer nada**). Há só duas definições novas
 (tabela `settings`, componente «Definições» do backup): `treadmill_speed_step` (o passo da velocidade,
 0,1 km/h por omissão) e `treadmill_guide_lead_s` (o aviso antes de cada mudança, 10 s por omissão).
@@ -4077,7 +4256,7 @@ base local; antes de abrires a versão nova podes fazer um backup: *Backups e Si
 | definição `ride_map_on` | se o mapa da rota aparece na sessão de ciclismo (tecla M) |
 | definição `screen_layout_cycling` | passa a poder ter os painéis `map` e `segment` (sem eles ficam no sítio de origem) |
 
-O **Power BI** não escreve na base: lê-a e grava ficheiros na pasta Exportações/PowerBI.
+O **Power BI** não escreve na base: lê-a e grava ficheiros na pasta `data/out/powerbi` (desde a ronda 29).
 
 **A ronda 19 cria 3 tabelas e 4 colunas — sozinha, na primeira vez que são precisas** (**não tens de
 fazer nada** na base local; antes de abrires a versão nova podes fazer um backup). Nada é apagado:
@@ -4206,9 +4385,10 @@ abrir a versão nova a Perennia faz sozinha o que precisa. O que muda no que já
 | `training_plan` | o botão **Planear** e a janela do dia escrevem aqui (um treino por dia e por desporto, sem duplicar) |
 
 A **Sincronização mudou de sítio** (de Definições para Backups e Sincronização), mas as suas
-opções continuam nas mesmas definições (`sync_*`, `garmindb_*`) — **não perdes nada**. A
-password do GarminDB continua só na configuração do próprio GarminDB, e os backups continuam a
-deixar de fora as credenciais por omissão. Se quiseres uma rede de segurança antes de abrires
+opções continuam nas mesmas definições (`sync_*`, `garmindb_*`) — **não perdes nada**. *(Desde a
+ronda 29, a palavra-passe do Garmin já não fica em lado nenhum — nem na configuração do GarminDB: é
+pedida a cada sincronização; ver «Sincronização (GarminDB)».)* Os backups continuam a deixar de fora
+as credenciais por omissão. Se quiseres uma rede de segurança antes de abrires
 a versão nova: **Backups e Sincronização → Exportar → Tudo**, ou `python main.py --backup`.
 
 **A ronda 10 acrescenta tabelas e colunas — e continua a ser tudo automático**: ao abrir a
@@ -4255,17 +4435,15 @@ guardadas. O que muda no que já lá está:
 Os **backups** continuam a levar tudo (as listas de métricas vão na componente
 «Ecrã da sessão» e os uploads em «Histórico de sessões»).
 
-**Para mudar de computador:** faz um backup completo (menu Backups ou
-`python main.py --backup`), leva o .zip e, no computador novo, arrasta-o para
-a janela da Perennia e escolhe Substituir. Também continua a dar para copiar
-a pasta inteira. Na máquina nova,
-instala a aplicação e põe a pasta no caminho equivalente — abre com todo o
-histórico, as classificações e os recordes intactos. Também podes guardar a
-pasta onde quiseres e correr sempre com `--data-dir /caminho/para/a/pasta`,
-por exemplo numa pen ou numa pasta sincronizada.
+**Para mudar de computador:** copia a pasta **`data/`** inteira para a pasta do projeto no
+computador novo (depois de correres lá o `perennia_setup`, ou antes — o setup não mexe no que já
+existe). Ou faz um backup completo (Backups e Sincronização → Exportar → Tudo, ou
+`python main.py --backup`): o `.zip` fica em `data/out/backups`; leva-o, põe-no em `data/in/backups`
+no computador novo (ou arrasta-o para a janela) e escolhe Substituir. O GarminDB não vai no backup:
+no computador novo faz-se o login outra vez (`perennia_setup` ou `python main.py --garmin-login`).
 
 **Para enviar uma sessão para o Strava, o Garmin Connect ou o Intervals.icu:**
-abre o sítio no navegador e arrasta para lá o `.fit` da pasta `rides/`. O
+abre o sítio no navegador e arrasta para lá o `.fit` de `data/out/sessoes/<desporto>/`. O
 caminho exato aparece no ecrã de resumo no fim de cada sessão.
 
 ---
@@ -4314,15 +4492,34 @@ e "ERG" na linha do trainer: é o que o próprio trainer declara saber fazer.
 Liga-a também no ecrã de Dispositivos; podes ter os dois ligados ao mesmo
 tempo, e a cinta tem prioridade sobre o sensor do trainer.
 
-**Não encontro o meu .gpx** — põe-no na pasta `gpx/` ao lado do `main.py`.
-A aplicação também procura em `~/Downloads`, `~/Transferências`,
-`~/Documents` e na pasta atual.
+**Não encontro o meu .gpx** — põe-no em `data/in/gpx` (dentro da pasta do projeto). A lista só
+procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
+
+**Não encontro um ficheiro para importar** — cada lista só procura na sua pasta em `data/in`
+(Definições → Pastas mostra todas). Arrastar o ficheiro para a janela funciona de qualquer sítio.
 
 ---
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1474 testes a passar).
+**Verificado com testes automáticos nesta versão** (1501 testes a passar).
+
+*Novidades da ronda 29 (26 testes novos em `tests/test_round29.py`, e os antigos atualizados à
+organização nova):* a pasta `data/` (a estrutura, os modelos copiados uma vez sem escrever por cima,
+os caminhos mostrados como `data/in/gpx`, a passagem dos caminhos antigos para os novos, nenhuma
+pasta configurável, nenhuma procura em Transferências/Documentos/Ambiente de trabalho); a cópia dos
+dados antigos (uma vez só, os originais ficam, os `.fit` repostos nos desportos certos, os caminhos
+na base corrigidos, as caches de fora, o GarminDB com as bases e o token mas sem a palavra-passe); a
+palavra-passe do Garmin (pedida numa janela com `•••`, só para descarregar, num ficheiro temporário
+dentro de `data/garmin/config` que desaparece mesmo quando o GarminDB falha, nunca na configuração,
+nos `.bak`, na linha de comandos, no ambiente do processo nem nas definições; uma antiga é retirada e
+não usada; Cancelar não corre nada; o login com MFA ligado ao terminal); as listas só de `data/in`
+(rotas, treinos, planos, análises, HRV4Training), os backups (exportar → `data/out/backups`, repor
+← `data/in/backups`, um backup antigo reposto nos sítios novos, o GarminDB e o Power BI fora); as
+exportações em `data/out` (treinos, Power BI, sessões por desporto); e o `perennia_setup`
+(`main.py --setup` sem perguntas duas vezes seguidas, o passo do GarminDB a instalar, a guardar o
+e-mail e a fazer o login sem guardar a palavra-passe, os dois scripts). Os testes correm sempre numa
+pasta de dados temporária (`PERENNIA_DATA_DIR`): nunca tocam na tua pasta `data/`.
 
 *Novidades da ronda 28 (7 testes novos em `tests/test_round28.py`):* o guia da passadeira manual —
 os toques com o sinal certo e o passo da passadeira, as fases (início, aviso, agora, sem nada a fazer

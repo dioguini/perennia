@@ -473,7 +473,7 @@ class StrengthSessionScreen(FinishFlow, ArrangedPanels, EditScreen):
         athlete = a.db.athlete()
         wid = workout_id or (resume or {}).get("config", {}).get("workout_id")
         self.session = st.StrengthSession(a.db, athlete, wid, sensors=a.hub,
-                                          out_dir=a.data_dir / "strength", resume=resume,
+                                          out_dir=_session_dir(a, "gym"), resume=resume,
                                           free=free, challenge=challenge)
         self.start_countdown(resume)
         self.init_finish()                    # o diálogo de terminar, como no ciclismo
@@ -2496,8 +2496,8 @@ class ExportScreen(Screen):
         self.workout_id = workout_id
 
     def folder(self) -> Path:
-        from perennia.core import folders
-        return folders.resolve(self.app.db, self.app.data_dir, "exports")
+        """`data/out/treinos`."""
+        return self.app.out_dir("workouts")
 
     def enter(self) -> None:
         a = self.app
@@ -2509,7 +2509,8 @@ class ExportScreen(Screen):
                  for f in wx.FORMATS]
         items.append(Item(t("bld.export_all"), action=lambda: self._export(list(wx.FORMATS))))
         self.chrome.set(f"{t('bld.export')} · {row['name']}",
-                        t("bld.export_where", path=str(self.folder())), self.footer())
+                        t("bld.export_where", path=_shown(self.folder(), self.app.data_dir)),
+                        self.footer())
         self.list.set_items(items, keep_index=True)
 
     def _export(self, fmts: list[str]) -> list[Path]:
@@ -2612,7 +2613,8 @@ class RecoveryScreen(Screen):
             from perennia.ui import endurance_screens as es
             eng = en.EnduranceEngine(a.db, a.db.athlete(), cp["config"].get("sport", "running"),
                                      workout_id=cp["config"].get("workout_id"),
-                                     out_dir=a.data_dir / "endurance", resume=cp)
+                                     out_dir=_session_dir(
+                                         a, cp["config"].get("sport", "running")), resume=cp)
             a.replace(es.EnduranceSummary(a, eng.finish()))
         elif cp["sport"] == "rowing":
             from perennia.core import rowing as rw
@@ -2620,16 +2622,16 @@ class RecoveryScreen(Screen):
             cfg = cp["config"]
             eng = rw.RowEngine(a.db, a.db.athlete(), None, workout_id=cfg.get("workout_id"),
                                protocol=cfg.get("protocol"), game_spec=cfg.get("game"),
-                               out_dir=a.data_dir / "rowing", resume=cp)
+                               out_dir=_session_dir(a, "rowing"), resume=cp)
             a.replace(rs.RowSummaryScreen(a, eng.finish()))
         elif cp["sport"] == "strength_laps":
             from perennia.core import laps_session as ls
             ses = ls.LapSession(a.db, a.db.athlete(), cp["config"].get("mode", "free"),
-                                out_dir=a.data_dir / "strength", resume=cp)
+                                out_dir=_session_dir(a, "gym"), resume=cp)
             a.replace(LapSummaryScreen(a, ses.finish()))
         elif cp["sport"] == "strength":
             ses = st.StrengthSession(a.db, a.db.athlete(), cp["config"].get("workout_id"),
-                                     out_dir=a.data_dir / "strength", resume=cp)
+                                     out_dir=_session_dir(a, "gym"), resume=cp)
             result = ses.finish()
             a.replace(StrengthSummaryScreen(a, result))
         else:
@@ -2742,7 +2744,7 @@ class LapSessionScreen(FinishFlow, EditScreen):
         from perennia.core import laps_session as ls
         self.ls = ls
         self.session = ls.LapSession(app.db, app.db.athlete(), mode, sensors=app.hub,
-                                     out_dir=app.data_dir / "strength", resume=resume,
+                                     out_dir=_session_dir(app, "gym"), resume=resume,
                                      rower=getattr(app, "rower", None), plan=plan,
                                      autolap=autolap, plan_id=plan_id, challenge=challenge)
         self.start_countdown(resume)
@@ -3314,3 +3316,14 @@ def _exercise_stats_screen(app, eid: int | None = None):
 def _fit_text(text: str, width_px: float, size: float) -> str:
     n = max(6, int(width_px / (size * 0.62)))
     return text if len(text) <= n else text[:n - 1].rstrip() + "…"
+
+
+def _shown(p, data_dir) -> str:
+    from perennia.core import folders
+    return folders.shown(p, data_dir)
+
+
+def _session_dir(app, sport: str):
+    """`data/out/sessoes/<desporto>`: onde fica o .fit da sessão."""
+    from perennia.core import folders
+    return folders.session_dir(sport, app.data_dir)

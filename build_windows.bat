@@ -30,8 +30,6 @@ python main.py --self-test || goto :erro
 
 echo [4/5] A empacotar...
 python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging\perennia.spec || goto :erro
-xcopy /E /I /Y gpx dist\Perennia\gpx >nul
-xcopy /E /I /Y workouts dist\Perennia\workouts >nul
 copy /Y packaging\LEIA-ME.txt dist\Perennia\LEIA-ME.txt >nul
 
 echo [5/5] A criar o zip...

@@ -254,12 +254,11 @@ def read(path) -> Loaded:
 
 
 def scan(folders: list[str] | None = None) -> list[Path]:
-    """Os ficheiros de treino de força nas pastas do costume."""
+    """Os ficheiros de treino de força de `data/in/treinos` (ou das pastas dadas)."""
     import os
-    from perennia import paths
-    from .workout_files import FOLDERS, PER_FOLDER
+    from .workout_files import PER_FOLDER, default_folders
     if folders is None:
-        folders = [str(p) for p in paths.user_folder("workouts")] + list(FOLDERS)
+        folders = default_folders("workouts")
     found: list[Path] = []
     for folder in dict.fromkeys(folders):
         base = Path(os.path.expanduser(folder))

@@ -296,24 +296,23 @@ class TestGarminDB(unittest.TestCase):
         rep2 = importers.import_garmindb(self.db, self.folder, since="2026-10-29")
         self.assertEqual(rep2["days"], 1)
 
-    def test_status_and_runner(self):
-        self.db.set("garmindb_dir", str(self.folder))
-        st = importers.garmindb_status(self.db)
-        self.assertTrue(st["found"])
-        calls = []
-
-        def runner(cmd, **kw):
-            calls.append(cmd)
-            return SimpleNamespace(returncode=0, stdout="ok", stderr="")
-        orig = importers.garmindb_cli
-        importers.garmindb_cli = lambda: "/usr/bin/garmindb_cli.py"
+    def test_status_reads_the_fixed_folder(self):
+        from perennia.core import folders
+        old = folders._ROOT
+        folders.set_root(self.tmp / "data")
         try:
-            ok, out = importers.run_garmindb(runner=runner)
+            self.assertEqual(importers.garmindb_dir(self.db),
+                             self.tmp / "data" / "garmin" / "bases" / "DBs")
+            self.assertFalse(importers.garmindb_status(self.db)["found"])
+            make_garmindb(importers.garmindb_dir(self.db))
+            st = importers.garmindb_status(self.db)
+            self.assertTrue(st["found"])
+            self.db.set("garmindb_dir", str(self.folder))          # já não se configura
+            self.assertEqual(Path(importers.garmindb_status(self.db)["dir"]),
+                             self.tmp / "data" / "garmin" / "bases" / "DBs")
         finally:
-            importers.garmindb_cli = orig
-        self.assertTrue(ok)
-        self.assertIn("--latest", calls[0])
-        self.assertNotIn("password", " ".join(calls[0]).lower())
+            folders._ROOT = old
+        self.assertFalse(hasattr(importers, "run_garmindb"))   # só via garmin_sync (-f data/…)
 
     def test_missing_folder(self):
         with self.assertRaises(FileNotFoundError):
@@ -322,8 +321,8 @@ class TestGarminDB(unittest.TestCase):
 
 class TestGarminDBGui(tg.GuiCase):
     def test_screen_imports(self):
-        folder = make_garmindb(Path(self.tmp) / "g")
-        self.app.db.set("garmindb_dir", str(folder))
+        from perennia.core import garmin_sync
+        make_garmindb(garmin_sync.db_dir(self.app.db))       # data/garmin/bases/DBs
         scr = self.open_sync()                     # Backups e Sincronização → Sincronização
         self.assertIsInstance(scr, bks.BackupScreen)
         self.assertEqual(scr.sync_tabs.current, "GarminDB")     # a fonte é um separador
@@ -483,9 +482,7 @@ class TestLabsExcel(unittest.TestCase):
 
 class TestLabsGui(tg.GuiCase):
     def test_excel_import_catalog_and_grouped_report(self):
-        make_lab_xlsx(self.app.data_dir / "imports" / "analises.xlsx") \
-            if (self.app.data_dir / "imports").mkdir(parents=True, exist_ok=True) is None \
-            else None
+        make_lab_xlsx(self.app.data_dir / "in" / "analises" / "analises.xlsx")   # data/in/analises
         scr = self.open_sync("Análises")              # Backups e Sincronização → Análises
         self.pick("analises.xlsx")
         self.assertEqual(scr.sync.last_report["reports"], 2)

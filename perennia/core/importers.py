@@ -238,7 +238,6 @@ def looks_like_hrv4training(path: str | Path) -> bool:
 
 # ------------------------------------------------------------------ GarminDB
 
-GARMINDB_DEFAULT = Path.home() / "HealthData" / "DBs"
 GARMIN_METRICS = {
     # (tabela, coluna) → (chave, nome, tipo, unidade, grupo, conversão)
     ("daily_summary", "steps"): ("steps", None, None, None, None, None),
@@ -292,8 +291,11 @@ GARMIN_METRICS = {
 }
 
 
-def garmindb_dir(db: Database) -> Path:
-    return Path(os.path.expanduser(db.get("garmindb_dir", str(GARMINDB_DEFAULT))))
+def garmindb_dir(db: Database | None = None) -> Path:
+    """As bases do GarminDB: `data/garmin/bases/DBs` (o GarminDB cria `DBs/` dentro da pasta
+    das bases que a configuração lhe dá)."""
+    from . import folders
+    return folders.garmin_bases_dir() / "DBs"
 
 
 def garmindb_status(db: Database) -> dict:
@@ -344,22 +346,6 @@ def launcher(cli: str) -> list[str]:
     if str(cli).lower().endswith(".py") and Path(cli).is_file():
         return [sys.executable, str(cli)]
     return [str(cli)]
-
-
-def run_garmindb(timeout: float = 1800.0, runner: Callable | None = None) -> tuple[bool, str]:
-    """Corre o GarminDB para trazer o mais recente (precisa de estar instalado
-    e configurado em ~/.GarminDb/GarminConnectConfig.json)."""
-    cli = garmindb_cli()
-    if cli is None:
-        return False, "GarminDB não encontrado (pip install garmindb)"
-    cmd = launcher(cli) + ["--all", "--download", "--import", "--analyze", "--latest"]
-    run = runner or subprocess.run
-    try:
-        res = run(cmd, capture_output=True, text=True, timeout=timeout)
-    except Exception as e:
-        return False, str(e)
-    out = (getattr(res, "stdout", "") or "")[-400:] + (getattr(res, "stderr", "") or "")[-400:]
-    return getattr(res, "returncode", 1) == 0, out.strip()
 
 
 def _value(raw: Any, conv: str | None) -> Any:

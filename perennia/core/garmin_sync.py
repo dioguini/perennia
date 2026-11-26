@@ -22,16 +22,19 @@ O que o GarminDB permite, e as opções que aqui se montam:
       configuração do GarminDB — com uma cópia `.bak` antes — e corre-se sem
       `--latest`. A Perennia importa só esse intervalo.
 * **Manutenção**: `--backup` (-b) e `--rebuild_db`.
-* `-f DIR`: a pasta da configuração, se não for a `~/.GarminDb`.
+* `-f DIR`: a pasta da configuração — a Perennia usa sempre `data/garmin/config`; o que o
+  GarminDB descarrega fica em `data/garmin/bases` (`DBs/garmin.db`, …).
 
-**A palavra-passe do Garmin nunca fica escrita em disco pela Perennia** (nem na base de dados,
-nem na configuração do GarminDB, nem nas cópias `.bak`, nem na linha de comandos). Vem da
-variável de ambiente `PERENNIA_GARMIN_PASSWORD` ou, se a escreveres nas Definições, fica só na
-memória até fechares a aplicação. Quando corre o GarminDB, a Perennia põe-na num ficheiro
-temporário privado (só o teu utilizador lê), aponta a opção `credentials.password_file` da
-configuração para ele e apaga-o logo que o GarminDB acaba (mesmo que falhe). Se a configuração
-já tinha uma palavra-passe em claro (versões anteriores, ou escrita à mão), ela é retirada do
-ficheiro e das cópias `.bak` na primeira sincronização e usada só nessa sessão.
+**A palavra-passe do Garmin é pedida a cada sincronização e não fica guardada em lado
+nenhum** (nem na base de dados, nem na configuração do GarminDB, nem nas cópias `.bak`, nem
+na linha de comandos, nem numa variável de ambiente, nem na memória depois de a sincronização
+acabar). Enquanto o GarminDB corre, a Perennia põe-na num ficheiro temporário privado (só o
+teu utilizador lê) dentro de `data/garmin/config`, aponta a opção `credentials.password_file`
+da configuração para ele e, logo que o GarminDB acaba (mesmo que falhe), escreve-o por cima e
+apaga-o. Se a configuração tinha uma palavra-passe em claro (escrita à mão, ou de versões
+anteriores), ela é retirada do ficheiro e das cópias `.bak` antes de correr. O GarminDB guarda,
+ele próprio, o **token** da sessão (`garmin_tokens.json`, não a palavra-passe) na pasta da
+configuração, para não ter de pedir o código MFA de cada vez.
 
 Depois de o GarminDB correr, a Perennia lê:
 * `garmin.db` → métricas diárias da Saúde (passos, FC em repouso, sono,
@@ -75,7 +78,6 @@ HEALTH_TABLES = {"monitoring": "daily_summary", "sleep": "sleep", "rhr": "restin
 PERIODS = ("latest", "all", "range")
 
 SYNC_TIMEOUT_S = 3600.0       # a opção «garmin_sync_timeout_s» (ver options.py)
-CONFIG_DIR_DEFAULT = Path.home() / ".GarminDb"
 CONFIG_NAME = "GarminConnectConfig.json"
 
 
@@ -119,17 +121,36 @@ def save_options(db: Database, opts: Options) -> None:
 # --------------------------------------------------------------- pastas
 
 
-def db_dir(db: Database) -> Path:
+def db_dir(db: Database | None = None) -> Path:
+    """Onde estão as bases que o GarminDB cria: `data/garmin/bases/DBs`."""
     return importers.garmindb_dir(db)
 
 
-def config_dir(db: Database) -> Path:
-    return Path(os.path.expanduser(str(db.get("garmindb_config_dir", "")
-                                       or CONFIG_DIR_DEFAULT)))
+def config_dir(db: Database | None = None) -> Path:
+    """A pasta da configuração do GarminDB: `data/garmin/config` (vai como `-f`)."""
+    from . import folders
+    return folders.garmin_config_dir()
 
 
-def config_path(db: Database) -> Path:
+def config_path(db: Database | None = None) -> Path:
     return config_dir(db) / CONFIG_NAME
+
+
+def save_config(path: Path, cfg: dict, bases: Path | None = None) -> None:
+    """Grava a configuração do GarminDB a apontar para `data/garmin/bases` e **sem
+    palavra-passe** (nem em claro, nem num ficheiro, nem no cofre)."""
+    from . import folders
+    bases = Path(bases) if bases is not None else folders.garmin_bases_dir()
+    d = cfg.setdefault("directories", {})
+    d["relative_to_home"] = False
+    d["base_dir"] = str(Path(bases).resolve())
+    cred = cfg.setdefault("credentials", {})
+    cred["password"] = ""
+    cred["secure_password"] = False
+    if not _is_run_file(str(cred.get("password_file") or "")):
+        cred["password_file"] = None
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    _private_write(Path(path), json.dumps(cfg, indent=4, ensure_ascii=False))
 
 
 def read_config(path: Path) -> dict | None:
@@ -183,45 +204,12 @@ def write_range(path: Path, start: str, end: str | None, stats: list[str]) -> Pa
     return backup
 
 
-ENV_PASSWORD = "PERENNIA_GARMIN_PASSWORD"
-_session: dict[str, str] = {}               # só em memória; nunca vai para o disco
-
-
-def set_session_password(password: str | None) -> None:
-    """A palavra-passe escrita nas Definições: fica na memória até fechares a aplicação."""
-    if password:
-        _session["password"] = password
-    else:
-        _session.pop("password", None)
-
-
-def session_password() -> str | None:
-    return os.environ.get(ENV_PASSWORD) or _session.get("password") or None
-
-
-def password_source(path: Path | None = None) -> str:
-    """De onde virá a palavra-passe: «env», «session», «keyring» (cofre do sistema, no
-    GarminDB), «file» (ficheiro de palavra-passe do GarminDB), «config» (em claro na
-    configuração — a Perennia retira-a ao sincronizar) ou «none»."""
-    if os.environ.get(ENV_PASSWORD):
-        return "env"
-    if _session.get("password"):
-        return "session"
-    cred = ((read_config(path) if path else None) or {}).get("credentials", {}) or {}
-    if cred.get("secure_password"):
-        return "keyring"
-    if cred.get("password_file") and not _is_run_file(str(cred["password_file"])):
-        return "file"
-    if cred.get("password"):
-        return "config"
-    return "none"
-
-
 def credentials(path: Path) -> tuple[str, bool]:
-    """(utilizador, há palavra-passe disponível?). O valor nunca sai daqui."""
-    cfg = read_config(path) or {}
-    cred = cfg.get("credentials", {}) or {}
-    return str(cred.get("user") or ""), password_source(path) != "none"
+    """(utilizador, há configuração?). A palavra-passe nunca está em lado nenhum: é pedida a
+    cada sincronização que descarrega do Garmin Connect."""
+    cfg = read_config(path)
+    cred = (cfg or {}).get("credentials", {}) or {}
+    return str(cred.get("user") or ""), cfg is not None
 
 
 _RUN_PREFIX = "perennia-garmin-"
@@ -302,57 +290,51 @@ class PasswordMissing(RuntimeError):
     pass
 
 
-def adopt_legacy_password(path: Path) -> None:
-    """Uma palavra-passe em claro na configuração sai do ficheiro (e do `.bak`) e passa a
-    viver só na memória desta sessão."""
-    legacy_pw = scrub_config(path)
-    if legacy_pw and not _session.get("password"):
-        _session["password"] = legacy_pw
+def needs_password(opts: "Options") -> bool:
+    """Só descarregar do Garmin Connect precisa da palavra-passe."""
+    return bool(opts.download) and importers.garmindb_cli() is not None
 
 
 @contextlib.contextmanager
-def password_for_run(db: Database):
-    """Durante um `with`, o GarminDB consegue autenticar-se sem que a palavra-passe fique
-    escrita: ela vai para um ficheiro temporário privado, referido por `password_file`, e
-    tudo é desfeito no fim (também se o GarminDB falhar)."""
+def password_for_run(db: Database | None, password: str | None):
+    """Durante um `with`, o GarminDB consegue autenticar-se com a palavra-passe que acabaste
+    de escrever, sem que ela fique guardada: o GarminDB só a lê de um ficheiro, por isso ela vai
+    para um ficheiro temporário privado (só o teu utilizador o lê) dentro de
+    `data/garmin/config`, referido por `password_file`, e tudo é apagado no fim — também se o
+    GarminDB falhar. A palavra-passe nunca fica na base de dados, na configuração, nas cópias
+    `.bak`, na linha de comandos nem na memória da aplicação depois da sincronização."""
     path = config_path(db)
     cfg = read_config(path)
     if cfg is None:
         yield                                  # sem configuração: o GarminDB explica o que falta
         return
-    adopt_legacy_password(path)
+    scrub_config(path)                         # uma palavra-passe antiga em claro: fora
     cfg = read_config(path) or cfg
-    cred = cfg.setdefault("credentials", {})
-    if cred.get("secure_password") or cred.get("password_file"):
-        yield                                  # cofre do sistema / ficheiro do próprio utilizador
-        return
-    pw = session_password()
-    if not pw:
-        raise PasswordMissing(
-            f"falta a palavra-passe do Garmin: define a variável {ENV_PASSWORD} ou escreve-a "
-            "nas Definições (só fica na memória, nunca no disco)")
-    tmpdir = Path(tempfile.mkdtemp(prefix=_RUN_PREFIX))
+    if not password:
+        raise PasswordMissing(tr("Falta a palavra-passe do Garmin Connect (é pedida a cada "
+                                 "sincronização e não fica guardada).",
+                                 "The Garmin Connect password is missing (it is asked at each "
+                                 "sync and never kept)."))
+    tmpdir = Path(tempfile.mkdtemp(prefix=_RUN_PREFIX, dir=str(config_dir(db))))
     pwfile = tmpdir / "gp"
     try:
         fd = os.open(str(pwfile), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(pw)
-        cred["password"] = ""
-        cred["secure_password"] = False
+            f.write(password)
+        cred = cfg.setdefault("credentials", {})
         cred["password_file"] = str(pwfile)
-        _private_write(path, json.dumps(cfg, indent=4, ensure_ascii=False))
+        save_config(path, cfg)
         yield
     finally:
         with contextlib.suppress(OSError):
-            pwfile.write_bytes(b"\0" * len(pw.encode("utf-8")))
+            pwfile.write_bytes(b"\0" * len(password.encode("utf-8")))
         shutil.rmtree(tmpdir, ignore_errors=True)
         cfg2 = read_config(path)
         if cfg2 is not None:
             c2 = cfg2.setdefault("credentials", {})
-            if _is_run_file(str(c2.get("password_file") or "")):
-                c2["password_file"] = None
-                with contextlib.suppress(OSError):
-                    _private_write(path, json.dumps(cfg2, indent=4, ensure_ascii=False))
+            c2["password_file"] = None
+            with contextlib.suppress(OSError):
+                save_config(path, cfg2)
 
 
 def new_config(start: str | None = None) -> dict:
@@ -367,7 +349,7 @@ def new_config(start: str | None = None) -> dict:
                  "rhr_start_date": start, "hrv_start_date": start,
                  "monitoring_start_date": start, "download_latest_activities": 25,
                  "download_all_activities": 1000},
-        "directories": {"relative_to_home": True, "base_dir": "HealthData",
+        "directories": {"relative_to_home": False, "base_dir": "",
                         "mount_dir": "/Volumes/GARMIN"},
         "enabled_stats": {k: True for k in ("monitoring", "steps", "itime", "sleep", "rhr",
                                             "hrv", "weight", "activities")},
@@ -377,26 +359,21 @@ def new_config(start: str | None = None) -> dict:
     }
 
 
-def write_credentials(path: Path, user: str | None, password: str | None = None) -> Path | None:
-    """Grava só o **utilizador** do Garmin Connect na configuração do GarminDB (cria o
-    ficheiro se não existir; se existir, guarda antes uma cópia `.bak` sem palavra-passe).
-    A palavra-passe nunca se grava: se vier, fica só na memória desta sessão."""
+def write_credentials(path: Path, user: str | None) -> Path | None:
+    """Grava só o **utilizador** do Garmin Connect na configuração do GarminDB (cria-a se não
+    existir, já a apontar para `data/garmin/bases`; se existir, guarda antes uma cópia `.bak`).
+    A palavra-passe nunca se grava: é pedida a cada sincronização."""
     path = Path(path)
     cfg = read_config(path)
     backup = None
     if cfg is None:
         cfg = new_config()
-        path.parent.mkdir(parents=True, exist_ok=True)
     else:
         backup = _write_backup_copy(path)
     cred = cfg.setdefault("credentials", {})
     if user is not None:
         cred["user"] = user
-    cred["password"] = ""
-    cred["secure_password"] = bool(cred.get("secure_password"))
-    _private_write(path, json.dumps(cfg, indent=4, ensure_ascii=False))
-    if password:
-        set_session_password(password)
+    save_config(path, cfg)
     return backup
 
 
@@ -417,7 +394,7 @@ def metric_units(cfg: dict | None) -> bool:
 def build_command(cli: str, opts: Options, cfg_dir: Path | None = None) -> list[str]:
     opts.clean()
     cmd = [cli]
-    if cfg_dir is not None and Path(cfg_dir) != CONFIG_DIR_DEFAULT:
+    if cfg_dir is not None:                      # sempre data/garmin/config
         cmd += ["-f", str(cfg_dir)]
     if set(opts.stats) == set(STAT_KEYS):
         cmd.append("--all")
@@ -524,27 +501,31 @@ def phase_of(line: str) -> str | None:
 # (padrão, mensagem PT, mensagem EN): o que uma falha típica quer dizer e o que fazer
 _DIAGNOSES = (
     (re.compile(r"mfa|2fa|two.?factor|verification code|security code", re.I),
-     ("A conta Garmin tem verificação em dois passos (MFA): o GarminDB pede o código no "
-      "terminal. Corre uma vez «garmindb_cli.py --download --latest» numa linha de comandos, "
-      "introduz o código, e depois volta a sincronizar aqui.",
-      "The Garmin account has two-step verification (MFA): GarminDB asks for the code in the "
-      "terminal. Run «garmindb_cli.py --download --latest» once in a command line, enter the "
-      "code, then sync here again.")),
+     ("A conta Garmin tem verificação em dois passos (MFA) e o GarminDB precisa do código. "
+      "Numa linha de comandos, na pasta da Perennia, corre «python main.py --garmin-login» (ou "
+      "o perennia_setup outra vez): escreves a palavra-passe e o código e o GarminDB guarda a "
+      "sessão; depois volta a sincronizar aqui.",
+      "The Garmin account has two-step verification (MFA) and GarminDB needs the code. In a "
+      "command line, in the Perennia folder, run «python main.py --garmin-login» (or "
+      "perennia_setup again): type the password and the code and GarminDB keeps the session; "
+      "then sync here again.")),
     (re.compile(r"429|too many requests|rate.?limit", re.I),
      ("O Garmin limitou os pedidos (demasiadas tentativas). Espera uns 30 minutos e tenta "
       "outra vez.", "Garmin limited the requests (too many attempts). Wait about 30 minutes "
       "and try again.")),
     (re.compile(r"401|403|unauthori[sz]ed|invalid (user|cred|pass)|incorrect|login failed|"
                 r"authentication|sign.?in", re.I),
-     ("O Garmin recusou o utilizador ou a palavra-passe. Confirma o utilizador na "
-      "configuração e a palavra-passe (variável PERENNIA_GARMIN_PASSWORD ou Definições).",
-      "Garmin rejected the user or password. Check the user in the config and the password "
-      "(PERENNIA_GARMIN_PASSWORD variable or Settings).")),
+     ("O Garmin recusou o utilizador ou a palavra-passe. Confirma o utilizador (Definições → "
+      "Ligações externas) e escreve a palavra-passe outra vez ao sincronizar.",
+      "Garmin rejected the user or password. Check the user (Settings → External "
+      "connections) and type the password again when you sync.")),
     (re.compile(r"no such file|not found|GarminConnectConfig|config.*(missing|not)", re.I),
-     ("O GarminDB não encontrou a configuração. Confirma a «Pasta da configuração» e que "
-      "GarminConnectConfig.json existe lá.",
-      "GarminDB did not find its configuration. Check the «Config folder» and that "
-      "GarminConnectConfig.json exists there.")),
+     ("O GarminDB não encontrou a configuração. Escreve o utilizador do Garmin em Definições "
+      "→ Ligações externas (cria data/garmin/config/GarminConnectConfig.json) ou corre o "
+      "perennia_setup.",
+      "GarminDB did not find its configuration. Type the Garmin user in Settings → External "
+      "connections (it creates data/garmin/config/GarminConnectConfig.json) or run "
+      "perennia_setup.")),
     (re.compile(r"ssl|certificate|connection|timed? ?out|resolve|network|unreachable", re.I),
      ("Falhou a ligação à internet ou ao Garmin. Confirma a rede e tenta outra vez.",
       "The connection to the internet or to Garmin failed. Check the network and try "
@@ -569,7 +550,7 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
     opts.clean()
     path = config_path(db)
     cfg = read_config(path)
-    user, has_pw = credentials(path) if cfg is not None else ("", False)
+    user, _has_cfg = credentials(path) if cfg is not None else ("", False)
     online = bool(opts.download)                   # só descarregar precisa de conta Garmin
     cli = importers.garmindb_cli() is not None
     out = [
@@ -587,12 +568,12 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
          "text": tr("Utilizador do Garmin Connect", "Garmin Connect user"),
          "fix": tr("escreve o e-mail da conta em Definições → Ligações externas → Garmin",
                    "type the account e-mail in Settings → External connections → Garmin")},
-        {"key": "password", "ok": has_pw, "blocking": cli and online,
-         "text": tr("Palavra-passe disponível", "Password available"),
-         "fix": tr("define a variável de ambiente {v} antes de abrir a Perennia, ou escreve-a "
-                   "nas Definições (fica só na memória)", "set the {v} environment variable "
-                   "before opening Perennia, or type it in Settings (kept in memory only)",
-                   v=ENV_PASSWORD)},
+        {"key": "password", "ok": True, "blocking": False,
+         "text": tr("Palavra-passe: pedida ao sincronizar (nunca fica guardada)",
+                    "Password: asked when syncing (never kept)") if online and cli else
+         tr("Palavra-passe: não é precisa (sem descarregar)",
+            "Password: not needed (no download)"),
+         "fix": ""},
         {"key": "stats", "ok": bool(opts.stats), "blocking": True,
          "text": tr("Pelo menos um tipo de dados", "At least one kind of data"),
          "fix": tr("liga um dos tipos em «Dados»", "turn on one of the kinds under «Data»")},
@@ -630,10 +611,8 @@ def _run(cmd: list[str], runner: Callable | None, timeout: float,
 
 def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
                    log: SyncLog) -> tuple[bool, str]:
-    # a palavra-passe do ambiente não vai para o GarminDB (ele lê-a do ficheiro temporário)
-    env = {k: v for k, v in os.environ.items() if k != ENV_PASSWORD}
     try:
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, errors="replace", stdin=subprocess.DEVNULL,
                                 cwd=str(cwd) if cwd and cwd.is_dir() else None)
     except OSError as e:
@@ -669,10 +648,10 @@ def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
 
 
 def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
-                 timeout: float | None = None, log: SyncLog | None = None
-                 ) -> tuple[bool, str]:
-    """Corre o GarminDB com as opções escolhidas (no intervalo, escreve
-    primeiro as datas na configuração)."""
+                 timeout: float | None = None, log: SyncLog | None = None,
+                 password: str | None = None) -> tuple[bool, str]:
+    """Corre o GarminDB com as opções escolhidas (no intervalo, escreve primeiro as datas na
+    configuração). `password`: a que acabaste de escrever (só para descarregar)."""
     timeout = SYNC_TIMEOUT_S if timeout is None else timeout     # opção «garmin_sync_timeout_s»
     opts.clean()
     if not opts.stats:
@@ -682,20 +661,49 @@ def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
         return False, "GarminDB não encontrado (pip install garmindb)"
     if not (opts.download or opts.copy or opts.import_ or opts.analyze):
         return True, ""
-    adopt_legacy_password(config_path(db))
+    if read_config(config_path(db)) is not None:
+        scrub_config(config_path(db))           # uma palavra-passe antiga em claro: fora
     if opts.period == "range" and opts.write_config and (opts.download or opts.import_):
         try:
             write_range(config_path(db), opts.start, opts.end, opts.stats)
         except OSError as e:
             return False, str(e)
     # o garmindb.log fica na pasta de onde se corre: a dos dados do GarminDB
+    cmd = build_command(cli, opts, config_dir(db))
+    cmd[:1] = importers.launcher(cli)
+    if not opts.download:                       # sem descarregar: sem login
+        return _run(cmd, runner, timeout, db_dir(db).parent, log)
     try:
-        with password_for_run(db):
-            cmd = build_command(cli, opts, config_dir(db))
-            cmd[:1] = importers.launcher(cli)
+        with password_for_run(db, password):
             return _run(cmd, runner, timeout, db_dir(db).parent, log)
     except PasswordMissing as e:
         return False, str(e)
+
+
+def login_command(db: Database | None = None) -> list[str] | None:
+    """O comando do primeiro login (o que pede o código MFA): descarrega só as últimas
+    atividades, o suficiente para o GarminDB entrar e guardar o token da sessão."""
+    cli = importers.garmindb_cli()
+    if cli is None:
+        return None
+    return importers.launcher(cli) + ["-f", str(config_dir(db)), "--activities", "--download",
+                                      "--latest"]
+
+
+def interactive_login(db: Database | None, password: str,
+                      call: Callable | None = None) -> int:
+    """O primeiro login num terminal (o `perennia_setup` e `main.py --garmin-login`): o GarminDB
+    corre ligado ao terminal, para pedir o código MFA se a conta o tiver; a palavra-passe vai
+    como em qualquer sincronização (ficheiro temporário apagado no fim). Devolve o código de
+    saída do GarminDB (127 se não estiver instalado)."""
+    cmd = login_command(db)
+    if cmd is None:
+        return 127
+    call = call or subprocess.call
+    cwd = db_dir(db).parent
+    cwd.mkdir(parents=True, exist_ok=True)
+    with password_for_run(db, password):
+        return int(call(cmd, cwd=str(cwd)))
 
 
 def maintenance(db: Database, action: str, runner: Callable | None = None,
@@ -707,14 +715,8 @@ def maintenance(db: Database, action: str, runner: Callable | None = None,
     if cli is None:
         return False, "GarminDB não encontrado (pip install garmindb)"
     flag = {"backup": "--backup", "rebuild": "--rebuild_db"}[action]
-    cmd = importers.launcher(cli)
-    if config_dir(db) != CONFIG_DIR_DEFAULT:
-        cmd += ["-f", str(config_dir(db))]
-    try:
-        with password_for_run(db):
-            return _run(cmd + [flag], runner, timeout, db_dir(db).parent, log)
-    except PasswordMissing as e:
-        return False, str(e)
+    cmd = importers.launcher(cli) + ["-f", str(config_dir(db))]
+    return _run(cmd + [flag], runner, timeout, db_dir(db).parent, log)     # sem login
 
 
 # --------------------------------------------------------- estado da fonte
@@ -914,7 +916,7 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
 
 
 def sync(db: Database, opts: Options, runner: Callable | None = None,
-         run_source: bool = True, log: SyncLog | None = None
+         run_source: bool = True, log: SyncLog | None = None, password: str | None = None
          ) -> tuple[bool, str, dict | None]:
     """Corre a fonte (se `run_source`) e importa. (ok, mensagem, relatório). Com `log`, vai
     contando o que faz, passo a passo."""
@@ -934,7 +936,7 @@ def sync(db: Database, opts: Options, runner: Callable | None = None,
                         n=" → ".join(names)))
         else:
             log.skip(tr("GarminDB", "GarminDB"), tr("nenhum passo ligado", "no step on"))
-        ok, out = run_garmindb(db, opts, runner=runner, log=log)
+        ok, out = run_garmindb(db, opts, runner=runner, log=log, password=password)
         if not ok:
             hint = diagnose(out)
             last = out.splitlines()[-1] if out else tr("falhou", "failed")

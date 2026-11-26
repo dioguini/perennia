@@ -80,8 +80,10 @@ class SyncPanel:
                ("labs", "Análises"), ("trainingpeaks", "TrainingPeaks"),
                ("historico", "Histórico"), ("upload", "Upload manual"), ("csv", "CSV"),
                ("saude", "Saúde"), ("wifi", "Wi-Fi"))
-    FILE_FOLDERS = ("imports", "~/Downloads", "~/Transferências", "~/Documents", "~/Documentos",
-                    "~/Desktop")
+    # cada separador procura os ficheiros só na sua pasta de data/in
+    FILE_KEYS = {"hrv4training": "hrv4training", "labs": "labs",
+                 "trainingpeaks": "trainingpeaks", "historico": "history",
+                 "upload": "activities", "csv": "csv", "saude": "csv"}
 
     def __init__(self, screen: Screen, runner=None, store=None):
         self.screen = screen
@@ -102,11 +104,6 @@ class SyncPanel:
         from dataclasses import asdict
         self.store.put("sync_garmindb", asdict(o.clean()))
 
-    def folder(self, field: str) -> str:
-        db = self.app.db
-        default = str(gs.db_dir(db)) if field == "garmindb_dir" else str(gs.config_dir(db))
-        return str(self.store.get(field, "") or default)
-
     @property
     def pending(self) -> bool:
         """Há alterações por guardar nas Definições? (sincronizar usa o que está gravado)"""
@@ -126,38 +123,39 @@ class SyncPanel:
 
     # ------------------------------------------------- importar ficheiros
 
-    def files(self, patterns: tuple) -> list:
-        import os
-        from pathlib import Path
-        self.app.folder("imports", create=True)
+    def files(self, patterns: tuple, kind: str | None = None) -> list:
+        """Os ficheiros na pasta de data/in deste tipo (só lá: arrastar um ficheiro para a
+        janela continua a servir para um ficheiro de outro sítio)."""
+        from perennia.core import folders
+        base = folders.in_dir(self.FILE_KEYS.get(kind or "", "activities"), self.app.data_dir)
         out = []
-        bases = []
-        for f in self.FILE_FOLDERS:
-            bases += self.app.folder_list("imports") if f == "imports" else \
-                [Path(os.path.expanduser(f))]
-        for base in bases:
-            if base.is_dir():
-                for pat in patterns:
-                    out += sorted(base.glob(pat))[:40]
+        for pat in patterns:
+            out += sorted(base.glob(pat))[:40]
         return list(dict.fromkeys(out))
 
     def _file_items(self, kind: str, patterns: tuple, how: tuple, check=None) -> list[Item]:
         rows = [Item(tr("Ficheiros encontrados", "Files found"), header=True)]
-        found = [p for p in self.files(patterns) if check is None or check(p)]
+        found = [p for p in self.files(patterns, kind) if check is None or check(p)]
         for p in found:
-            rows.append(Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
+            rows.append(Item(p.name, value=p.suffix.lower(), detail=self.where(kind),
                              action=lambda q=p: self.import_file(kind, q)))
         if not found:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
-                             detail=tr("põe o ficheiro em {p}, Transferências ou Documentos",
-                                       "put the file in {p}, Downloads or Documents",
-                                       p=self.app.folder("imports"))))
+                             detail=tr("põe o ficheiro em {p} (ou arrasta-o para a janela)",
+                                       "put the file in {p} (or drag it onto the window)",
+                                       p=self.where(kind))))
         rows += [Item(tr("Como exportar", "How to export"), header=True),
                  Item(tr(*how), enabled=False)]
         if self.last_report and self.last_report.get("_kind") == kind:
             rows.insert(0, Item(tr("Última importação", "Last import"),
                                 value=self.last_report.get("_text", ""), enabled=False))
         return rows
+
+    def where(self, kind: str) -> str:
+        """A pasta de data/in deste separador, para mostrar («data/in/analises»)."""
+        from perennia.core import folders
+        return folders.shown(folders.in_dir(self.FILE_KEYS.get(kind, "activities"),
+                                            self.app.data_dir), self.app.data_dir)
 
     def import_file(self, kind: str, path) -> None:
         from perennia.core import file_import
@@ -174,11 +172,12 @@ class SyncPanel:
     def items_hrv4training(self) -> list[Item]:
         return self._file_items(
             "hrv4training", ("*.csv",),
-            ("Na app HRV4Training: Definições → Exportar medições (CSV) → descarrega o "
-             "ficheiro para Transferências. A Perennia junta a HRV, a FC em repouso e o resto "
-             "ao diário da Saúde.",
-             "In the HRV4Training app: Settings → Export measurements (CSV) → download it to "
-             "Downloads. Perennia adds HRV, resting HR and the rest to the Health log."))
+            ("Na app HRV4Training: Definições → Exportar medições (CSV) → guarda o ficheiro em "
+             "data/in/hrv4training. A Perennia junta a HRV, a FC em repouso e o resto ao "
+             "diário da Saúde.",
+             "In the HRV4Training app: Settings → Export measurements (CSV) → save the file in "
+             "data/in/hrv4training. Perennia adds HRV, resting HR and the rest to the Health "
+             "log."))
 
     def items_labs(self) -> list[Item]:
         return self._file_items(
@@ -269,7 +268,8 @@ class SyncPanel:
     def rules_template(self) -> None:
         from perennia.core import history_etl as he
         try:
-            path = he.write_template(self.app.folder("imports", create=True))
+            from perennia.core import folders
+            path = he.write_template(folders.in_dir("history", self.app.data_dir))
         except OSError as e:
             self.app.message(f"{t('common.error')}: {e}")
             return
@@ -287,7 +287,7 @@ class SyncPanel:
             rows.append(Item(d.label, value=tr("{n} linhas", "{n} rows", n=n), detail=d.help,
                              action=lambda k=d.key: self.open_csv(k)))
         rows.append(Item(tr("Ficheiros .csv encontrados", "CSV files found"), header=True))
-        found = self.files(("*.csv",))
+        found = self.files(("*.csv",), "csv")
         known = 0
         for p in found:
             try:
@@ -298,14 +298,14 @@ class SyncPanel:
             if key is None:
                 continue
             known += 1
-            rows.append(Item(p.name, value=cs.DATASETS[key].label, detail=str(p.parent),
+            rows.append(Item(p.name, value=cs.DATASETS[key].label, detail=self.where("csv"),
                              action=lambda q=p: self.import_csv_file(q)))
         if not known:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
-                             detail=tr("descarrega um modelo, preenche-o e põe-no em {p}, "
-                                       "Transferências ou Documentos",
-                                       "download a template, fill it in and put it in {p}, "
-                                       "Downloads or Documents", p=self.app.folder("imports"))))
+                             detail=tr("descarrega um modelo (fica em data/out/csv), preenche-o "
+                                       "e põe-no em {p}", "download a template (it goes to "
+                                       "data/out/csv), fill it in and put it in {p}",
+                                       p=self.where("csv"))))
         if self.last_report and self.last_report.get("_kind") == "csv":
             rows.insert(0, Item(tr("Último CSV", "Last CSV"),
                                 value=self.last_report.get("_text", ""), enabled=False))
@@ -314,9 +314,12 @@ class SyncPanel:
     def items_saude(self) -> list[Item]:
         """Os dados de saúde de uma ou mais datas por .csv: os campos são os do diário da
         Perennia (uma coluna por métrica). Modelo para descarregar, exportação e importação."""
+        from perennia.core import folders
         from perennia.core import health_csv as hc
-        from perennia.core.workout_download import downloads_dir
         db = self.app.db
+
+        def downloads_dir():
+            return folders.out_dir("csv", self.app.data_dir)
 
         def write(what: str) -> None:
             try:
@@ -330,7 +333,7 @@ class SyncPanel:
                      detail=tr("uma linha por data: data, uma coluna por métrica do diário e a "
                                "nota do dia · grava em {p}", "one row per date: date, one column "
                                "per log metric and the day's note · saved in {p}",
-                               p=str(downloads_dir())),
+                               p=folders.shown(downloads_dir(), self.app.data_dir)),
                      action=lambda: write("template")),
                 Item(tr("Exportar o diário (.csv)", "Export the log (.csv)"),
                      value=tr("{n} métricas", "{n} metrics", n=len(hc.metrics(db))),
@@ -339,22 +342,22 @@ class SyncPanel:
                      action=lambda: write("export")),
                 Item(tr("Ficheiros .csv encontrados", "CSV files found"), header=True)]
         known = 0
-        for p in self.files(("*.csv",)):
+        for p in self.files(("*.csv",), "saude"):
             try:
                 if not hc.detect(db, p.read_text(encoding="utf-8-sig", errors="replace")):
                     continue
             except Exception:
                 continue
             known += 1
-            rows.append(Item(p.name, value=tr("saúde", "health"), detail=str(p.parent),
+            rows.append(Item(p.name, value=tr("saúde", "health"), detail=self.where("saude"),
                              action=lambda q=p: self.import_health_csv(q)))
         if not known:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
-                             detail=tr("descarrega o modelo, preenche as datas e põe o .csv em "
-                                       "{p}, Transferências ou Documentos",
-                                       "download the template, fill in the dates and put the "
-                                       ".csv in {p}, Downloads or Documents",
-                                       p=self.app.folder("imports"))))
+                             detail=tr("descarrega o modelo (fica em data/out/csv), preenche as "
+                                       "datas e põe o .csv em {p}",
+                                       "download the template (it goes to data/out/csv), fill "
+                                       "in the dates and put the .csv in {p}",
+                                       p=self.where("saude"))))
         rows += [Item(tr("Como funciona", "How it works"), header=True),
                  Item(tr("A primeira coluna é a data (AAAA-MM-DD ou DD/MM/AAAA); cada outra é uma "
                          "métrica do diário com o nome que tem na Perennia — número (7,5), sim/não, "
@@ -398,16 +401,15 @@ class SyncPanel:
         """Uma atividade de cada vez: escolhe o ficheiro (.fit ou .tcx) e vê o que
         tem antes de a guardar no desporto respetivo."""
         rows = [Item(tr("Ficheiros encontrados", "Files found"), header=True)]
-        found = self.files(("*.fit", "*.FIT", "*.tcx", "*.TCX"))
+        found = self.files(("*.fit", "*.FIT", "*.tcx", "*.TCX"), "upload")
         for p in found:
-            rows.append(Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
+            rows.append(Item(p.name, value=p.suffix.lower(), detail=self.where("upload"),
                              action=lambda q=p: self.open_upload(q)))
         if not found:
             rows.append(Item(tr("Nenhum ficheiro encontrado", "No files found"), enabled=False,
-                             detail=tr("põe o ficheiro em {p}, Transferências ou Documentos, ou "
-                                       "arrasta-o para a janela",
-                                       "put the file in {p}, Downloads or Documents, or drag it "
-                                       "onto the window", p=self.app.folder("imports"))))
+                             detail=tr("põe o ficheiro em {p}, ou arrasta-o para a janela",
+                                       "put the file in {p}, or drag it onto the window",
+                                       p=self.where("upload"))))
         rows += [Item(tr("Como funciona", "How it works"), header=True),
                  Item(tr("Escolhe um ficheiro .fit (ou .tcx) do teu computador — ou arrasta-o "
                          "para a janela. A Perennia lê-o e mostra o nome, o desporto, o tempo, a "
@@ -502,17 +504,15 @@ class SyncPanel:
         ready = not self.busy and not self.pending
         wait = tr("guarda primeiro as alterações", "save your changes first") \
             if self.pending else ""
+        from perennia.core import folders
         rows += [
-            Item(tr("Pasta das bases do GarminDB", "GarminDB databases folder"),
-                 value=self.folder("garmindb_dir") + "▏", data="text:garmindb_dir",
-                 detail=tr("por omissão ~/HealthData/DBs", "default ~/HealthData/DBs")),
-            Item(tr("Pasta da configuração", "Config folder"),
-                 value=self.folder("garmindb_config_dir") + "▏", data="text:garmindb_config_dir",
-                 detail=tr("por omissão ~/.GarminDb · o utilizador e a palavra-passe estão em "
-                           "Ligações Externas", "default ~/.GarminDb · user and password are in "
-                           "External connections")),
-            Item(tr("Comando", "Command"),
-                 detail=gs.command_text(db, o, Path(self.folder("garmindb_config_dir"))),
+            Item(tr("Pastas do GarminDB", "GarminDB folders"), enabled=False,
+                 value=folders.shown(folders.garmin_bases_dir(self.app.data_dir).parent,
+                                     self.app.data_dir),
+                 detail=tr("a configuração em garmin/config (sem palavra-passe) e as bases em "
+                           "garmin/bases", "the config in garmin/config (no password) and the "
+                           "databases in garmin/bases")),
+            Item(tr("Comando", "Command"), detail=gs.command_text(db, o, gs.config_dir(db)),
                  enabled=False),
             Item(tr("Cópia de segurança das bases (--backup)", "Back up the databases (--backup)"),
                  action=lambda: self.ask_maintenance("backup"), enabled=st["cli"] and ready,
@@ -570,22 +570,23 @@ class SyncPanel:
         a.push(ConfirmScreen(
             a, tr("Sincronizar o GarminDB pela primeira vez", "Syncing GarminDB for the first "
                   "time"),
-            tr("1) Instala o GarminDB: pip install garmindb. 2) Em Definições → Ligações "
-               "externas → Garmin escreve o e-mail da conta (a Perennia cria a configuração). "
-               "3) Define a variável PERENNIA_GARMIN_PASSWORD com a palavra-passe antes de "
-               "abrir a Perennia (ou escreve-a nas Definições: fica só na memória). 4) Se a "
-               "conta tem verificação em dois passos, corre uma vez garmindb_cli.py --download "
-               "--latest numa linha de comandos. 5) Aqui, escolhe o período e os dados e carrega "
-               "em «Sincronizar agora»: os passos e o que o GarminDB diz aparecem ao vivo. "
-               "Cada pessoa usa a sua conta Garmin: a Perennia não leva a tua.",
-               "1) Install GarminDB: pip install garmindb. 2) In Settings → External "
-               "connections → Garmin type the account e-mail (Perennia creates the config). "
-               "3) Set the PERENNIA_GARMIN_PASSWORD variable with the password before opening "
-               "Perennia (or type it in Settings: kept in memory only). 4) If the account has "
-               "two-step verification, run garmindb_cli.py --download --latest once in a command "
-               "line. 5) Here, pick the period and data and press «Sync now»: the steps and "
-               "what GarminDB says show live. Everyone uses their own Garmin account: Perennia "
-               "does not carry yours."),
+            tr("1) Corre o perennia_setup e responde «s» ao Garmin (instala o GarminDB, guarda o "
+               "e-mail da conta e faz o primeiro login, onde metes o código se a conta tiver "
+               "verificação em dois passos). Sem o setup: pip install garmindb no .venv e o "
+               "e-mail em Definições → Ligações externas → Garmin; o login (com o código) faz-se "
+               "com «python main.py --garmin-login». 2) Aqui, escolhe o período e "
+               "os dados e carrega em «Sincronizar agora». 3) A palavra-passe é pedida de cada "
+               "vez que se descarrega do Garmin Connect e não fica guardada em lado nenhum. Tudo "
+               "fica em data/garmin. Cada pessoa usa a sua conta Garmin: a Perennia não leva a "
+               "tua.",
+               "1) Run perennia_setup and answer «y» to Garmin (it installs GarminDB, saves the "
+               "account e-mail and does the first login, where you type the code if the account "
+               "has two-step verification). Without the setup: pip install garmindb in the .venv "
+               "and the e-mail in Settings → External connections → Garmin; log in (with the "
+               "code) with «python main.py --garmin-login». 2) Here, pick the "
+               "period and data and press «Sync now». 3) The password is asked every time data "
+               "is downloaded from Garmin Connect and is never kept anywhere. Everything stays "
+               "in data/garmin. Everyone uses their own Garmin account."),
             [(tr("Fechar", "Close"), a.pop)], default=0, buttons=True, cancel=a.pop))
 
     # ------------------------------------------------------------- mexer
@@ -638,12 +639,7 @@ class SyncPanel:
         return True
 
     def text(self, field: str, text: str | None) -> bool:
-        if field not in ("garmindb_dir", "garmindb_config_dir"):
-            return False
-        cur = self.folder(field)
-        self.store.put(field, cur[:-1] if text is None else cur + text)
-        self.screen.enter()
-        return True
+        return False                       # as pastas do GarminDB são fixas (data/garmin)
 
     # ------------------------------------------------------------- correr
 
@@ -668,11 +664,29 @@ class SyncPanel:
             self.app.message(tr("Falta: ", "Missing: ") + bad[0]["text"] + " — " + bad[0]["fix"])
             self.screen.enter()
             return
+        if gs.needs_password(o):
+            self.ask_password(lambda pw: self._start_sync(o, pw))
+            return
+        self._start_sync(o, None)
+
+    def ask_password(self, then) -> None:
+        """A palavra-passe do Garmin Connect, a cada sincronização que descarrega: não fica
+        guardada em lado nenhum (passa ao GarminDB e esquece-se)."""
+        from perennia.ui.goal_popup import PasswordPopup
+        user, _ = gs.credentials(gs.config_path(self.app.db))
+        self.app.push(PasswordPopup(
+            self.app, tr("Palavra-passe do Garmin Connect", "Garmin Connect password"),
+            (user + " · " if user else "") + tr(
+                "é usada só nesta sincronização e não fica guardada em lado nenhum",
+                "used for this sync only and never kept anywhere"), then))
+
+    def _start_sync(self, o: gs.Options, password: str | None) -> None:
+        db, runner = self.app.db, self.runner
         self.log = gs.SyncLog(self.log_lines(), self.log_chars())
         log = self.log
         self.log.step(tr("A verificar os requisitos", "Checking the requirements"))
         self.log.end(True)
-        self._job(lambda: gs.sync(db, o, runner=runner, log=log))
+        self._job(lambda: gs.sync(db, o, runner=runner, log=log, password=password))
 
     def log_lines(self) -> int:
         return int(opt_mod.get(self.app.db, "garmin_log_lines"))
@@ -712,8 +726,8 @@ class SyncPanel:
         title = tr("Cópia de segurança das bases?", "Back up the databases?") \
             if action == "backup" else tr("Reconstruir as bases do GarminDB?",
                                           "Rebuild the GarminDB databases?")
-        sub = tr("O GarminDB faz um .zip em HealthData/Backups.",
-                 "GarminDB writes a .zip to HealthData/Backups.") if action == "backup" else \
+        sub = tr("O GarminDB faz um .zip em data/garmin/bases/Backups.",
+                 "GarminDB writes a .zip to data/garmin/bases/Backups.") if action == "backup" else \
             tr("Apaga as bases do GarminDB e volta a importá-las dos ficheiros que já tem.",
                "Deletes the GarminDB databases and re-imports them from its files.")
 

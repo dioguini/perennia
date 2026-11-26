@@ -53,14 +53,15 @@ class WorkoutFilePopup(PopupMixin, Screen):
         else:
             self.files = wf.scan(self.sport, self.folders)
             exts = " ".join(wf.EXTS.get(self.sport, ()))
-        items = [Item(p.name, value=p.suffix.lower(), detail=str(p.parent),
-                      action=lambda q=p: self.pick(q)) for p in self.files]
+        from perennia.core import folders
+        where = folders.shown(self.app.in_dir("workouts"), self.app.data_dir)
+        items = [Item(p.name, value=p.suffix.lower(), action=lambda q=p: self.pick(q))
+                 for p in self.files]
         if not items:
             items = [Item(tr("Nenhum treino encontrado", "No workout found"),
-                          detail=tr("Põe ficheiros {e} na pasta «workouts» ao lado da "
-                                    "aplicação, em Transferências ou em Documentos.",
-                                    "Put {e} files in the «workouts» folder next to the app, "
-                                    "in Downloads or in Documents.", e=exts), enabled=False)]
+                          detail=tr("Põe ficheiros {e} em {p} e volta a abrir.",
+                                    "Put {e} files in {p} and open this again.", e=exts,
+                                    p=where), enabled=False)]
         self.chrome.set(tr("Carregar treino do computador", "Load a workout from the computer")
                         + f" · {sp.name(self.sport)}",
                         (tr("1 ficheiro", "1 file") if len(self.files) == 1 else

@@ -308,7 +308,7 @@ class RowingSessionScreen(FinishFlow, ArrangedPanels, Screen):
             a.db, a.db.athlete(), a.rower, sensors=a.hub,
             workout_id=workout_id or cfg.get("workout_id"),
             protocol=protocol or cfg.get("protocol"),
-            game_spec=game_spec or cfg.get("game"), out_dir=a.data_dir / "rowing",
+            game_spec=game_spec or cfg.get("game"), out_dir=_session_dir(a),
             resume=resume, autolap=autolap)
         self.start_countdown(resume)          # 15 s; depois conta a partir da 1.ª remada
         self.page = 0
@@ -963,8 +963,7 @@ class RowWorkoutEditor(EditScreen):
                           "meters": s.dur_value if s.dur_type == "distance" else None,
                           "lo_w": rng[0] if rng else None, "hi_w": rng[1] if rng else None,
                           "intensity": s.kind, "notes": s.cue})
-        from perennia.core import folders
-        folder = folders.ensure_dir(self.app.db, self.app.data_dir, "workouts")
+        folder = self.app.out_dir("workouts")           # data/out/treinos
         from perennia.core import naming
         path = folder / f"remo_{naming.clean(self.name) or 'treino'}.fit"
         try:
@@ -1220,3 +1219,9 @@ def _pretty(name) -> str:
 def _feedback():
     from perennia.ui import feedback_screens
     return feedback_screens
+
+
+def _session_dir(app):
+    """`data/out/sessoes/remo`: onde fica o .fit da sessão."""
+    from perennia.core import folders
+    return folders.session_dir("rowing", app.data_dir)

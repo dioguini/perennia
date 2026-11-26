@@ -1,0 +1,2 @@
+Põe aqui um backup da Perennia (.zip) para o repor em Backups e Sincronização → Repor.
+Os backups que fazes ficam em data/out/backups.

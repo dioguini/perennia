@@ -655,25 +655,20 @@ class TestCsv(tg.GuiCase):
         _ = os
 
     def test_sync_tab_lists_datasets_and_the_dataset_window_works(self):
-        os_env = __import__("os").environ
-        out = tempfile.mkdtemp()
-        os_env["PERENNIA_DOWNLOADS"] = out
-        try:
-            scr = self.open_sync("CSV")
-            items = scr.sync.items_csv()
-            labels = [i.label for i in items]
-            self.assertIn("Exercícios", labels)
-            self.assertIn("Grupos e subgrupos musculares", labels)
-            from perennia.ui.csv_screens import CsvDatasetPopup
-            pop = CsvDatasetPopup(self.app, "exercicios")
-            self.app.push(pop)
-            self.pick("Descarregar o modelo (.csv)")
-            self.pick("Exportar o que tenho (.csv)")
-            names = sorted(p.name for p in Path(out).glob("*.csv"))
-            self.assertTrue(any(n.startswith("perennia_modelo_exercicios") for n in names))
-            self.assertTrue(any(n.startswith("perennia_exercicios_") for n in names))
-        finally:
-            os_env.pop("PERENNIA_DOWNLOADS", None)
+        out = Path(self.app.data_dir) / "out" / "csv"          # data/out/csv
+        scr = self.open_sync("CSV")
+        items = scr.sync.items_csv()
+        labels = [i.label for i in items]
+        self.assertIn("Exercícios", labels)
+        self.assertIn("Grupos e subgrupos musculares", labels)
+        from perennia.ui.csv_screens import CsvDatasetPopup
+        pop = CsvDatasetPopup(self.app, "exercicios")
+        self.app.push(pop)
+        self.pick("Descarregar o modelo (.csv)")
+        self.pick("Exportar o que tenho (.csv)")
+        names = sorted(p.name for p in Path(out).glob("*.csv"))
+        self.assertTrue(any(n.startswith("perennia_modelo_exercicios") for n in names))
+        self.assertTrue(any(n.startswith("perennia_exercicios_") for n in names))
 
 
 # ====================================================== ciclismo e outros ecrãs

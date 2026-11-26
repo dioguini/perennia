@@ -84,30 +84,15 @@ class TestComplexes(Tmp):
 
 
 class TestFolders(Tmp):
-    def test_default_configured_and_fallback(self):
-        d = folders.resolve(self.db, self.tmp, "exports")
-        self.assertEqual(d, self.tmp / "exports")
-        target = self.tmp / "mais" / "exp"
-        self.db.set("path_exports", str(target))
-        self.assertEqual(folders.resolve(self.db, self.tmp, "exports"), target)
-        self.assertTrue(folders.ensure_dir(self.db, self.tmp, "exports").is_dir())
-        # uma pasta impossível cai na de sempre
-        blocker = self.tmp / "ficheiro"
-        blocker.write_text("x")
-        self.db.set("path_imports", str(blocker / "sub"))
-        self.assertEqual(folders.ensure_dir(self.db, self.tmp, "imports"),
-                         self.tmp / "imports")
-        ok, why = folders.check(str(blocker / "sub"))
-        self.assertFalse(ok)
-        self.assertTrue(why)
-        self.assertTrue(folders.check(str(self.tmp / "nova"))[0])
+    """As pastas deixaram de ser configuráveis (ronda 29): tudo em data/in e data/out."""
 
-    def test_extra_and_search_list(self):
-        self.db.set("path_imports", str(self.tmp / "i"))
-        lst = folders.search_list(self.db, self.tmp, "imports", ["/x"])
-        self.assertEqual(lst[0], str(self.tmp / "i"))
-        self.assertIn("/x", lst)
-        self.assertEqual(len(lst), len(set(lst)))
+    def test_fixed_folders_inside_the_data_folder(self):
+        self.assertEqual(folders.in_dir("history", self.tmp), self.tmp / "in" / "historico")
+        self.assertEqual(folders.out_dir("workouts", self.tmp), self.tmp / "out" / "treinos")
+        self.db.set("path_exports", str(self.tmp / "outra"))       # um valor antigo: ignorado
+        self.assertEqual(folders.out_dir("workouts", self.tmp), self.tmp / "out" / "treinos")
+        for old in ("resolve", "ensure_dir", "search_list", "check", "KEYS"):
+            self.assertFalse(hasattr(folders, old), old)
 
 
 class TestPlanCsv(Tmp):
@@ -353,8 +338,12 @@ class TestGarminDiscovery(Tmp):
 
     def test_sync_without_the_databases_is_an_error_not_zero_records(self):
         from perennia.core import garmin_sync as gs
-        self.db.set("garmindb_dir", str(self.tmp / "vazio"))
-        ok, msg, rep = gs.sync(self.db, gs.Options(), run_source=False)
+        old = folders._ROOT
+        folders.set_root(self.tmp / "vazio")                   # data/garmin/bases sem nada
+        try:
+            ok, msg, rep = gs.sync(self.db, gs.Options(), run_source=False)
+        finally:
+            folders._ROOT = old
         self.assertFalse(ok)
         self.assertIn("garmin.db", msg)
         self.assertIsNone(rep)
@@ -373,8 +362,13 @@ class TestScreens(tg.GuiCase):
         scr = self.screen()
         self.assertTrue(scr.tab_named("Pastas"))
         labels = " | ".join(i.label for i in scr.list.items)
-        for k in folders.KEYS:
-            self.assertIn(folders.name(k), labels)
+        values = " | ".join(str(i.value) for i in scr.list.items)
+        for k in folders.IN:
+            self.assertIn(folders.name_in(k), labels)
+            self.assertIn("/in/" + folders.IN[k], values.replace("\\", "/"))   # data/in/…
+        for k in folders.OUT:
+            self.assertIn(folders.name_out(k), labels)
+        self.assertTrue(all(not i.enabled for i in scr.list.items if not i.header))  # só info
 
     def test_wifi_and_history_tabs_open_their_screens(self):
         from perennia.ui import lan_sync_screens as lss

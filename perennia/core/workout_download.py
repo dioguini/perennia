@@ -1,11 +1,11 @@
-"""Exportar um treino de qualquer desporto para um ficheiro (Transferências).
+"""Exportar um treino de qualquer desporto para um ficheiro (`data/out/treinos`).
 
 * ciclismo — .zwo, .erg, .mrc e .fit (ver `workout_export`);
 * remo — .fit (treino estruturado) e os dois abaixo;
 * todos — .json (o treino da Perennia, com blocos e objetivos) e .txt (para ler
   ou imprimir).
 
-O ficheiro vai para a pasta Transferências do computador.
+O ficheiro vai para `data/out/treinos` (ver `perennia.core.folders`).
 """
 from __future__ import annotations
 
@@ -32,18 +32,10 @@ def formats(sport: str) -> list[tuple[str, str]]:
     return out
 
 
-def downloads_dir() -> Path:
-    """A pasta Transferências (Downloads): a que existir, senão cria-se
-    `~/Downloads`. `PERENNIA_DOWNLOADS` força outra (testes, servidores)."""
-    forced = os.environ.get("PERENNIA_DOWNLOADS")
-    if forced:
-        p = Path(forced)
-    else:
-        home = Path(os.path.expanduser("~"))
-        p = next((home / n for n in ("Downloads", "Transferências", "Descargas")
-                  if (home / n).is_dir()), home / "Downloads")
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def export_dir(kind: str = "workouts", data_dir: Path | str | None = None) -> Path:
+    """Onde se grava o que se exporta: `data/out/<pasta>` (por omissão `data/out/treinos`)."""
+    from . import folders
+    return folders.out_dir(kind, data_dir)
 
 
 def default_name(name: str | None) -> str:

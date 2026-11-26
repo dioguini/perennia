@@ -30,15 +30,14 @@ python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packa
 echo "[5/5] A criar o arquivo..."
 if [ "$(uname)" = "Darwin" ]; then
   APP="dist/Perennia.app"
-  # as pastas de exemplo ficam ao lado da app, dentro de uma pasta comum
+  # a app e o LEIA-ME numa pasta comum; a pasta data/ (os teus dados, com os modelos) nasce
+  # ao lado da app na primeira vez que a abres
   rm -rf dist/Perennia-mac && mkdir -p dist/Perennia-mac
   cp -R "$APP" dist/Perennia-mac/
-  cp -R gpx workouts dist/Perennia-mac/
   cp packaging/LEIA-ME.txt dist/Perennia-mac/
   (cd dist && ditto -c -k --keepParent Perennia-mac Perennia-mac.zip)
   echo "Pronto: dist/Perennia-mac.zip"
 else
-  cp -R gpx workouts dist/Perennia/
   cp packaging/LEIA-ME.txt dist/Perennia/
   ARCH="$(uname -m)"
   tar -C dist -czf "dist/Perennia-linux-$ARCH.tar.gz" Perennia

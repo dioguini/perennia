@@ -62,7 +62,7 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Perennia")
     parser.add_argument("--data-dir", default=None,
-                        help="pasta da base de dados e dos .fit")
+                        help="outra pasta de dados (por omissão, a pasta data/ do projeto)")
     parser.add_argument("--fullscreen", action="store_true", default=None,
                         help="ecrã inteiro (senão, usa a última escolha)")
     parser.add_argument("--window", action="store_true",
@@ -71,9 +71,19 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=None)
     parser.add_argument("--self-test", action="store_true",
                         help="testa o núcleo e sai, sem abrir janela")
+    parser.add_argument("--setup", action="store_true",
+                        help="instalação num computador novo (o que o perennia_setup corre): "
+                             "cria data/ com a base de dados, o conteúdo de base e os modelos, "
+                             "faz o autoteste e, se quiseres, configura o GarminDB e o atalho; "
+                             "pode repetir-se")
+    parser.add_argument("--sem-perguntas", action="store_true",
+                        help="com --setup: não pergunta nada (sem GarminDB nem atalho)")
+    parser.add_argument("--garmin-login", nargs="?", const="", default=None, metavar="E-MAIL",
+                        help="o login do GarminDB num terminal (pede a palavra-passe — que não "
+                             "fica guardada — e, se a conta tiver, o código MFA) e sai")
     parser.add_argument("--backup", nargs="?", const="", default=None, metavar="DESTINO",
                         help="faz um backup e sai (pasta ou ficheiro .zip; por omissão, "
-                             "a pasta backups dos dados)")
+                             "data/out/backups)")
     parser.add_argument("--restore", default=None, metavar="BACKUP.zip",
                         help="repõe um backup e sai (antes guarda o que tens agora)")
     parser.add_argument("--componentes", default=None,
@@ -130,7 +140,7 @@ def main() -> int:
                         help="com --adhoc-exportar: . ou , (por omissão, o das Definições)")
     parser.add_argument("--plano-modelo", nargs="?", const="", default=None, metavar="PASTA",
                         help="grava o ficheiro modelo de um plano de X semanas e a descrição do "
-                             "formato (por omissão na pasta «planos» dos dados) e sai")
+                             "formato (por omissão em data/out/planos) e sai")
     parser.add_argument("--plano-importar", default=None, metavar="FICHEIRO",
                         help="importa um plano de X semanas (*.perennia-plan.json) e sai")
     parser.add_argument("--plano-exportar", default=None, metavar="CHAVE",
@@ -142,13 +152,23 @@ def main() -> int:
                              "um único canal e escreve o que chega, ao segundo")
     parser.add_argument("--powerbi", nargs="?", const="", default=None, metavar="PASTA",
                         help="exporta tudo para o Power BI (Excel + CSV + .pbids + medidas DAX) "
-                             "e sai; por omissão na pasta Exportações/PowerBI")
+                             "e sai; por omissão em data/out/powerbi")
     parser.add_argument("--destino", default=None,
-                        help="pasta onde gravar os .csv (por omissão, Transferências)")
+                        help="pasta onde gravar (por omissão, a pasta data/out desse tipo: "
+                             "csv, planos…)")
     args = parser.parse_args()
 
     if args.self_test:
         return self_test()
+    if args.setup:
+        from perennia import install
+        return install.run(Path(args.data_dir).expanduser() if args.data_dir else None,
+                           interactive=not args.sem_perguntas, self_test=self_test)
+    if args.garmin_login is not None:
+        from perennia import install
+        from perennia.datadir import default_data_dir
+        return install.login_cli(Path(args.data_dir).expanduser() if args.data_dir
+                                 else default_data_dir(), args.garmin_login)
     if args.backup is not None or args.restore:
         return backup_cli(args)
     if args.testar_hr_ant is not None:
@@ -203,14 +223,16 @@ def csv_cli(args) -> int:
     """O modelo ou a exportação de um conjunto em .csv, sem abrir a janela."""
     from perennia.core import csv_sync
     from perennia.core.db import Database
-    from perennia.core.workout_download import downloads_dir
+    from perennia.core import folders
     from perennia.datadir import data_dir_for, database_path
     key = args.csv_modelo or args.csv_exportar
+    data_dir = data_dir_for(args.data_dir)
+    out = args.destino or folders.out_dir("csv", data_dir)
     if key == "saude":                       # os campos do diário de saúde, por data
         from perennia.core import health_csv
-        db = Database(database_path(data_dir_for(args.data_dir)))
+        db = Database(database_path(data_dir))
         try:
-            print(health_csv.write(db, args.destino or downloads_dir(),
+            print(health_csv.write(db, out,
                                    what="template" if args.csv_modelo else "export"))
         finally:
             db.close()
@@ -219,9 +241,9 @@ def csv_cli(args) -> int:
         print("Conjunto desconhecido: " + key + "\nExistem: " + ", ".join(csv_sync.DATASETS)
               + ", saude", file=sys.stderr)
         return 2
-    db = Database(database_path(data_dir_for(args.data_dir)))
+    db = Database(database_path(data_dir))
     try:
-        print(csv_sync.write(db, key, args.destino or downloads_dir(),
+        print(csv_sync.write(db, key, out,
                              what="template" if args.csv_modelo else "export"))
     finally:
         db.close()
@@ -270,7 +292,8 @@ def plan_cli(args) -> int:
     from perennia.core.db import Database
     from perennia.datadir import data_dir_for, database_path
     data_dir = data_dir_for(args.data_dir)
-    folder = Path(args.destino) if args.destino else Path(data_dir) / "planos"
+    from perennia.core import folders
+    folder = Path(args.destino) if args.destino else folders.out_dir("plans", data_dir)
     if args.plano_modelo is not None:
         if args.plano_modelo:
             folder = Path(args.plano_modelo)
@@ -384,7 +407,7 @@ def history_cli(args) -> int:
     db = Database(database_path(data_dir))
     try:
         if args.historico_regras is not None:
-            folder = args.historico_regras or str(folders.ensure_dir(db, data_dir, "imports"))
+            folder = args.historico_regras or str(folders.in_dir("history", data_dir))
             print("Ficheiro de regras gravado: " + str(history_etl.write_template(folder)))
             return 0
         try:

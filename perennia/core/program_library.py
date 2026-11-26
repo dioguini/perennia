@@ -949,7 +949,7 @@ Um plano é um ficheiro de texto **JSON** com o nome a acabar em `.perennia-plan
 exercício de cada sessão, as linhas `# nome: …`, `# semanas: …`, `# rotacao: A,B` no topo, e
 `70|75|80` numa célula para um valor por semana). O CSV não tem séries com valores diferentes
 umas das outras: para isso usa o JSON.
-Põe-no na pasta `workouts` (ao lado da aplicação), em Transferências ou em Documentos, e em
+Põe-no na pasta `data/in/planos` (dentro da pasta da Perennia) e em
 **Ginásio → Lista de treinos → Planos de X semanas → Importar plano…** escolhe-o. Se alguma
 coisa não obedecer ao formato, a Perennia diz o campo e a razão, e não importa nada.
 

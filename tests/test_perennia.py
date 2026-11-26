@@ -46,11 +46,14 @@ def _iso(d: datetime) -> str:
 
 class TestNameAndData(unittest.TestCase):
     def test_previous_data_folder_is_migrated_once_without_losing_anything(self):
-        from perennia import legacy
+        """A pasta do nome antigo (velolocal) é adotada como a pasta do sistema e, daí, os dados
+        são copiados para data/ (ronda 29) com os caminhos dos .fit corrigidos."""
+        from perennia import datadir, legacy
         tmp = Path(tempfile.mkdtemp())
         try:
             old = tmp / "velolocal"
-            old.mkdir()
+            (old / "rides").mkdir(parents=True)
+            (old / "rides" / "a.fit").write_bytes(b"fit")
             db = Database(old / "velolocal.db")
             wid = db.insert_workout("Teste", [], "velolocal")
             db.conn.execute(
@@ -64,21 +67,27 @@ class TestNameAndData(unittest.TestCase):
             os.environ["XDG_DATA_HOME"] = str(tmp)
             try:
                 if os.name != "nt" and sys.platform != "darwin":
-                    new = tmp / "perennia"
-                    self.assertEqual(app_mod._default_data_dir(), new)
-                    self.assertFalse(old.exists())
-                    path = app_mod._database_path(new)
+                    system = tmp / "perennia"
+                    self.assertEqual(datadir.system_data_dir(), system)
+                    self.assertFalse(old.exists())                 # renomeada (nome antigo)
+                    data = tmp / "projeto" / "data"
+                    rep = datadir.migrate_from(system, data, home=tmp)
+                    self.assertEqual(rep["files"], 1)
+                    path = app_mod._database_path(data)
                     self.assertEqual(path.name, "perennia.db")
                     self.assertTrue(path.exists())
-                    self.assertFalse((new / "velolocal.db").exists())
+                    self.assertTrue((system / "rides" / "a.fit").exists())   # o original fica
                     db = Database(path)
                     row = db.conn.execute("SELECT fit_path FROM rides WHERE id='r1'").fetchone()
-                    self.assertEqual(row["fit_path"], str(new / "rides" / "a.fit"))
+                    want = data / "out" / "sessoes" / "ciclismo" / "a.fit"
+                    self.assertEqual(row["fit_path"], str(want))
+                    self.assertTrue(want.exists())
                     wk = db.conn.execute("SELECT source_format FROM workouts WHERE id = ?",
                                          (wid,)).fetchone()
                     self.assertEqual(wk["source_format"], "perennia")
-                    self.assertEqual(legacy.migrate_db(db.conn, new), 0)     # idempotente
+                    self.assertEqual(legacy.migrate_db(db.conn, data), 0)     # idempotente
                     db.conn.close()
+                    self.assertIsNone(datadir.migrate_from(system, data, home=tmp))  # 1 vez
             finally:
                 os.environ.clear()
                 os.environ.update(env)

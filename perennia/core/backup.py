@@ -1,7 +1,8 @@
 """Backups e reposição: tudo o que a Perennia guarda, num só ficheiro .zip.
 
 **Exportar** — tudo (exportação completa) ou só algumas componentes. O .zip
-vem segmentado, uma pasta por componente e um ficheiro por tabela:
+fica em `data/out/backups` e vem segmentado, uma pasta por componente e um
+ficheiro por tabela:
 
     perennia-backup_2026-11-04_16-30_completo.zip
       manifest.json             o que está lá dentro (versão, data, contagens)
@@ -9,7 +10,7 @@ vem segmentado, uma pasta por componente e um ficheiro por tabela:
       01-perfil/athlete.jsonl
       07-rotas/routes.jsonl, route_points.jsonl, climbs.jsonl
       11-sessoes/rides.jsonl, ride_samples.jsonl, …
-      11-sessoes/ficheiros/rides/<sessão>.fit
+      11-sessoes/ficheiros/out/sessoes/ciclismo/<sessão>.fit
       …
 
 Cada linha de um `.jsonl` é um registo, com o nome das colunas — legível e
@@ -17,8 +18,8 @@ fácil de ler noutro programa. As definições (tabela `settings`) dividem-se
 pelas componentes: atalhos de teclado, ecrã da sessão, ligações externas e o
 resto.
 
-**Repor** — escolhe-se o ficheiro (ou arrasta-se para a janela) e a
-Perennia faz o resto: antes de mexer, guarda um backup do que tens agora;
+**Repor** — põe-se o .zip em `data/in/backups` e escolhe-se lá (ou arrasta-se
+de qualquer sítio para a janela); a Perennia faz o resto: antes de mexer, guarda um backup do que tens agora;
 depois, em cada componente escolhida,
 
 * **substituir** — os dados dessa componente passam a ser os do backup
@@ -33,7 +34,10 @@ arrumam-se como a base de dados manda (ficam vazias, ou saem).
 
 As caches que se refazem sozinhas (`route_bakes`, `ride_zone_cache`), o
 ponto de recuperação de uma sessão a meio (`session_checkpoints`) e a versão
-do esquema não entram. As credenciais (Strava) só entram se as pedires.
+do esquema não entram. As credenciais (Strava) só entram se as pedires; o
+GarminDB (`data/garmin`) nunca entra — volta a descarregar-se. Um backup das
+versões antigas (pastas `rides/`, `rowing/`, `exports/`…) repõe-se na
+organização nova (`out/sessoes/ciclismo/`, …).
 
 Também pela linha de comandos:
 
@@ -123,6 +127,11 @@ def _is_definicao(k: str) -> bool:
                 or k in SKIP_SETTINGS)
 
 
+# a componente «Ficheiros»: as pastas de data/ que entram (relativas à pasta de dados)
+FILE_FOLDERS = ("in/gpx", "in/treinos", "in/planos", "in/csv", "in/atividades", "in/analises",
+                "in/hrv4training", "in/trainingpeaks", "in/historico", "out/treinos",
+                "out/planos", "out/csv", "out/relatorios")
+
 COMPONENTS: tuple[Component, ...] = (
     Component("perfil", "Perfil do atleta", "Athlete profile",
               "nome, peso, FTP e limiares", "name, weight, FTP and thresholds",
@@ -200,7 +209,7 @@ COMPONENTS: tuple[Component, ...] = (
                       "session_workouts", "segment_efforts", "strava_efforts",
                       "synced_activities", "session_tags", "tag_catalog", "block_events",
                       "strength_set_parts", "conditioning_parts"),
-              folders=("rides", "rowing", "endurance", "strength")),
+              folders=("out/sessoes",)),
     Component("analises", "Análises e feedback", "Analyses and feedback",
               "o feedback de cada sessão e a sua análise, picos e curvas de potência",
               "each session's feedback and analysis, peaks and power curves",
@@ -225,9 +234,13 @@ COMPONENTS: tuple[Component, ...] = (
               "planned workouts, day notes and the coach's events (with the answers)",
               tables=("training_plan", "day_notes", "coach_events")),
     Component("ficheiros", "Ficheiros", "Files",
-              "treinos exportados, importações e a pasta workouts",
-              "exported workouts, imports and the workouts folder",
-              folders=("exports", "imports", "workouts")),
+              "o que está em data/in (treinos, planos, rotas, .csv… a importar) e o que "
+              "exportaste para data/out (treinos, planos, .csv, relatórios); os backups e o "
+              "Power BI não entram",
+              "what is in data/in (workouts, plans, routes, .csv… to import) and what you "
+              "exported to data/out (workouts, plans, .csv, reports); backups and Power BI "
+              "are left out",
+              folders=FILE_FOLDERS),
     Component("ligacoes", "Ligações externas (credenciais)", "External connections (credentials)",
               "Strava (chaves e sessão) e GarminDB (pastas) — só se pedires: o ficheiro "
               "fica com as tuas chaves",
@@ -569,7 +582,7 @@ def safety_backup(db, data_dir: Path) -> dict:
     """O que tens agora, antes de repor (com credenciais: é para ficar cá)."""
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     from . import folders
-    return export(db, data_dir, folders.resolve(db, data_dir, "backups") /
+    return export(db, data_dir, folders.out_dir("backups", data_dir) /
                   f"perennia-antes-de-repor_{stamp}.zip", keys=list(BY_KEY),
                   include_secrets=True)
 
@@ -642,7 +655,8 @@ def restore(db, data_dir: Path | None, path: Path | str, keys: list[str] | None 
             if data_dir is not None:
                 for e in entries:
                     for f in e.get("files") or []:
-                        dst = _safe_destination(data_dir, f["path"])
+                        # (o caminho de um backup antigo, «rides/x.fit», vai para o sítio novo)
+                        dst = _safe_destination(data_dir, _relocate(f["path"]))
                         if dst is None:                  # caminho suspeito: nunca sai da pasta
                             continue
                         rel = PurePosixPath(f["path"])
@@ -676,8 +690,19 @@ def _rewrite_path(v, old_dir: str | None, data_dir: Path | None):
         parts = PurePosixPath(rest.replace("\\", "/")).parts
         if not parts or ".." in parts or any(":" in p for p in parts):
             return v                              # nunca aponta para fora da pasta de dados
+        parts = PurePosixPath(_relocate("/".join(parts))).parts
         return str(Path(data_dir) / Path(*parts))
     return v
+
+
+def _relocate(rel: str) -> str:
+    """Um caminho da organização antiga das pastas («rides/x.fit») na nova
+    («out/sessoes/ciclismo/x.fit»); os da nova ficam iguais (ver core.folders)."""
+    text = str(rel or "")
+    if not text or "\\" in text or "\x00" in text:
+        return text                               # _safe_destination recusa-o depois
+    from . import folders
+    return folders.relocate(text)
 
 
 PATH_COLUMNS = ("fit_path",)
@@ -856,7 +881,7 @@ def _after(db) -> None:
 def cli_export(db, data_dir: Path, out: str | None, keys: list[str] | None,
                secrets: bool) -> int:
     from . import folders
-    dest = Path(out) if out else folders.resolve(db, data_dir, "backups")
+    dest = Path(out) if out else folders.out_dir("backups", data_dir)
     m = export(db, data_dir, dest, keys, include_secrets=secrets,
                progress=lambda n: print(f"  {n}…"))
     print(f"Backup feito: {m['path']} ({m['bytes'] / 1024:.0f} KB)")

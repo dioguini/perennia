@@ -33,8 +33,19 @@ def _day(d: date) -> str:
     return f"{pg.weekday_name(d.isoweekday())} {d.strftime('%d/%m')}"
 
 
-def _user_dir(app, name: str) -> Path:
-    return Path(app.data_dir) / name
+def _in_dir(app) -> Path:
+    """Os planos a importar: `data/in/planos`."""
+    return app.in_dir("plans")
+
+
+def _out_dir(app) -> Path:
+    """Os planos exportados e o modelo descarregado: `data/out/planos`."""
+    return app.out_dir("plans")
+
+
+def _shown(app, p) -> str:
+    from perennia.core import folders
+    return folders.shown(p, app.data_dir)
 
 
 def plans_item(app) -> Item:
@@ -145,17 +156,18 @@ class ProgramsScreen(Screen):
     def _template(self) -> None:
         a = self.app
         try:
-            paths = pg.write_template(_user_dir(a, "planos"))
+            paths = pg.write_template(_out_dir(a))
         except OSError as e:
             a.message(tr("Não consegui escrever o ficheiro modelo: {e}",
                          "Could not write the template file: {e}", e=e))
             return
         a.message(tr("Ficheiro modelo e descrição do formato em {p}",
-                     "Template file and format description in {p}", p=paths[0].parent))
+                     "Template file and format description in {p}",
+                     p=_shown(a, paths[0].parent)))
 
 
 class ProgramFilePopup(PopupMixin, Screen):
-    """Os ficheiros de plano (`*.perennia-plan.json`) encontrados no computador."""
+    """Os ficheiros de plano (`*.perennia-plan.json` / `.csv`) de `data/in/planos`."""
 
     W, H = 820, 560
 
@@ -172,23 +184,15 @@ class ProgramFilePopup(PopupMixin, Screen):
 
     def enter(self) -> None:
         a = self.app
-        extra = [str(_user_dir(a, "planos"))]
-        if self.folders is None:
-            from perennia import paths
-            from perennia.core.workout_files import FOLDERS
-            folders = [str(p) for p in paths.user_folder("workouts")] + extra + list(FOLDERS)
-        else:
-            folders = self.folders
+        base = _in_dir(a)
+        folders = [str(base)] if self.folders is None else self.folders
         self.files = pg.scan(folders)
-        items = [Item(p.name, detail=str(p.parent), action=lambda q=p: self.pick(q))
-                 for p in self.files]
+        items = [Item(p.name, action=lambda q=p: self.pick(q)) for p in self.files]
         if not items:
             items = [Item(tr("Nenhum plano encontrado", "No plan found"),
-                          detail=tr("Põe ficheiros «{e}» na pasta «workouts» ao lado da "
-                                    "aplicação, em Transferências, em Documentos ou em {p}.",
-                                    "Put '{e}' files in the 'workouts' folder next to the app, "
-                                    "in Downloads, in Documents or in {p}.", e=pg.EXT,
-                                    p=extra[0]), enabled=False)]
+                          detail=tr("Põe ficheiros «{e}» em {p} e volta a abrir.",
+                                    "Put '{e}' files in {p} and open this again.", e=pg.EXT,
+                                    p=_shown(a, base)), enabled=False)]
         self.chrome.set(tr("Importar um plano", "Import a plan"),
                         tr("{n} ficheiro(s) «{e}» · Enter importa · Esc volta",
                            "{n} '{e}' file(s) · Enter imports · Esc goes back",
@@ -309,7 +313,7 @@ class ProgramDetail(Screen):
         a = self.app
         p = pg.get(a.db, self.key)
         try:
-            path = pg.export_file(p, _user_dir(a, "planos"))
+            path = pg.export_file(p, _out_dir(a))
         except OSError as e:
             a.message(tr("Não consegui exportar: {e}", "Could not export: {e}", e=e))
             return

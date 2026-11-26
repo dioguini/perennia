@@ -3,12 +3,12 @@
 TrainingPeaks, Upload manual, CSV, Saúde — as opções gravam-se logo, sem «Guardar»).
 
 * **Exportar** — tudo (exportação completa) ou só as componentes que
-  escolheres; o .zip fica na pasta `backups` dos teus dados, segmentado por
-  componente (ver `perennia.core.backup`).
-* **Repor** — os backups que a Perennia encontra (na pasta `backups`, em
-  Transferências, Documentos e no Ambiente de trabalho). Enter abre a janela
-  da reposição: que componentes, e se substitui ou junta. Também se pode
-  **arrastar um .zip para a janela** da Perennia, de qualquer ecrã.
+  escolheres; o .zip fica em `data/out/backups`, segmentado por componente
+  (ver `perennia.core.backup`).
+* **Repor** — os backups que estão em `data/in/backups` (só aí: copia para lá
+  o .zip a repor). Enter abre a janela da reposição: que componentes, e se
+  substitui ou junta. Também se pode **arrastar um .zip para a janela** da
+  Perennia, de qualquer ecrã.
 
 Antes de repor guarda-se sempre um backup do que tens agora; depois, a
 aplicação volta ao ecrã inicial com os dados (e as definições) repostos.
@@ -26,19 +26,17 @@ from perennia.ui.app import Screen
 from perennia.ui.sport_screens import EditPopup
 from perennia.ui.widgets import Item, TabBar
 
-SEARCH = ("~/Downloads", "~/Transferências", "~/Documents", "~/Documentos", "~/Desktop",
-          "~/Área de Trabalho")
-
-
 def backups_dir(app) -> Path:
+    """Onde se gravam os backups que fazes: `data/out/backups`."""
     from perennia.core import folders
-    return folders.resolve(app.db, app.data_dir, "backups")
+    return folders.out_dir("backups", app.data_dir)
 
 
 def search_folders(app) -> list[Path]:
-    from perennia import paths
-    out = [backups_dir(app)] + [Path(p) for p in paths.user_folder("backups")]
-    return out + [Path(p).expanduser() for p in SEARCH]
+    """Onde se procuram os backups a repor: só `data/in/backups` (para repor um que fizeste,
+    copia-o de data/out/backups para lá, ou arrasta o .zip para a janela)."""
+    from perennia.core import folders
+    return [folders.in_dir("backups", app.data_dir)]
 
 
 def size_text(n: float) -> str:
@@ -274,7 +272,7 @@ class BackupScreen(Screen):
                     "Desktop; da próxima vez basta «Atualizar» · Está em {p}",
                     "{t} tables · {n} rows · open Perennia.pbids (or the Excel) in Power BI "
                     "Desktop; next time just «Refresh» · It is in {p}",
-                    t=len(m["tables"]), n=rows, p=m["path"]))
+                    t=len(m["tables"]), n=rows, p=folders_shown(m["path"], a.data_dir)))
 
     # --------------------------------------------------------------- repor
 
@@ -292,16 +290,19 @@ class BackupScreen(Screen):
                               action=lambda mm=m: self.app.push(RestorePopup(self.app, mm)),
                               data=("file", m["path"])))
         if not self.found:
-            items.append(Item(tr("Ainda não há backups", "No backups yet"),
-                              detail=tr("faz um no separador Exportar, ou traz um .zip",
-                                        "make one in the Export tab, or bring a .zip"),
+            items.append(Item(tr("Nenhum backup em data/in/backups", "No backup in "
+                                 "data/in/backups"),
+                              detail=tr("copia para lá o .zip a repor", "copy the .zip to "
+                                        "restore there"),
                               enabled=False))
+        items.append(Item(tr("Os que fazes", "The ones you make"), value="data/out/backups",
+                          detail=tr("para repor um, copia-o para data/in/backups",
+                                    "to restore one, copy it to data/in/backups"),
+                          enabled=False))
         items.append(Item(tr("Trazer um backup (upload)", "Bring a backup (upload)"),
                           value=tr("arrasta o .zip", "drag the .zip"),
-                          detail=tr("arrasta o .zip para a janela da Perennia, ou põe-no em "
-                                    "Transferências, Documentos ou na pasta backups",
-                                    "drag the .zip onto the Perennia window, or put it in "
-                                    "Downloads, Documents or the backups folder"),
+                          detail=tr("arrasta-o para a janela, de qualquer sítio",
+                                    "drag it onto the window, from anywhere"),
                           enabled=False))
         self.chrome.set(tr("Backups e reposição", "Backups and restore"),
                         tr("Escolhe o backup a repor · antes, guardo o que tens agora",
@@ -490,3 +491,8 @@ def open_dropped(app, paths: list) -> bool:
         app.push(RestorePopup(app, m))
         return True
     return False
+
+
+def folders_shown(p, data_dir) -> str:
+    from perennia.core import folders
+    return folders.shown(p, data_dir)

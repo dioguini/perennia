@@ -1,0 +1,1 @@
+Põe aqui o .csv de atividades do TrainingPeaks (Calendário → Exportar → Workouts).

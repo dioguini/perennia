@@ -518,8 +518,8 @@ class TestHealthGui(tg.GuiCase):
         self.assertIn("média", trend.summary.text)
 
     def test_import_screen(self):
-        imports = Path(self.tmp) / "imports"
-        imports.mkdir(exist_ok=True)
+        imports = Path(self.app.data_dir) / "in" / "hrv4training"           # só data/in
+        imports.mkdir(parents=True, exist_ok=True)
         (imports / "My_Measurements.csv").write_text("date,rMSSD\n2026-10-28,70\n")
         scr = self.open_sync("HRV4Training")
         self.pick("My_Measurements.csv")

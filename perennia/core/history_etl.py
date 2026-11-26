@@ -217,13 +217,9 @@ def load_rules(path: str | Path, max_kb: int = 512) -> list[dict]:
 
 
 def rules_path(db: Database) -> Path:
-    """O ficheiro de regras: o das Definições, ou `regras-historico.json` na pasta de
-    importações."""
-    from . import folders, options
-    text = str(options.get(db, "etl_rules_file") or "").strip()
-    if text:
-        return Path(folders.expand_text(text))
-    return folders.resolve(db, db.path.parent, "imports") / "regras-historico.json"
+    """O ficheiro de regras: `data/in/historico/regras-historico.json`."""
+    from . import folders
+    return folders.in_dir("history") / "regras-historico.json"
 
 
 def write_template(folder: str | Path) -> Path:

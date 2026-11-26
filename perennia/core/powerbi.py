@@ -2,7 +2,7 @@
 
 Um ficheiro `.pbix` (o relatório do Power BI) não se consegue escrever fora do Power BI
 Desktop: o modelo de dados lá dentro é um formato binário fechado. O que a Perennia faz é
-entregar o **modelo já pronto** para o Power BI ler, numa pasta fixa (Exportações → PowerBI),
+entregar o **modelo já pronto** para o Power BI ler, numa pasta fixa (`data/out/powerbi`),
 que se reescreve a cada exportação — assim, depois de montares o relatório uma vez e o
 guardares como `.pbix`, basta carregar em **Atualizar** no Power BI para ver os dados novos:
 
@@ -33,7 +33,6 @@ from typing import Any, Callable, Iterable
 from .db import Database, now_iso
 from .i18n import tr
 
-FOLDER = "PowerBI"
 XLSX = "Perennia_PowerBI.xlsx"
 SAMPLES = "Amostras"
 SPORT_NAMES = {"cycling": ("Ciclismo", "Cycling"), "rowing": ("Remo", "Rowing"),
@@ -580,8 +579,9 @@ def readme(tables: list[Table], folder: Path) -> str:
 
 
 def output_dir(db: Database, data_dir: Path | str | None) -> Path:
+    """`data/out/powerbi` (sempre a mesma: o Power BI lê sempre do mesmo sítio)."""
     from . import folders
-    return folders.ensure_dir(db, data_dir, "exports") / FOLDER
+    return folders.out_dir("powerbi", data_dir)
 
 
 def export(db: Database, data_dir: Path | str | None, out: Path | str | None = None,

@@ -18,4 +18,5 @@ openpyxl>=3.1
 cryptography>=42
 
 # GarminDB (opcional, à parte): descarrega os teus dados do Garmin Connect.
-# pip install garmindb   — e configura ~/.GarminDb/GarminConnectConfig.json
+# O perennia_setup instala-o se quiseres (pip install garmindb) e guarda a configuração em
+# data/garmin/config — só o utilizador; a palavra-passe é pedida a cada sincronização.
