@@ -38,9 +38,20 @@ python --version       # Windows
 ```
 
 Se não tiveres Python, instala-o:
-- **Windows**: https://www.python.org/downloads/ — na primeira janela do
-  instalador, liga a opção **"Add Python to PATH"**, senão os comandos
-  seguintes não funcionam.
+- **Windows**: o python.org dá agora o **Python install manager** (também na Microsoft Store).
+  Instala-o (duplo clique → Install) e depois, numa janela do **PowerShell** ou da **Linha de
+  comandos** (não no Git Bash), instala o Python 3.13:
+
+  ```powershell
+  pymanager install 3.13
+  py list
+  ```
+
+  (`py install 3.13` também serve; o `pymanager` evita confusões com o `py` de um Python antigo.)
+  O `py list` mostra os Pythons instalados. Um Python antigo (por exemplo o 3.11) pode ficar: o
+  `python` da linha de comandos pode continuar a ser ele — não faz mal, o `perennia_setup.bat`
+  procura o 3.13 sozinho (`py -3.13`, ou `%LocalAppData%\Python\bin\python3.13.exe`).
+  Com o instalador antigo (python.org até 2025), liga na primeira janela **"Add Python to PATH"**.
 - **macOS**: `brew install python` (ou o instalador do python.org)
 - **Debian / Ubuntu / Raspberry Pi OS**: `sudo apt install python3 python3-pip python3-venv`
 - **Fedora**: `sudo dnf install python3 python3-pip`

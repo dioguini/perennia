@@ -200,11 +200,13 @@ class TestSetup(unittest.TestCase):
     def test_scripts_prefer_python_312_and_replace_an_old_venv(self):
         sh = (ROOT / "perennia_setup.sh").read_text(encoding="utf-8")
         self.assertIn("python3.12", sh)
-        self.assertLess(sh.index("python3.13"), sh.index("python3.12"))   # o mais recente 1.º
+        self.assertLess(sh.index("python3.13"), sh.index("python3.12"))   # o 3.13 primeiro
+        self.assertLess(sh.index("python3.12"), sh.index("python3.14"))
         self.assertIn(".venv-antigo", sh)
         bat = (ROOT / "perennia_setup.bat").read_bytes().decode("ascii")
         self.assertIn("py -%%V", bat)
-        self.assertIn("3.14 3.13 3.12", bat)
+        self.assertIn("3.13 3.12 3.14", bat)                # o 3.13 (o testado) primeiro
+        self.assertIn(r"%LocalAppData%\Python\bin\python%%V.exe", bat)   # o install manager
         self.assertIn(".venv-antigo", bat)
         self.assertIn("\r\n", bat)
         self.assertIn(".venv-antigo/", (ROOT / ".gitignore").read_text())

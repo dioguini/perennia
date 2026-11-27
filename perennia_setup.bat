@@ -8,7 +8,7 @@ rem  base, exercicios do ginasio, metricas...), os ficheiros modelo, o
 rem  autoteste e, se quiseres, o GarminDB e o atalho no Ambiente de trabalho.
 rem  Pode correr-se outra vez: o que ja existe fica como esta.
 rem
-rem  Python: usa o mais recente que encontrar. A Perennia precisa do 3.11+;
+rem  Python: usa o 3.13 (ou o 3.12 / 3.14). A Perennia precisa do 3.11+;
 rem  o GarminDB precisa do 3.12+ (https://www.python.org/downloads/ - marca
 rem  "Add python.exe to PATH"). Se o .venv for de um Python antigo e houver
 rem  um 3.12+, o antigo fica guardado em .venv-antigo e cria-se um novo.
@@ -19,9 +19,14 @@ set "CHK=import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"
 set "CHK11=import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
 
 set "PY="
-for %%V in (3.14 3.13 3.12) do (
+rem  o 3.13 primeiro (o testado); o py do "Python install manager" e, se o py
+rem  antigo se sobrepuser, o python3.X.exe que ele poe em %LocalAppData%\Python\bin
+for %%V in (3.13 3.12 3.14) do (
   if not defined PY (
     py -%%V -c "%CHK%" >nul 2>nul && set "PY=py -%%V"
+  )
+  if not defined PY if exist "%LocalAppData%\Python\bin\python%%V.exe" (
+    "%LocalAppData%\Python\bin\python%%V.exe" -c "%CHK%" >nul 2>nul && set "PY="%LocalAppData%\Python\bin\python%%V.exe""
   )
 )
 if not defined PY (
