@@ -8,7 +8,7 @@
 # modelo, o autoteste e, se quiseres, o GarminDB e o atalho. Pode correr-se outra vez: o que já
 # existe fica como está.
 #
-# Python: usa o mais recente que encontrar. A Perennia precisa do 3.11+; o GarminDB precisa do
+# Python: usa o 3.13 (ou o 3.12 / 3.14). A Perennia precisa do 3.11+; o GarminDB precisa do
 # 3.12+ (o GarminDB 3.x já não funciona). Se o .venv for de um Python antigo e houver um 3.12+,
 # o .venv antigo fica guardado em .venv-antigo e cria-se um novo.
 set -e
@@ -20,7 +20,7 @@ ver_ok() {   # $1 = python, $2 = mínimo (ex.: 12) — 0 se for 3.$2 ou mais rec
 
 PY="${PYTHON:-}"
 if [ -z "$PY" ]; then
-  for c in python3.14 python3.13 python3.12 python3 python; do
+  for c in python3.13 python3.12 python3.14 python3 python; do      # o 3.13 é o testado
     if command -v "$c" >/dev/null 2>&1 && ver_ok "$c" 12; then PY="$c"; break; fi
   done
 fi
