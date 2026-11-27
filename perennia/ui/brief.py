@@ -18,7 +18,7 @@ from perennia.core.i18n import t, tr
 from perennia.core.units import hms
 from perennia.gfx.compat import label as make_label
 from perennia.ui.app import Screen
-from perennia.ui.widgets import BORDER, DIM, GRID, PANEL, TEXT, Item
+from perennia.ui.widgets import BORDER, DIM, GRID, PANEL, PANEL2, TEXT, Item
 
 
 def wrap(text: str, width_px: float, size: float, max_lines: int = 0) -> str:
@@ -94,8 +94,19 @@ class BriefPanel:
                 "target": make_label("", font_size=12, color=DIM, anchor_y="top", batch=b),
             })
         self.more = make_label("", font_size=13, color=DIM, anchor_y="top", batch=b)
+        # o impacto do treino (IF, sistemas, longevidade), à direita do título — ronda 31
+        from perennia.ui.impact_panel import ImpactPanel
+        self.impact = ImpactPanel(batch=b, background=PANEL2, title=True)
         self.geometry = (0, 0, 600, 0)
         self.brief: ob.Brief | None = None
+
+    IMPACT_MIN_CARD_W = 900       # num cartão mais estreito, o painel do impacto não aparece
+
+    def set_impact(self, imp, links: dict | None = None) -> None:
+        """O impacto do treino (ver core.workout_impact.planned); None tira o painel."""
+        self.impact.set(imp, links)
+        if self.brief is not None:
+            self.set(self.brief)
 
     # -------------------------------------------------------------- medidas
 
@@ -113,7 +124,16 @@ class BriefPanel:
         self.card.x, self.card.y, self.card.width, self.card.height = x, bottom, w, top - bottom
         ix, iw = x + pad, w - 2 * pad
         y = top - 14
-        self.title.text = wrap(brief.title, iw, 24, 1)
+        from perennia.ui.impact_panel import PANEL_H, PANEL_W
+        show_imp = self.impact.impact is not None and w >= self.IMPACT_MIN_CARD_W
+        if show_imp:
+            imp_top = top - 14
+            self.impact.layout(ix + iw - PANEL_W, ix + iw, imp_top - PANEL_H - 20, imp_top)
+            text_w = iw - PANEL_W - 18             # o texto fica à esquerda do painel
+        else:
+            self.impact.layout(0, 0, 0, 0)
+            text_w = iw
+        self.title.text = wrap(brief.title, text_w, 24, 1)
         self.title.x, self.title.y = ix, y
         y -= 38
         bits = [sport_kind(brief.sport), hms(brief.seconds) if brief.seconds < 3600
@@ -128,17 +148,20 @@ class BriefPanel:
         self.intensity.text = brief.intensity
         self.intensity.x, self.intensity.y = ix, y
         y -= 26
-        text = wrap(brief.goal, iw, 16, 3)
+        text = wrap(brief.goal, text_w, 16, 3)
         self.goal.text = text
-        self.goal.width = int(iw)
+        self.goal.width = int(text_w)
         self.goal.x, self.goal.y = ix, y
         y -= 22 * (text.count("\n") + 1) + 2
-        self.auto_note.text = "" if brief.goal_written else tr(
+        self.auto_note.text = "" if brief.goal_written else wrap(tr(
             "Objetivo sugerido pela estrutura do treino · «Editar» para o escrever",
-            "Goal suggested from the workout structure · «Edit» to write your own")
+            "Goal suggested from the workout structure · «Edit» to write your own"),
+            text_w, 11, 1)
         self.auto_note.x, self.auto_note.y = ix, y
         if not brief.goal_written:
             y -= 18
+        if show_imp:                               # o gráfico começa por baixo do painel
+            y = min(y, self.impact.box[2] - 6)
         avail = y - bottom
         chart_h = max(70, min(150, avail * 0.36))
         y -= 8
@@ -316,6 +339,33 @@ class BriefScreen(Screen):
     def make_brief(self) -> ob.Brief | None:
         return None
 
+    def make_impact(self) -> tuple:
+        """(impacto, ligações ao perfil) do treino — IF, sistemas do desporto e longevidade, os
+        mesmos do construtor (ver core.workout_impact). O ginásio não tem: (None, {})."""
+        if self.SPORT not in ("cycling", "rowing", "running", "swimming"):
+            return None, {}
+        from perennia.core import workout_impact as wi
+        from perennia.core.blocks import load_blocks
+        try:
+            _n, _d, _m, blocks = load_blocks(self.app.db, self.SPORT, self.wid)
+        except Exception:
+            return None, {}
+        if not any(bk.lo is not None for bk in blocks) and not any(
+                bk.lo is None and bk.dur <= 30 for bk in blocks):
+            return None, {}
+        # refaz-se só quando o treino muda (ao voltar do construtor, por exemplo)
+        sig = tuple((bk.kind, bk.dur_type, round(bk.dur), bk.lo, bk.hi, bk.cue) for bk in blocks)
+        cached = getattr(self, "_impact_cache", None)
+        if cached is not None and cached[0] == sig:
+            return cached[1]
+        try:
+            imp = wi.planned(self.app.db, self.SPORT, blocks)
+            out = (imp, wi.profile_links(self.app.db, self.SPORT, imp.systems))
+        except Exception:
+            out = (None, {})
+        self._impact_cache = (sig, out)
+        return out
+
     def start(self) -> None: ...
 
     def edit(self) -> None:
@@ -330,6 +380,7 @@ class BriefScreen(Screen):
             a.pop()
             return
         self.brief_data = b
+        self.panel.set_impact(*self.make_impact())
         self.panel.set(b)
         # as ações do treino: Editar (abre o construtor), Exportar e Configurar sessão;
         # os objetivos vêm do próprio treino (escrevem-se no construtor)

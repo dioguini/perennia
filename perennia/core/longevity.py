@@ -269,7 +269,7 @@ def blocks_mins(blocks, sport: str, bounds=None) -> dict:
             pct = 70.0 if pct == 50.0 else pct
         else:
             pct = b.mid()
-        z = sum(1 for x in bounds if pct >= x)
+        z = sum(1 for x in bounds if pct > x)      # como intensity.zone: Z4 vai até 105 %
         _add(acc, POWER_ZONE_AXIS[min(z, len(POWER_ZONE_AXIS) - 1)], secs / 60.0)
     return acc
 

@@ -250,32 +250,15 @@ class BlockBuilder(EditScreen):
 
     IMPACT_W = 340            # a largura do painel «Impacto do treino», à direita do gráfico
     IMPACT_MIN_W = 1100       # numa janela mais estreita, o painel não aparece (fica o subtítulo)
-    SYSTEM_ZONE = {"endurance": 2, "tempo": 3, "threshold": 4, "vo2max": 5, "anaerobic": 6,
-                   "sprint": 7}
 
     def _make_impact_panel(self, b) -> None:
         """O painel com o IF, a TSS, o efeito em cada sistema do desporto e o impacto no índice
-        de longevidade — atualiza-se a cada mudança nos blocos (ver core.workout_impact)."""
-        from perennia.core import workout_impact as wi
-        self.imp_bg = pyglet.shapes.Rectangle(0, 0, 10, 10, color=PANEL, batch=b)
-        self.imp_if = make_label("", font_size=20, bold=True, color=ACCENT, anchor_y="center",
-                                 batch=b)
-        self.imp_sub = make_label("", font_size=10, color=DIM, anchor_x="right",
-                                  anchor_y="center", batch=b)
-        self.imp_rows = []
-        for sname in wi.SYSTEMS:
-            name = make_label(wi.system_name(sname), font_size=9, bold=True, color=TEXT,
-                              anchor_y="center", batch=b)
-            track = pyglet.shapes.Rectangle(0, 0, 10, 8, color=GRID, batch=b)
-            fill = pyglet.shapes.Rectangle(0, 0, 0, 8, color=it.ZONE_COLORS[
-                self.SYSTEM_ZONE[sname] - 1], batch=b)
-            val = make_label("", font_size=9, color=TEXT, anchor_y="center", batch=b)
-            self.imp_rows.append((sname, name, track, fill, val))
-        self.imp_lon = make_label("", font_size=10, bold=True, color=TEXT, anchor_y="center",
-                                  batch=b)
-        self.imp_lon2 = make_label("", font_size=9, color=DIM, anchor_y="center", batch=b)
-        self.imp_note = make_label("", font_size=9, color=DIM, anchor_y="center", batch=b)
+        de longevidade — atualiza-se a cada mudança nos blocos (ver ui.impact_panel)."""
+        from perennia.ui.impact_panel import ImpactPanel
+        self.impact_panel = ImpactPanel(batch=b)
+        self.imp_if = self.impact_panel.if_label           # (os testes leem o texto daqui)
         self._impact = None
+        self._impact_links: dict = {}
         self._imp_sig = None
 
     def impact_visible(self) -> bool:
@@ -300,100 +283,18 @@ class BlockBuilder(EditScreen):
         return self._impact
 
     def _layout_impact(self, x0: float, x1: float, y0: float, y1: float) -> None:
-        show = x1 > x0
-        self.imp_bg.x, self.imp_bg.y = x0, y0
-        self.imp_bg.width, self.imp_bg.height = max(0, x1 - x0), max(0, y1 - y0)
-        self.imp_bg.opacity = 255 if show else 0
-        self._imp_box = (x0, x1, y0, y1) if show else None
-        pad = 12
-        self.imp_if.x, self.imp_if.y = x0 + pad, y1 - 22
-        self.imp_sub.x, self.imp_sub.y = x1 - pad, y1 - 22
-        rows_top = y1 - 50
-        bottom_lines = 3 * 15 + 4
-        row_h = max(13.0, min(20.0, (rows_top - (y0 + bottom_lines)) / len(self.imp_rows)))
-        for k, (_s, name, track, fill, val) in enumerate(self.imp_rows):
-            ry = rows_top - k * row_h
-            name.x, name.y = x0 + pad, ry
-            track.x, track.y, track.width, track.height = x0 + pad + 96, ry - 4, 96, 8
-            fill.x, fill.y, fill.height = track.x, track.y, 8
-            val.x, val.y = track.x + track.width + 8, ry
-        base = rows_top - len(self.imp_rows) * row_h - 2
-        self.imp_lon.x, self.imp_lon.y = x0 + pad, base
-        self.imp_lon2.x, self.imp_lon2.y = x0 + pad, base - 15
-        self.imp_note.x, self.imp_note.y = x0 + pad, base - 30
-        for _s, _n, track, fill, _v in self.imp_rows:
-            track.opacity = fill.opacity = 255 if show else 0
-        if not show:
-            for lab in (self.imp_if, self.imp_sub, self.imp_lon, self.imp_lon2, self.imp_note):
-                lab.text = ""
-            for _s, name, _t, _f, val in self.imp_rows:
-                name.text = val.text = ""
+        self.impact_panel.layout(x0, x1, y0, y1)
+        self._imp_box = self.impact_panel.box
 
     def impact_texts(self) -> dict:
-        """Os textos do painel (também para os testes): {"if", "sub", "rows": {sistema: texto},
-        "longevity", "longevity2", "note"}."""
-        from perennia.core import longevity as lg
-        from perennia.core import workout_impact as wi
-        imp = self.impact()
-        if imp is None:
-            return {}
-        links = getattr(self, "_impact_links", {}) or {}
-        rows = {}
-        for sname in wi.SYSTEMS:
-            v = imp.systems.get(sname, 0.0)
-            rows[sname] = f"{v:.1f} · {wi.effect_level(v)}"
-        d = (imp.longevity or {}).get("deltas") or {}
-        top = (imp.longevity or {}).get("top") or []
-        if d:
-            lon = tr("Longevidade {v} num mês", "Longevity {v} in a month",
-                     v=lg.fmt_delta(d.get("1m", 0.0)))
-            bits = [tr("1 sem {v}", "1 wk {v}", v=lg.fmt_delta(d.get("1w", 0.0))),
-                    tr("3 meses {v}", "3 mo {v}", v=lg.fmt_delta(d.get("3m", 0.0)))]
-            if top:
-                bits.append(tr("mais em ", "mostly ") + ", ".join(lg.axis_label(a)
-                                                                  for a, _v in top[:2]))
-            lon2 = " · ".join(bits)
-        else:
-            lon, lon2 = tr("Longevidade: sem efeito", "Longevity: no effect"), ""
-        focus = imp.focus
-        note = ""
-        weak = [sn for sn, ln in links.items() if ln.get("weakest")]
-        if weak:
-            ln = links[weak[0]]
-            note = tr("★ puxa o teu ponto fraco: {n} ({l})", "★ works your weakest point: {n} "
-                      "({l})", n=ln["name"], l=ln["level"])
-        elif focus and focus in links:
-            ln = links[focus]
-            note = tr("Perfil: {n} — {l}", "Profile: {n} — {l}", n=ln["name"], l=ln["level"])
-        elif focus:
-            note = tr("Foco: {s}", "Focus: {s}", s=wi.system_name(focus))
-        sub = f"TSS {imp.tss:.0f} · {hms(imp.seconds)}" if imp.tss is not None else ""
-        return {"if": f"IF {wi.fmt_if(imp.if_)}", "sub": sub, "rows": rows, "longevity": lon,
-                "longevity2": lon2, "note": note, "weak": weak, "focus": focus}
+        """Os textos do painel (também para os testes) — ver ui.impact_panel.texts_for."""
+        from perennia.ui.impact_panel import texts_for
+        return texts_for(self.impact(), self._impact_links)
 
     def _refresh_impact(self) -> None:
         if getattr(self, "_imp_box", None) is None:
             return
-        from perennia.core import workout_impact as wi
-        from perennia.ui.widgets import fit_text
-        x0, x1, _y0, _y1 = self._imp_box
-        texts = self.impact_texts()
-        if not texts:
-            return
-        imp = self._impact
-        room = x1 - x0 - 24
-        self.imp_if.text = texts["if"]
-        self.imp_sub.text = fit_text(texts["sub"], room - 110, 10)
-        for sname, name, track, fill, val in self.imp_rows:
-            v = imp.systems.get(sname, 0.0)
-            star = "★ " if sname in texts["weak"] else ""
-            name.text = star + wi.system_name(sname)
-            name.color = ACCENT if (star or sname == texts["focus"]) else TEXT
-            fill.width = track.width * max(0.0, min(1.0, v / wi.EFFECT_MAX))
-            val.text = fit_text(texts["rows"][sname], x1 - val.x - 10, 9)
-        self.imp_lon.text = fit_text(texts["longevity"], room, 10, bold=True)
-        self.imp_lon2.text = fit_text(texts["longevity2"], room, 9)
-        self.imp_note.text = fit_text(texts["note"], room, 9)
+        self.impact_panel.set(self.impact(), self._impact_links)
 
     # ----------------------------------------------------------- separadores
 
