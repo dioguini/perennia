@@ -2302,6 +2302,22 @@ O plano é o treino como estava quando a sessão começou (a cópia que a sessã
 plano no índice mede-se no mesmo dia e contra a mesma base da sessão, para comparar de igual para
 igual. Uma sessão livre (sem treino), a corrida e a natação não têm esta comparação.
 
+### Ronda 31: o impacto do treino também na ficha do treino
+
+O painel **Impacto do treino** (IF, TSS, o efeito em cada sistema do desporto, a característica do
+perfil que o treino puxa e o impacto no índice de longevidade — ver a ronda 30) aparece agora também
+na **ficha do treino**: o ecrã dos detalhes que se abre ao escolher um treino da lista (ciclismo,
+remo, corrida e natação; também a partir do calendário). Fica no canto superior direito do cartão,
+ao lado do título e do objetivo, e o gráfico dos blocos passa para baixo dele. Os números são os
+mesmos do construtor; se editares o treino, ao voltares à ficha o painel já mostra o treino novo.
+O ginásio não tem este painel (não tem zonas de potência). Numa janela estreita (cartão com menos de
+900 px) o painel não aparece.
+
+A **TSS e a intensidade** escritas na ficha («bicicleta indoor · 1,0 h · TSS ≈ 80», «Intensidade
+dura…») passaram a ser as do painel e do construtor (pela NP do perfil do treino). E um bloco exatamente
+no limite de uma zona (por exemplo 105 %) conta agora para o mesmo eixo da longevidade que a zona
+mostra (Z4, Limiar), como no resto da aplicação.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4270,6 +4286,11 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 31 NÃO cria tabelas nem colunas e não grava nada novo** (**não tens de fazer nada**): o
+painel da ficha do treino calcula-se na hora a partir dos passos do treino. Muda só o texto da ficha
+(a TSS e a intensidade passam a ser as da NP do perfil, como no construtor) e o eixo da longevidade de
+um bloco exatamente no limite de uma zona.
+
 **A ronda 30 NÃO cria tabelas nem colunas e não grava nada novo** (**não tens de fazer nada**): o
 impacto de um treino e a comparação plano/feito calculam-se na hora (`perennia/core/workout_impact.py`)
 a partir do que já está na base — os passos do treino (e a cópia que a sessão guardou, em
@@ -4555,7 +4576,13 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1517 testes a passar).
+**Verificado com testes automáticos nesta versão** (1524 testes a passar).
+
+*Novidades da ronda 31 (7 testes novos em `tests/test_round31.py`):* o painel do impacto na ficha do
+treino de ciclismo (o mesmo IF e os mesmos sistemas do construtor, a TSS da ficha igual à do painel, o
+texto à esquerda e o gráfico por baixo do painel), de remo, de corrida e de natação, nenhum painel no
+ginásio nem numa janela estreita, a ficha a acompanhar a edição do treino, e o componente do painel
+sozinho.
 
 *Novidades da ronda 30 (16 testes novos em `tests/test_round30.py`):* o efeito por sistema (satura,
 vai para o sistema certo, os níveis), os sprints livres a contar como esforço máximo, o IF pela NP do

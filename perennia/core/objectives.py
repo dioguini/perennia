@@ -429,6 +429,15 @@ def build(db, sport: str, wid: str | None, title: str, blocks: list,
         load += s / 3600 * (mid / 100) ** 2 * 100
         rpe_t += s * ctx.rpe(mid)
     if_ = (load / (secs / 3600) / 100) ** 0.5 if secs else 0.0
+    # o IF e a TSS da ficha são os do construtor e do painel do impacto: pela NP do perfil
+    try:
+        from .blocks import profile_if
+        np_if = profile_if(list(blocks), ctx)
+    except Exception:
+        np_if = None
+    if np_if:
+        if_ = np_if
+        load = secs / 3600 * if_ ** 2 * 100
     rpe = round(ctx.rpe(if_ * 100)) if secs else None
     goal = saved.get("goal") or library_goal(title)
     written = bool(goal)
