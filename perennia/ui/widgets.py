@@ -1885,6 +1885,18 @@ class TopBar:
             self.chips.append((dot, lab))
         self.more = make_label("", font_size=11, color=HEADER_DIM, anchor_y="center",
                                batch=self.batch)
+        # a tarefa em segundo plano (a sincronização do GarminDB), ao lado de «Perennia»:
+        # clica-se para ver o progresso (ronda 34)
+        self.task_bg = pyglet.shapes.Rectangle(0, 0, 0, self.H - 8,
+                                               color=_theme.mix(HEADER, (255, 255, 255), 0.13),
+                                               batch=self.batch)
+        self.task_dot = pyglet.shapes.Circle(0, 0, 4, color=ACCENT[:3], batch=self.batch)
+        self.task_lab = make_label("", font_size=11, bold=True, color=HEADER_TEXT,
+                                   anchor_y="center", batch=self.batch)
+        self.task_text = ""
+        self.task_state: str | None = None
+        self._task_rect: tuple[float, float] | None = None
+        self.task_bg.opacity = self.task_dot.opacity = 0
         self.buttons: dict[str, tuple] = {}
         for key_, icon in (("glossary", "checklist"), ("devices", "devices"),
                            ("backups", "recover"), ("settings", "gear"),
@@ -1909,10 +1921,13 @@ class TopBar:
         self.update_clock()
         self.layout()
 
-    def clock_text(self) -> str:
+    def clock_text(self, compact: bool | None = None) -> str:
+        """«sex 27/11/2026 · 10:15»; numa janela estreita, «27/11 · 10:15»."""
         import datetime as _dt
         from perennia.core.i18n import tr
         now = self.now or _dt.datetime.now()
+        if compact if compact is not None else getattr(self, "compact", False):
+            return f"{now.day:02d}/{now.month:02d} · {now.hour:02d}:{now.minute:02d}"
         days = tr("seg ter qua qui sex sáb dom", "Mon Tue Wed Thu Fri Sat Sun").split()
         return f"{days[now.weekday()]} {now.day:02d}/{now.month:02d}/{now.year} · " \
                f"{now.hour:02d}:{now.minute:02d}"
@@ -1928,16 +1943,20 @@ class TopBar:
 
     def set_texts(self, devices: str, settings: str, quit_: str, backups: str = "Backups",
                   glossary: str = "Glossário") -> None:
-        for k, txt in (("devices", devices), ("settings", settings), ("quit", quit_),
-                       ("backups", backups), ("glossary", glossary)):
+        self.full_labels = {"devices": devices, "settings": settings, "quit": quit_,
+                            "backups": backups, "glossary": glossary}
+        for k, txt in self.full_labels.items():
             self.buttons[k][1].text = txt
         self._clock_key = None
         self.update_clock()
         self.layout()
 
-    def layout(self) -> None:
-        w, h = self.window.width, self.window.height
-        self.bg.x, self.bg.y, self.bg.width = 0, h - self.H, w
+    SEARCH_MIN = 150
+    # numa janela estreita, o que encolhe (antes de a pesquisa tapar «Perennia» e a tarefa)
+    COMPACT = {"backups": "Backups"}
+
+    def _place_buttons(self, w: float, h: float) -> float:
+        """Os botões da direita e a hora; devolve onde acaba a hora (à esquerda)."""
         x = w - 12
         for k in ("quit", "settings", "backups", "devices", "glossary"):
             r, lab, ic = self.buttons[k]
@@ -1949,16 +1968,37 @@ class TopBar:
             lab.x, lab.y = x + 29, h - self.H / 2
             x -= 6
         self.clock.x, self.clock.y = x - 8, h - self.H / 2
-        x -= 8 + text_px(self.clock.text, 11, True) + 14
+        return x - (8 + text_px(self.clock.text, 11, True) + 14)
+
+    def layout(self) -> None:
+        w, h = self.window.width, self.window.height
+        self.bg.x, self.bg.y, self.bg.width = 0, h - self.H, w
+        # à esquerda: «Perennia» e, se houver, a tarefa em segundo plano
+        left = 26 + text_px(self.brand.text, 12, True) + 20
+        if getattr(self, "task_text", ""):
+            left += min(self.TASK_MAX_W, 40 + text_px(self.task_text, 11, True)) + 16
+        full = getattr(self, "full_labels", {})
+        for compact in (False, True):
+            self.compact = compact
+            for k, short in self.COMPACT.items():
+                self.buttons[k][1].text = short if compact else full.get(
+                    k, self.buttons[k][1].text)
+            self._clock_key = None
+            self.update_clock()
+            x = self._place_buttons(w, h)
+            if x - 12 - left >= self.SEARCH_MIN:
+                break
         self._search_right = x
-        x -= self.SEARCH_W + 12
+        # a pesquisa encolhe (até 150 px) antes de tapar «Perennia» e o indicador da tarefa
+        self.search_w = max(self.SEARCH_MIN, min(self.SEARCH_W, x - 12 - left))
+        x -= self.search_w + 12
         self._buttons_left = x
         self._place_chips()
 
     def search_slot(self) -> tuple[float, float, float, float]:
         """Onde fica a pesquisa: (direita, topo, largura, altura)."""
         return (getattr(self, "_search_right", self.window.width - 400),
-                self.window.height - 4, self.SEARCH_W, self.H - 8)
+                self.window.height - 4, getattr(self, "search_w", self.SEARCH_W), self.H - 8)
 
     def set_devices(self, devices: list[tuple[str, str]]) -> None:
         """[(nome, estado)] com estado em ok | lost | off."""
@@ -1966,11 +2006,55 @@ class TopBar:
             self.devices = list(devices)
             self._place_chips()
 
+    TASK_MAX_W = 360
+
+    def set_task(self, text: str, state: str | None) -> bool:
+        """A tarefa em segundo plano: texto e estado (run | ok | fail | stop), ou nada.
+        Devolve True quando a pesquisa mudou de tamanho (o ecrã volta a pô-la no sítio)."""
+        if (text, state) == (self.task_text, self.task_state):
+            return False
+        grew = bool(text) != bool(self.task_text) or len(text) != len(self.task_text)
+        self.task_text, self.task_state = text, state
+        if grew:
+            before = getattr(self, "search_w", None)
+            self.layout()                 # a pesquisa abre (ou fecha) espaço para o indicador
+            return self.search_w != before
+        self._place_chips()
+        return False
+
+    def _place_task(self, x: float) -> float:
+        """Põe o indicador da tarefa a partir de `x`; devolve onde começa o resto."""
+        h = self.window.height
+        if not self.task_text:
+            self.task_lab.text = ""
+            self.task_bg.opacity = self.task_dot.opacity = 0
+            self._task_rect = None
+            return x
+        # nunca por cima da pesquisa: com pouco espaço o texto encolhe, e no limite fica só
+        # o ponto (continua a dar para clicar)
+        room = min(self.TASK_MAX_W, getattr(self, "_buttons_left", self.window.width) - 10 - x)
+        text = fit_text(self.task_text, room - 40, 11, bold=True) if room >= 80 else ""
+        wdt = 28 + (text_px(text, 11, True) + 12 if text else 0)
+        self.task_bg.x, self.task_bg.y = x, h - self.H + 4
+        self.task_bg.width = wdt
+        self.task_bg.opacity = 255
+        self.task_dot.x, self.task_dot.y = x + 14, h - self.H / 2
+        self.task_dot.opacity = 255
+        self.task_dot.color = {"run": ACCENT[:3], "ok": GOOD[:3], "fail": BAD[:3]}.get(
+            self.task_state or "", HEADER_DIM[:3])
+        self.task_lab.text = text
+        self.task_lab.x, self.task_lab.y = x + 26, h - self.H / 2
+        self.task_lab.color = (_theme.rgba(_theme.mix(BAD[:3], (255, 255, 255), 0.45))
+                               if self.task_state == "fail" else HEADER_TEXT)
+        self._task_rect = (x, x + wdt)
+        return x + wdt + 16
+
     def _place_chips(self) -> None:
         h = self.window.height
         self.brand_dot.x, self.brand_dot.y = 16, h - self.H / 2
         self.brand.x, self.brand.y = 26, h - self.H / 2
         x = 26 + text_px(self.brand.text, 12, True) + 20
+        x = self._place_task(x)
         limit = getattr(self, "_buttons_left", self.window.width) - 10
         self._chip_rects = []
         shown = 0
@@ -2019,8 +2103,10 @@ class TopBar:
         for k, (r, _lab, _ic) in self.buttons.items():
             if r.x <= mx <= r.x + r.width:
                 return k
+        if self._task_rect is not None and self._task_rect[0] <= mx <= self._task_rect[1]:
+            return "task"
         sr = getattr(self, "_search_right", None)
-        if sr is not None and sr - self.SEARCH_W <= mx <= sr:
+        if sr is not None and sr - getattr(self, "search_w", self.SEARCH_W) <= mx <= sr:
             return "search"
         for x0, x1, _i in self._chip_rects:
             if x0 <= mx <= x1:
@@ -2030,6 +2116,10 @@ class TopBar:
     def draw(self) -> None:
         if self.update_clock():
             self.layout()
+        if self.task_state == "run" and self.task_text:      # a pulsar enquanto corre
+            import math
+            import time as _time
+            self.task_dot.opacity = int(130 + 125 * abs(math.sin(_time.monotonic() * 3)))
         self.batch.draw()
 
 

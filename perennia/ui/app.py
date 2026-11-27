@@ -4804,6 +4804,10 @@ class App:
         self._fps = pyglet.window.FPSDisplay(self.window) if os.environ.get(
             "PERENNIA_FPS") else None
 
+        self.task = None                 # a tarefa em segundo plano (ronda 34): ver poll_task
+        self.sync_log = None             # o relato da última sincronização (passos e linhas)
+        self.sync_last_report = None
+        self.sync_last_error = ""
         self.topbar = TopBar(self.window)
         self._topbar_texts()
         # o texto do rato por cima (Item.tip): aparece com o rato parado um instante
@@ -4839,6 +4843,11 @@ class App:
         if aborted:
             self.message(f"{aborted} sessão(ões) incompleta(s) foram encerradas")
         self.warn_wrong_python()
+        try:                                  # restos de uma sincronização interrompida
+            from perennia.core import garmin_sync as _gs
+            _gs.cleanup_leftovers(self.db)
+        except Exception:
+            pass
         mig = self.migration or {}
         if mig.get("from"):                   # 1.ª vez com data/: os dados antigos copiados
             self.message(tr("Os teus dados foram copiados para {p} (os originais ficaram em "
@@ -5207,6 +5216,109 @@ class App:
                               tr("Desligar", "Power off"),
                               tr("Backups e Sincronização", "Backups and Sync"),
                               tr("Glossário", "Glossary"))
+        self.refresh_task_chip()
+
+    # ------------------------------------------------ trabalhos em segundo plano
+
+    @property
+    def task_running(self) -> bool:
+        """Há uma tarefa em segundo plano a decorrer (a sincronização do GarminDB)?"""
+        t = getattr(self, "task", None)
+        return t is not None and t.running
+
+    def task_busy_text(self) -> str:
+        t = getattr(self, "task", None)
+        return tr("Já está a decorrer: {t} — vê o progresso no topo, ao lado de «Perennia»",
+                  "Already running: {t} — see the progress at the top, next to «Perennia»",
+                  t=t.title if t is not None else "")
+
+    def start_task(self, kind: str, title: str, fn: Callable, log=None,
+                   finish: Callable | None = None, short: str | None = None):
+        """Começa um trabalho que pertence à aplicação, não ao ecrã: continua quando se muda
+        de ecrã, vê-se no topo e o resultado aparece onde estiveres. Só um de cada vez."""
+        from perennia.ui.background import BackgroundTask
+        if self.task_running:
+            self.message(self.task_busy_text())
+            return None
+        self.task = BackgroundTask(kind, title, fn, log=log, finish=finish, short=short)
+        self.refresh_task_chip()
+        return self.task
+
+    def poll_task(self) -> None:
+        """Em cada fotograma: quando a tarefa acaba, trata o resultado (em qualquer ecrã); a
+        que correu bem sai do topo ao fim de 2 minutos."""
+        from perennia.ui.background import KEEP_OK_S, TaskPopup
+        t = getattr(self, "task", None)
+        if t is None:
+            return
+        if t.job.done and not t.handled:
+            t.finish_now(self)
+        elif (not t.running and t.state() == "ok" and t.ended is not None
+              and t._clock() - t.ended > KEEP_OK_S and not isinstance(self.current, TaskPopup)):
+            self.task = None
+        self.refresh_task_chip()
+
+    def refresh_task_chip(self) -> None:
+        tb = getattr(self, "topbar", None)
+        if tb is None or not hasattr(tb, "set_task"):
+            return
+        t = getattr(self, "task", None)
+        moved = tb.set_task("", None) if t is None else tb.set_task(t.chip_text(), t.state())
+        if moved:
+            for scr in getattr(self, "stack", []):     # a pesquisa encolheu ou cresceu
+                place = getattr(scr, "_place_search", None)
+                if place is not None:
+                    place()
+
+    def open_task(self) -> None:
+        """O indicador do topo: a janela com o que a tarefa está a fazer."""
+        from perennia.ui.background import TaskPopup
+        if getattr(self, "task", None) is None or isinstance(self.current, TaskPopup):
+            return
+        self.push(TaskPopup(self))
+
+    def show_task_source(self) -> None:
+        """«Ver na Sincronização»: o separador GarminDB de Backups e Sincronização."""
+        bs = _backups()
+        scr = self.current
+        if isinstance(scr, bs.BackupScreen):
+            scr.tab = 2
+            if scr.tabs is not None:
+                scr.tabs.select(2)
+            labels = scr.sync.source_labels()
+            scr.sync_tab = labels.index("GarminDB") if "GarminDB" in labels else 0
+            scr.enter()
+            return
+        self.open_backups("GarminDB")
+
+    def _ask_quit_task(self) -> None:
+        """Sair com a sincronização a decorrer: pergunta antes (o GarminDB seria parado)."""
+        t = self.task
+        if isinstance(self.current, ConfirmScreen):
+            return
+
+        def progress() -> None:
+            self.pop()
+            self.open_task()
+        self.push(ConfirmScreen(
+            self, tr("{t} a decorrer", "{t} in progress", t=t.title),
+            tr("Se saíres agora, o GarminDB é parado a meio. O que já foi descarregado fica "
+               "guardado e a próxima sincronização continua daí.",
+               "If you quit now, GarminDB is stopped halfway. What was already downloaded is "
+               "kept and the next sync carries on from there."),
+            [(tr("Não, continuar", "No, keep going"), self.pop),
+             (tr("Ver o progresso", "Show progress"), progress),
+             (tr("Parar e sair", "Stop and quit"), self.quit)],
+            default=0, buttons=True, cancel=self.pop))
+
+    def _stop_task_for_exit(self, wait_s: float = 8.0) -> None:
+        """Ao sair: pára o GarminDB e espera que a thread acabe, para a pasta temporária com
+        a palavra-passe ser apagada (o `finally` da sincronização)."""
+        t = getattr(self, "task", None)
+        if t is None or t.job.done:
+            return
+        t.cancel()
+        t.wait(wait_s)
 
     @property
     def in_session(self) -> bool:
@@ -5303,6 +5415,9 @@ class App:
         self.push(scr)
 
     def ask_quit(self) -> None:
+        if self.task_running and not self.in_session:
+            self._ask_quit_task()
+            return
         if self.in_session:
             self.message(tr("Termina a sessão de treino antes de sair.",
                             "Finish the workout before quitting."))
@@ -5419,6 +5534,7 @@ class App:
 
     def _tick(self, dt: float) -> None:
         self._hover_still += dt
+        self.poll_task()
         if self.auto_running and self._auto_result is not None:
             self._collect_auto_connect()
         screen = self.current
@@ -5629,6 +5745,9 @@ class App:
         if which == "quit":
             self.ask_quit()
             return
+        if which == "task":
+            self.open_task()
+            return
         if which == "search":
             screen = self.current
             if screen is not None and not screen.counting and screen.has_search:
@@ -5713,8 +5832,13 @@ class App:
             return t("set.display.full", w=size[0], h=size[1])
         return t("set.display.window", w=self.window.width, h=self.window.height)
 
-    def _on_close(self) -> None:
+    def _on_close(self):
+        if self.task_running and not getattr(self, "_shut_down", False):
+            # fechar a janela a meio da sincronização: pergunta antes
+            self._ask_quit_task()
+            return True                      # = pyglet.event.EVENT_HANDLED: a janela fica
         self.shutdown()
+        return None
 
     def quit(self) -> None:
         self.shutdown()
@@ -5729,6 +5853,10 @@ class App:
         if getattr(self, "_shut_down", False):
             return
         self._shut_down = True
+        try:
+            self._stop_task_for_exit()   # o GarminDB a meio: parado, sem deixar a palavra-passe
+        except Exception:
+            pass
         try:
             self.save_display()      # o tamanho com que fechaste é o da próxima vez
         except Exception:

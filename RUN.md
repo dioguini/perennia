@@ -2386,6 +2386,44 @@ claramente:
 
 Como abrir pela linha de comandos com o `.venv`: secção 4. **Base de dados:** sem alterações.
 
+### Ronda 34: a sincronização em segundo plano
+
+**O que acontecia antes:** a sincronização pertencia ao ecrã de Sincronização. Ao ir ver o
+calendário a meio, o GarminDB **não era abortado**: continuava a correr, mas fora de vista. O
+resultado nunca era mostrado e, ao voltar, o ecrã parecia parado e deixava começar outra
+sincronização por cima. Para saberes se uma dessas acabou, vê a data em **Estado** (separador
+GarminDB): é a hora a que a importação para a Perennia terminou.
+
+**Agora a sincronização pertence à aplicação:**
+
+- **Continua quando mudas de ecrã.** Podes ir ao calendário, às estatísticas ou começar um treino.
+  Não fica tudo bloqueado, porque uma primeira sincronização de «todo o histórico» pode demorar
+  horas.
+- **Vê-se no topo, ao lado de «Perennia»:** `● GarminDB · 03:12` (o ponto pulsa enquanto corre),
+  depois `✓ GarminDB` ou `✗ GarminDB · falhou`. Um `✓` sai sozinho ao fim de 2 minutos.
+- **Clicar no indicador** abre uma janela com os passos e o que o GarminDB vai dizendo, ao vivo:
+  - **Fechar** — a sincronização continua;
+  - **Ver na Sincronização** — abre o separador GarminDB;
+  - **Parar** — pede confirmação e interrompe o GarminDB. O que já foi descarregado fica, e a
+    próxima sincronização continua daí.
+- **O resultado aparece onde estiveres** («Sincronizado: … valores · … atividades»). Ao voltares
+  ao separador GarminDB, o relato está lá.
+- **Só uma de cada vez.** «Sincronizar agora», «Só importar», «Atualizar o GarminDB» e «Cópia/
+  Reconstruir as bases» dizem «Já está a decorrer…» e onde ver o progresso.
+- **Repor um backup** espera que a sincronização acabe (ela está a escrever na base de dados).
+- **Sair** (Desligar ou fechar a janela) com uma sincronização a decorrer pergunta antes: *Não,
+  continuar* · *Ver o progresso* · *Parar e sair*. Ao sair, o GarminDB é parado e a Perennia
+  espera que ele acabe, para apagar o ficheiro temporário com a palavra-passe.
+- **Ao abrir**, a Perennia apaga o que uma sincronização interrompida (um corte de luz, a
+  aplicação a ir abaixo) possa ter deixado: as pastas `perennia-garmin-*` com a palavra-passe em
+  `data/garmin/config` e a referência a elas na configuração.
+- A sincronização usa a **sua própria ligação** à base de dados. Assim, andar pela Perennia
+  enquanto ela importa não mistura as escritas.
+- **Barra do topo numa janela estreita:** a pesquisa encolhe, «Backups e Sincronização» passa a
+  «Backups» e a data fica curta (`27/11 · 10:15`), para «Perennia» e o indicador caberem.
+
+**Base de dados:** sem alterações (o relato e o último resultado ficam em memória, na aplicação).
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4668,7 +4706,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1546 testes a passar).
+**Verificado com testes automáticos nesta versão** (1558 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões
