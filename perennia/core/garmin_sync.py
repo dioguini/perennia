@@ -290,6 +290,29 @@ class PasswordMissing(RuntimeError):
     pass
 
 
+def cleanup_leftovers(db: Database | None = None) -> int:
+    """Apaga o que uma sincronização interrompida pode ter deixado (a aplicação fechada, ou
+    a ir abaixo, a meio do GarminDB): as pastas temporárias `perennia-garmin-*` com a
+    palavra-passe e a referência a elas na configuração. Corre ao abrir a Perennia.
+    Devolve quantas pastas apagou."""
+    try:
+        path = config_path(db)
+        scrub_config(path)
+        folder = config_dir(db)
+    except Exception:
+        return 0
+    n = 0
+    if folder.is_dir():
+        for d in folder.iterdir():
+            if d.is_dir() and d.name.startswith(_RUN_PREFIX):
+                for f in d.iterdir():
+                    with contextlib.suppress(OSError):
+                        f.write_bytes(b"\0" * max(1, f.stat().st_size))
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+    return n
+
+
 def needs_password(opts: "Options") -> bool:
     """Só descarregar do Garmin Connect precisa da palavra-passe."""
     return bool(opts.download) and importers.garmindb_cli() is not None
@@ -425,6 +448,19 @@ def command_text(db: Database, opts: Options, cfg_dir: Path | None = None) -> st
 # ------------------------------------------------- o relato (passos e linhas)
 
 
+def stopped() -> str:
+    """O que se diz quando paras a sincronização a meio."""
+    return tr("parada por ti (o que já foi descarregado fica; a próxima sincronização "
+              "continua daí)", "stopped by you (what was already downloaded stays; the next "
+              "sync carries on from there)")
+
+
+def _kill(proc) -> None:
+    with contextlib.suppress(Exception):
+        if proc.poll() is None:
+            proc.kill()
+
+
 class SyncLog:
     """O que a sincronização está a fazer, para o ecrã mostrar (como o GarminDB faz na linha
     de comandos): uma lista de **passos** (a decorrer, feito, falhou) e as últimas linhas
@@ -436,6 +472,40 @@ class SyncLog:
         self.steps: list[dict] = []
         self.lines: deque = deque(maxlen=max(1, int(keep)))
         self.version = 0
+        self._cancel = threading.Event()     # «Parar»: o GarminDB é interrompido
+        self._proc = None                    # o processo do GarminDB que está a correr
+
+    # ------------------------------------------------------------- parar
+
+    def attach(self, proc) -> None:
+        """O processo que está a correr agora (para o «Parar» o poder interromper)."""
+        with self._lock:
+            self._proc = proc
+        if proc is not None and self.cancelled:
+            _kill(proc)
+
+    def cancel(self) -> None:
+        """Pára: o processo do GarminDB que estiver a correr é interrompido e os passos
+        seguintes já não começam."""
+        self._cancel.set()
+        with self._lock:
+            proc = self._proc
+            self.version += 1
+        if proc is not None:
+            _kill(proc)
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancel.is_set()
+
+    def current(self) -> str:
+        """O passo em curso (ou o último), com o pormenor: «A correr o GarminDB · a
+        descarregar…» — para a faixa do topo."""
+        with self._lock:
+            if not self.steps:
+                return ""
+            st = self.steps[-1]
+            return st["text"] + (" · " + st["detail"] if st["detail"] else "")
 
     def step(self, text: str) -> None:
         """Começa um passo (o anterior, se ainda decorria, fica feito)."""
@@ -790,6 +860,8 @@ def _run(cmd: list[str], runner: Callable | None, timeout: float,
          cwd: Path | None, log: SyncLog | None = None) -> tuple[bool, str]:
     """Corre o comando. Com `log` (e sem um `runner` de teste), lê o que o GarminDB vai
     escrevendo, linha a linha, e passa-o ao relato."""
+    if log is not None and log.cancelled:
+        return False, stopped()
     if runner is None and log is not None:
         return _run_streaming(cmd, timeout, cwd, log)
     run = runner or subprocess.run
@@ -807,12 +879,15 @@ def _run(cmd: list[str], runner: Callable | None, timeout: float,
 
 def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
                    log: SyncLog) -> tuple[bool, str]:
+    if log.cancelled:
+        return False, stopped()
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, errors="replace", stdin=subprocess.DEVNULL,
                                 cwd=str(cwd) if cwd and cwd.is_dir() else None)
     except OSError as e:
         return False, str(e)
+    log.attach(proc)
     fired: list[bool] = []
 
     def _stop() -> None:
@@ -834,9 +909,12 @@ def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
         code = proc.wait()
     finally:
         timer.cancel()
+        log.attach(None)
         if proc.poll() is None:
             proc.kill()
     out = "\n".join(tail)[-1200:]
+    if log.cancelled:
+        return False, stopped()
     if fired:                                         # o temporizador disparou: demorou demais
         return False, tr("o GarminDB demorou mais de {s} s e foi parado",
                          "GarminDB took more than {s} s and was stopped", s=int(timeout))
@@ -1133,6 +1211,9 @@ def sync(db: Database, opts: Options, runner: Callable | None = None,
         else:
             log.skip(tr("GarminDB", "GarminDB"), tr("nenhum passo ligado", "no step on"))
         ok, out = run_garmindb(db, opts, runner=runner, log=log, password=password)
+        if log.cancelled:
+            log.end(False, stopped())
+            return False, stopped(), None
         if not ok:
             hint = diagnose(out)
             last = out.splitlines()[-1] if out else tr("falhou", "failed")
@@ -1144,6 +1225,8 @@ def sync(db: Database, opts: Options, runner: Callable | None = None,
         log.skip(tr("GarminDB", "GarminDB"),
                  tr("só se importa o que já está nas bases", "importing only what is already "
                     "in the databases"))
+    if log.cancelled:
+        return False, stopped(), None
     try:
         log.step(tr("A importar para a Perennia", "Importing into Perennia"))
         rep = sync_into_perennia(db, opts)

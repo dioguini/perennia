@@ -90,11 +90,7 @@ class SyncPanel:
         self.app = screen.app
         self.store = store or screen    # o rascunho das Definições
         self.runner = runner            # para os testes: corre «subprocess.run» falso
-        self.job = None
-        self.log: gs.SyncLog | None = None      # os passos e o que o GarminDB vai dizendo
-        self._seen = -1
-        self.last_report: dict | None = None
-        self.last_error = ""
+        self._seen = None
 
     @property
     def opts(self) -> gs.Options:
@@ -109,9 +105,52 @@ class SyncPanel:
         """Há alterações por guardar nas Definições? (sincronizar usa o que está gravado)"""
         return bool(getattr(self.store, "dirty", False))
 
+    # A sincronização pertence à aplicação (ronda 34), não a este painel: ao mudar de ecrã
+    # continua, e ao voltar vê-se outra vez. O relato e o último resultado também ficam lá.
+
+    @property
+    def task(self):
+        return getattr(self.app, "task", None)
+
     @property
     def busy(self) -> bool:
-        return self.job is not None and not self.job.done
+        return bool(getattr(self.app, "task_running", False))
+
+    @property
+    def job(self):
+        t = self.task
+        return t.job if t is not None else None
+
+    @property
+    def log(self) -> gs.SyncLog | None:
+        return getattr(self.app, "sync_log", None)
+
+    @log.setter
+    def log(self, value: gs.SyncLog | None) -> None:
+        self.app.sync_log = value
+
+    @property
+    def last_report(self) -> dict | None:
+        return getattr(self.app, "sync_last_report", None)
+
+    @last_report.setter
+    def last_report(self, value: dict | None) -> None:
+        self.app.sync_last_report = value
+
+    @property
+    def last_error(self) -> str:
+        return getattr(self.app, "sync_last_error", "")
+
+    @last_error.setter
+    def last_error(self, value: str) -> None:
+        self.app.sync_last_error = value
+
+    def refuse_if_busy(self) -> bool:
+        """Já há uma sincronização a decorrer? Diz onde a ver (e não começa outra)."""
+        if self.busy:
+            self.app.message(self.app.task_busy_text())
+            return True
+        return False
 
     # ------------------------------------------------------------- linhas
 
@@ -556,12 +595,16 @@ class SyncPanel:
     def ask_repair(self) -> None:
         a = self.app
 
+        if self.refuse_if_busy():
+            return
+
         def go() -> None:
             a.pop()
             self.log = gs.SyncLog(self.log_lines(), self.log_chars())
             log = self.log
             log.step(tr("A instalar o GarminDB 4 (pip)", "Installing GarminDB 4 (pip)"))
-            self._job(lambda: (gs.repair(log=log), "repair"))
+            self._job(lambda: (gs.repair(log=log), "repair"),
+                      tr("Instalação do GarminDB", "GarminDB install"))
         a.push(ConfirmScreen(
             a, tr("Instalar o GarminDB 4?", "Install GarminDB 4?"),
             tr("Corre «pip install --upgrade \"garmindb>=4\"» no Python da Perennia (precisa de "
@@ -576,20 +619,8 @@ class SyncPanel:
     def log_rows(self) -> list[Item]:
         """O que está a acontecer (ou aconteceu na última sincronização), passo a passo, e as
         últimas linhas do que o GarminDB escreveu — como na linha de comandos."""
-        if self.log is None:
-            return []
-        steps, lines = self.log.snapshot()
-        icon = {"run": "▶", "ok": "✓", "fail": "✗", "skip": "–"}
-        rows = [Item(tr("— O que está a acontecer —", "— What is happening —") if self.busy else
-                     tr("— Última sincronização —", "— Last sync —"), enabled=False)]
-        for n, st in enumerate(steps, 1):
-            rows.append(Item(f"{icon[st['state']]} {n}. {st['text']}",
-                             detail=st["detail"], enabled=False))
-        if lines:
-            rows.append(Item(tr("— O que o GarminDB diz —", "— What GarminDB says —"),
-                              enabled=False))
-            rows += [Item("   " + ln, enabled=False) for ln in lines]
-        return rows
+        from perennia.ui.background import log_items
+        return log_items(self.log, self.busy)
 
     def requirement_rows(self, o: gs.Options) -> list[Item]:
         """O que é preciso para sincronizar, com ✓/✗ e, no que falta, como se resolve."""
@@ -684,13 +715,15 @@ class SyncPanel:
 
     # ------------------------------------------------------------- correr
 
-    def _job(self, fn) -> None:
-        from perennia.ui.connect_screens import Job
-        self.job = Job(fn)
+    def _job(self, fn, title: str | None = None) -> None:
+        """Começa na aplicação (em segundo plano): ver `perennia.ui.background`."""
+        self.app.start_task("garmindb", title or tr("Sincronização do GarminDB",
+                                                    "GarminDB sync"),
+                            fn, log=self.log, finish=finish_garmindb, short="GarminDB")
         self.screen.enter()
 
     def sync_now(self) -> None:
-        if self.busy or self.pending:
+        if self.refuse_if_busy() or self.pending:
             return
         db, o, runner = self.app.db, self.opts, self.runner
         if not gs.status(db)["cli"]:
@@ -722,12 +755,24 @@ class SyncPanel:
                 "used for this sync only and never kept anywhere"), then))
 
     def _start_sync(self, o: gs.Options, password: str | None) -> None:
-        db, runner = self.app.db, self.runner
+        if self.refuse_if_busy():
+            return
+        path, runner = self.app.db.path, self.runner
         self.log = gs.SyncLog(self.log_lines(), self.log_chars())
         log = self.log
         self.log.step(tr("A verificar os requisitos", "Checking the requirements"))
         self.log.end(True)
-        self._job(lambda: gs.sync(db, o, runner=runner, log=log, password=password))
+
+        def run():
+            # a thread tem a sua própria ligação à base de dados: enquanto sincroniza, podes
+            # andar pela Perennia (o calendário, as estatísticas…) com a ligação da janela
+            from perennia.core.db import Database
+            wdb = Database(path)
+            try:
+                return gs.sync(wdb, o, runner=runner, log=log, password=password)
+            finally:
+                wdb.close()
+        self._job(run)
 
     def log_lines(self) -> int:
         return int(opt_mod.get(self.app.db, "garmin_log_lines"))
@@ -736,7 +781,7 @@ class SyncPanel:
         return int(opt_mod.get(self.app.db, "garmin_log_line_chars"))
 
     def import_only(self) -> None:
-        if self.busy or self.pending:
+        if self.refuse_if_busy() or self.pending:
             return
         db, o = self.app.db, self.opts
         self.log = gs.SyncLog(self.log_lines(), self.log_chars())
@@ -767,6 +812,8 @@ class SyncPanel:
 
     def ask_maintenance(self, action: str) -> None:
         a = self.app
+        if self.refuse_if_busy():
+            return
         title = tr("Cópia de segurança das bases?", "Back up the databases?") \
             if action == "backup" else tr("Reconstruir as bases do GarminDB?",
                                           "Rebuild the GarminDB databases?")
@@ -782,67 +829,94 @@ class SyncPanel:
             log = self.log
             log.step(tr("A correr o GarminDB: {a}", "Running GarminDB: {a}",
                         a="--backup" if action == "backup" else "--rebuild_db"))
-            self._job(lambda: (gs.maintenance(db, action, runner=runner, log=log), action))
+            self._job(lambda: (gs.maintenance(db, action, runner=runner, log=log), action),
+                      tr("Cópia das bases do GarminDB", "GarminDB backup") if action == "backup"
+                      else tr("Reconstrução das bases do GarminDB", "GarminDB rebuild"))
         a.push(ConfirmScreen(a, title, sub, [(tr("Cancelar", "Cancel"), a.pop),
                                              (tr("Sim, continuar", "Yes, go on"), go)],
                              default=0, buttons=True, cancel=a.pop))
 
     def _done(self, ok: bool, msg: str, rep: dict | None) -> None:
-        a = self.app
-        if ok and rep is not None:
-            self.last_report = rep
-            a.message(tr("Sincronizado: {v} valores em {d} dias · {n} atividades ({k} novas)",
-                         "Synced: {v} values over {d} days · {n} activities ({k} new)",
-                         v=rep["values"], d=rep["days"], n=rep["activities"],
-                         k=rep["new_activities"]) +
-                      (" · " + tr("{n} valores mantidos (a Fonte do indicador é outra)",
-                                  "{n} values kept (the indicator's source is another)",
-                                  n=rep["kept"]) if rep.get("kept") else ""))
-        else:
-            self.last_error = msg
-            a.message("GarminDB: " + (msg or tr("falhou", "failed")))
+        report(self.app, ok, msg, rep)
         self.screen.enter()
 
     def update(self) -> None:
-        j = self.job
-        if self.log is not None and self.busy and self.log.version != self._seen:
-            self._seen = self.log.version          # o relato mudou: redesenha as linhas
-            self.screen.enter()
-        if j is None or not j.done:
+        """Em cada fotograma: a tarefa acaba na aplicação (`App.poll_task`); aqui só se
+        redesenha quando o relato muda."""
+        a = self.app
+        if hasattr(a, "poll_task"):
+            a.poll_task()
+        log = self.log
+        key = (id(log), getattr(log, "version", None), self.busy)
+        if key == self._seen:
             return
-        self.job = None
-        res = j.result
-        if j.error:
-            if self.log is not None:
-                self.log.end(False, j.error)
-            self._done(False, j.error, None)
-        elif isinstance(res, tuple) and len(res) == 2 and res[1] == "repair":
-            (ok, out), _ = res
-            import importlib
-            importlib.invalidate_caches()             # as versões novas veem-se já
-            if self.log is not None:
-                self.log.end(ok, "" if ok else (out.splitlines()[-1] if out else ""))
-            v = gs.versions()
-            self.app.message(tr("GarminDB {g} instalado (fitfile {f})", "GarminDB {g} installed "
-                                "(fitfile {f})", g=gs._vtext(v["garmindb"]),
-                                f=gs._vtext(v["fitfile"])) if ok else
-                             "GarminDB: " + (out.splitlines()[-1] if out else
-                                             tr("falhou", "failed")))
+        first = self._seen is None
+        self._seen = key
+        if not first and getattr(self.screen, "view", "sync") == "sync":
             self.screen.enter()
-        elif isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], str) \
-                and res[1] in ("backup", "rebuild"):
-            (ok, out), action = res
-            if self.log is not None:
-                self.log.end(ok, "" if ok else (gs.diagnose(out) or out.splitlines()[-1:] and
-                                                  out.splitlines()[-1] or ""))
-            self.app.message(("GarminDB: " + (tr("cópia feita", "backup done") if action ==
-                                              "backup" else tr("bases reconstruídas",
-                                                               "databases rebuilt")))
-                             if ok else "GarminDB: " + (out.splitlines()[-1] if out else "falhou"))
-            self.screen.enter()
-        else:
-            ok, msg, rep = res
-            self._done(ok, msg, rep)
+
+
+def report(app, ok: bool, msg: str, rep: dict | None) -> None:
+    """O resultado de uma sincronização, numa mensagem (em qualquer ecrã)."""
+    if ok and rep is not None:
+        app.sync_last_report = rep
+        app.message(summary_of(rep))
+    else:
+        app.sync_last_error = msg
+        app.message("GarminDB: " + (msg or tr("falhou", "failed")))
+
+
+def summary_of(rep: dict) -> str:
+    return (tr("Sincronizado: {v} valores em {d} dias · {n} atividades ({k} novas)",
+               "Synced: {v} values over {d} days · {n} activities ({k} new)",
+               v=rep["values"], d=rep["days"], n=rep["activities"],
+               k=rep["new_activities"]) +
+            (" · " + tr("{n} valores mantidos (a Fonte do indicador é outra)",
+                        "{n} values kept (the indicator's source is another)",
+                        n=rep["kept"]) if rep.get("kept") else ""))
+
+
+def finish_garmindb(app, task) -> None:
+    """Quando a tarefa do GarminDB acaba (na thread da janela, em qualquer ecrã): fecha o
+    relato, diz o resultado e põe `task.ok` / `task.summary`."""
+    j, log = task.job, task.log
+    res = j.result
+    if j.error:
+        if log is not None:
+            log.end(False, j.error)
+        task.ok, task.summary = False, j.error
+        report(app, False, j.error, None)
+        return
+    if isinstance(res, tuple) and len(res) == 2 and res[1] == "repair":
+        (ok, out), _ = res
+        import importlib
+        importlib.invalidate_caches()             # as versões novas veem-se já
+        if log is not None:
+            log.end(ok, "" if ok else (out.splitlines()[-1] if out else ""))
+        v = gs.versions()
+        text = (tr("GarminDB {g} instalado (fitfile {f})", "GarminDB {g} installed "
+                   "(fitfile {f})", g=gs._vtext(v["garmindb"]), f=gs._vtext(v["fitfile"]))
+                if ok else "GarminDB: " + (out.splitlines()[-1] if out else
+                                           tr("falhou", "failed")))
+        task.ok, task.summary = ok, text
+        app.message(text)
+        return
+    if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], str) \
+            and res[1] in ("backup", "rebuild"):
+        (ok, out), action = res
+        if log is not None:
+            log.end(ok, "" if ok else (gs.diagnose(out) or out.splitlines()[-1:] and
+                                       out.splitlines()[-1] or ""))
+        text = (("GarminDB: " + (tr("cópia feita", "backup done") if action == "backup"
+                                 else tr("bases reconstruídas", "databases rebuilt")))
+                if ok else "GarminDB: " + (out.splitlines()[-1] if out else "falhou"))
+        task.ok, task.summary = ok, text
+        app.message(text)
+        return
+    ok, msg, rep = res
+    task.ok = bool(ok)
+    task.summary = summary_of(rep) if ok and rep is not None else (msg or "")
+    report(app, ok, msg, rep)
 
 
 def _is_tp(path) -> bool:

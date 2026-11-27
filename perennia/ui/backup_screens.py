@@ -436,6 +436,13 @@ class RestorePopup(EditPopup):
             a.message(tr("Termina a sessão antes de repor um backup",
                          "Finish the session before restoring a backup"))
             return
+        if getattr(a, "task_running", False):
+            # a sincronização está a escrever na base de dados: repor por cima estragava-a
+            a.message(tr("Espera que acabe a sincronização para repor um backup — vês o "
+                         "progresso no topo, ao lado de «Perennia»",
+                         "Wait for the sync to finish before restoring a backup — the "
+                         "progress is at the top, next to «Perennia»"))
+            return
         n = len(self.keys)
         what = count_text(n, "1 componente", "{n} componentes", "1 component", "{n} components")
         sub = (tr("Os dados de {w} passam a ser os do backup. O que tens agora fica guardado "

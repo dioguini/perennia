@@ -16,7 +16,7 @@ faz o autoteste e, se quiseres, configura o GarminDB e o atalho.
 ./perennia_setup.sh                             # ou perennia_setup.bat: prepara tudo
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1546 testes
+python -m unittest discover -s tests -t .       # 1558 testes
 ```
 
 **Os teus dados ficam todos em `data/`**, dentro da pasta do projeto (e nunca vão para o git):
@@ -58,6 +58,12 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 34** — **A sincronização em segundo plano**: a sincronização do GarminDB pertence à
+  aplicação, não ao ecrã. Continua quando mudas de ecrã e vê-se no topo, ao lado de «Perennia»
+  (`● GarminDB · 03:12`, `✓`, `✗`). Um clique mostra os passos ao vivo, com **Fechar**, **Ver na
+  Sincronização** e **Parar**, e o resultado aparece onde estiveres. Só corre uma de cada vez; repor
+  um backup espera que acabe; sair pergunta antes e pára o GarminDB sem deixar a palavra-passe
+  num ficheiro temporário.
 - **Ronda 33** — **A Perennia aberta com o Python errado**: se abrires com `python main.py` e esse
   `python` não for o do `.venv` (onde está o GarminDB 4), a Perennia avisa logo ao abrir. O
   separador GarminDB mostra com que Python está a correr e explica a causa, em vez de «instala o
@@ -610,7 +616,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1546 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1558 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```
