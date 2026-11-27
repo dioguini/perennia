@@ -599,6 +599,36 @@ def _vtext(v: tuple | None) -> str:
     return ".".join(str(x) for x in v) if v else "—"
 
 
+def environment() -> dict:
+    """Com que Python está a Perennia a correr, e se é o `.venv` do projeto (onde o
+    perennia_setup instala o GarminDB). Abrir a Perennia pelo PyCharm ou com «python main.py»
+    num Python do sistema faz com que ela não veja o GarminDB do `.venv`."""
+    import sys as _sys
+    from perennia import paths
+    venv = paths.app_dir() / ".venv"
+    exe = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    has = venv.is_dir() and (exe.exists() or (venv / "pyvenv.cfg").is_file())
+    try:
+        using = has and Path(_sys.prefix).resolve() == venv.resolve()
+    except OSError:
+        using = False
+    vver = ""
+    cfg = venv / "pyvenv.cfg"
+    if cfg.is_file():
+        try:
+            for line in cfg.read_text(encoding="utf-8", errors="ignore").splitlines():
+                k, _, val = line.partition("=")
+                if k.strip() in ("version", "version_info"):
+                    vver = val.strip()
+                    break
+        except OSError:
+            pass
+    return {"executable": _sys.executable,
+            "python": ".".join(str(x) for x in _sys.version_info[:3]),
+            "venv": str(venv), "venv_python": str(exe), "venv_exists": has,
+            "venv_version": vver, "using_venv": using}
+
+
 def repair_command() -> list[str]:
     """O comando que instala (ou atualiza) o GarminDB certo no Python da Perennia."""
     import sys as _sys
@@ -622,6 +652,29 @@ def compatibility(cli: str | None = None, v: dict | None = None) -> dict:
     problems: list[dict] = []
     gdb, fit = v["garmindb"], v["fitfile"]
     py = _vtext(v["python"][:2])
+    env = v.get("env") or environment()
+    if env["venv_exists"] and not env["using_venv"]:
+        # o GarminDB está no .venv do projeto, mas a Perennia foi aberta com outro Python
+        problems.append({"key": "venv", "download_only": True,
+                         "text": tr("A Perennia está a correr com outro Python ({e}, {p}), não "
+                                    "com o .venv do projeto{vv}",
+                                    "Perennia is running with another Python ({e}, {p}), not "
+                                    "the project's .venv{vv}", e=env["executable"],
+                                    p=env["python"], vv=(f" ({env['venv_version']})"
+                                                         if env["venv_version"] else "")),
+                         "fix": tr("fecha-a e abre-a pelo Perennia.bat ou pelo atalho; na "
+                                   "linha de comandos: «{x} main.py»; no PyCharm: Settings → "
+                                   "Project → Python Interpreter → {x}", "close it and open "
+                                   "it with Perennia.bat or the shortcut; on the command line: "
+                                   "«{x} main.py»; in PyCharm: Settings → Project → Python "
+                                   "Interpreter → {x}", x=env["venv_python"])})
+    if (gdb is None and not cli and not py_ok
+            and not any(p["key"] == "venv" for p in problems)):
+        # sem GarminDB em lado nenhum, e com um Python onde o GarminDB 4 não se instala
+        problems.append({"key": "python", "download_only": True,
+                         "text": tr("O GarminDB 4 precisa do Python 3.12+ (este é o {p})",
+                                    "GarminDB 4 needs Python 3.12+ (this is {p})", p=py),
+                         "fix": fix_py})
     if gdb is None:
         if cli and str(cli).lower().endswith(".py") and Path(cli).is_file():
             # o .py corre com o Python da Perennia: sem o pacote nele, falha logo ao arrancar
@@ -679,9 +732,10 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
     out = [
         {"key": "cli", "ok": cli, "blocking": False,
          "text": tr("GarminDB instalado", "GarminDB installed"),
-         "fix": tr("instala-o com «pip install garmindb» (sem ele só se importa o que já está "
-                   "nas bases)", "install it with «pip install garmindb» (without it only what "
-                   "is already in the databases is imported)")},
+         "fix": tr("corre o perennia_setup ou, no .venv, «pip install \"garmindb>=4\"» "
+                   "(Python 3.12+; sem ele só se importa o que já está nas bases)",
+                   "run perennia_setup or, in the .venv, «pip install \"garmindb>=4\"» (Python "
+                   "3.12+; without it only what is already in the databases is imported)")},
         {"key": "config", "ok": cfg is not None, "blocking": cli,
          "text": tr("Configuração do GarminDB", "GarminDB configuration"),
          "fix": tr("falta {p} · em Definições → Ligações externas → Garmin guarda o utilizador "
@@ -713,9 +767,9 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
 def _version_checks(online: bool) -> list[dict]:
     """Os requisitos de versão (Python, GarminDB, fitfile): um por problema, ou um «✓»."""
     cli = importers.garmindb_cli()
-    if cli is None:
-        return []
     comp = compatibility(cli)
+    if cli is None and comp["ok"]:
+        return []
     if comp["ok"]:
         v = comp["versions"]
         return [{"key": "versions", "ok": True, "blocking": False,
@@ -800,7 +854,7 @@ def run_garmindb(db: Database, opts: Options, runner: Callable | None = None,
         return False, "escolhe pelo menos um tipo de dados"
     cli = importers.garmindb_cli()
     if cli is None:
-        return False, "GarminDB não encontrado (pip install garmindb)"
+        return False, "GarminDB não encontrado (pip install \"garmindb>=4\")"
     if not (opts.download or opts.copy or opts.import_ or opts.analyze):
         return True, ""
     if read_config(config_path(db)) is not None:
@@ -855,7 +909,7 @@ def maintenance(db: Database, action: str, runner: Callable | None = None,
     timeout = SYNC_TIMEOUT_S if timeout is None else timeout
     cli = importers.garmindb_cli()
     if cli is None:
-        return False, "GarminDB não encontrado (pip install garmindb)"
+        return False, "GarminDB não encontrado (pip install \"garmindb>=4\")"
     flag = {"backup": "--backup", "rebuild": "--rebuild_db"}[action]
     cmd = importers.launcher(cli) + ["-f", str(config_dir(db))]
     return _run(cmd + [flag], runner, timeout, db_dir(db).parent, log)     # sem login
@@ -1036,10 +1090,10 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
         # antes dizia «0 valores, 0 atividades» como se tivesse corrido bem
         raise FileNotFoundError(tr(
             "o GarminDB ainda não criou as bases em {d} (garmin.db). Instala-o com «python -m pip "
-            "install garmindb», faz «Sincronizar agora» com «descarregar» e «importar» ligados, "
+            "install \"garmindb>=4\"» (Python 3.12+), faz «Sincronizar agora» com «descarregar» e «importar» ligados, "
             "ou muda a pasta das bases se estão noutro sítio",
             "GarminDB has not created its databases in {d} yet (garmin.db). Install it with "
-            "'python -m pip install garmindb', run 'Sync now' with 'download' and 'import' on, "
+            "'python -m pip install \"garmindb>=4\"' (Python 3.12+), run 'Sync now' with 'download' and 'import' on, "
             "or change the databases folder if they are elsewhere", d=folder))
     tables = tuple(HEALTH_TABLES[k] for k in opts.stats if k in HEALTH_TABLES)
     if tables:

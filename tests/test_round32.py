@@ -108,6 +108,66 @@ class TestCompatibility(unittest.TestCase):
                                                "--upgrade", "garmindb>=4"])
 
 
+class TestEnvironment(unittest.TestCase):
+    """A Perennia aberta com outro Python (o do sistema, pelo PyCharm) não vê o GarminDB do
+    .venv do projeto: diz-se com que Python está a correr e como a abrir."""
+
+    def fake_project(self, version="3.13.17") -> Path:
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / ".venv").mkdir()
+        (tmp / ".venv" / "pyvenv.cfg").write_text(f"home = x\nversion = {version}\n")
+        return tmp
+
+    def with_app_dir(self, d: Path):
+        from perennia import paths
+        orig = paths.app_dir
+        paths.app_dir = lambda: d
+        self.addCleanup(setattr, paths, "app_dir", orig)
+
+    def test_running_outside_the_project_venv(self):
+        self.with_app_dir(self.fake_project())
+        env = gs.environment()
+        self.assertTrue(env["venv_exists"])
+        self.assertFalse(env["using_venv"])
+        self.assertEqual(env["venv_version"], "3.13.17")
+        comp = gs.compatibility(None, v((3, 11, 8), None, None))
+        keys = [p["key"] for p in comp["problems"]]
+        self.assertEqual(keys, ["venv"])                       # a causa, não o Python 3.11
+        self.assertIn(sys.executable, comp["problems"][0]["text"])
+        self.assertIn("Perennia.bat", comp["problems"][0]["fix"])
+        self.assertIn("Python Interpreter", comp["problems"][0]["fix"])
+        checks = gs._version_checks(online=True)                # aparece nos requisitos
+        self.assertTrue(any(c["key"] == "versions:venv" and c["blocking"] for c in checks))
+
+    def test_running_inside_the_project_venv(self):
+        d = self.fake_project()
+        self.with_app_dir(d)
+        orig = sys.prefix
+        sys.prefix = str(d / ".venv")
+        try:
+            env = gs.environment()
+            comp = gs.compatibility(None, v((3, 13, 17), None, None))
+        finally:
+            sys.prefix = orig
+        self.assertTrue(env["using_venv"])
+        self.assertNotIn("venv", [p["key"] for p in comp["problems"]])
+
+    def test_no_project_venv_no_warning(self):
+        self.with_app_dir(Path(tempfile.mkdtemp()))
+        self.assertFalse(gs.environment()["venv_exists"])
+        comp = gs.compatibility(None, v((3, 13, 0), None, None))
+        self.assertTrue(comp["ok"])
+        old = gs.compatibility(None, v((3, 11, 8), None, None))
+        self.assertEqual([p["key"] for p in old["problems"]], ["python"])
+
+    def test_status_line_says_which_python(self):
+        from perennia.ui.sync_screens import SyncPanel
+        self.with_app_dir(self.fake_project())
+        text = SyncPanel.python_text()
+        self.assertIn(sys.executable, text)
+        self.assertTrue(text.startswith("Python "))
+
+
 class TestRepair(unittest.TestCase):
     def test_repair_runs_pip_in_perennias_python(self):
         seen = []
@@ -255,6 +315,39 @@ class TestSyncTab(tg.GuiCase):
             gs.importers.garmindb_cli, gs.compatibility = o_cli, o_comp
         self.assertNotIn("Atualizar o GarminDB", labels)
         self.assertTrue(any("GarminDB 4.0.1" in x for x in labels))
+
+    def test_opened_with_another_python(self):
+        """O caso real: o GarminDB 4 está no .venv (3.13), mas a Perennia foi aberta com o
+        Python 3.11 do sistema — diz-se isso, e não «instala o GarminDB»."""
+        from perennia import paths
+        d = Path(tempfile.mkdtemp())
+        (d / ".venv").mkdir()
+        (d / ".venv" / "pyvenv.cfg").write_text("home = x\nversion = 3.13.17\n")
+        o_dir, o_cli = paths.app_dir, gs.importers.garmindb_cli
+        paths.app_dir = lambda: d
+        gs.importers.garmindb_cli = lambda: None
+        try:
+            self.assertTrue(self.app.warn_wrong_python())
+            self.assertIn(".venv", self.app._message)
+            scr = self.open_sync("GarminDB")
+            details = " ".join(str(i.detail or "") + " " + i.label for i in scr.list.items)
+            self.assertIn(sys.executable, details)                 # Estado: com que Python
+            self.assertIn("outro Python", details)                 # o requisito ✗
+            scr.sync.import_only()
+        finally:
+            paths.app_dir, gs.importers.garmindb_cli = o_dir, o_cli
+        self.assertIn("outro Python", self.app._message)
+        self.assertIn("Perennia.bat", self.app._message)
+        self.assertNotIn("Não encontrei", self.app._message)
+
+    def test_no_warning_without_a_project_venv(self):
+        from perennia import paths
+        o_dir = paths.app_dir
+        paths.app_dir = lambda: Path(tempfile.mkdtemp())
+        try:
+            self.assertFalse(self.app.warn_wrong_python())
+        finally:
+            paths.app_dir = o_dir
 
 
 if __name__ == "__main__":

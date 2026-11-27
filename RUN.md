@@ -158,6 +158,22 @@ python -m unittest discover -s tests -t .
 python main.py
 ```
 
+**Na linha de comandos, o `python` tem de ser o do `.venv`.** É lá que o `perennia_setup` instala
+o GarminDB (e o resto). Se o `python` for o do sistema (por exemplo o Python 3.11 em
+`C:\Users\<tu>\AppData\Local\Programs\Python\Python311`), a Perennia abre, mas não vê o
+GarminDB. O `Perennia.bat` e o atalho já usam o `.venv`. Na linha de comandos, ativa-o primeiro ou
+chama o Python dele diretamente:
+
+| Onde | Como |
+|---|---|
+| **PowerShell** | `.\.venv\Scripts\Activate.ps1` e depois `python main.py` — ou só `.\.venv\Scripts\python main.py` |
+| **Git Bash** | `source .venv/Scripts/activate` e depois `python main.py` — ou só `.venv/Scripts/python main.py` |
+| **macOS / Linux** | `source .venv/bin/activate` e depois `python main.py` — ou só `.venv/bin/python main.py` |
+| **PyCharm** | *Settings → Project → Python Interpreter* → `<projeto>\.venv\Scripts\python.exe` |
+
+Para confirmares, `python --version` dentro do `.venv` deve dar 3.12 ou mais recente. Se te
+enganares, a Perennia avisa logo ao abrir (ronda 33).
+
 Outras opções:
 
 ```bash
@@ -2349,6 +2365,26 @@ attribute 'field_enums'`) e o login antigo do GarminDB 3.x deixou de entrar. A s
   o atualiza; com o Python 3.11 já não instala o GarminDB;
 - a Perennia procura primeiro o `garmindb_cli.py` do seu próprio Python (o `.venv`), e só depois o
   PATH.
+
+### Ronda 33: a Perennia aberta com o Python errado
+
+Pelo `Perennia.bat` a sincronização funcionava, mas com `python main.py` na linha de comandos dava
+«Não encontrei o programa do GarminDB». A causa: esse `python` era o do sistema (3.11), não o do
+`.venv` do projeto (3.13), que é onde o GarminDB 4 está instalado. Agora a Perennia diz isso
+claramente:
+
+- **ao abrir**: se existe um `.venv` no projeto e a Perennia não está a correr com ele, aparece um
+  aviso com o Python em uso e o comando certo (`<projeto>\.venv\Scripts\python.exe main.py`);
+- **Sincronização → GarminDB**: a linha **Estado** mostra com que Python a Perennia está a correr
+  («Python 3.13.17 (.venv)» ou «Python 3.11.8 (C:\…\python.exe)»), e os **Requisitos** mostram
+  «A Perennia está a correr com outro Python…». A correção indicada é o Perennia.bat, o atalho, o
+  comando com o Python do `.venv` ou o interpretador do PyCharm;
+- **Só importar / Sincronizar agora** sem GarminDB explicam a causa verdadeira (outro Python, ou um
+  Python anterior ao 3.12), em vez de mandarem instalar o GarminDB;
+- as dicas de instalação dizem `pip install "garmindb>=4"` (Python 3.12+), já não
+  `pip install garmindb`.
+
+Como abrir pela linha de comandos com o `.venv`: secção 4. **Base de dados:** sem alterações.
 
 ### Definições → Avançado (as opções afináveis)
 
@@ -4632,7 +4668,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1540 testes a passar).
+**Verificado com testes automáticos nesta versão** (1546 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões

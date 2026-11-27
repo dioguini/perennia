@@ -454,8 +454,7 @@ class SyncPanel:
             Item(tr("Estado", "Status"),
                  value=tr("a sincronizar…", "syncing…") if self.busy else
                  (st["last_sync"] or tr("nunca sincronizado", "never synced")),
-                 detail=state + ("" if st["cli"] else " · pip install garmindb"),
-                 enabled=False),
+                 detail=state + " · " + self.python_text(), enabled=False),
             *self.log_rows(),
             *self.requirement_rows(o),
             Item(tr("Período", "Period"), value=_period_name(o.period), data="sync:period",
@@ -530,6 +529,14 @@ class SyncPanel:
                  primary=True, enabled=ready),
         ]
         return rows
+
+    @staticmethod
+    def python_text() -> str:
+        """«Python 3.13.17 (.venv)» ou «Python 3.11.8 (C:/…/python.exe)»: com que Python a
+        Perennia está a correr (é nesse que o GarminDB tem de estar)."""
+        env = gs.environment()
+        where = ".venv" if env["using_venv"] else env["executable"]
+        return f"Python {env['python']} ({where})"
 
     def repair_rows(self, ready: bool) -> list[Item]:
         """«Atualizar o GarminDB»: quando o GarminDB falta ou tem uma versão que já não funciona
@@ -606,7 +613,7 @@ class SyncPanel:
                   "time"),
             tr("1) Corre o perennia_setup e responde «s» ao Garmin (instala o GarminDB, guarda o "
                "e-mail da conta e faz o primeiro login, onde metes o código se a conta tiver "
-               "verificação em dois passos). Sem o setup: pip install garmindb no .venv e o "
+               "verificação em dois passos). Sem o setup: pip install \"garmindb>=4\" no .venv e o "
                "e-mail em Definições → Ligações externas → Garmin; o login (com o código) faz-se "
                "com «python main.py --garmin-login». 2) Aqui, escolhe o período e "
                "os dados e carrega em «Sincronizar agora». 3) A palavra-passe é pedida de cada "
@@ -615,7 +622,7 @@ class SyncPanel:
                "tua.",
                "1) Run perennia_setup and answer «y» to Garmin (it installs GarminDB, saves the "
                "account e-mail and does the first login, where you type the code if the account "
-               "has two-step verification). Without the setup: pip install garmindb in the .venv "
+               "has two-step verification). Without the setup: pip install \"garmindb>=4\" in the .venv "
                "and the e-mail in Settings → External connections → Garmin; log in (with the "
                "code) with «python main.py --garmin-login». 2) Here, pick the "
                "period and data and press «Sync now». 3) The password is asked every time data "
@@ -739,13 +746,16 @@ class SyncPanel:
             ok, msg, rep = False, str(e), None
         if not gs.status(db)["cli"]:
             from perennia.core import importers
-            hint = tr(
+            comp = gs.compatibility(None)
+            first = comp["problems"][0] if comp["problems"] else None
+            hint = (first["text"] + ". " + first["fix"][:1].upper() + first["fix"][1:] + ".") \
+                if first else tr(
                 "Não encontrei o programa do GarminDB (procurei no PATH e em {d}), por isso não "
                 "descarreguei nada do Garmin. Instala-o no mesmo ambiente da Perennia: «python "
-                "-m pip install garmindb».",
+                "-m pip install \"garmindb>=4\"» (Python 3.12+).",
                 "Could not find the GarminDB program (looked in PATH and in {d}), so nothing was "
                 "downloaded from Garmin. Install it in the same environment as Perennia: "
-                "'python -m pip install garmindb'.",
+                "'python -m pip install \"garmindb>=4\"' (Python 3.12+).",
                 d=", ".join(importers.cli_search_dirs()[:2]) or "—")
             if ok:
                 self.app.message(hint)
