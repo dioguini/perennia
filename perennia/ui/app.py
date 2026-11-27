@@ -4838,6 +4838,7 @@ class App:
         self._unarchive_once()
         if aborted:
             self.message(f"{aborted} sessão(ões) incompleta(s) foram encerradas")
+        self.warn_wrong_python()
         mig = self.migration or {}
         if mig.get("from"):                   # 1.ª vez com data/: os dados antigos copiados
             self.message(tr("Os teus dados foram copiados para {p} (os originais ficaram em "
@@ -4850,6 +4851,25 @@ class App:
             self.push(RecoveryScreen(self))
         if self.db.get("auto_connect", True) and self.db.known_devices():
             self.start_auto_connect()
+
+    def warn_wrong_python(self) -> bool:
+        """Aberta com outro Python (o do sistema, pelo PyCharm ou «python main.py»), a Perennia
+        não vê o GarminDB instalado no .venv do projeto: avisa logo ao abrir."""
+        try:
+            from perennia.core import garmin_sync as _gs
+            env = _gs.environment()
+        except Exception:
+            return False
+        if not env["venv_exists"] or env["using_venv"]:
+            return False
+        self.message(tr("Atenção: a Perennia foi aberta com {e} (Python {p}), não com o .venv "
+                        "do projeto, e assim não vê o GarminDB. Abre-a pelo Perennia.bat ou pelo "
+                        "atalho; na linha de comandos: «{x} main.py»",
+                        "Note: Perennia was opened with {e} (Python {p}), not the project's "
+                        ".venv, so it cannot see GarminDB. Open it with Perennia.bat or the "
+                        "shortcut; on the command line: «{x} main.py»", e=env["executable"],
+                        p=env["python"], x=env["venv_python"]))
+        return True
 
     def _unarchive_once(self) -> None:
         """Já não há «arquivar» nem «desativar»: o que estava escondido assim

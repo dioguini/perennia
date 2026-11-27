@@ -193,7 +193,7 @@ def login_cli(data_dir: Path, user: str | None, ask: Callable[[str], str] = inpu
     secret = secret or getpass.getpass
     datadir.prepare(data_dir)
     if not garmin_installed():
-        _say("O GarminDB não está instalado. Instala-o com: python -m pip install garmindb "
+        _say("O GarminDB não está instalado. Instala-o com: python -m pip install \"garmindb>=4\" "
              "(ou corre o perennia_setup).")
         return 2
     have, _cfg = gs.credentials(gs.config_path())
