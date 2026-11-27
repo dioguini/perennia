@@ -390,8 +390,12 @@ class TestScreens(tg.GuiCase):
             labels = [i.label for i in rx.list.items]
             self.assertIn("PIN (uso único)", labels)
         finally:
-            self.app.pop()                                     # fecha a porta
-        rx.thread.join(5)                                      # a escuta pára sozinha
+            self.app.pop()
+        # sair do ecrã não pára a escuta (ronda 35): continua, e vê-se no topo
+        self.assertTrue(rx.task.running)
+        self.assertIn("Wi-Fi", self.app.topbar.task_text)
+        rx.task.cancel()                                       # «Parar»: fecha a porta
+        rx.thread.join(5)
         self.assertEqual(rx.rx.status, "closed")
 
 

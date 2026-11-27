@@ -2424,6 +2424,40 @@ GarminDB): é a hora a que a importação para a Perennia terminou.
 
 **Base de dados:** sem alterações (o relato e o último resultado ficam em memória, na aplicação).
 
+### Ronda 35: todas as sincronizações funcionam da mesma maneira
+
+O que a ronda 34 fez para o GarminDB vale agora para **tudo o que é sincronização**:
+
+| Onde | O que corre em segundo plano | No topo |
+|---|---|---|
+| Sincronização → GarminDB | Sincronizar agora, **Só importar**, Atualizar o GarminDB, Cópia/Reconstruir as bases | `GarminDB` |
+| HRV4Training, Análises, TrainingPeaks, Histórico | importar um ficheiro | o nome do separador |
+| Histórico | ver/aplicar as regras de normalização | `Histórico` |
+| Saúde | descarregar o modelo, exportar o diário, importar um .csv | `Saúde` |
+| CSV | importar um .csv; na janela de um conjunto: modelo, exportar, importar | `CSV` |
+| Upload manual | «Fazer upload» (também ao arrastar um .fit para a janela) | `Upload manual` |
+| Wi-Fi | **Enviar** e **Receber** | `Wi-Fi` |
+| Strava | importar segmentos (IDs, favoritos, atualizar a biblioteca), atualizar os segmentos de uma rota ou um segmento | `Strava` |
+
+- **Mesmo o que leva um segundo fica à vista:** no topo aparece `✓ HRV4Training` (ou `✗ … ·
+  falhou`). A mensagem diz de onde veio («HRV4Training: 2 valores em 2 dias»), e um clique no
+  indicador mostra os passos e o resultado. Um `✓` sai sozinho ao fim de 2 minutos; um `✗` fica
+  até carregares em **OK**.
+- **Uma de cada tipo ao mesmo tempo.** Podes importar um .csv da Saúde enquanto o GarminDB
+  descarrega. Uma segunda do mesmo tipo é recusada com «Já está a decorrer…». O indicador mostra
+  a mais recente a correr e `+1` se houver outra; a janela **Sincronizações** mostra todas, cada
+  uma com o seu **Parar**.
+- **Wi-Fi — Receber:** a escuta continua se saíres do ecrã. O endereço, a porta e o PIN ficam na
+  janela das sincronizações. Pára quando chegar o envio, quando o PIN caducar ou em **Parar de
+  receber**. Os dados recebidos são repostos em segundo plano, com cópia de segurança antes.
+- **Sair** com sincronizações a decorrer pergunta antes («2 sincronizações a decorrer»). **Repor um
+  backup** espera que todas acabem.
+- Cada sincronização usa a sua própria ligação à base de dados.
+- **Fica de fora (de propósito):** a procura de segmentos do Strava ao preparar uma sessão. Faz
+  parte do arranque da sessão, e o aviso de erro decide se a sessão começa sem Strava.
+
+**Base de dados:** sem alterações.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4706,7 +4740,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1558 testes a passar).
+**Verificado com testes automáticos nesta versão** (1568 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões

@@ -43,6 +43,9 @@ class GuiCase(unittest.TestCase):
         pyglet_stub.reset()
         self.tmp = tempfile.mkdtemp()
         self.app = app_mod.App(data_dir=Path(self.tmp), width=1280, height=760)
+        # as sincronizações correm em segundo plano; nos testes acabam antes de seguir (os
+        # testes do segundo plano em si — rondas 34 e 35 — desligam isto)
+        self.app.inline_tasks = True
         # o feedback no fim das sessões tem testes próprios (test_perennia)
         self.app.db.set("ask_feedback", False)
         # a contagem de 15 s antes das sessões tem testes próprios (test_session_setup)

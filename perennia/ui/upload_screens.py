@@ -129,12 +129,27 @@ class UploadPreview(PopupMixin, EditScreen):
         self.list.set_items(rows, keep_index=True)
 
     def upload(self) -> None:
-        au.save(self.app.db, self.info, sport=self.sport)
-        self.app.pop()
-        self.app.message(tr("Atividade «{n}» guardada em {s}", "Activity «{n}» saved to {s}",
-                            n=self.info["name"], s=sp.name(self.sport)))
-        if self.then is not None:
-            self.then()
+        """«Fazer upload»: guarda a atividade em segundo plano, como as outras sincronizações
+        (vê-se no topo, ao lado de «Perennia»)."""
+        from perennia.ui.background import one_step, run_task
+        a, info, sport, then = self.app, self.info, self.sport, self.then
+        a.pop()
+
+        def work(db, log):
+            def go():
+                au.save(db, info, sport=sport)
+                return tr("Atividade «{n}» guardada em {s}", "Activity «{n}» saved to {s}",
+                          n=info["name"], s=sp.name(sport)), None
+            return one_step(log, tr("A guardar «{n}» em {s}", "Saving «{n}» to {s}",
+                                    n=info["name"], s=sp.name(sport)), go)
+
+        def done(ok: bool, _text: str, _rep) -> None:
+            if ok and then is not None:
+                then()
+        run_task(a, "sync:upload", tr("Upload manual: {n}", "Manual upload: {n}",
+                                      n=info["name"]), work,
+                 short=tr("Upload manual", "Manual upload"), then=done,
+                 open_fn=lambda app: app.show_sync_tab("Upload manual"))
 
 
 # ============================================================ exportar treino
