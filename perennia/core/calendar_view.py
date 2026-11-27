@@ -40,7 +40,7 @@ def weekday_name(i: int) -> str:
 @dataclass
 class Entry:
     day: date
-    kind: str                     # ride | row | endurance | strength | plan
+    kind: str                     # ride | row | endurance | strength | imported | plan
     id: str
     sport: str                    # cycling | rowing | running | swimming | gym
     title: str
@@ -87,6 +87,16 @@ def _rows(db, sql: str, args: tuple = ()):
         return []
 
 
+def imported_source(r: dict) -> str:
+    """De onde veio uma atividade importada («Garmin», «TrainingPeaks», «upload manual»…)."""
+    from .i18n import tr
+    src = str(r.get("source") or "")
+    return {"garmindb": "Garmin", "garmin": "Garmin Connect", "strava": "Strava",
+            "trainingpeaks": "TrainingPeaks",
+            "upload": tr("upload manual", "manual upload")}.get(
+        src, tr("histórico", "history") if src else tr("importada", "imported"))
+
+
 def sessions_between(db, d0: date, d1: date) -> list[Entry]:
     """As sessões concluídas entre d0 e d1 (inclusive), de todos os desportos."""
     from .naming import pretty
@@ -120,6 +130,29 @@ def sessions_between(db, d0: date, d1: date) -> list[Entry]:
                    " FROM strength_sessions WHERE status='completed' AND started_at >= ?"
                    " AND started_at < ?", (lo, hi)):
         add("strength", "gym", r, r["elapsed_s"], None, r["load"], r["name"])
+    # as atividades importadas (Garmin, TrainingPeaks, histórico, upload manual): também são
+    # treinos teus. Uma que seja a mesma de uma sessão da Perennia (o mesmo dia e desporto,
+    # duração parecida, ± 25 %) não aparece duas vezes.
+    own: dict = {}
+    for e in out:
+        own.setdefault((e.day, e.sport), []).append(e.seconds)
+    try:
+        lthr = db.athlete().lthr
+    except Exception:
+        lthr = None
+    for r in _rows(db, "SELECT * FROM synced_activities WHERE substr(started_at, 1, 10) >= ?"
+                   " AND substr(started_at, 1, 10) < ?", (lo, hi)):
+        r = dict(r)
+        day = stats.synced_day(r)
+        if day is None or not (d0 <= day <= d1):
+            continue
+        secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
+        sport = r.get("sport") or "other"
+        if any(abs(secs - x) <= 0.25 * max(secs, x) for x in own.get((day, sport), [])):
+            continue
+        out.append(Entry(day, "imported", r["id"], sport,
+                         pretty(r.get("name") or "") or imported_source(r), secs,
+                         r.get("distance_m"), stats.synced_load(r, lthr)))
     # o veredito do feedback, se houver
     try:
         from . import feedback as fbm

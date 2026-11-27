@@ -698,6 +698,28 @@ def pmc(daily: dict, today, db: Database | None = None, start=None) -> list[dict
     return out
 
 
+def synced_day(r: dict):
+    """O dia local de uma atividade importada (ou None)."""
+    if "T" in str(r.get("started_at") or ""):
+        day = _local_date(r.get("started_at"))
+        if day is not None:
+            return day
+    try:
+        return datetime.fromisoformat(str(r.get("started_at"))[:10]).date()
+    except ValueError:
+        return None
+
+
+def synced_load(r: dict, lthr: float | None) -> float | None:
+    """A carga de uma atividade importada: a TSS (do TrainingPeaks, do .fit ou calculada pela
+    potência); senão a carga pela FC média e o LTHR."""
+    load = r.get("tss")
+    secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
+    if load is None and r.get("avg_hr") and lthr and secs:
+        load = secs / 3600.0 * (float(r["avg_hr"]) / lthr) ** 2 * 100.0
+    return float(load) if load else None
+
+
 def synced_loads(db: Database, sports: tuple[str, ...], own: dict) -> dict:
     """A carga das atividades importadas (Garmin, TrainingPeaks): a TSS do
     TrainingPeaks quando há; senão a carga pela FC média. Uma atividade do

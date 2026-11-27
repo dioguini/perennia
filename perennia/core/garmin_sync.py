@@ -1022,7 +1022,7 @@ def ensure(db: Database) -> None:
     """)
     cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(synced_activities)")}
     for c, decl in (("tss", "REAL"), ("if_value", "REAL"), ("avg_power_w", "REAL"),
-                    ("np_w", "REAL")):
+                    ("np_w", "REAL"), ("fit_file", "TEXT")):
         if c not in cols:                 # a TSS do TrainingPeaks (e a calculada)
             db.conn.execute(f"ALTER TABLE synced_activities ADD COLUMN {c} {decl}")
     db.conn.commit()
@@ -1139,7 +1139,69 @@ def import_activities(db: Database, folder: str | Path | None = None,
         new += aid not in existing
     db.conn.commit()
     src.close()
-    return {"activities": n, "new": new, "found": True}
+    details = fit_details(db, folder)
+    return {"activities": n, "new": new, "found": True, "detailed": details}
+
+
+def fit_index(folder: Path) -> dict[str, Path]:
+    """{id da atividade: ficheiro .fit} dos .fit que o GarminDB descarregou (ficam em
+    `<bases>/FitFiles/Activities`, com o nome a começar pelo id: `123456_ACTIVITY.fit`)."""
+    base = Path(folder).parent                       # data/garmin/bases (as DBs estão em DBs/)
+    roots = [d for d in (base / "FitFiles", base) if d.is_dir()]
+    out: dict[str, Path] = {}
+    if not roots:
+        return out
+    for p in roots[0].rglob("*.fit"):
+        m = re.match(r"(\d{5,})", p.name)
+        if m:
+            out.setdefault(m.group(1), p)
+    return out
+
+
+def fit_details(db: Database, folder: str | Path | None = None) -> int:
+    """Lê o .fit de cada atividade do Garmin que ainda não foi lido e guarda o que o resumo do
+    GarminDB não tem: a potência média e normalizada, a TSS e o IF (do relógio ou, com
+    potência, calculados pelo teu FTP). Devolve quantas atividades ganharam pormenor."""
+    from . import activity_upload as au
+    folder = Path(folder) if folder else db_dir(db)
+    rows = db.conn.execute("SELECT id, moving_s, elapsed_s FROM synced_activities"
+                           " WHERE source = 'garmindb' AND fit_file IS NULL").fetchall()
+    if not rows:
+        return 0
+    index = fit_index(folder)
+    if not index:
+        return 0
+    try:
+        ftp = float(db.athlete().ftp_w or 0)
+    except Exception:
+        ftp = 0.0
+    n = 0
+    for r in rows:
+        path = index.get(str(r["id"]).split(":", 1)[-1])
+        if path is None:
+            continue
+        try:
+            info = au.parse_fit(path)
+        except Exception:
+            # estragado ou num formato que não se lê: marca-se, para não voltar a tentar
+            db.conn.execute("UPDATE synced_activities SET fit_file = ? WHERE id = ?",
+                            ("!" + path.name, r["id"]))
+            continue
+        npw, avg = info.get("np_w"), info.get("avg_power_w")
+        tss, if_ = info.get("tss"), info.get("if_value")
+        secs = float(r["moving_s"] or r["elapsed_s"] or info.get("moving_s") or 0)
+        if tss is None and npw and ftp and secs:
+            if_ = npw / ftp
+            tss = secs * npw * if_ / (ftp * 3600.0) * 100.0
+        if if_ is None and npw and ftp:
+            if_ = npw / ftp
+        db.conn.execute("UPDATE synced_activities SET avg_power_w = COALESCE(?, avg_power_w),"
+                        " np_w = COALESCE(?, np_w), tss = COALESCE(?, tss),"
+                        " if_value = COALESCE(?, if_value), fit_file = ? WHERE id = ?",
+                        (avg, npw, tss, if_, str(path), r["id"]))
+        n += 1
+    db.conn.commit()
+    return n
 
 
 def import_range(db: Database, opts: Options) -> tuple[str | None, str | None]:
@@ -1183,7 +1245,8 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
             raise FileNotFoundError(f"não encontrei {folder / 'garmin.db'}")
     if "activities" in opts.stats:
         rep = import_activities(db, folder, since=since, until=until)
-        report.update(activities=rep["activities"], new_activities=rep["new"])
+        report.update(activities=rep["activities"], new_activities=rep["new"],
+                      detailed=rep.get("detailed", 0))
     db.set("garmindb_last_sync", now_iso()[:16].replace("T", " "))
     db.set("garmindb_last_sync_day", date.today().isoformat())
     return report
@@ -1244,6 +1307,11 @@ def sync(db: Database, opts: Options, runner: Callable | None = None,
     elif "activities" in opts.stats:
         log.detail(tr("atividades: {n} ({k} novas)", "activities: {n} ({k} new)",
                       n=rep["activities"], k=rep["new_activities"]))
+    if rep.get("detailed"):
+        log.step(tr("A ler os .fit das atividades (potência, TSS, IF)",
+                    "Reading the activities' .fit files (power, TSS, IF)"))
+        log.end(True, tr("{n} atividades com pormenor do .fit", "{n} activities detailed "
+                         "from the .fit", n=rep["detailed"]))
     log.end(True)
     log.step(tr("Concluído", "Done"))
     log.end(True)

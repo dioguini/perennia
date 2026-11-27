@@ -2458,6 +2458,40 @@ O que a ronda 34 fez para o GarminDB vale agora para **tudo o que é sincroniza�
 
 **Base de dados:** sem alterações.
 
+### Ronda 36: o calendário com todas as atividades, e o pormenor dos .fit do Garmin
+
+**O calendário mostra tudo o que fizeste:** as sessões feitas na Perennia e as importadas
+(GarminDB, TrainingPeaks, histórico do Strava ou do Garmin Connect, upload manual).
+
+- Cada atividade aparece no seu dia, com a cor do desporto, e entra nos totais da semana
+  (tempo, km, carga).
+- No dia, a linha diz de onde veio («importada de Garmin»). Enter abre a **ficha da atividade
+  importada**: origem, desporto, início, tempo, distância, subida, FC, potência média e
+  normalizada, IF, TSS (ou a carga pela FC), carga do Garmin, calorias e o ficheiro .fit.
+- A mesma ficha abre-se no **Histórico** de cada desporto (as linhas «Importadas» já não são só
+  de leitura).
+- **Sem duplicados:** se a mesma atividade foi feita na Perennia (mesmo dia e desporto, duração a
+  ±25 %), só aparece a da Perennia. É a mesma regra da forma e da fadiga.
+
+**A TSS das atividades do Garmin:** não é preciso nenhum .zip. Ao descarregar as atividades, o
+GarminDB guarda o **.fit de cada uma** em `data/garmin/bases/FitFiles/Activities`, com o nome a
+começar pelo número da atividade. Depois de importar o resumo, a Perennia lê o .fit de cada
+atividade nova e guarda:
+
+- a **potência média e normalizada (NP)**;
+- a **TSS e o IF** do próprio relógio ou ciclocomputador. Se o aparelho não os calcula mas há
+  potência, calcula-os pelo teu FTP: `TSS = s × NP × IF / (FTP × 3600) × 100`.
+
+Sem potência (corrida sem sensor, ginásio), a carga continua a ser calculada pela FC média e o
+LTHR. Cada .fit lê-se só uma vez. O relato da sincronização tem o passo «A ler os .fit das
+atividades (potência, TSS, IF)» com quantas ganharam pormenor.
+
+Para as atividades que já tinhas importado, faz **«Só importar»** com o período «Todo o
+histórico»: os .fit que já estão na pasta do GarminDB são lidos nessa altura.
+
+**Base de dados:** nova coluna `synced_activities.fit_file` (o .fit lido; criada sozinha ao
+abrir, sem migração manual).
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -4740,7 +4774,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1568 testes a passar).
+**Verificado com testes automáticos nesta versão** (1575 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões
