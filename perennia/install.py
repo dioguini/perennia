@@ -100,10 +100,25 @@ def garmin_installed() -> bool:
     return importers.garmindb_cli() is not None
 
 
+def python_ok_for_garmindb() -> bool:
+    from .core import garmin_sync as gs
+    return tuple(sys.version_info[:2]) >= gs.MIN_PYTHON
+
+
 def install_garmindb(call: Callable = subprocess.call) -> bool:
-    """`pip install garmindb` no mesmo Python (o `.venv` da Perennia)."""
-    _say("  A instalar o GarminDB (pip install garmindb)…")
-    code = call([sys.executable, "-m", "pip", "install", "garmindb"])
+    """`pip install --upgrade "garmindb>=4"` no mesmo Python (o `.venv` da Perennia). O GarminDB
+    4 precisa do Python 3.12+: com um Python mais antigo não se instala (o GarminDB 3.x já não
+    funciona — o fitfile 2.0 tirou o `field_enums` e o login antigo deixou de entrar)."""
+    from .core import garmin_sync as gs
+    if not python_ok_for_garmindb():
+        _say(f"  O GarminDB precisa do Python 3.12 ou mais recente (o .venv usa o "
+             f"{sys.version_info[0]}.{sys.version_info[1]}). Instala o Python 3.12+ "
+             "(python.org), apaga a pasta .venv e corre o perennia_setup outra vez.")
+        return False
+    _say(f"  A instalar o GarminDB 4 (pip install --upgrade \"{gs.GARMINDB_SPEC}\")…")
+    code = call(gs.repair_command())
+    import importlib
+    importlib.invalidate_caches()
     return code == 0 and garmin_installed()
 
 
@@ -122,6 +137,18 @@ def garmin(data_dir: Path, ask: Callable[[str], str], secret: Callable[[str], st
     if not _yes(ask("  Configurar o GarminDB agora? [s/N] "), False):
         return out
     out["wanted"] = True
+    if out["installed"]:
+        comp = gs.compatibility()
+        for p in comp["problems"]:
+            _say(f"  ✗ {p['text']}")
+        if comp["problems"]:
+            if not comp["python_ok"]:
+                install_garmindb(call)              # explica o que fazer com o Python
+                return out
+            if _yes(ask("  Atualizar o GarminDB para a versão 4? [S/n] "), True):
+                out["installed"] = install_garmindb(call)
+            if not out["installed"]:
+                return out
     if not out["installed"]:
         out["installed"] = install_garmindb(call)
         if not out["installed"]:

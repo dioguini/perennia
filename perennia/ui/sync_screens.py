@@ -514,6 +514,7 @@ class SyncPanel:
                            "databases in garmin/bases")),
             Item(tr("Comando", "Command"), detail=gs.command_text(db, o, gs.config_dir(db)),
                  enabled=False),
+            *self.repair_rows(ready),
             Item(tr("Cópia de segurança das bases (--backup)", "Back up the databases (--backup)"),
                  action=lambda: self.ask_maintenance("backup"), enabled=st["cli"] and ready,
                  detail=wait),
@@ -529,6 +530,39 @@ class SyncPanel:
                  primary=True, enabled=ready),
         ]
         return rows
+
+    def repair_rows(self, ready: bool) -> list[Item]:
+        """«Atualizar o GarminDB»: quando o GarminDB falta ou tem uma versão que já não funciona
+        (o erro «field_enums», o login antigo), instala o certo no Python da Perennia."""
+        cli = gs.importers.garmindb_cli()
+        comp = gs.compatibility(cli)
+        missing = cli is None
+        if not (comp["can_repair"] or (missing and comp["python_ok"])):
+            return []
+        cmd = " ".join(gs.repair_command()[1:])
+        return [Item(tr("Instalar o GarminDB", "Install GarminDB") if missing else
+                     tr("Atualizar o GarminDB", "Update GarminDB"),
+                     action=self.ask_repair, enabled=ready,
+                     detail=tr("instala o GarminDB 4 no Python da Perennia: {c}",
+                               "installs GarminDB 4 in Perennia's Python: {c}", c=cmd))]
+
+    def ask_repair(self) -> None:
+        a = self.app
+
+        def go() -> None:
+            a.pop()
+            self.log = gs.SyncLog(self.log_lines(), self.log_chars())
+            log = self.log
+            log.step(tr("A instalar o GarminDB 4 (pip)", "Installing GarminDB 4 (pip)"))
+            self._job(lambda: (gs.repair(log=log), "repair"))
+        a.push(ConfirmScreen(
+            a, tr("Instalar o GarminDB 4?", "Install GarminDB 4?"),
+            tr("Corre «pip install --upgrade \"garmindb>=4\"» no Python da Perennia (precisa de "
+               "internet; demora um ou dois minutos). Os teus dados e a configuração ficam.",
+               "Runs «pip install --upgrade \"garmindb>=4\"» in Perennia's Python (needs the "
+               "internet; takes a minute or two). Your data and config stay."),
+            [(tr("Cancelar", "Cancel"), a.pop), (tr("Sim, instalar", "Yes, install"), go)],
+            default=0, buttons=True, cancel=a.pop))
 
     # ------------------------------------------------------- passos e requisitos
 
@@ -772,6 +806,19 @@ class SyncPanel:
             if self.log is not None:
                 self.log.end(False, j.error)
             self._done(False, j.error, None)
+        elif isinstance(res, tuple) and len(res) == 2 and res[1] == "repair":
+            (ok, out), _ = res
+            import importlib
+            importlib.invalidate_caches()             # as versões novas veem-se já
+            if self.log is not None:
+                self.log.end(ok, "" if ok else (out.splitlines()[-1] if out else ""))
+            v = gs.versions()
+            self.app.message(tr("GarminDB {g} instalado (fitfile {f})", "GarminDB {g} installed "
+                                "(fitfile {f})", g=gs._vtext(v["garmindb"]),
+                                f=gs._vtext(v["fitfile"])) if ok else
+                             "GarminDB: " + (out.splitlines()[-1] if out else
+                                             tr("falhou", "failed")))
+            self.screen.enter()
         elif isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], str) \
                 and res[1] in ("backup", "rebuild"):
             (ok, out), action = res

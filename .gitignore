@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+.venv-antigo/
 .build-venv/
 build/
 dist/

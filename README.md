@@ -16,7 +16,7 @@ faz o autoteste e, se quiseres, configura o GarminDB e o atalho.
 ./perennia_setup.sh                             # ou perennia_setup.bat: prepara tudo
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1524 testes
+python -m unittest discover -s tests -t .       # 1540 testes
 ```
 
 **Os teus dados ficam todos em `data/`**, dentro da pasta do projeto (e nunca vão para o git):
@@ -58,6 +58,10 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 32** — **O GarminDB que funciona**: o erro «module 'fitfile' has no attribute
+  'field_enums'» (o fitfile 2.0 partiu o GarminDB 3.x) — a Perennia verifica as versões, explica o
+  erro e tem **Atualizar o GarminDB** (GarminDB 4, que precisa do **Python 3.12+**); o
+  `perennia_setup` escolhe o Python mais recente e troca um `.venv` antigo.
 - **Ronda 31** — O painel **Impacto do treino** (IF, sistemas do desporto, longevidade) também na
   **ficha do treino** (os detalhes de um treino da lista), em ciclismo, remo, corrida e natação.
 - **Ronda 30** — **O impacto de um treino por potência**: no construtor, logo ao criar, o painel
@@ -601,7 +605,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1524 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1540 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

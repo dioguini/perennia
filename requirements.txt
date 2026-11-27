@@ -18,5 +18,6 @@ openpyxl>=3.1
 cryptography>=42
 
 # GarminDB (opcional, à parte): descarrega os teus dados do Garmin Connect.
-# O perennia_setup instala-o se quiseres (pip install garmindb) e guarda a configuração em
-# data/garmin/config — só o utilizador; a palavra-passe é pedida a cada sincronização.
+# O perennia_setup instala-o se quiseres (pip install --upgrade "garmindb>=4") e guarda a
+# configuração em data/garmin/config — só o utilizador; a palavra-passe é pedida a cada
+# sincronização. O GarminDB 4 precisa do Python 3.12+ (o 3.x já não funciona: fitfile 2.0).

@@ -500,6 +500,25 @@ def phase_of(line: str) -> str | None:
 
 # (padrão, mensagem PT, mensagem EN): o que uma falha típica quer dizer e o que fazer
 _DIAGNOSES = (
+    (re.compile(r"field_enums", re.I),
+     ("O GarminDB instalado (3.x) não funciona com o fitfile 2.0 (saído a 16/11/2026): é o erro "
+      "«field_enums». A solução é o GarminDB 4, que precisa do Python 3.12 ou mais recente — "
+      "carrega em «Atualizar o GarminDB» (ou corre o perennia_setup outra vez). Com o Python "
+      "3.11, instala o Python 3.12+, apaga a pasta .venv e corre o perennia_setup.",
+      "The installed GarminDB (3.x) does not work with fitfile 2.0 (released 16/11/2026): that "
+      "is the «field_enums» error. The fix is GarminDB 4, which needs Python 3.12 or newer — "
+      "press «Update GarminDB» (or run perennia_setup again). With Python 3.11, install Python "
+      "3.12+, delete the .venv folder and run perennia_setup.")),
+    (re.compile(r"No module named '?(garmindb|fitfile|garminconnect|idbutils)", re.I),
+     ("O GarminDB não está instalado no Python da Perennia (o .venv). Carrega em «Atualizar o "
+      "GarminDB» ou corre o perennia_setup outra vez.",
+      "GarminDB is not installed in Perennia's Python (the .venv). Press «Update GarminDB» or "
+      "run perennia_setup again.")),
+    (re.compile(r"garth", re.I),
+     ("Este GarminDB usa o «garth», que deixou de conseguir entrar no Garmin (a Garmin mudou a "
+      "autenticação). Atualiza para o GarminDB 4 (Python 3.12+): «Atualizar o GarminDB».",
+      "This GarminDB uses «garth», which can no longer sign in to Garmin (Garmin changed its "
+      "authentication). Update to GarminDB 4 (Python 3.12+): «Update GarminDB».")),
     (re.compile(r"mfa|2fa|two.?factor|verification code|security code", re.I),
      ("A conta Garmin tem verificação em dois passos (MFA) e o GarminDB precisa do código. "
       "Numa linha de comandos, na pasta da Perennia, corre «python main.py --garmin-login» (ou "
@@ -544,6 +563,110 @@ def diagnose(output: str) -> str | None:
     return None
 
 
+# ------------------------------------------------------ versões (ronda 32)
+
+# O fitfile 2.0 (16/11/2026) tirou o `fitfile.field_enums` que o GarminDB 3.x usa; o GarminDB 4
+# já usa o fitfile 2, mas precisa do Python 3.12+. E o GarminDB 3.x entra no Garmin pelo «garth»,
+# que deixou de funcionar (a Garmin mudou a autenticação). Por isso: Python 3.12+ e GarminDB 4+.
+MIN_PYTHON = (3, 12)
+MIN_GARMINDB = (4, 0)
+GARMINDB_SPEC = "garmindb>=4"
+
+
+def _version(dist: str) -> tuple | None:
+    """A versão instalada de um pacote **no Python da Perennia** (None se não estiver)."""
+    import importlib.metadata as md
+    try:
+        text = md.version(dist)
+    except Exception:
+        return None
+    nums = []
+    for part in re.split(r"[.+-]", text):
+        if not part.isdigit():
+            break
+        nums.append(int(part))
+    return tuple(nums) or None
+
+
+def versions() -> dict:
+    """As versões que contam: o Python da Perennia, o GarminDB e o fitfile instalados nele."""
+    import sys as _sys
+    return {"python": tuple(_sys.version_info[:3]), "garmindb": _version("garmindb"),
+            "fitfile": _version("fitfile")}
+
+
+def _vtext(v: tuple | None) -> str:
+    return ".".join(str(x) for x in v) if v else "—"
+
+
+def repair_command() -> list[str]:
+    """O comando que instala (ou atualiza) o GarminDB certo no Python da Perennia."""
+    import sys as _sys
+    return [_sys.executable, "-m", "pip", "install", "--upgrade", GARMINDB_SPEC]
+
+
+def compatibility(cli: str | None = None, v: dict | None = None) -> dict:
+    """O GarminDB deste computador funciona com a Perennia? {"ok", "problems": [{"key", "text",
+    "fix", "download_only"}], "can_repair"}. Só se avalia o que se consegue ver: o GarminDB
+    instalado no Python da Perennia (o que corre um `garmindb_cli.py`)."""
+    v = v or versions()
+    cli = cli if cli is not None else importers.garmindb_cli()
+    py_ok = tuple(v["python"][:2]) >= MIN_PYTHON
+    cmd = " ".join(f'"{c}"' if " " in c else c for c in repair_command())
+    fix_py = tr("instala o Python 3.12 ou mais recente (python.org), apaga a pasta .venv do "
+                "projeto e corre o perennia_setup outra vez",
+                "install Python 3.12 or newer (python.org), delete the project's .venv folder "
+                "and run perennia_setup again")
+    fix_up = tr("carrega em «Atualizar o GarminDB» ou corre: {c}",
+                "press «Update GarminDB» or run: {c}", c=cmd)
+    problems: list[dict] = []
+    gdb, fit = v["garmindb"], v["fitfile"]
+    py = _vtext(v["python"][:2])
+    if gdb is None:
+        if cli and str(cli).lower().endswith(".py") and Path(cli).is_file():
+            # o .py corre com o Python da Perennia: sem o pacote nele, falha logo ao arrancar
+            problems.append({"key": "env", "download_only": False,
+                             "text": tr("O GarminDB não está no Python da Perennia",
+                                        "GarminDB is not in Perennia's Python"),
+                             "fix": fix_up if py_ok else fix_py})
+    else:
+        if fit is not None and gdb < MIN_GARMINDB and fit >= (2,):
+            problems.append({"key": "fitfile", "download_only": False,
+                             "text": tr("GarminDB {g} não funciona com o fitfile {f} (erro "
+                                        "«field_enums»)", "GarminDB {g} does not work with "
+                                        "fitfile {f} («field_enums» error)", g=_vtext(gdb),
+                                        f=_vtext(fit)),
+                             "fix": fix_up if py_ok else fix_py})
+        elif gdb < MIN_GARMINDB:
+            problems.append({"key": "old", "download_only": True,
+                             "text": tr("GarminDB {g} é antigo: já não consegue entrar no Garmin",
+                                        "GarminDB {g} is old: it can no longer sign in to "
+                                        "Garmin", g=_vtext(gdb)),
+                             "fix": fix_up if py_ok else fix_py})
+        if not py_ok:
+            problems.append({"key": "python", "download_only": False,
+                             "text": tr("O GarminDB 4 precisa do Python 3.12+ (este é o {p})",
+                                        "GarminDB 4 needs Python 3.12+ (this is {p})", p=py),
+                             "fix": fix_py})
+    return {"ok": not problems, "problems": problems, "python_ok": py_ok,
+            "can_repair": py_ok and bool(problems), "versions": v}
+
+
+def repair(runner: Callable | None = None, timeout: float | None = None,
+           log: "SyncLog | None" = None) -> tuple[bool, str]:
+    """Instala ou atualiza o GarminDB no Python da Perennia (`pip install --upgrade
+    "garmindb>=4"`). Com um Python antigo não tenta: diz o que fazer."""
+    import sys as _sys
+    if tuple(_sys.version_info[:2]) < MIN_PYTHON:
+        return False, tr("O GarminDB 4 precisa do Python 3.12 ou mais recente (este é o {p}). "
+                         "Instala o Python 3.12+, apaga a pasta .venv e corre o perennia_setup.",
+                         "GarminDB 4 needs Python 3.12 or newer (this is {p}). Install Python "
+                         "3.12+, delete the .venv folder and run perennia_setup.",
+                         p=_vtext(tuple(_sys.version_info[:2])))
+    timeout = SYNC_TIMEOUT_S if timeout is None else timeout
+    return _run(repair_command(), runner, timeout, None, log)
+
+
 def preflight(db: Database, opts: "Options") -> list[dict]:
     """Os requisitos para sincronizar, um a um: `{key, ok, text, fix, blocking}`. Serve para
     dizer ao utilizador o que falta **antes** de correr, em vez de um erro do GarminDB."""
@@ -574,6 +697,7 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
          tr("Palavra-passe: não é precisa (sem descarregar)",
             "Password: not needed (no download)"),
          "fix": ""},
+        *_version_checks(online),
         {"key": "stats", "ok": bool(opts.stats), "blocking": True,
          "text": tr("Pelo menos um tipo de dados", "At least one kind of data"),
          "fix": tr("liga um dos tipos em «Dados»", "turn on one of the kinds under «Data»")},
@@ -584,6 +708,24 @@ def preflight(db: Database, opts: "Options") -> list[dict]:
                    "with no steps only what is already in the databases is imported")},
     ]
     return out
+
+
+def _version_checks(online: bool) -> list[dict]:
+    """Os requisitos de versão (Python, GarminDB, fitfile): um por problema, ou um «✓»."""
+    cli = importers.garmindb_cli()
+    if cli is None:
+        return []
+    comp = compatibility(cli)
+    if comp["ok"]:
+        v = comp["versions"]
+        return [{"key": "versions", "ok": True, "blocking": False,
+                 "text": tr("Versões: Python {p} · GarminDB {g} · fitfile {f}",
+                            "Versions: Python {p} · GarminDB {g} · fitfile {f}",
+                            p=_vtext(v["python"][:2]), g=_vtext(v["garmindb"]),
+                            f=_vtext(v["fitfile"])), "fix": ""}]
+    return [{"key": "versions:" + p["key"], "ok": False,
+             "blocking": online or not p["download_only"],
+             "text": p["text"], "fix": p["fix"]} for p in comp["problems"]]
 
 
 def blocking_problems(checks: list[dict]) -> list[dict]:

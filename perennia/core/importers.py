@@ -325,13 +325,23 @@ def cli_search_dirs() -> list[str]:
 
 
 def garmindb_cli() -> str | None:
-    """O caminho do `garmindb_cli.py` (no PATH ou na pasta de scripts deste Python)."""
+    """O caminho do `garmindb_cli.py`: primeiro o do Python que corre a Perennia (o `.venv`,
+    onde o perennia_setup o instala — e é com esse Python que corre), depois o PATH e a pasta
+    de scripts do utilizador."""
     names = ("garmindb_cli.py", "garmindb_cli", "garmindb_cli.exe")
+    dirs = cli_search_dirs()
+    own = [d for d in dirs if sys.executable and
+           Path(d).resolve().is_relative_to(Path(sys.executable).resolve().parent.parent)]
+    for d in own:
+        for n in names:
+            p = Path(d) / n
+            if p.is_file():
+                return str(p)
     for n in names[:2]:
         found = shutil.which(n)
         if found:
             return found
-    for d in cli_search_dirs():
+    for d in dirs:
         for n in names:
             p = Path(d) / n
             if p.is_file():

@@ -504,7 +504,7 @@ class TestSetup(Tmp):
         finally:
             importers.garmindb_cli = orig
         self.assertTrue(g["installed"])
-        self.assertEqual(calls[0][1:], ["-m", "pip", "install", "garmindb"])
+        self.assertEqual(calls[0][1:], ["-m", "pip", "install", "--upgrade", "garmindb>=4"])
         self.assertIsNone(g["login"])                     # disse que não ao login
 
     def test_scripts_exist_and_call_setup(self):

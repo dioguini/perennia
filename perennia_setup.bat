@@ -7,21 +7,50 @@ rem  corre "main.py --setup": a pasta data\ com a base de dados (treinos de
 rem  base, exercicios do ginasio, metricas...), os ficheiros modelo, o
 rem  autoteste e, se quiseres, o GarminDB e o atalho no Ambiente de trabalho.
 rem  Pode correr-se outra vez: o que ja existe fica como esta.
-rem  Precisa do Python 3.11+ (https://www.python.org/downloads/ - marca
-rem  "Add python.exe to PATH" na instalacao).
+rem
+rem  Python: usa o mais recente que encontrar. A Perennia precisa do 3.11+;
+rem  o GarminDB precisa do 3.12+ (https://www.python.org/downloads/ - marca
+rem  "Add python.exe to PATH"). Se o .venv for de um Python antigo e houver
+rem  um 3.12+, o antigo fica guardado em .venv-antigo e cria-se um novo.
 rem ==========================================================================
 setlocal
 cd /d "%~dp0"
+set "CHK=import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"
+set "CHK11=import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
 
 set "PY="
-where py >nul 2>nul && set "PY=py -3"
-if not defined PY where python >nul 2>nul && set "PY=python"
+for %%V in (3.14 3.13 3.12) do (
+  if not defined PY (
+    py -%%V -c "%CHK%" >nul 2>nul && set "PY=py -%%V"
+  )
+)
+if not defined PY (
+  python -c "%CHK%" >nul 2>nul && set "PY=python"
+)
+set "OLDPY="
+if not defined PY (
+  py -3 -c "%CHK11%" >nul 2>nul && set "PY=py -3" && set "OLDPY=1"
+)
+if not defined PY (
+  python -c "%CHK11%" >nul 2>nul && set "PY=python" && set "OLDPY=1"
+)
 if not defined PY goto semPython
+if defined OLDPY (
+  echo Aviso: so encontrei um Python 3.11. A Perennia funciona, mas o GarminDB
+  echo precisa do Python 3.12 ou mais recente ^(https://www.python.org/downloads/^).
+)
 
-%PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
-if errorlevel 1 goto pythonAntigo
+if not exist ".venv\Scripts\python.exe" goto criar
+if defined OLDPY goto requisitos
+".venv\Scripts\python.exe" -c "%CHK%" >nul 2>nul
+if not errorlevel 1 goto requisitos
+echo O .venv usa um Python antigo; passo para um 3.12+ ^(o GarminDB precisa dele^).
+echo O antigo fica guardado em .venv-antigo.
+if exist ".venv-antigo" rmdir /s /q ".venv-antigo"
+move ".venv" ".venv-antigo" >nul
+if errorlevel 1 goto falhou
 
-if exist ".venv\Scripts\python.exe" goto requisitos
+:criar
 echo A criar o ambiente virtual (.venv)...
 %PY% -m venv .venv
 if errorlevel 1 goto falhou
@@ -40,16 +69,9 @@ exit /b %RC%
 
 :semPython
 echo.
-echo Nao encontrei o Python. Instala-o de https://www.python.org/downloads/
-echo (marca "Add python.exe to PATH") e corre este ficheiro outra vez.
-echo.
-pause
-exit /b 1
-
-:pythonAntigo
-echo.
-echo O Python nao respondeu ou e antigo: a Perennia precisa do 3.11 ou mais
-echo recente (https://www.python.org/downloads/).
+echo Nao encontrei o Python 3.11+ (recomendado: 3.12 ou mais recente).
+echo Instala-o de https://www.python.org/downloads/ (marca "Add python.exe to
+echo PATH") e corre este ficheiro outra vez.
 echo.
 pause
 exit /b 1
