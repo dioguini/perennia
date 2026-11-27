@@ -220,7 +220,9 @@ class TestStravaInRide(tg.GuiCase):
         self.assertEqual(self.app.db.get("strava_client_id"), "999")
         self.select("Client Secret")
         self.type("segredo")
-        self.assertEqual(self.app.db.get("strava_client_secret"), "segredo")
+        # o segredo fica só em memória (ronda 37), não na base de dados
+        self.assertEqual(scr.client.client_secret, "segredo")
+        self.assertIsNone(self.app.db.get("strava_client_secret"))
         scr.client.http = fake
         scr.client.exchange("code")
         scr.enter()

@@ -77,7 +77,7 @@ HEALTH_TABLES = {"monitoring": "daily_summary", "sleep": "sleep", "rhr": "restin
                  "hrv": "hrv", "weight": "weight"}
 PERIODS = ("latest", "all", "range")
 
-SYNC_TIMEOUT_S = 3600.0       # a opção «garmin_sync_timeout_s» (ver options.py)
+SYNC_TIMEOUT_S = 0.0          # a opção «garmin_sync_timeout_s» (0 = sem limite; ver options.py)
 CONFIG_NAME = "GarminConnectConfig.json"
 
 
@@ -455,6 +455,50 @@ def stopped() -> str:
               "sync carries on from there)")
 
 
+def _stamp() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def save_report(log: "SyncLog", ok: bool, message: str, report: dict | None = None,
+                title: str = "GarminDB", data_dir=None) -> Path | None:
+    """Grava o relatório de uma sincronização em `data/out/sincronizacoes/` (um .txt por
+    corrida): o resultado, os passos e tudo o que o GarminDB escreveu. Assim, uma
+    sincronização que falha ao fim de uma hora deixa explicado o que aconteceu. Nunca leva a
+    palavra-passe (o GarminDB não a escreve; e retira-se qualquer «password»)."""
+    from . import folders
+    try:
+        out = folders.out_dir("sync", data_dir)
+    except Exception:
+        return None
+    end = datetime.now()
+    name = f"{re.sub(r'[^A-Za-z0-9]+', '-', title).strip('-').lower() or 'sync'}_" \
+           f"{log.started:%Y-%m-%d_%H%M%S}.txt"
+    lines = [f"Perennia — {title}",
+             f"Início: {log.started:%Y-%m-%d %H:%M:%S}",
+             f"Fim:    {end:%Y-%m-%d %H:%M:%S} ({int((end - log.started).total_seconds())} s)",
+             f"Resultado: {'OK' if ok else 'FALHOU'}" + (f" — {message}" if message else "")]
+    if report:
+        lines.append("Relatório: " + ", ".join(f"{k}={v}" for k, v in report.items()
+                                              if not str(k).startswith("_")))
+    lines += ["", "Passos:"]
+    steps, _ = log.snapshot()
+    icon = {"run": "▶", "ok": "✓", "fail": "✗", "skip": "–"}
+    for n, st in enumerate(steps, 1):
+        lines.append(f"  {icon.get(st['state'], '?')} {n}. {st['text']}"
+                     + (f" — {st['detail']}" if st["detail"] else ""))
+    lines += ["", "Registo completo:"]
+    with log._lock:
+        lines += list(log.transcript)
+    text = "\n".join(lines) + "\n"
+    text = re.sub(r'(?i)("?password"?\s*[:=]\s*)"?[^"\s,]+"?', r'\1"***"', text)
+    path = out / name
+    try:
+        path.write_text(text, encoding="utf-8")
+    except OSError:
+        return None
+    return path
+
+
 def _kill(proc) -> None:
     with contextlib.suppress(Exception):
         if proc.poll() is None:
@@ -471,6 +515,9 @@ class SyncLog:
         self._lock = threading.Lock()
         self.steps: list[dict] = []
         self.lines: deque = deque(maxlen=max(1, int(keep)))
+        # tudo o que aconteceu, para o relatório .txt (com um limite, por segurança)
+        self.transcript: deque = deque(maxlen=50000)
+        self.started = datetime.now()
         self.version = 0
         self._cancel = threading.Event()     # «Parar»: o GarminDB é interrompido
         self._proc = None                    # o processo do GarminDB que está a correr
@@ -513,6 +560,7 @@ class SyncLog:
             if self.steps and self.steps[-1]["state"] == "run":
                 self.steps[-1]["state"] = "ok"
             self.steps.append({"text": text, "state": "run", "detail": ""})
+            self.transcript.append(f"{_stamp()} ▶ {text}")
             self.version += 1
 
     def detail(self, text: str) -> None:
@@ -528,6 +576,10 @@ class SyncLog:
                 self.steps[-1]["state"] = "ok" if ok else "fail"
                 if detail is not None:
                     self.steps[-1]["detail"] = detail
+                self.transcript.append(f"{_stamp()} {'✓' if ok else '✗'} "
+                                       f"{self.steps[-1]['text']}"
+                                       + (f" — {self.steps[-1]['detail']}"
+                                          if self.steps[-1]["detail"] else ""))
                 self.version += 1
 
     def skip(self, text: str, why: str = "") -> None:
@@ -540,6 +592,7 @@ class SyncLog:
         if text:
             with self._lock:
                 self.lines.append(text[:self.line_chars])
+                self.transcript.append("    " + text[:4000])
                 self.version += 1
 
     def snapshot(self) -> tuple[list[dict], list[str]]:
@@ -658,11 +711,28 @@ def _version(dist: str) -> tuple | None:
     return tuple(nums) or None
 
 
+_VERSIONS_CACHE: dict = {}
+
+
 def versions() -> dict:
-    """As versões que contam: o Python da Perennia, o GarminDB e o fitfile instalados nele."""
+    """As versões que contam: o Python da Perennia, o GarminDB e o fitfile instalados nele.
+    Com uma cache de poucos segundos (ronda 37): ler os pacotes instalados é lento e o ecrã
+    pede isto a cada redesenho."""
     import sys as _sys
-    return {"python": tuple(_sys.version_info[:3]), "garmindb": _version("garmindb"),
-            "fitfile": _version("fitfile")}
+    import time as _time
+    hit = _VERSIONS_CACHE.get("v")
+    if hit is not None and _time.monotonic() - hit[0] < importers.CLI_CACHE_S:
+        return dict(hit[1])
+    v = {"python": tuple(_sys.version_info[:3]), "garmindb": _version("garmindb"),
+         "fitfile": _version("fitfile")}
+    _VERSIONS_CACHE["v"] = (_time.monotonic(), v)
+    return dict(v)
+
+
+def clear_caches() -> None:
+    """Depois de instalar ou atualizar o GarminDB: volta a procurar."""
+    _VERSIONS_CACHE.clear()
+    importers.clear_cli_cache()
 
 
 def _vtext(v: tuple | None) -> str:
@@ -866,7 +936,8 @@ def _run(cmd: list[str], runner: Callable | None, timeout: float,
         return _run_streaming(cmd, timeout, cwd, log)
     run = runner or subprocess.run
     try:
-        res = run(cmd, capture_output=True, text=True, timeout=timeout,
+        res = run(cmd, capture_output=True, text=True,
+                  timeout=timeout if timeout and timeout > 0 else None,
                   cwd=str(cwd) if cwd and cwd.is_dir() else None)
     except Exception as e:
         return False, str(e)
@@ -893,9 +964,10 @@ def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
     def _stop() -> None:
         fired.append(True)
         proc.kill()
-    timer = threading.Timer(timeout, _stop)
-    timer.daemon = True
-    timer.start()
+    timer = threading.Timer(timeout, _stop) if timeout and timeout > 0 else None
+    if timer is not None:
+        timer.daemon = True
+        timer.start()
     tail: deque = deque(maxlen=40)
     try:
         for raw in proc.stdout:                       # type: ignore[union-attr]
@@ -908,7 +980,8 @@ def _run_streaming(cmd: list[str], timeout: float, cwd: Path | None,
                         log.detail(ph)
         code = proc.wait()
     finally:
-        timer.cancel()
+        if timer is not None:
+            timer.cancel()
         log.attach(None)
         if proc.poll() is None:
             proc.kill()
@@ -1022,7 +1095,12 @@ def ensure(db: Database) -> None:
     """)
     cols = {r["name"] for r in db.conn.execute("PRAGMA table_info(synced_activities)")}
     for c, decl in (("tss", "REAL"), ("if_value", "REAL"), ("avg_power_w", "REAL"),
-                    ("np_w", "REAL"), ("fit_file", "TEXT")):
+                    ("np_w", "REAL"), ("fit_file", "TEXT"),
+                    # ronda 37: de onde veio a TSS, as zonas (para a longevidade e a análise)
+                    # e o que o TrainingPeaks traz escrito
+                    ("tss_source", "TEXT"), ("hr_zone_s", "TEXT"), ("power_zone_s", "TEXT"),
+                    ("description", "TEXT"), ("coach_comments", "TEXT"),
+                    ("athlete_comments", "TEXT")):
         if c not in cols:                 # a TSS do TrainingPeaks (e a calculada)
             db.conn.execute(f"ALTER TABLE synced_activities ADD COLUMN {c} {decl}")
     db.conn.commit()
@@ -1035,14 +1113,17 @@ def count_activities(db: Database) -> int:
         return 0
 
 
-def activities(db: Database, sport: str | None = None, limit: int = 200) -> list[dict]:
+HISTORY_MAX = 200            # a opção «history_imported_max»
+
+
+def activities(db: Database, sport: str | None = None, limit: int | None = None) -> list[dict]:
     ensure(db)
     sql, args = "SELECT * FROM synced_activities", []
     if sport:
         sql += " WHERE sport = ?"
         args.append(sport)
     sql += " ORDER BY started_at DESC LIMIT ?"
-    return [dict(r) for r in db.conn.execute(sql, args + [limit])]
+    return [dict(r) for r in db.conn.execute(sql, args + [int(limit or HISTORY_MAX)])]
 
 
 def sport_of(sport: str | None, sub: str | None) -> str:
@@ -1158,23 +1239,33 @@ def fit_index(folder: Path) -> dict[str, Path]:
     return out
 
 
+def set_zones(db: Database, aid: str, hr_zone_s, power_zone_s, tss_source=None) -> None:
+    """Guarda as zonas (segundos em cada uma) e de onde veio a TSS de uma atividade importada."""
+    db.conn.execute("UPDATE synced_activities SET hr_zone_s = ?, power_zone_s = ?,"
+                    " tss_source = COALESCE(?, tss_source) WHERE id = ?",
+                    (json.dumps(hr_zone_s) if hr_zone_s else None,
+                     json.dumps(power_zone_s) if power_zone_s else None, tss_source, aid))
+
+
 def fit_details(db: Database, folder: str | Path | None = None) -> int:
     """Lê o .fit de cada atividade do Garmin que ainda não foi lido e guarda o que o resumo do
-    GarminDB não tem: a potência média e normalizada, a TSS e o IF (do relógio ou, com
-    potência, calculados pelo teu FTP). Devolve quantas atividades ganharam pormenor."""
+    GarminDB não tem, como o TrainingPeaks (ronda 37):
+    - a potência média e a normalizada (NP);
+    - a TSS e o IF do aparelho; sem eles, calculados pelos teus limiares (potência → TSS,
+      ritmo → rTSS com a inclinação, natação → sTSS);
+    - o tempo em cada zona de FC e de potência.
+    Sem os dados de que a fórmula precisa, a atividade fica sem carga. Devolve quantas
+    atividades ganharam pormenor."""
     from . import activity_upload as au
     folder = Path(folder) if folder else db_dir(db)
-    rows = db.conn.execute("SELECT id, moving_s, elapsed_s FROM synced_activities"
-                           " WHERE source = 'garmindb' AND fit_file IS NULL").fetchall()
+    rows = db.conn.execute("SELECT id, sport, moving_s, elapsed_s, distance_m"
+                           " FROM synced_activities WHERE source = 'garmindb'"
+                           " AND fit_file IS NULL").fetchall()
     if not rows:
         return 0
     index = fit_index(folder)
     if not index:
         return 0
-    try:
-        ftp = float(db.athlete().ftp_w or 0)
-    except Exception:
-        ftp = 0.0
     n = 0
     for r in rows:
         path = index.get(str(r["id"]).split(":", 1)[-1])
@@ -1187,18 +1278,16 @@ def fit_details(db: Database, folder: str | Path | None = None) -> int:
             db.conn.execute("UPDATE synced_activities SET fit_file = ? WHERE id = ?",
                             ("!" + path.name, r["id"]))
             continue
-        npw, avg = info.get("np_w"), info.get("avg_power_w")
-        tss, if_ = info.get("tss"), info.get("if_value")
-        secs = float(r["moving_s"] or r["elapsed_s"] or info.get("moving_s") or 0)
-        if tss is None and npw and ftp and secs:
-            if_ = npw / ftp
-            tss = secs * npw * if_ / (ftp * 3600.0) * 100.0
-        if if_ is None and npw and ftp:
-            if_ = npw / ftp
+        info["sport"] = r["sport"]                  # o desporto que o Garmin deu
+        info["moving_s"] = float(r["moving_s"] or r["elapsed_s"] or info.get("moving_s") or 0)
+        info["distance_m"] = r["distance_m"] or info.get("distance_m")
+        m = au.metrics(db, info)
         db.conn.execute("UPDATE synced_activities SET avg_power_w = COALESCE(?, avg_power_w),"
                         " np_w = COALESCE(?, np_w), tss = COALESCE(?, tss),"
                         " if_value = COALESCE(?, if_value), fit_file = ? WHERE id = ?",
-                        (avg, npw, tss, if_, str(path), r["id"]))
+                        (info.get("avg_power_w"), info.get("np_w"), m["tss"], m["if_value"],
+                         str(path), r["id"]))
+        set_zones(db, r["id"], m.get("hr_zone_s"), m.get("power_zone_s"), m.get("tss_source"))
         n += 1
     db.conn.commit()
     return n
@@ -1247,6 +1336,11 @@ def sync_into_perennia(db: Database, opts: Options, folder: str | Path | None = 
         rep = import_activities(db, folder, since=since, until=until)
         report.update(activities=rep["activities"], new_activities=rep["new"],
                       detailed=rep.get("detailed", 0))
+        try:                       # a análise automática das novas (ronda 37)
+            from . import feedback as fbm
+            report["analysed"] = fbm.analyse_imported(db)
+        except Exception:
+            report["analysed"] = 0
     db.set("garmindb_last_sync", now_iso()[:16].replace("T", " "))
     db.set("garmindb_last_sync_day", date.today().isoformat())
     return report

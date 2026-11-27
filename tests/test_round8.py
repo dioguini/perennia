@@ -79,8 +79,9 @@ class TestPmc(DbCase):
     def test_constants_like_trainingpeaks(self):
         out = stats.pmc({TODAY: 100.0}, TODAY + timedelta(days=1), None)
         first, nxt = out[0], out[1]
-        self.assertAlmostEqual(first["ctl"], 100 * (1 - math.exp(-1 / 42)), places=3)
-        self.assertAlmostEqual(first["atl"], 100 * (1 - math.exp(-1 / 7)), places=3)
+        # a fórmula publicada pelo TrainingPeaks (ronda 37): + (TSS − CTL) / 42, / 7
+        self.assertAlmostEqual(first["ctl"], 100 / 42, places=6)
+        self.assertAlmostEqual(first["atl"], 100 / 7, places=6)
         # a forma de amanhã é o fitness menos a fadiga de hoje
         self.assertAlmostEqual(nxt["tsb"], first["ctl"] - first["atl"], places=3)
         self.assertAlmostEqual(first["tsb"], 0.0, places=6)
@@ -188,7 +189,7 @@ class TestImports(DbCase):
                      "Planeado,Bike,2026-06-21,,,,,\n", encoding="utf-8")
         self.assertTrue(tp_import.looks_like_tp(p))
         r = tp_import.import_csv(self.db, p)
-        self.assertEqual(r, {"activities": 1, "skipped": 1})
+        self.assertEqual((r["activities"], r["skipped"]), (1, 1))
         row = self.db.conn.execute("SELECT * FROM synced_activities").fetchone()
         self.assertEqual(row["sport"], "running")
         self.assertEqual(row["tss"], 95)

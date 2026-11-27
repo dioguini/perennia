@@ -56,7 +56,7 @@ class TestCalendarShowsEverything(tg.GuiCase):
         es = cv.sessions_between(self.app.db, day, day)
         self.assertEqual([(e.kind, e.sport, e.title) for e in es],
                          [("imported", "running", "Corrida da manhã")])
-        self.assertTrue(es[0].load)                     # a carga pela FC (sem TSS)
+        self.assertIsNone(es[0].load)       # sem TSS não há carga: não se inventa pela FC (r37)
         data = cv.month_data(self.app.db, day.year, day.month)
         self.assertIn(es[0].id, [e.id for e in data["by_day"][day]])
 

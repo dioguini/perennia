@@ -183,6 +183,51 @@ class SyncPanel:
         return run_task(self.app, "sync:" + kind, title, work, short=self.source_name(kind),
                         then=done, open_fn=lambda app: app.show_sync_tab(label))
 
+    # ------------------------------------------------ reavaliar todos os treinos (ronda 37)
+
+    def reevaluate_item(self) -> Item:
+        a = self.app
+        busy = hasattr(a, "running_task") and a.running_task("reevaluate") is not None
+        return Item(tr("Reavaliar todos os treinos", "Re-evaluate all workouts"),
+                    value=tr("a decorrer…", "running…") if busy else "",
+                    detail=tr("volta a calcular a carga (fórmulas do TrainingPeaks), lê os .fit "
+                              "do Garmin e refaz a análise automática de todas as sessões — o "
+                              "índice de longevidade fica atualizado; o teu feedback fica",
+                              "recomputes the load (TrainingPeaks formulas), reads the Garmin "
+                              ".fit files and redoes every session's automatic analysis — the "
+                              "longevity index is updated; your feedback stays"),
+                    action=self.ask_reevaluate, enabled=not busy)
+
+    def ask_reevaluate(self) -> None:
+        a = self.app
+        a.confirm(tr("Reavaliar todos os treinos?", "Re-evaluate all workouts?"),
+                  tr("Corre em segundo plano (vê-se no topo). Com um histórico grande pode "
+                     "demorar alguns minutos. O feedback que deste não se perde.",
+                     "It runs in the background (shown at the top). With a large history it "
+                     "can take a few minutes. The feedback you gave is kept."),
+                  self.reevaluate, yes=tr("Reavaliar", "Re-evaluate"))
+
+    def reevaluate(self):
+        from perennia.core import feedback as fbm
+        from perennia.ui.background import run_task
+
+        def work(db, log):
+            log.step(tr("A reavaliar: carga, .fit do Garmin e análise de cada sessão",
+                        "Re-evaluating: load, Garmin .fit files and each session's analysis"))
+            rep = fbm.reevaluate_all(db, progress=lambda i, n: log.detail(
+                tr("{i} de {n} sessões", "{i} of {n} sessions", i=i, n=n)))
+            text = tr("{n} sessões reavaliadas · {f} .fit lidos · {c} cargas por substituição "
+                      "retiradas", "{n} sessions re-evaluated · {f} .fit read · {c} substitute "
+                      "loads removed", n=rep["sessions"], f=rep.get("fit", 0),
+                      c=rep.get("cleared", 0))
+            log.end(True, text)
+            log.step(tr("Concluído", "Done"))
+            log.end(True)
+            return True, text, rep
+        return run_task(self.app, "reevaluate", tr("Reavaliar todos os treinos",
+                                                   "Re-evaluate all workouts"), work,
+                        short=tr("Reavaliar", "Re-evaluate"), then=lambda *_: self.refresh())
+
     def refresh(self) -> None:
         """Redesenha o separador, se o ecrã ainda estiver aberto."""
         scr = self.screen
@@ -321,7 +366,8 @@ class SyncPanel:
              "Account → Download or delete → 'activities.csv'. Garmin Connect: Activities → "
              "Export CSV. Activities the rules do not know appear in the 'no rule' report."),
             check=lambda p: _is_tp(p) or he.looks_like(p) is not None)
-        rows += [Item(tr("Regras de normalização", "Normalisation rules"), header=True),
+        rows += [Item(tr("Reavaliação", "Re-evaluation"), header=True), self.reevaluate_item(),
+                 Item(tr("Regras de normalização", "Normalisation rules"), header=True),
                  Item(tr("Ver o que as regras mudariam", "Preview what the rules would change"),
                       detail=tr("não grava nada", "saves nothing"),
                       action=lambda: self.normalize(False)),
@@ -626,6 +672,7 @@ class SyncPanel:
                  enabled=st["cli"] and ready,
                  detail=wait or tr("se o GarminDB pedir (mudança de versão)",
                                    "if GarminDB asks for it (version change)")),
+            self.reevaluate_item(),
             Item(tr("Só importar", "Import only"), action=self.import_only, button=True,
                  enabled=(st["garmin_db"] or st["activities_db"]) and ready),
             Item(tr("A sincronizar…", "Syncing…") if self.busy else
@@ -881,8 +928,8 @@ class SyncPanel:
                 task.summary = summary_of(rep) if rep else ""
                 app.message(hint)
             else:
-                task.summary = msg
-                report(app, False, hint + " " + (msg or ""), None)
+                task.summary = hint + " " + (msg or "")
+                report(app, False, task.summary, None)
         self._job(run, tr("GarminDB: só importar", "GarminDB: import only"), finish)
 
     def missing_cli_hint(self) -> str:
@@ -938,8 +985,14 @@ class SyncPanel:
         key = (id(log), getattr(log, "version", None), self.busy)
         if key == self._seen:
             return
+        # o GarminDB escreve muitas linhas por segundo: redesenhar no máximo 4×/s (ronda 37)
+        import time as _time
+        now = _time.monotonic()
+        if self._seen is not None and self.busy and now - getattr(self, "_drawn_at", 0.0) < 0.25:
+            return
         first = self._seen is None
         self._seen = key
+        self._drawn_at = now
         if not first and getattr(self.screen, "view", "sync") == "sync":
             self.screen.enter()
 
@@ -979,6 +1032,7 @@ def finish_garmindb(app, task) -> None:
         (ok, out), _ = res
         import importlib
         importlib.invalidate_caches()             # as versões novas veem-se já
+        gs.clear_caches()
         if log is not None:
             log.end(ok, "" if ok else (out.splitlines()[-1] if out else ""))
         v = gs.versions()

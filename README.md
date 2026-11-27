@@ -16,7 +16,7 @@ faz o autoteste e, se quiseres, configura o GarminDB e o atalho.
 ./perennia_setup.sh                             # ou perennia_setup.bat: prepara tudo
 python main.py --self-test                      # verifica o núcleo
 python main.py                                  # abre a aplicação
-python -m unittest discover -s tests -t .       # 1575 testes
+python -m unittest discover -s tests -t .       # 1585 testes
 ```
 
 **Os teus dados ficam todos em `data/`**, dentro da pasta do projeto (e nunca vão para o git):
@@ -58,6 +58,18 @@ com duplo clique. Detalhes em [RUN.md](RUN.md), secção 7.
   segue um .gpx) e etiquetas livres: escolhe-se uma das que existem ou **cria-se uma nova**.
   Os botões de todas as sessões são os mesmos (− + Pausa Terminar) e **todo o botão tem um
   ícone ao lado da etiqueta — o mesmo para a mesma ação**.
+- **Ronda 37** — **Métricas como o TrainingPeaks**: CTL/ATL com / 42 e / 7; TSS, rTSS e sTSS
+  só com os dados de cada fórmula, sem substitutos pela FC ou pelo ritmo médio. Também:
+  - o limite de 1 h que parava a sincronização do GarminDB deixa de existir por omissão;
+  - **relatório .txt** de cada sincronização em `data/out/sincronizacoes`;
+  - **análise automática** de cada atividade importada, que também entra no índice de
+    longevidade;
+  - **Reavaliar todos os treinos**;
+  - do TrainingPeaks entram a descrição, os comentários, o RPE, a sensação e as zonas;
+  - o Client Secret do Strava fica só em memória;
+  - menos redesenhos no separador GarminDB;
+  - [DB.md](DB.md) descreve a base de dados (SQLite em `data/perennia.db`; como lhe aceder: RUN.md
+    § 10).
 - **Ronda 36** — **O calendário com todas as atividades:**
   - entram as feitas na Perennia e as importadas (Garmin, TrainingPeaks, Strava/Garmin Connect,
     upload manual), sem duplicados, com uma ficha para cada uma (também no Histórico);
@@ -630,7 +642,7 @@ build_windows.bat    cria a versão para Windows (Perennia.exe), para partilhar
 build.sh             o mesmo, para macOS, Linux e Raspberry Pi
 tools/                make_icons.py (ícones dos botões) · make_app_icon.py (o ícone da aplicação)
 .github/workflows/   o GitHub gera as três versões sozinho
-tests/               1575 testes: núcleo, protocolos, força, remo, saúde,
+tests/               1585 testes: núcleo, protocolos, força, remo, saúde,
                      ligações e interface
   pyglet_stub.py     pyglet falsa, para testar a interface sem ecrã
 ```

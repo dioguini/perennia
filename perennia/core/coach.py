@@ -1529,7 +1529,7 @@ def review_blocks(db: Database, sport: str, blocks: list, today: date | None = N
             a.worst("warn")
             issues.append(tr("{r:.1f}× a tua carga habitual: é um dia pesado",
                              "{r:.1f}× your usual load: this is a hard day", r=ratio))
-        k_atl, k_ctl = stats.K_ATL, stats.K_CTL
+        k_atl, k_ctl = stats.k_atl(), stats.k_ctl()
         ctl2 = s["ctl"] + (tss - s["ctl"]) * k_ctl
         atl2 = s["atl"] + (tss - s["atl"]) * k_atl
         tsb2 = ctl2 - atl2

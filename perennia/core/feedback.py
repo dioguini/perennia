@@ -97,7 +97,30 @@ def load_session(db, kind: str, sid: str) -> Session | None:
     return sess
 
 
+def _imported_session(db, sid: str) -> Session | None:
+    """Uma atividade importada como sessão (sem amostras): o que a fonte registou."""
+    from .naming import pretty
+    r = _row(db, "SELECT * FROM synced_activities WHERE id = ?", (sid,))
+    if r is None:
+        return None
+    try:
+        ftp = db.athlete().ftp_w
+    except Exception:
+        ftp = None
+    secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
+    pace = None
+    if r.get("distance_m") and secs:
+        per = {"running": 1000.0, "swimming": 100.0, "rowing": 500.0}.get(r.get("sport"))
+        pace = secs / (r["distance_m"] / per) if per else None
+    return Session("imported", sid, r.get("sport") or "other", pretty(r.get("name") or ""),
+                   str(r.get("started_at") or ""), float(r.get("elapsed_s") or secs), secs,
+                   None, r.get("distance_m"), r.get("avg_power_w"), r.get("np_w"),
+                   r.get("avg_hr"), r.get("max_hr"), r.get("tss"), pace, ftp)
+
+
 def _load_session(db, kind: str, sid: str) -> Session | None:
+    if kind == "imported":
+        return _imported_session(db, sid)
     from .naming import pretty
     ctx_cache: dict[str, it.Context] = {}
 
@@ -227,6 +250,109 @@ def save(db, kind: str, sid: str, rpe: int | None = None, pain: int | None = Non
     return res
 
 
+USER_FIELDS = ("rpe", "pain", "feel", "goal_met", "comment")
+IMPACT_RECENT = 30          # a opção «analysis_impact_recent»
+
+
+def has_user_feedback(fb: dict | None) -> bool:
+    """O atleta deu feedback (e não só a análise automática)?"""
+    return bool(fb) and any(fb.get(k) not in (None, "") for k in USER_FIELDS)
+
+
+def auto_analyse(db, kind: str, sid: str, impact: bool = True, **given) -> dict:
+    """Refaz a análise automática de uma sessão (ronda 37), sem perder o feedback que lá
+    estiver; `given` (rpe, comentário…) junta-se — por exemplo o que vem do TrainingPeaks."""
+    old = get(db, kind, sid) or {}
+    fb = {k: given.get(k, old.get(k)) for k in USER_FIELDS}
+    res = save(db, kind, sid, fb["rpe"], fb["pain"], fb["feel"], fb["goal_met"],
+               fb["comment"] or "")
+    if impact and kind == "imported":
+        try:
+            from . import longevity as lg
+            imp = lg.session_impact(db, (get_sport(db, sid) or "other"), sid)
+            text = lg.impact_text(imp)
+            if text:
+                res.setdefault("sections", []).append(
+                    (tr("Longevidade", "Longevity"), tr("Impacto no índice: {t}.",
+                                                        "Impact on the index: {t}.", t=text)))
+                db.conn.execute("UPDATE session_feedback SET analysis = ? WHERE kind = ? AND"
+                                " session_id = ?", (json.dumps(res, ensure_ascii=False),
+                                                    kind, sid))
+                db.conn.commit()
+        except Exception:
+            pass
+    return res
+
+
+def get_sport(db, sid: str) -> str | None:
+    r = _row(db, "SELECT sport FROM synced_activities WHERE id = ?", (sid,))
+    return r.get("sport") if r else None
+
+
+def analyse_imported(db, only_new: bool = True, progress=None) -> int:
+    """A análise automática das atividades importadas que ainda não a têm (ou de todas): é o
+    que corre depois de cada importação (GarminDB, TrainingPeaks, histórico, upload). Com
+    muitas de uma vez (um histórico inteiro), o impacto na longevidade só se escreve nas 30 mais
+    recentes — o índice conta-as todas na mesma."""
+    ensure(db)
+    try:
+        rows = db.conn.execute(
+            "SELECT a.id FROM synced_activities a LEFT JOIN session_feedback f"
+            " ON f.kind = 'imported' AND f.session_id = a.id"
+            + (" WHERE f.session_id IS NULL" if only_new else "")
+            + " ORDER BY a.started_at DESC").fetchall()
+    except Exception:
+        return 0
+    n = 0
+    for i, r in enumerate(rows):
+        auto_analyse(db, "imported", r["id"], impact=i < IMPACT_RECENT)
+        n += 1
+        if progress is not None:
+            progress(n, len(rows))
+    return n
+
+
+def reevaluate_all(db, progress=None) -> dict:
+    """«Reavaliar todos os treinos» (ronda 37): volta a calcular a carga com as fórmulas do
+    TrainingPeaks (sem substitutos), lê os .fit das atividades do Garmin outra vez e refaz a
+    análise automática de todas as sessões — as da Perennia e as importadas — sem perder o
+    feedback. O índice de longevidade é calculado a partir disto."""
+    from . import garmin_sync as gs
+    from . import tss
+    out = {"cleared": tss.clear_substitutes(db), "endurance": tss.recompute_endurance(db)}
+    try:
+        gs.ensure(db)
+        db.conn.execute("UPDATE synced_activities SET fit_file = NULL WHERE source = 'garmindb'"
+                        " AND (fit_file IS NULL OR fit_file NOT LIKE '!%')")
+        db.conn.commit()
+        out["fit"] = gs.fit_details(db)
+    except Exception:
+        out["fit"] = 0
+    sessions = []
+    for kind, table in (("ride", "rides"), ("row", "row_sessions"),
+                        ("endurance", "endurance_sessions"), ("strength", "strength_sessions")):
+        try:
+            sessions += [(kind, r[0]) for r in db.conn.execute(
+                f"SELECT id FROM {table} WHERE status = 'completed'")]
+        except Exception:
+            continue
+    try:
+        sessions += [("imported", r[0]) for r in db.conn.execute(
+            "SELECT id FROM synced_activities ORDER BY started_at DESC")]
+    except Exception:
+        pass
+    total = len(sessions)
+    for i, (kind, sid) in enumerate(sessions, 1):
+        try:
+            auto_analyse(db, kind, sid, impact=kind == "imported" and i <= IMPACT_RECENT)
+        except Exception:
+            pass
+        if progress is not None:
+            progress(i, total)
+    out["sessions"] = total
+    return out
+
+
 def all_feedback(db, since: str | None = None) -> list[dict]:
     """Para o agente treinador: todos os feedbacks (o mais recente primeiro)."""
     ensure(db)
@@ -305,10 +431,16 @@ def _zone_word(brief: ob.Brief | None) -> str:
 
 
 def session_text(sess: Session) -> str:
-    kind = {"cycling": tr("bicicleta indoor", "indoor cycling"),
-            "rowing": tr("remo indoor", "indoor rowing"),
-            "running": tr("corrida em passadeira", "treadmill running"),
-            "swimming": tr("natação", "swimming"), "gym": tr("ginásio", "gym")}[sess.sport]
+    if sess.kind == "imported":            # feita fora (Garmin, TrainingPeaks…): sem «indoor»
+        kind = {"cycling": tr("ciclismo", "cycling"), "rowing": tr("remo", "rowing"),
+                "running": tr("corrida", "running"), "swimming": tr("natação", "swimming"),
+                "gym": tr("ginásio", "gym")}.get(sess.sport, tr("treino", "training"))
+    else:
+        kind = {"cycling": tr("bicicleta indoor", "indoor cycling"),
+                "rowing": tr("remo indoor", "indoor rowing"),
+                "running": tr("corrida em passadeira", "treadmill running"),
+                "swimming": tr("natação", "swimming"), "gym": tr("ginásio", "gym")}.get(
+            sess.sport, tr("treino", "training"))
     mins = round((sess.moving_s or sess.elapsed_s or 0) / 60)
     bits = [tr("Sessão de {k} com {m} minutos", "{k} session of {m} minutes", k=kind, m=mins)]
     if sess.distance_m:

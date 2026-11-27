@@ -203,6 +203,47 @@ def all_doses(db) -> list[Dose]:
             if mins:
                 out.append(Dose(day, sp, r[sid_col], mins))
     out += _strength_doses(db)
+    out += imported_doses(db, out)
+    return out
+
+
+IMPORTED_SPORT_AXIS = {"gym": "strength"}
+
+
+def imported_doses(db, own: list[Dose]) -> list[Dose]:
+    """As atividades importadas (Garmin, TrainingPeaks, histórico, upload manual) também contam
+    para o índice (ronda 37): pelo tempo em cada zona de potência ou de FC lido do .fit; sem
+    zonas, pelo tipo do desporto e a duração. A que for a mesma de uma sessão da Perennia
+    (mesmo dia e desporto, duração a ±25 %) não conta duas vezes."""
+    from . import stats
+    try:
+        rows = db.conn.execute("SELECT id, sport, started_at, moving_s, elapsed_s, hr_zone_s,"
+                               " power_zone_s FROM synced_activities").fetchall()
+    except Exception:
+        return []
+    mine: dict = {}
+    for d in own:
+        mine.setdefault((d.day, d.sport), []).append(sum(d.mins.values()) * 60.0)
+    out = []
+    for r in rows:
+        r = dict(r)
+        day = stats.synced_day(r)
+        if day is None:
+            continue
+        sport = r.get("sport") or "other"
+        secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
+        if secs <= 0 or any(stats.same_activity(secs, x)
+                            for x in mine.get((day, sport), [])):
+            continue
+        power, hr = _json_list(r.get("power_zone_s")), _json_list(r.get("hr_zone_s"))
+        if sum(float(x or 0) for x in power) > 0:
+            mins = _zones_to_axes([float(x or 0) for x in power], POWER_ZONE_AXIS)
+        elif sum(float(x or 0) for x in hr) > 0:
+            mins = _zones_to_axes([float(x or 0) for x in hr], HR_ZONE_AXIS)
+        else:
+            mins = {IMPORTED_SPORT_AXIS.get(sport, "aerobic"): secs / 60.0}
+        if mins:
+            out.append(Dose(day, sport, str(r["id"]), mins))
     return out
 
 

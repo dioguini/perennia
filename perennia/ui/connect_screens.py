@@ -153,14 +153,27 @@ class StravaScreen(Screen):
         self.list.set_items(rows, keep_index=True)
         _ = db
 
+    def _secret_in_memory(self, field: str) -> bool:
+        """O Client Secret fica só em memória (ronda 37), salvo a opção «strava_secret_in_db»."""
+        from perennia.core import options as opt_mod
+        return field == "strava_client_secret" and not opt_mod.get(self.app.db,
+                                                                  "strava_secret_in_db")
+
     def text_input(self, field: str, text: str) -> None:
         db = self.app.db
-        db.set(field, (str(db.get(field, "") or "") + text).strip())
+        if self._secret_in_memory(field):
+            cur = strava_mod.SESSION_SECRET.get("secret", "")
+            strava_mod.SESSION_SECRET["secret"] = (cur + text).strip()
+        else:
+            db.set(field, (str(db.get(field, "") or "") + text).strip())
         self.enter()
 
     def text_backspace(self, field: str) -> None:
         db = self.app.db
-        db.set(field, str(db.get(field, "") or "")[:-1])
+        if self._secret_in_memory(field):
+            strava_mod.SESSION_SECRET["secret"] = strava_mod.SESSION_SECRET.get("secret", "")[:-1]
+        else:
+            db.set(field, str(db.get(field, "") or "")[:-1])
         self.enter()
 
     def _authorize(self) -> None:

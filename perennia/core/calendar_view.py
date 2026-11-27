@@ -148,7 +148,7 @@ def sessions_between(db, d0: date, d1: date) -> list[Entry]:
             continue
         secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
         sport = r.get("sport") or "other"
-        if any(abs(secs - x) <= 0.25 * max(secs, x) for x in own.get((day, sport), [])):
+        if any(stats.same_activity(secs, x) for x in own.get((day, sport), [])):
             continue
         out.append(Entry(day, "imported", r["id"], sport,
                          pretty(r.get("name") or "") or imported_source(r), secs,

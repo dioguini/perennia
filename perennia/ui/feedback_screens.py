@@ -38,7 +38,7 @@ def maybe_ask(screen, kind: str, sid: str | None) -> None:
         return
     screen._feedback_asked = True
     db = screen.app.db
-    if not ask_enabled(db) or fbm.get(db, kind, sid) is not None:
+    if not ask_enabled(db) or fbm.has_user_feedback(fbm.get(db, kind, sid)):
         return
     screen.app.push(FeedbackScreen(screen.app, kind, sid))
 

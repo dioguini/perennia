@@ -49,7 +49,8 @@ IN: dict[str, str] = {
 # chave → pasta dentro de out/
 OUT: dict[str, str] = {
     "sessions": "sessoes", "workouts": "treinos", "plans": "planos", "csv": "csv",
-    "powerbi": "powerbi", "backups": "backups", "reports": "relatorios"}
+    "powerbi": "powerbi", "backups": "backups", "reports": "relatorios",
+    "sync": "sincronizacoes"}
 # desporto → pasta dentro de out/sessoes/
 SPORT_DIRS: dict[str, str] = {"cycling": "ciclismo", "rowing": "remo", "running": "corrida",
                               "swimming": "natacao", "gym": "ginasio", "strength": "ginasio"}
@@ -70,7 +71,8 @@ NAMES_OUT = {"sessions": ("Sessões (.fit)", "Sessions (.fit)"),
              "csv": ("Modelos e exportações .csv", ".csv templates and exports"),
              "powerbi": ("Power BI", "Power BI"),
              "backups": ("Backups feitos", "Backups made"),
-             "reports": ("Relatórios (AdHoc)", "Reports (AdHoc)")}
+             "reports": ("Relatórios (AdHoc)", "Reports (AdHoc)"),
+             "sync": ("Relatórios das sincronizações (.txt)", "Sync reports (.txt)")}
 
 # A pasta de dados em uso (posta pela aplicação e pela linha de comandos ao arrancar). As funções
 # que não recebem `data_dir` usam esta.
