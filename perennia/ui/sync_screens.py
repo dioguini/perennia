@@ -1012,6 +1012,11 @@ def _is_tp(path) -> bool:
     return tp_import.looks_like_tp(path)
 
 
+def _open_imported(app, aid: str) -> None:
+    from perennia.ui.imported_screens import ImportedActivityScreen
+    app.push(ImportedActivityScreen(app, aid))
+
+
 def history_items(app, sport: str) -> list[Item]:
     """As atividades sincronizadas (GarminDB) deste desporto, para o fim do
     separador Histórico. Só de leitura: são o que o Garmin registou."""
@@ -1023,7 +1028,8 @@ def history_items(app, sport: str) -> list[Item]:
         return []
     rows = [Item(tr("— Importadas (Garmin, TrainingPeaks, upload manual) ({n}) —",
                     "— Imported (Garmin, TrainingPeaks, manual upload) ({n}) —", n=len(acts)),
-                 enabled=False)]
+                 enabled=False,
+                 detail=tr("Enter abre a ficha", "Enter opens the details"))]
     from perennia.core.units import hms
     for r in acts:
         bits = []
@@ -1034,6 +1040,8 @@ def history_items(app, sport: str) -> list[Item]:
             bits.append(f"{r['avg_hr']:.0f} bpm")
         if r.get("ascent_m"):
             bits.append(f"↑ {r['ascent_m']:.0f} m")
+        if r.get("np_w"):
+            bits.append(f"NP {r['np_w']:.0f} W")
         if r.get("tss"):
             bits.append(f"TSS {r['tss']:.0f}")
         elif r.get("training_load"):
@@ -1044,5 +1052,6 @@ def history_items(app, sport: str) -> list[Item]:
         rows.append(Item(f"{str(r['started_at'])[:16].replace('T', ' ')}  "
                          f"{r.get('name') or tr('Atividade', 'Activity')}",
                          value=hms(r.get("moving_s") or r.get("elapsed_s") or 0),
-                         detail=" · ".join(bits), enabled=False, data=("synced", r["id"])))
+                         detail=" · ".join(bits), data=("synced", r["id"]),
+                         action=lambda aid=r["id"]: _open_imported(app, aid)))
     return rows

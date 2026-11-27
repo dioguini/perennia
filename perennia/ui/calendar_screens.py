@@ -58,7 +58,10 @@ def event_item(app, day: date, button: bool = False) -> Item:
 
 
 def sport_label(sport: str) -> str:
-    return tr("Ginásio", "Gym") if sport == "gym" else sp.name(sport)
+    if sport == "gym":
+        return tr("Ginásio", "Gym")
+    name = sp.name(sport)
+    return tr("Outro", "Other") if name == sport and sport in ("other", "", None) else name
 
 
 class CalendarScreen(Screen):
@@ -415,6 +418,11 @@ class DayScreen(Screen):
             bits = [x for x in (f"{e.distance_m / 1000:.1f} km" if e.distance_m else "",
                                 tr("carga {l}", "load {l}", l=f"{e.load:.0f}") if e.load else "",
                                 e.verdict) if x]
+            if e.kind == "imported":            # de onde veio (Garmin, TrainingPeaks…)
+                r = a.db.conn.execute("SELECT source FROM synced_activities WHERE id = ?",
+                                      (e.id,)).fetchone()
+                bits.append(tr("importada de {s}", "imported from {s}",
+                               s=cv.imported_source(dict(r) if r else {})))
             items.append(Item(f"✓ {sport_label(e.sport)} · {e.title}", value=hms(e.seconds),
                               detail=" · ".join(bits) or tr("sem feedback", "no feedback"),
                               action=lambda ee=e: self._open_session(ee), data=("done", e)))
@@ -483,6 +491,9 @@ class DayScreen(Screen):
         elif e.kind == "endurance":
             from perennia.ui.endurance_screens import EnduranceDetail
             a.push(EnduranceDetail(a, e.id))
+        elif e.kind == "imported":
+            from perennia.ui.imported_screens import ImportedActivityScreen
+            a.push(ImportedActivityScreen(a, e.id))
         else:
             from perennia.ui.session_analysis import SessionAnalysis
             a.push(SessionAnalysis(a, "strength", e.id))
