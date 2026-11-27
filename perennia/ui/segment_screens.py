@@ -513,7 +513,136 @@ class LibrarySegmentDetail(Screen):
         routes = a.db.conn.execute(
             "SELECT s.route_id, s.start_m, s.end_m FROM strava_segments s WHERE s.segment_id = ?",
             (self.segment_id,)).fetchall()
-        busy = self.job is not None and not self.job.done
+        from perennia.ui.connect_screens import strava_busy
+        busy = strava_busy(a)
+        items = [Item(tr("Atualizar do Strava", "Refresh from Strava"), top=True,
+                       value=tr("a atualizar…", "refreshing…") if busy else "",
+                       enabled=not busy, action=self._refresh),
+                 Item(tr("Ligar às minhas rotas", "Link to my routes"), top=True,
+                      action=self._link),
+                 Item(tr("Segmento", "Segment"), header=True),
+                 Item(tr("Distância", "Distance"),
+                      value=f"{(r['distance_m'] or 0) / 1000:.2f} km",
+                      detail=" · ".join(x for x in (
+                          f"{r['avg_grade']:.1f} %" if r["avg_grade"] is not None else "",
+                          f"↑ {r['elev_gain_m']:.0f} m" if r["elev_gain_m"] else "",
+                          tr("máx. {g:.0f} %", "max {g:.0f} %", g=r["max_grade"])
+                          if r["max_grade"] else "",
+                          ", ".join(x for x in (r["city"], r["country"]) if x)) if x),
+                      enabled=False),
+                 Item(tr("O meu PR no Strava", "My Strava PR"),
+                      value=hms(r["pr_s"]) if r["pr_s"] else "—",
+                      detail=" · ".join(x for x in (
+                          r["pr_date"] or "",
+                          tr("{n} esforços no Strava", "{n} efforts on Strava",
+                             n=r["effort_count"]) if r["effort_count"] else "",
+                          f"KOM {r['kom']}" if r["kom"] else "") if x), enabled=False),
+                 Item(tr("Importado", "Imported"), value=str(r["fetched_at"] or "")[:16]
+                      .replace("T", " "),
+                      detail=tr("ID {i} · origem: {o}", "ID {i} · source: {o}",
+                                i=r["segment_id"], o=r["origin"] or "—"), enabled=False),
+                 Item(tr("Rotas ligadas", "Linked routes"), header=True)]
+        for lk in routes:
+            row = a.db.route(lk["route_id"])
+            items.append(Item(row["name"] if row else "—",
+                              detail=f"km {lk['start_m'] / 1000:.2f}–{lk['end_m'] / 1000:.2f}",
+                              action=(lambda rid=lk["route_id"]: self._open_route(rid))
+                              if row else None))
+        if not routes:
+            items.append(Item(tr("Nenhuma rota percorre este segmento",
+                                 "No route follows this segment"),
+                              detail=tr("importa um .gpx que passe por ele, ou «Ligar às minhas "
+                                        "rotas»", "import a .gpx that goes through it, or "
+                                        "“Link to my routes”"), enabled=False))
+        items.append(Item(tr("Os meus esforços importados", "My imported efforts"), header=True))
+        for i, e in enumerate(ef[:60], start=1):
+            items.append(Item(f"{i}.  {hms(e['elapsed_s'])}",
+                              value=(f"{e['avg_watts']:.0f} W" if e["avg_watts"] else ""),
+                              detail=str(e["start_date"] or "")[:10], enabled=False))
+        if not ef:
+            items.append(Item(tr("Sem esforços importados", "No efforts imported"),
+                              detail=tr("precisam de subscrição Strava; «Atualizar do Strava» "
+                                        "tenta outra vez", "they need a Strava subscription; "
+                                        "“Refresh from Strava” tries again"), enabled=False))
+        items.append(Item(tr("Tirar da biblioteca", "Remove from the library"), button=True,
+                          action=lambda: delete_library(a, self.segment_id, r["name"],
+                                                        then=lambda: a.pop(force=True))))
+        self.chrome.set(r["name"], tr("{n} esforços importados · melhor {b}",
+                                      "{n} imported efforts · best {b}", n=len(ef),
+                                      b=hms(ef[0]["elapsed_s"]) if ef else "—"), self.footer())
+        self.list.set_items(items, keep_index=True)
+
+    def _link(self) -> None:
+        r = lib_mod.link_all(self.app.db)
+        self.app.message(tr("{n} ligações a rotas", "{n} links to routes", n=r["linked"]))
+        self.enter()
+
+    def _refresh(self) -> None:
+        from perennia.io import strava as strava_mod
+        from perennia.ui.connect_screens import strava_busy, strava_task
+        client = strava_mod.StravaClient(self.app.db, http=self.http)
+        if not client.connected:
+            self.app.message(tr("Liga primeiro o Strava em Definições → Strava",
+                                "Connect Strava first in Settings → Strava"))
+            return
+        if strava_busy(self.app):
+            self.app.message(self.app.task_busy_text("strava"))
+            return
+        sid = self.segment_id
+
+        def fn(db, c, _log):
+            rep = lib_mod.import_ids(db, c, [sid])
+            return rep.text(), rep
+
+        def then(_ok, _text, _rep) -> None:
+            if self in getattr(self.app, "stack", []):
+                self.enter()
+        task = strava_task(self.app, tr("Strava: atualizar o segmento",
+                                        "Strava: refresh the segment"), client.http, fn, then)
+        self.job = task.job if task is not None else None
+        self.enter()
+
+    def update(self, dt: float) -> None:
+        if hasattr(self.app, "poll_task"):
+            self.app.poll_task()
+
+    def _open_route(self, rid: str) -> None:
+        from perennia.ui.route_screens import RouteOverview
+        self.app.push(RouteOverview(self.app, rid))
+
+    def _open_session(self, kind: str, sid: str) -> None:
+        from perennia.ui.session_analysis import SessionAnalysis
+        self.app.push(SessionAnalysis(self.app, kind, sid))
+
+
+# ================================================================ um da biblioteca
+
+
+class LibrarySegmentDetail(Screen):
+    """Um segmento da biblioteca do Strava: os números, os teus esforços importados (o melhor
+    primeiro), as rotas a que está ligado e as ações (atualizar, ligar, tirar)."""
+
+    AGENT = False
+    KEY_SCOPE = "routes"
+
+    def __init__(self, app, segment_id: int, http=None):
+        super().__init__(app)
+        self.segment_id = int(segment_id)
+        self.http = http
+        self.job = None
+
+    def enter(self) -> None:
+        a = self.app
+        r = lib_mod.get(a.db, self.segment_id)
+        if r is None:
+            a.pop()
+            return
+        ef = lib_mod.library_efforts(a.db, self.segment_id)
+        routes = a.db.conn.execute(
+            "SELECT s.route_id, s.start_m, s.end_m FROM strava_segments s WHERE s.segment_id = ?",
+            (self.segment_id,)).fetchall()
+        from perennia.ui.connect_screens import strava_busy
+        busy = strava_busy(a)
         items = [Item(tr("Atualizar do Strava", "Refresh from Strava"), top=True,
                        value=tr("a atualizar…", "refreshing…") if busy else "",
                        enabled=not busy, action=self._refresh),

@@ -4804,7 +4804,8 @@ class App:
         self._fps = pyglet.window.FPSDisplay(self.window) if os.environ.get(
             "PERENNIA_FPS") else None
 
-        self.task = None                 # a tarefa em segundo plano (ronda 34): ver poll_task
+        self.tasks: list = []            # as sincronizações em segundo plano: ver poll_task
+        self.inline_tasks = False        # testes: cada tarefa acaba antes de start_task voltar
         self.sync_log = None             # o relato da última sincronização (passos e linhas)
         self.sync_last_report = None
         self.sync_last_error = ""
@@ -5221,49 +5222,83 @@ class App:
     # ------------------------------------------------ trabalhos em segundo plano
 
     @property
-    def task_running(self) -> bool:
-        """Há uma tarefa em segundo plano a decorrer (a sincronização do GarminDB)?"""
-        t = getattr(self, "task", None)
-        return t is not None and t.running
+    def task(self):
+        """A tarefa principal: a mais recente a correr, ou a mais recente de todas."""
+        tasks = getattr(self, "tasks", [])
+        for t in reversed(tasks):
+            if t.running:
+                return t
+        return tasks[-1] if tasks else None
 
-    def task_busy_text(self) -> str:
-        t = getattr(self, "task", None)
+    @property
+    def task_running(self) -> bool:
+        """Há alguma sincronização a decorrer?"""
+        return any(t.running for t in getattr(self, "tasks", []))
+
+    def running_task(self, kind: str):
+        """A sincronização deste tipo que está a decorrer (ou None)."""
+        for t in reversed(getattr(self, "tasks", [])):
+            if t.kind == kind and t.running:
+                return t
+        return None
+
+    def task_busy_text(self, kind: str | None = None) -> str:
+        t = self.running_task(kind) if kind else self.task
         return tr("Já está a decorrer: {t} — vê o progresso no topo, ao lado de «Perennia»",
                   "Already running: {t} — see the progress at the top, next to «Perennia»",
                   t=t.title if t is not None else "")
 
     def start_task(self, kind: str, title: str, fn: Callable, log=None,
-                   finish: Callable | None = None, short: str | None = None):
-        """Começa um trabalho que pertence à aplicação, não ao ecrã: continua quando se muda
-        de ecrã, vê-se no topo e o resultado aparece onde estiveres. Só um de cada vez."""
+                   finish: Callable | None = None, short: str | None = None,
+                   open_fn: Callable | None = None, cancel_fn: Callable | None = None,
+                   waits: bool = False):
+        """Começa uma sincronização que pertence à aplicação, não ao ecrã: continua quando se
+        muda de ecrã, vê-se no topo e o resultado aparece onde estiveres. Uma de cada tipo."""
         from perennia.ui.background import BackgroundTask
-        if self.task_running:
-            self.message(self.task_busy_text())
+        if self.running_task(kind) is not None:
+            self.message(self.task_busy_text(kind))
             return None
-        self.task = BackgroundTask(kind, title, fn, log=log, finish=finish, short=short)
+        task = BackgroundTask(kind, title, fn, log=log, finish=finish, short=short,
+                              open_fn=open_fn, cancel_fn=cancel_fn)
+        # as acabadas do mesmo tipo saem: fica só a mais recente
+        self.tasks = [t for t in self.tasks if t.running or t.kind != kind] + [task]
         self.refresh_task_chip()
-        return self.task
+        if self.inline_tasks and not waits:      # `waits`: espera por fora (o Wi-Fi a receber)
+            task.wait(60)
+            self.poll_task()
+        return task
 
     def poll_task(self) -> None:
-        """Em cada fotograma: quando a tarefa acaba, trata o resultado (em qualquer ecrã); a
-        que correu bem sai do topo ao fim de 2 minutos."""
+        """Em cada fotograma: quando uma sincronização acaba, trata o resultado (em qualquer
+        ecrã); as que correram bem saem do topo ao fim de 2 minutos."""
         from perennia.ui.background import KEEP_OK_S, TaskPopup
-        t = getattr(self, "task", None)
-        if t is None:
+        tasks = getattr(self, "tasks", [])
+        if not tasks:
             return
-        if t.job.done and not t.handled:
-            t.finish_now(self)
-        elif (not t.running and t.state() == "ok" and t.ended is not None
-              and t._clock() - t.ended > KEEP_OK_S and not isinstance(self.current, TaskPopup)):
-            self.task = None
+        for t in list(tasks):
+            if t.job.done and not t.handled:
+                t.finish_now(self)
+        if not isinstance(self.current, TaskPopup):
+            self.tasks = [t for t in self.tasks
+                          if t.running or t.state() != "ok" or t.ended is None
+                          or t._clock() - t.ended <= KEEP_OK_S]
+        self.refresh_task_chip()
+
+    def clear_finished_tasks(self) -> None:
+        """OK na janela das sincronizações: as que acabaram saem do topo."""
+        self.tasks = [t for t in getattr(self, "tasks", []) if t.running]
         self.refresh_task_chip()
 
     def refresh_task_chip(self) -> None:
         tb = getattr(self, "topbar", None)
         if tb is None or not hasattr(tb, "set_task"):
             return
-        t = getattr(self, "task", None)
-        moved = tb.set_task("", None) if t is None else tb.set_task(t.chip_text(), t.state())
+        t = self.task
+        if t is None:
+            moved = tb.set_task("", None)
+        else:
+            others = sum(1 for o in self.tasks if o is not t and o.running)
+            moved = tb.set_task(t.chip_text() + (f" · +{others}" if others else ""), t.state())
         if moved:
             for scr in getattr(self, "stack", []):     # a pesquisa encolheu ou cresceu
                 place = getattr(scr, "_place_search", None)
@@ -5271,14 +5306,14 @@ class App:
                     place()
 
     def open_task(self) -> None:
-        """O indicador do topo: a janela com o que a tarefa está a fazer."""
+        """O indicador do topo: a janela com o que as sincronizações estão a fazer."""
         from perennia.ui.background import TaskPopup
-        if getattr(self, "task", None) is None or isinstance(self.current, TaskPopup):
+        if not getattr(self, "tasks", []) or isinstance(self.current, TaskPopup):
             return
         self.push(TaskPopup(self))
 
-    def show_task_source(self) -> None:
-        """«Ver na Sincronização»: o separador GarminDB de Backups e Sincronização."""
+    def show_sync_tab(self, source: str) -> None:
+        """«Ver na Sincronização»: o separador desta fonte em Backups e Sincronização."""
         bs = _backups()
         scr = self.current
         if isinstance(scr, bs.BackupScreen):
@@ -5286,26 +5321,38 @@ class App:
             if scr.tabs is not None:
                 scr.tabs.select(2)
             labels = scr.sync.source_labels()
-            scr.sync_tab = labels.index("GarminDB") if "GarminDB" in labels else 0
+            scr.sync_tab = labels.index(source) if source in labels else 0
             scr.enter()
             return
-        self.open_backups("GarminDB")
+        self.open_backups(source)
+
+    def show_task_source(self) -> None:
+        t = self.task
+        if t is not None and t.open_fn is not None:
+            t.open_fn(self)
+        else:
+            self.show_sync_tab("GarminDB")
 
     def _ask_quit_task(self) -> None:
-        """Sair com a sincronização a decorrer: pergunta antes (o GarminDB seria parado)."""
+        """Sair com uma sincronização a decorrer: pergunta antes (seria parada a meio)."""
         t = self.task
         if isinstance(self.current, ConfirmScreen):
             return
+        n = sum(1 for o in self.tasks if o.running)
 
         def progress() -> None:
             self.pop()
             self.open_task()
         self.push(ConfirmScreen(
-            self, tr("{t} a decorrer", "{t} in progress", t=t.title),
+            self, tr("{t} a decorrer", "{t} in progress", t=t.title) if n == 1 else
+            tr("{n} sincronizações a decorrer", "{n} syncs in progress", n=n),
             tr("Se saíres agora, o GarminDB é parado a meio. O que já foi descarregado fica "
                "guardado e a próxima sincronização continua daí.",
                "If you quit now, GarminDB is stopped halfway. What was already downloaded is "
-               "kept and the next sync carries on from there."),
+               "kept and the next sync carries on from there.") if t.kind == "garmindb" and n == 1
+            else tr("Se saíres agora, são paradas a meio. O que já foi feito fica guardado.",
+                    "If you quit now, they are stopped halfway. What was already done is "
+                    "kept."),
             [(tr("Não, continuar", "No, keep going"), self.pop),
              (tr("Ver o progresso", "Show progress"), progress),
              (tr("Parar e sair", "Stop and quit"), self.quit)],
@@ -5314,11 +5361,12 @@ class App:
     def _stop_task_for_exit(self, wait_s: float = 8.0) -> None:
         """Ao sair: pára o GarminDB e espera que a thread acabe, para a pasta temporária com
         a palavra-passe ser apagada (o `finally` da sincronização)."""
-        t = getattr(self, "task", None)
-        if t is None or t.job.done:
-            return
-        t.cancel()
-        t.wait(wait_s)
+        running = [t for t in getattr(self, "tasks", []) if not t.job.done]
+        for t in running:
+            t.cancel()
+        end = time.monotonic() + wait_s
+        for t in running:
+            t.wait(max(0.1, end - time.monotonic()))
 
     @property
     def in_session(self) -> bool:

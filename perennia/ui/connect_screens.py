@@ -57,6 +57,27 @@ def strava_job(app_db, http, fn: Callable[[Any, Any], Any]) -> "Job":
     return Job(run)
 
 
+def strava_task(app, title: str, http, fn: Callable[[Any, Any, Any], tuple], then=None):
+    """Uma sincronização com o Strava em segundo plano (ronda 35): vê-se no topo, ao lado de
+    «Perennia», como as outras. `fn(db, client, log)` corre na thread com a sua própria
+    ligação e devolve `(texto, resultado)`; `then(ok, texto, resultado)` corre na janela.
+    Só uma de cada vez (o Strava limita os pedidos)."""
+    from perennia.ui.background import run_task
+
+    def work(db, log):
+        log.step(title)
+        text, res = fn(db, strava_mod.StravaClient(db, http=http), log)
+        log.end(True, text)
+        log.step(tr("Concluído", "Done"))
+        log.end(True)
+        return True, text, res
+    return run_task(app, "strava", title, work, short="Strava", then=then)
+
+
+def strava_busy(app) -> bool:
+    return hasattr(app, "running_task") and app.running_task("strava") is not None
+
+
 def _mask(s: str) -> str:
     if not s:
         return "—"
@@ -178,7 +199,7 @@ class StravaSegmentsScreen(Screen):
     def enter(self) -> None:
         a = self.app
         segs = seg_mod.load(a.db, self.route_id)
-        busy = self.job is not None and not self.job.done
+        busy = strava_busy(a)
         rows = [Item(tr("Atualizar do Strava", "Refresh from Strava"),
                      value=tr("a procurar…", "searching…") if busy else "",
                      action=self._refresh, enabled=self.client.connected and not busy,
@@ -221,26 +242,28 @@ class StravaSegmentsScreen(Screen):
         self.enter()
 
     def _refresh(self) -> None:
-        if self.job is not None and not self.job.done:
+        if strava_busy(self.app):
+            self.app.message(self.app.task_busy_text("strava"))
             return
         rid = self.route_id
-        self.job = strava_job(self.app.db, self.client.http,
-                              lambda db, client: seg_mod.fetch_for_route(db, client, rid))
+
+        def fn(db, client, _log):
+            r = seg_mod.fetch_for_route(db, client, rid)
+            return tr("{m} segmentos na rota ({e} vistos) · {l} ligados da biblioteca",
+                      "{m} segments on the route ({e} seen) · {l} linked from the library",
+                      m=r["matched"], e=r["explored"], l=r.get("linked", 0)), r
+
+        def then(_ok, _text, _r) -> None:
+            if self in getattr(self.app, "stack", []):
+                self.enter()
+        task = strava_task(self.app, tr("Strava: segmentos da rota", "Strava: route segments"),
+                           self.client.http, fn, then)
+        self.job = task.job if task is not None else None
         self.enter()
 
     def update(self, dt: float) -> None:
-        j = self.job
-        if j is not None and j.done:
-            self.job = None
-            if j.error:
-                self.app.message(f"Strava: {j.error}")
-            else:
-                r = j.result
-                self.app.message(tr("{m} segmentos na rota ({e} vistos) · {l} ligados da "
-                                    "biblioteca", "{m} segments on the route ({e} seen) · {l} "
-                                    "linked from the library",
-                                    m=r["matched"], e=r["explored"], l=r.get("linked", 0)))
-            self.enter()
+        if hasattr(self.app, "poll_task"):
+            self.app.poll_task()
 
 
 def clipboard_text(window) -> str:
@@ -277,7 +300,7 @@ class StravaImportScreen(Screen):
         self._shown_progress: tuple[int, int] = (0, 0)
 
     def _busy(self) -> bool:
-        return self.job is not None and not self.job.done
+        return strava_busy(self.app)
 
     def enter(self) -> None:
         c = self.client
@@ -364,45 +387,53 @@ class StravaImportScreen(Screen):
     def _progress(self, n: int, m: int) -> None:
         self.progress = (n, m)
 
-    def _start(self, fn) -> None:
+    def _start(self, title: str, fn) -> None:
+        """Importa em segundo plano (vê-se no topo); `fn(db, client, progress)` devolve o
+        relatório da biblioteca."""
         if self._busy():
+            self.app.message(self.app.task_busy_text("strava"))
             return
         self.progress = (0, 0)
-        self.job = strava_job(self.app.db, self.client.http, fn)
+
+        def run(db, client, log):
+            def progress(n: int, m: int) -> None:
+                self._progress(n, m)
+                log.detail(tr("{n} de {m}", "{n} of {m}", n=n, m=m))
+            rep = fn(db, client, progress)
+            linked = lib_mod.link_all(db)["linked"] if rep["added"] or rep["updated"] else 0
+            return rep.text() + (" · " + tr("{n} ligações às rotas", "{n} links to routes",
+                                            n=linked) if linked else ""), rep
+
+        def then(ok: bool, _text: str, rep) -> None:
+            if ok and rep is not None:
+                self.ids_text = " ".join(str(i) for i in rep["remaining"]) if rep["remaining"] \
+                    else ("" if not rep["failed"] else " ".join(str(f[0]) for f in rep["failed"]))
+            if self in getattr(self.app, "stack", []):
+                self.enter()
+        task = strava_task(self.app, title, self.client.http, run, then)
+        self.job = task.job if task is not None else None
         self.enter()
 
     def _import_ids(self) -> None:
         ids = lib_mod.parse_ids(self.ids_text)
-        self._start(lambda db, c: lib_mod.import_ids(db, c, ids, progress=self._progress))
+        self._start(tr("Strava: importar {n} segmentos", "Strava: import {n} segments",
+                       n=len(ids)),
+                    lambda db, c, prog: lib_mod.import_ids(db, c, ids, progress=prog))
 
     def _import_starred(self) -> None:
-        self._start(lambda db, c: lib_mod.import_starred(db, c, progress=self._progress))
+        self._start(tr("Strava: importar os favoritos", "Strava: import the starred"),
+                    lambda db, c, prog: lib_mod.import_starred(db, c, progress=prog))
 
     def _refresh_all(self) -> None:
-        self._start(lambda db, c: lib_mod.refresh(db, c, progress=self._progress))
+        self._start(tr("Strava: atualizar a biblioteca", "Strava: refresh the library"),
+                    lambda db, c, prog: lib_mod.refresh(db, c, progress=prog))
 
     def update(self, dt: float) -> None:
-        j = self.job
-        if j is None:
-            return
-        if not j.done:
-            if self.progress != self._shown_progress:
-                self._shown_progress = self.progress
-                self.enter()
-            return
-        self.job = None
-        if j.error:
-            self.app.message(f"Strava: {j.error}")
-        else:
-            rep = j.result
-            linked = lib_mod.link_all(self.app.db)["linked"] if rep["added"] or rep["updated"] \
-                else 0
-            self.ids_text = " ".join(str(i) for i in rep["remaining"]) if rep["remaining"] \
-                else ("" if not rep["failed"] else " ".join(str(f[0]) for f in rep["failed"]))
-            self.app.message(rep.text() + (" · " + tr("{n} ligações às rotas",
-                                                      "{n} links to routes", n=linked)
-                                           if linked else ""))
-        self.enter()
+        if hasattr(self.app, "poll_task"):
+            self.app.poll_task()
+        if self._busy() and self.progress != self._shown_progress:
+            self._shown_progress = self.progress
+            self.enter()
 
 
 # ================================================================ GarminDB

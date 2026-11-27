@@ -3,7 +3,7 @@ exportar o que tens e importar um .csv desse conjunto."""
 from __future__ import annotations
 
 from perennia.core import csv_sync as cs
-from perennia.core.i18n import t, tr
+from perennia.core.i18n import tr
 from perennia.core import folders
 from perennia.ui.app import PopupMixin, Screen
 from perennia.ui.widgets import Item
@@ -63,25 +63,42 @@ class CsvDatasetPopup(PopupMixin, Screen):
         base = self.app.in_dir("csv")
         return sorted(base.glob("*.csv"))[:200] if base.is_dir() else []
 
+    def _task(self, title: str, step: str, go, done=None) -> None:
+        """Gravar ou importar em segundo plano (vê-se no topo, como as outras
+        sincronizações); no fim, a janela e o separador CSV atualizam-se."""
+        from perennia.ui.background import one_step, run_task
+        then_ = self.then
+
+        def work(db, log):
+            return one_step(log, step, lambda: go(db))
+
+        def finish(ok: bool, text: str, rep) -> None:
+            if ok and then_:
+                then_(text)
+            if done is not None:
+                done(ok)
+            if self in getattr(self.app, "stack", []):
+                self.enter()
+        run_task(self.app, "sync:csv", title, work, short="CSV", then=finish,
+                 open_fn=lambda app: app.show_sync_tab("CSV"))
+
     def _write(self, what: str) -> None:
-        try:
-            path = cs.write(self.app.db, self.key, self._out(), what=what)
-        except Exception as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        text = tr("Guardado em {p}", "Saved to {p}", p=path)
-        self.app.message(text)
-        if self.then:
-            self.then(text)
+        key, out = self.key, self._out()
+        label = cs.DATASETS[key].label
+
+        def go(db):
+            path = cs.write(db, key, out, what=what)
+            return tr("Guardado em {p}", "Saved to {p}", p=path), path
+        self._task(tr("CSV: modelo de {d}", "CSV: {d} template", d=label) if what == "template"
+                   else tr("CSV: exportar {d}", "CSV: export {d}", d=label),
+                   tr("A gravar o modelo", "Writing the template") if what == "template"
+                   else tr("A exportar {d}", "Exporting {d}", d=label), go)
 
     def _import(self, path) -> None:
-        try:
-            _key, rep = cs.import_file(self.app.db, path, self.key)
-        except Exception as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        text = f"{cs.DATASETS[self.key].label}: {rep.text()}"
-        self.app.message(text)
-        if self.then:
-            self.then(text)
-        self.enter()
+        key = self.key
+        name = getattr(path, "name", str(path))
+
+        def go(db):
+            _key, rep = cs.import_file(db, path, key)
+            return f"{cs.DATASETS[key].label}: {rep.text()}", rep
+        self._task(f"CSV: {name}", tr("A importar {f}", "Importing {f}", f=name), go)

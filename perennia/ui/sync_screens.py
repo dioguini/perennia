@@ -110,11 +110,18 @@ class SyncPanel:
 
     @property
     def task(self):
-        return getattr(self.app, "task", None)
+        """A sincronização do GarminDB (a que corre, ou a última)."""
+        a = self.app
+        t = a.running_task("garmindb") if hasattr(a, "running_task") else None
+        if t is None:
+            t = next((x for x in reversed(getattr(a, "tasks", [])) if x.kind == "garmindb"),
+                     None)
+        return t
 
     @property
     def busy(self) -> bool:
-        return bool(getattr(self.app, "task_running", False))
+        a = self.app
+        return hasattr(a, "running_task") and a.running_task("garmindb") is not None
 
     @property
     def job(self):
@@ -148,9 +155,39 @@ class SyncPanel:
     def refuse_if_busy(self) -> bool:
         """Já há uma sincronização a decorrer? Diz onde a ver (e não começa outra)."""
         if self.busy:
-            self.app.message(self.app.task_busy_text())
+            self.app.message(self.app.task_busy_text("garmindb"))
             return True
         return False
+
+    # ------------------------------------------- as outras sincronizações (ronda 35)
+
+    def source_name(self, kind: str) -> str:
+        """O nome do separador desta fonte («HRV4Training», «Análises»…)."""
+        for k, name in self.SOURCES:
+            if k == kind:
+                return tr(name, {"Análises": "Labs", "Histórico": "History",
+                                 "Saúde": "Health", "Upload manual": "Manual upload"}
+                          .get(name, name))
+        return kind
+
+    def run(self, kind: str, title: str, work, then=None):
+        """Uma sincronização deste separador em segundo plano (ver `background.run_task`):
+        vê-se no topo, e o separador atualiza-se quando acaba (se estiver aberto)."""
+        from perennia.ui.background import run_task
+        label = dict(self.SOURCES).get(kind, kind)
+
+        def done(ok: bool, text: str, rep) -> None:
+            if then is not None:
+                then(ok, text, rep)
+            self.refresh()
+        return run_task(self.app, "sync:" + kind, title, work, short=self.source_name(kind),
+                        then=done, open_fn=lambda app: app.show_sync_tab(label))
+
+    def refresh(self) -> None:
+        """Redesenha o separador, se o ecrã ainda estiver aberto."""
+        scr = self.screen
+        if scr in getattr(self.app, "stack", []) and getattr(scr, "view", "sync") == "sync":
+            scr.enter()
 
     # ------------------------------------------------------------- linhas
 
@@ -197,16 +234,20 @@ class SyncPanel:
                                             self.app.data_dir), self.app.data_dir)
 
     def import_file(self, kind: str, path) -> None:
+        """Importa um ficheiro deste separador, em segundo plano (vê-se no topo)."""
         from perennia.core import file_import
-        try:
-            rep, text = file_import.import_file(self.app.db, kind, path)
-        except Exception as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        rep["_kind"], rep["_text"] = kind, text
-        self.last_report = rep
-        self.app.message(text)
-        self.screen.enter()
+        from perennia.ui.background import one_step
+        name = getattr(path, "name", str(path))
+
+        def work(db, log):
+            return one_step(log, tr("A importar {f}", "Importing {f}", f=name),
+                            lambda: file_import.import_file(db, kind, path)[::-1])
+
+        def then(ok: bool, text: str, rep) -> None:
+            if ok and rep is not None:
+                rep["_kind"], rep["_text"] = kind, text
+                self.last_report = rep
+        self.run(kind, f"{self.source_name(kind)}: {name}", work, then)
 
     def items_hrv4training(self) -> list[Item]:
         return self._file_items(
@@ -295,14 +336,21 @@ class SyncPanel:
         return rows
 
     def normalize(self, apply: bool) -> None:
+        """As regras do histórico (ver o que mudariam, ou aplicá-las), em segundo plano."""
         from perennia.core import history_etl as he
-        try:
-            rep = he.normalize(self.app.db, dry_run=not apply)
-        except he.RulesError as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        self.app.message(he.report_text(rep))
-        self.screen.enter()
+        from perennia.ui.background import one_step
+
+        def work(db, log):
+            def go():
+                rep = he.normalize(db, dry_run=not apply)
+                return he.report_text(rep), rep
+            return one_step(log, tr("A aplicar as regras ao histórico",
+                                    "Applying the rules to the history") if apply else
+                            tr("A ver o que as regras mudariam (sem gravar)",
+                               "Previewing what the rules would change (saving nothing)"), go)
+        self.run("historico", tr("Histórico: aplicar as regras", "History: apply the rules")
+                 if apply else tr("Histórico: ver as regras", "History: preview the rules"),
+                 work)
 
     def rules_template(self) -> None:
         from perennia.core import history_etl as he
@@ -361,13 +409,24 @@ class SyncPanel:
             return folders.out_dir("csv", self.app.data_dir)
 
         def write(what: str) -> None:
-            try:
-                path = hc.write(db, downloads_dir(), what=what)
-            except Exception as e:
-                self.app.message(f"{t('common.error')}: {e}")
-                return
-            self._csv_done(tr("Guardado em {p}", "Saved to {p}", p=path))
-            self.app.message(tr("Guardado em {p}", "Saved to {p}", p=path))
+            from perennia.ui.background import one_step
+            out = downloads_dir()
+
+            def work(wdb, log):
+                def go():
+                    path = hc.write(wdb, out, what=what)
+                    return tr("Guardado em {p}", "Saved to {p}", p=path), path
+                return one_step(log, tr("A gravar o modelo", "Writing the template")
+                                if what == "template" else
+                                tr("A exportar o diário", "Exporting the log"), go)
+
+            def then(ok: bool, text: str, _path) -> None:
+                if ok:
+                    self.last_report = {"_kind": "csv", "_text": text}
+            self.run("saude", tr("Saúde: modelo (.csv)", "Health: template (.csv)")
+                     if what == "template" else tr("Saúde: exportar o diário (.csv)",
+                                                   "Health: export the log (.csv)"),
+                     work, then)
         rows = [Item(tr("Descarregar o modelo (.csv)", "Download the template (.csv)"),
                      detail=tr("uma linha por data: data, uma coluna por métrica do diário e a "
                                "nota do dia · grava em {p}", "one row per date: date, one column "
@@ -423,18 +482,24 @@ class SyncPanel:
 
     def _csv_done(self, text: str) -> None:
         self.last_report = {"_kind": "csv", "_text": text}
-        self.screen.enter()
+        self.refresh()
 
     def import_csv_file(self, path) -> None:
+        """Importa um .csv de um conjunto de dados (artigos, exercícios…), em segundo plano."""
         from perennia.core import csv_sync as cs
-        try:
-            key, rep = cs.import_file(self.app.db, path)
-        except Exception as e:
-            self.app.message(f"{t('common.error')}: {e}")
-            return
-        text = f"{cs.DATASETS[key].label}: {rep.text()}"
-        self.app.message(text)
-        self._csv_done(text)
+        from perennia.ui.background import one_step
+        name = getattr(path, "name", str(path))
+
+        def work(db, log):
+            def go():
+                key, rep = cs.import_file(db, path)
+                return f"{cs.DATASETS[key].label}: {rep.text()}", rep
+            return one_step(log, tr("A importar {f}", "Importing {f}", f=name), go)
+
+        def then(ok: bool, text: str, _rep) -> None:
+            if ok:
+                self.last_report = {"_kind": "csv", "_text": text}
+        self.run("csv", f"CSV: {name}", work, then)
 
     def items_upload(self) -> list[Item]:
         """Uma atividade de cada vez: escolhe o ficheiro (.fit ou .tcx) e vê o que
@@ -470,7 +535,7 @@ class SyncPanel:
         def done() -> None:
             self.last_report = {"_kind": "upload", "_text": str(path.name if hasattr(path, "name")
                                                                 else path)}
-            self.screen.enter()
+            self.refresh()
         try:
             from perennia.core import activity_upload as au
             info = au.parse(path)
@@ -715,12 +780,18 @@ class SyncPanel:
 
     # ------------------------------------------------------------- correr
 
-    def _job(self, fn, title: str | None = None) -> None:
+    def _job(self, fn, title: str | None = None, finish=None):
         """Começa na aplicação (em segundo plano): ver `perennia.ui.background`."""
-        self.app.start_task("garmindb", title or tr("Sincronização do GarminDB",
-                                                    "GarminDB sync"),
-                            fn, log=self.log, finish=finish_garmindb, short="GarminDB")
-        self.screen.enter()
+        task = self._start(fn, title, finish)
+        self.refresh()
+        return task
+
+    def _start(self, fn, title, finish):
+        return self.app.start_task("garmindb", title or tr("Sincronização do GarminDB",
+                                                           "GarminDB sync"),
+                                   fn, log=self.log, finish=finish or finish_garmindb,
+                                   short="GarminDB",
+                                   open_fn=lambda app: app.show_sync_tab("GarminDB"))
 
     def sync_now(self) -> None:
         if self.refuse_if_busy() or self.pending:
@@ -781,34 +852,55 @@ class SyncPanel:
         return int(opt_mod.get(self.app.db, "garmin_log_line_chars"))
 
     def import_only(self) -> None:
+        """«Só importar»: o que já está nas bases do GarminDB entra na Perennia, em segundo
+        plano como as outras sincronizações."""
         if self.refuse_if_busy() or self.pending:
             return
-        db, o = self.app.db, self.opts
+        path, o = self.app.db.path, self.opts
         self.log = gs.SyncLog(self.log_lines(), self.log_chars())
-        try:
-            ok, msg, rep = gs.sync(db, o, run_source=False, log=self.log)
-        except Exception as e:
-            ok, msg, rep = False, str(e), None
-        if not gs.status(db)["cli"]:
-            from perennia.core import importers
-            comp = gs.compatibility(None)
-            first = comp["problems"][0] if comp["problems"] else None
-            hint = (first["text"] + ". " + first["fix"][:1].upper() + first["fix"][1:] + ".") \
-                if first else tr(
-                "Não encontrei o programa do GarminDB (procurei no PATH e em {d}), por isso não "
-                "descarreguei nada do Garmin. Instala-o no mesmo ambiente da Perennia: «python "
-                "-m pip install \"garmindb>=4\"» (Python 3.12+).",
-                "Could not find the GarminDB program (looked in PATH and in {d}), so nothing was "
-                "downloaded from Garmin. Install it in the same environment as Perennia: "
-                "'python -m pip install \"garmindb>=4\"' (Python 3.12+).",
-                d=", ".join(importers.cli_search_dirs()[:2]) or "—")
-            if ok:
-                self.app.message(hint)
-                self.last_report = rep
-                self.screen.enter()
+        log = self.log
+        hint = None if gs.status(self.app.db)["cli"] else self.missing_cli_hint()
+
+        def run():
+            from perennia.core.db import Database
+            wdb = Database(path)
+            try:
+                return gs.sync(wdb, o, run_source=False, log=log)
+            finally:
+                wdb.close()
+
+        def finish(app, task) -> None:
+            if hint is None or task.job.error:
+                finish_garmindb(app, task)
                 return
-            msg = hint + " " + (msg or "")
-        self._done(ok, msg, rep)
+            ok, msg, rep = task.job.result
+            task.ok = bool(ok)
+            if ok:
+                # importou o que lá estava, mas não há GarminDB para descarregar: diz porquê
+                app.sync_last_report = rep
+                task.summary = summary_of(rep) if rep else ""
+                app.message(hint)
+            else:
+                task.summary = msg
+                report(app, False, hint + " " + (msg or ""), None)
+        self._job(run, tr("GarminDB: só importar", "GarminDB: import only"), finish)
+
+    def missing_cli_hint(self) -> str:
+        """Porque não há GarminDB: o primeiro problema de compatibilidade (outro Python, um
+        Python antigo…), ou onde se procurou."""
+        from perennia.core import importers
+        comp = gs.compatibility(None)
+        first = comp["problems"][0] if comp["problems"] else None
+        if first:
+            return first["text"] + ". " + first["fix"][:1].upper() + first["fix"][1:] + "."
+        return tr(
+            "Não encontrei o programa do GarminDB (procurei no PATH e em {d}), por isso não "
+            "descarreguei nada do Garmin. Instala-o no mesmo ambiente da Perennia: «python "
+            "-m pip install \"garmindb>=4\"» (Python 3.12+).",
+            "Could not find the GarminDB program (looked in PATH and in {d}), so nothing was "
+            "downloaded from Garmin. Install it in the same environment as Perennia: "
+            "'python -m pip install \"garmindb>=4\"' (Python 3.12+).",
+            d=", ".join(importers.cli_search_dirs()[:2]) or "—")
 
     def ask_maintenance(self, action: str) -> None:
         a = self.app
@@ -835,10 +927,6 @@ class SyncPanel:
         a.push(ConfirmScreen(a, title, sub, [(tr("Cancelar", "Cancel"), a.pop),
                                              (tr("Sim, continuar", "Yes, go on"), go)],
                              default=0, buttons=True, cancel=a.pop))
-
-    def _done(self, ok: bool, msg: str, rep: dict | None) -> None:
-        report(self.app, ok, msg, rep)
-        self.screen.enter()
 
     def update(self) -> None:
         """Em cada fotograma: a tarefa acaba na aplicação (`App.poll_task`); aqui só se

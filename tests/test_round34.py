@@ -167,6 +167,7 @@ class TestBackgroundSync(tg.GuiCase):
 
     def setUp(self):
         super().setUp()
+        self.app.inline_tasks = False               # aqui interessa o segundo plano
         tc.make_garmindb(gs.db_dir(self.app.db))
         self.gate = threading.Event()
         self.ran: list = []
