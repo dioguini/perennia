@@ -2467,7 +2467,7 @@ O que a ronda 34 fez para o GarminDB vale agora para **tudo o que é sincroniza�
   (tempo, km, carga).
 - No dia, a linha diz de onde veio («importada de Garmin»). Enter abre a **ficha da atividade
   importada**: origem, desporto, início, tempo, distância, subida, FC, potência média e
-  normalizada, IF, TSS (ou a carga pela FC), carga do Garmin, calorias e o ficheiro .fit.
+  normalizada, IF, TSS, carga do Garmin, calorias e o ficheiro .fit.
 - A mesma ficha abre-se no **Histórico** de cada desporto (as linhas «Importadas» já não são só
   de leitura).
 - **Sem duplicados:** se a mesma atividade foi feita na Perennia (mesmo dia e desporto, duração a
@@ -2482,8 +2482,8 @@ atividade nova e guarda:
 - a **TSS e o IF** do próprio relógio ou ciclocomputador. Se o aparelho não os calcula mas há
   potência, calcula-os pelo teu FTP: `TSS = s × NP × IF / (FTP × 3600) × 100`.
 
-Sem potência (corrida sem sensor, ginásio), a carga continua a ser calculada pela FC média e o
-LTHR. Cada .fit lê-se só uma vez. O relato da sincronização tem o passo «A ler os .fit das
+Sem os dados de que a fórmula precisa não há carga (ronda 37: já não se usa a FC como
+substituto). Cada .fit lê-se só uma vez. O relato da sincronização tem o passo «A ler os .fit das
 atividades (potência, TSS, IF)» com quantas ganharam pormenor.
 
 Para as atividades que já tinhas importado, faz **«Só importar»** com o período «Todo o
@@ -2491,6 +2491,63 @@ histórico»: os .fit que já estão na pasta do GarminDB são lidos nessa altur
 
 **Base de dados:** nova coluna `synced_activities.fit_file` (o .fit lido; criada sozinha ao
 abrir, sem migração manual).
+
+### Ronda 37: métricas como o TrainingPeaks, relatório das sincronizações, análise das importadas
+
+**A sincronização de 1 h que acabou em erro:** o limite de tempo de uma sincronização era de 3600 s
+(1 h). Ao fim de uma hora o GarminDB era parado — a meio do descarregar de «Todo o histórico» — e
+nada chegava a ser importado. Agora o limite por omissão é **0 = sem limite** (opção
+`garmin_sync_timeout_s`).
+
+**O relatório de cada sincronização** fica em `data/out/sincronizacoes/` (um .txt por corrida,
+de todas: GarminDB, ficheiros, CSV, Wi-Fi, Strava…): o início e o fim, o resultado, os passos e
+**tudo o que o GarminDB escreveu**. Se falhar, a mensagem diz o motivo e onde ficou o relatório. A
+palavra-passe nunca aparece (o GarminDB não a escreve, e qualquer «password» é tapada).
+
+**Métricas de treino como o TrainingPeaks** (`perennia/core/tss.py`):
+
+| Desporto | Métrica | Fórmula | Precisa de |
+|---|---|---|---|
+| Ciclismo, remo | TSS | `s × NP × IF / (FTP × 3600) × 100`, IF = NP / FTP; NP = média móvel de 30 s à 4.ª, média, raiz 4.ª | potência |
+| Corrida | rTSS | `h × IF² × 100`, IF = NGP / ritmo de limiar (NGP pela inclinação, Minetti) | ritmo gravado (≥ 30 amostras) |
+| Natação | sTSS | `h × IF³ × 100`, IF = velocidade / CSS | distância e tempo |
+| Todas | CTL / ATL / TSB | + (TSS − CTL) / 42, / 7; TSB = CTL − ATL de ontem | TSS |
+
+**Sem os dados, não se calcula** — não se substitui pela FC nem pelo ritmo médio. Uma corrida
+sem ritmo gravado, um remo sem potência ou uma atividade importada sem TSS ficam **sem carga**. O
+ginásio mantém a sua carga própria (FC ou RPE da sessão), que não é uma métrica do TrainingPeaks.
+As atividades importadas ganham a TSS do ficheiro; senão, a do .fit (potência → TSS, ritmo e
+inclinação → rTSS) ou da distância (natação → sTSS), com os teus limiares.
+
+**Análise automática das importadas:** cada atividade nova (GarminDB, TrainingPeaks, histórico,
+upload manual) é analisada logo — a mesma análise das sessões (sem o teu feedback). Também entra
+no **índice de longevidade**, pelo tempo em cada zona de potência ou de FC lido do .fit (ou das
+zonas do TrainingPeaks). A ficha da atividade mostra a análise, e Enter abre um texto comprido
+inteiro.
+
+**Reavaliar todos os treinos** (Sincronização → GarminDB e → Histórico): volta a calcular a
+carga com estas fórmulas, tira as cargas feitas por substituição, lê os .fit do Garmin outra
+vez e refaz a análise automática de todas as sessões (as da Perennia e as importadas). O teu
+feedback fica. Corre em segundo plano.
+
+**TrainingPeaks — o que vem escrito entra:** `WorkoutDescription` (descrição) e `CoachComments`
+(comentários do treinador) ficam na atividade; `AthleteComments` (o comentário do pós-treino),
+`Rpe` e `Feeling` (0–10 → 1–5) entram no **feedback** da sessão; `HRZone1..10Minutes` e
+`PWRZone1..10Minutes` dão o tempo em cada zona.
+
+**Bottlenecks corrigidos:**
+- o separador GarminDB procurava o programa do GarminDB 7 vezes e lia as versões instaladas a
+  cada redesenho — e redesenhava a cada linha que o GarminDB escrevia. Agora há uma cache de 5 s
+  e redesenha no máximo 4× por segundo (fica fluido durante horas de sincronização);
+- medido com 2000 atividades importadas: índice de longevidade 0,02 s, mês do calendário 0,02 s,
+  forma (365 dias) 0,01 s, análise das 2000 de uma vez 1 s.
+
+**Segurança:** ver «Segurança» na secção 10.
+
+**Base de dados:** colunas novas em `synced_activities` — `tss_source`, `hr_zone_s`,
+`power_zone_s`, `description`, `coach_comments`, `athlete_comments` — e linhas novas em
+`session_feedback` com `kind = 'imported'`. Tudo criado sozinho ao abrir a Perennia (não há nada
+a fazer). Descrição de todas as tabelas: **[DB.md](DB.md)**.
 
 ### Definições → Avançado (as opções afináveis)
 
@@ -2533,7 +2590,14 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Strava: segmentos por importação, máximo (`strava_import_batch`) | 5 a 80 | 30 | o resto fica para a importação seguinte |
 | Strava: importar os meus esforços (`strava_import_efforts`) | sim / não | sim | precisa de subscrição Strava; sem ela só entra o PR |
 | Strava: esforços por segmento, máximo (`strava_efforts_max`) | 20 a 1000 | 200 | cada 200 é um pedido ao Strava |
-| Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 60 a 21600 s | 3600 s | a sincronização é interrompida se demorar mais do que isto |
+| Garmin: tempo máximo de uma sincronização (`garmin_sync_timeout_s`) | 0 a 172800 s | 0 (sem limite) | 0 = sem limite (o «Todo o histórico» pode levar horas); senão, a sincronização é interrompida se demorar mais do que isto |
+| Strava: guardar o Client Secret na base de dados (`strava_secret_in_db`) | sim / não | não | desligado: o segredo fica só em memória até fechares, ou vem de PERENNIA_STRAVA_CLIENT_SECRET (ronda 37) |
+| Forma: constante da CTL (`pmc_ctl_days`) | 7 a 90 d | 42 d | CTL hoje = CTL ontem + (TSS − CTL ontem) / 42, como o TrainingPeaks |
+| Forma: constante da ATL (`pmc_atl_days`) | 2 a 28 d | 7 d | o mesmo para a fadiga |
+| Importadas: a mesma atividade se a duração difere até (`import_same_activity_pct`) | 5 a 60 % | 25 % | não contar duas vezes uma sessão da Perennia e a mesma importada |
+| Histórico: atividades importadas a mostrar (`history_imported_max`) | 20 a 5000 | 200 | no fim do Histórico de cada desporto |
+| Análise das importadas: impacto nas mais recentes (`analysis_impact_recent`) | 0 a 1000 | 30 | com muitas de uma vez, o impacto na longevidade só se escreve nas N mais recentes |
+| Sincronização concluída: tempo no topo (`sync_chip_keep_s`) | 5 a 3600 s | 120 s | quanto tempo fica «✓ <fonte>» ao lado de «Perennia» |
 | Garmin: linhas do relato (`garmin_log_lines`) | 4 a 60 | 14 | quantas linhas do que o GarminDB vai dizendo se mostram no ecrã da sincronização |
 | Garmin: tamanho de cada linha do relato (`garmin_log_line_chars`) | 60 a 1000 car. | 300 | as linhas do GarminDB mais compridas são cortadas no ecrã |
 | Saúde: respeitar a Fonte dos indicadores (`health_respect_source`) | ligado / desligado | ligado | uma importação não substitui um valor que já lá está de outra origem quando a Fonte do indicador não é a dela; desligado, a última a gravar ganha |
@@ -2756,13 +2820,12 @@ treino, não um percentil de uma população medida.
 ### Fitness, fadiga e forma
 
 São três números que as plataformas de treino usam (no TrainingPeaks chamam-se
-CTL, ATL e TSB). **Calculam-se exatamente como no TrainingPeaks e no WKO
-(modelo de Coggan):**
+CTL, ATL e TSB). **Calculam-se com a fórmula publicada pelo TrainingPeaks (ronda 37):**
 
 - **Fitness (CTL):** média exponencial da carga diária com constante de 42
-  dias: CTL hoje = CTL ontem + (carga de hoje − CTL ontem) × (1 − e^(−1/42)).
+  dias: CTL hoje = CTL ontem + (TSS de hoje − CTL ontem) ÷ 42 (opção «pmc_ctl_days»).
   Sobe devagar com o treino consistente.
-- **Fadiga (ATL):** o mesmo, com constante de 7 dias. Sobe e desce depressa.
+- **Fadiga (ATL):** o mesmo, com constante de 7 dias («pmc_atl_days»). Sobe e desce depressa.
 - **Forma (TSB):** o fitness **de ontem** menos a fadiga **de ontem** — a
   forma com que entras no dia, antes do treino de hoje (como o
   TrainingPeaks).
@@ -4747,6 +4810,70 @@ No Pi, confirma que a aceleração gráfica está ligada: `raspi-config` →
 
 ## 10. Se algo não correr bem
 
+### A base de dados: como lhe aceder
+
+A Perennia guarda tudo numa base **SQLite**: um só ficheiro, `data/perennia.db` (ao lado,
+`perennia.db-wal` e `perennia.db-shm`, do modo WAL). Para a abrir:
+
+- **DB Browser for SQLite** (gratuito, sqlitebrowser.org): *Abrir base de dados* →
+  `data/perennia.db`. O mais simples para ver e filtrar tabelas.
+- **Linha de comandos:** `sqlite3 data/perennia.db` e depois `.tables`, `.schema
+  synced_activities`, `SELECT * FROM synced_activities ORDER BY started_at DESC LIMIT 10;`.
+- **Python:** `import sqlite3; con = sqlite3.connect("data/perennia.db")`.
+- **PyCharm Professional / DataGrip:** *Database → + → Data Source → SQLite* → o ficheiro.
+- **Power BI:** já existe a exportação própria (Sincronização/Exportar → Power BI).
+
+Recomendado: **fecha a Perennia antes de alterar** a base (ou trabalha numa cópia). Ler com ela
+aberta é seguro. A descrição de cada tabela e coluna está em **[DB.md](DB.md)** (gerado com `python
+tools/db_doc.py`; com `python tools/db_doc.py data/perennia.db` também conta as linhas).
+
+### Segurança (revisão da ronda 37)
+
+O que está bem:
+- **Palavras-passe:** a do Garmin Connect é pedida a cada sincronização e nunca é guardada. Vai
+  para um ficheiro temporário privado (0600) só durante a corrida, apagado no fim, e nunca na
+  linha de comandos. Ao abrir, a Perennia apaga restos de uma corrida interrompida. Os relatórios
+  .txt tapam qualquer «password».
+- **Comandos:** todos os programas externos correm com a lista de argumentos (sem `shell=True`) e
+  nenhum leva uma palavra-passe.
+- **Segredos por variável de ambiente:** `PERENNIA_STRAVA_CLIENT_ID`,
+  `PERENNIA_STRAVA_CLIENT_SECRET`, `ANTHROPIC_API_KEY` (para quando houver IA). **Não há
+  palavras-passe nem chaves escritas no código** (verificado).
+- **Strava Client Secret:** agora fica **só em memória** se o escreveres nas Definições (antes ia
+  para a base de dados). Para o guardar, usa a variável de ambiente; ou liga
+  `strava_secret_in_db`, se aceitares o risco.
+- **git:** `.claude/`, `.env*`, `data/`, `*.db`, `*.fit`, a configuração do GarminDB e os tokens
+  estão no `.gitignore`.
+- **Rede:** o retorno do Strava só escuta em 127.0.0.1. O Wi-Fi entre Perennias é cifrado (TLS
+  com certificado próprio) e protegido por PIN de uso único, que caduca, com limite de tentativas.
+- **Ficheiros:** os .gpx/.tcx são lidos com um analisador XML seguro, e a reposição de backups
+  recusa caminhos com `..`.
+
+O que deves saber (riscos que ficam):
+1. **Tokens do Strava** (de acesso e de renovação) ficam na base, em `data/perennia.db`, sem
+   cifra — é o que permite não autorizar sempre. Quem tiver uma cópia da pasta `data/` pode usar
+   a tua conta Strava até revogares em strava.com → Definições → Aplicações. Os backups só os
+   levam se escolheres «Ligações externas (credenciais)».
+2. **Sessão do Garmin:** o GarminDB guarda os seus tokens de sessão na pasta dele
+   (`data/garmin/…`). O mesmo cuidado: não partilhes a pasta `data/`.
+3. **Wi-Fi a receber:** enquanto «Receber» está à espera, a porta (`sync_port`) está aberta para a
+   rede local. Usa-o só em redes de confiança (em casa) e fecha-o quando acabares.
+4. **No Windows** as permissões 0600 não se aplicam; a proteção é a da tua conta de utilizador.
+   Se o computador for partilhado, usa contas separadas.
+5. **Backups com credenciais** (`.zip`) não são cifrados: guarda-os num sítio só teu.
+
+### Refazer a aplicação (atalho / ícone)
+
+- **Com o `Perennia.bat` / `perennia.sh` ou o atalho que aponta para eles:** não há nada a
+  refazer. Fazes `git pull` e a versão nova já é a que abre (o atalho usa o `.venv` do projeto).
+- **Se mudaste de Python ou o `.venv` foi recriado:** corre outra vez o `perennia_setup`, que
+  refaz o `.venv` e as dependências. O atalho continua a funcionar.
+- **Se usas o `Perennia.exe` (build):** volta a fazer o build depois do `git pull`. No Windows,
+  `build_windows.bat`; no Linux/macOS, `./build.sh`. Depois corre `criar_atalho_windows.bat`
+  outra vez, para o atalho apontar para o novo `.exe`.
+- Ícone sem imagem: `python tools/make_app_icon.py` e depois o `criar_atalho_windows.bat`.
+
+
 **"No module named pyglet"** — o ambiente virtual não está ativado. Corre
 outra vez `source .venv/bin/activate` (ou `.\.venv\Scripts\Activate.ps1`).
 
@@ -4774,7 +4901,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1575 testes a passar).
+**Verificado com testes automáticos nesta versão** (1585 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões

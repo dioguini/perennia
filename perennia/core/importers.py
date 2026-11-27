@@ -324,7 +324,29 @@ def cli_search_dirs() -> list[str]:
     return [d for d in dict.fromkeys(dirs) if d and Path(d).is_dir()]
 
 
+_CLI_CACHE: dict = {}
+# ronda 37: o ecrã redesenha muitas vezes; procurar no disco 7× cada vez era lento (sobretudo
+# no Windows). Os testes desligam a cache (PERENNIA_CLI_CACHE_S=0): mudam o ambiente entre chamadas.
+CLI_CACHE_S = float(os.environ.get("PERENNIA_CLI_CACHE_S", "5") or 0)
+
+
+def clear_cli_cache() -> None:
+    _CLI_CACHE.clear()
+
+
 def garmindb_cli() -> str | None:
+    """O caminho do programa do GarminDB (com uma cache de poucos segundos; ver `_find_cli`)."""
+    import time as _time
+    now = _time.monotonic()
+    hit = _CLI_CACHE.get("cli")
+    if hit is not None and now - hit[0] < CLI_CACHE_S and hit[2] == sys.executable:
+        return hit[1]
+    found = _find_cli()
+    _CLI_CACHE["cli"] = (now, found, sys.executable)
+    return found
+
+
+def _find_cli() -> str | None:
     """O caminho do `garmindb_cli.py`: primeiro o do Python que corre a Perennia (o `.venv`,
     onde o perennia_setup o instala — e é com esse Python que corre), depois o PATH e a pasta
     de scripts do utilizador."""

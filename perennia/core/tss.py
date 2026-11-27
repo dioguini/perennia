@@ -8,7 +8,10 @@
   passadeira, sem inclinação gravada, a inclinação conta como 0.
 * Natação: sTSS = h · IF³ · 100, com IF = velocidade média / velocidade
   crítica (CSS) — ao cubo, como no TrainingPeaks.
-* Sem potência nem ritmo: pela FC (uma hora no limiar = 100).
+* Sem os dados de que a fórmula precisa, não há carga: não se substitui pela FC nem pelo
+  ritmo médio (ronda 37). O ginásio (força) tem a sua própria carga (FC ou RPE da sessão).
+* Atividades importadas: a TSS que vem no ficheiro; senão, a do .fit (potência → TSS,
+  ritmo → rTSS) ou da distância (natação → sTSS), pelo teu FTP / ritmo de limiar / CSS.
 """
 from __future__ import annotations
 
@@ -78,5 +81,56 @@ def recompute_endurance(db) -> int:
             db.conn.execute("UPDATE endurance_sessions SET load = ?, load_source = ? WHERE id = ?",
                             (load, "rtss" if r["sport"] == "running" else "stss", r["id"]))
             n += 1
+    db.conn.commit()
+    return n
+
+
+def for_imported(db, sport: str, seconds: float, *, np_w: float | None = None,
+                 speeds: list | None = None, grades: list | None = None,
+                 distance_m: float | None = None) -> tuple[float | None, float | None, str | None]:
+    """(TSS, IF, fonte) de uma atividade importada, com as fórmulas do TrainingPeaks e os teus
+    limiares. Sem os dados de que a fórmula do desporto precisa, (None, None, None)."""
+    from . import intensity as it
+    if seconds <= 0:
+        return None, None, None
+    if sport in ("cycling", "rowing") and np_w:
+        try:
+            ftp = float(db.athlete().ftp_w or 0)
+        except Exception:
+            ftp = 0.0
+        if ftp > 0:
+            if_ = np_w / ftp
+            return seconds / 3600.0 * if_ * if_ * 100.0, if_, "power"
+        return None, None, None
+    if sport == "running" and speeds and len(speeds) >= 30:
+        ctx = it.Context.from_db(db, "running")
+        if ctx.run_pace_s:
+            thr = 1000.0 / ctx.run_pace_s
+            load = rtss(speeds, seconds, thr, grades)
+            if load is not None:
+                ngs = normalized([v * grade_factor(g) for v, g in zip(speeds, grades)]
+                                 if grades else speeds)
+                return load, (ngs / thr if ngs else None), "rtss"
+        return None, None, None
+    if sport == "swimming" and distance_m:
+        ctx = it.Context.from_db(db, "swimming")
+        if ctx.swim_css_s:
+            load = stss(distance_m, seconds, ctx.swim_css_s)
+            if load is not None:
+                return load, (distance_m / seconds) / (100.0 / ctx.swim_css_s), "stss"
+    return None, None, None
+
+
+def clear_substitutes(db) -> int:
+    """Tira a carga que tinha sido calculada por substituição (pela FC ou pelo ritmo médio) às
+    corridas, natações e remadas — como o TrainingPeaks, sem os dados não há carga."""
+    n = 0
+    for table in ("endurance_sessions", "row_sessions"):
+        try:
+            cur = db.conn.execute(f"UPDATE {table} SET load = NULL, load_source = NULL"
+                                  " WHERE load_source IN ('hr', 'pace')")
+            n += cur.rowcount or 0
+        except Exception:
+            continue
     db.conn.commit()
     return n

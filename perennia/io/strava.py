@@ -39,6 +39,9 @@ SCOPE = "read,read_all,activity:read"      # read_all: o teu PR e os segmentos p
 # Em vez de gravar as chaves na base de dados, podem vir do ambiente (não ficam em disco):
 ENV_CLIENT_ID = "PERENNIA_STRAVA_CLIENT_ID"
 ENV_CLIENT_SECRET = "PERENNIA_STRAVA_CLIENT_SECRET"
+# O Client Secret escrito nas Definições fica só em memória enquanto a Perennia está aberta
+# (ronda 37): não vai para a base de dados, a não ser que a opção «strava_secret_in_db» o peça.
+SESSION_SECRET: dict[str, str] = {}
 
 
 class StravaError(RuntimeError):
@@ -80,7 +83,7 @@ class StravaClient:
 
     @property
     def client_secret(self) -> str:
-        return (os.environ.get(ENV_CLIENT_SECRET)
+        return (os.environ.get(ENV_CLIENT_SECRET) or SESSION_SECRET.get("secret")
                 or str(self.db.get("strava_client_secret", "") or ""))
 
     @property

@@ -1172,9 +1172,7 @@ class RowEngine:
         if np_w and self.ftp:
             if_ = np_w / self.ftp
             load, source = self.t / 3600.0 * if_ * if_ * 100.0, "power"
-        if load is None:
-            load = st.hr_load(self._hrs, self.lthr)
-            source = "hr" if load is not None else None
+        # sem potência não há TSS (como no TrainingPeaks): não se substitui pela FC (ronda 37)
         return {"elapsed_s": int(self.t + self.paused_s), "moving_s": int(self.t),
                 "paused_s": int(self.paused_s), "distance_m": round(self.distance_m, 1),
                 "strokes": self.strokes, "avg_spm": self.avg_spm,

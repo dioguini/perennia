@@ -130,7 +130,7 @@ def _is_definicao(k: str) -> bool:
 # a componente «Ficheiros»: as pastas de data/ que entram (relativas à pasta de dados)
 FILE_FOLDERS = ("in/gpx", "in/treinos", "in/planos", "in/csv", "in/atividades", "in/analises",
                 "in/hrv4training", "in/trainingpeaks", "in/historico", "out/treinos",
-                "out/planos", "out/csv", "out/relatorios")
+                "out/planos", "out/csv", "out/relatorios", "out/sincronizacoes")
 
 COMPONENTS: tuple[Component, ...] = (
     Component("perfil", "Perfil do atleta", "Athlete profile",
@@ -235,11 +235,11 @@ COMPONENTS: tuple[Component, ...] = (
               tables=("training_plan", "day_notes", "coach_events")),
     Component("ficheiros", "Ficheiros", "Files",
               "o que está em data/in (treinos, planos, rotas, .csv… a importar) e o que "
-              "exportaste para data/out (treinos, planos, .csv, relatórios); os backups e o "
-              "Power BI não entram",
+              "exportaste para data/out (treinos, planos, .csv, relatórios, relatórios das "
+              "sincronizações); os backups e o Power BI não entram",
               "what is in data/in (workouts, plans, routes, .csv… to import) and what you "
-              "exported to data/out (workouts, plans, .csv, reports); backups and Power BI "
-              "are left out",
+              "exported to data/out (workouts, plans, .csv, reports, sync reports); backups "
+              "and Power BI are left out",
               folders=FILE_FOLDERS),
     Component("ligacoes", "Ligações externas (credenciais)", "External connections (credentials)",
               "Strava (chaves e sessão) e GarminDB (pastas) — só se pedires: o ficheiro "

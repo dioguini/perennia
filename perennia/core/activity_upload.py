@@ -124,7 +124,78 @@ def parse_fit(path: Path) -> dict:
     }
     if s0.get("pool_length"):
         info["pool_m"] = float(s0["pool_length"])
+    # as séries, um valor por registo (para a rTSS da corrida e as zonas — ronda 37). Ficam
+    # com «_» à frente: não se gravam nem se mostram.
+    info["_hr"] = [r.get("heart_rate") for r in records]
+    info["_power"] = [r.get("power") for r in records]
+    info["_speed"] = [r.get("enhanced_speed", r.get("speed")) for r in records]
+    info["_alt"] = [r.get("enhanced_altitude", r.get("altitude")) for r in records]
+    info["_dist"] = [r.get("distance") for r in records]
     return info
+
+
+def grades(dist: list, alt: list) -> list[float] | None:
+    """A inclinação (%) em cada registo, pela altitude e a distância (para o NGP)."""
+    if not dist or not alt or len(dist) != len(alt):
+        return None
+    out, last = [], 0.0
+    for i in range(len(dist)):
+        if i == 0 or dist[i] is None or dist[i - 1] is None or alt[i] is None \
+                or alt[i - 1] is None:
+            out.append(last)
+            continue
+        dd = dist[i] - dist[i - 1]
+        last = (alt[i] - alt[i - 1]) / dd * 100.0 if dd > 0.5 else last
+        out.append(max(-45.0, min(45.0, last)))
+    return out if any(a is not None for a in alt) else None
+
+
+def zone_seconds(values: list, bounds: list[float], ref: float | None) -> list[int] | None:
+    """Segundos em cada zona (um registo ≈ um segundo): `bounds` em % de `ref` (FTP ou LTHR)."""
+    if not ref or not values:
+        return None
+    vals = [v for v in values if v]
+    if not vals:
+        return None
+    out = [0] * (len(bounds) + 1)
+    for v in vals:
+        pct = v / ref * 100.0
+        z = sum(1 for b in bounds if pct > b)
+        out[z] += 1
+    return out
+
+
+def metrics(db, info: dict) -> dict:
+    """A TSS, o IF e as zonas de uma atividade lida de um ficheiro, como o TrainingPeaks e com
+    os teus limiares (ronda 37). Sem os dados de que a fórmula precisa, fica sem carga."""
+    from . import tss as tss_mod
+    from .ride import estimate_lthr
+    sport = info.get("sport") or ""
+    secs = float(info.get("moving_s") or info.get("elapsed_s") or 0)
+    out: dict = {"tss": info.get("tss"), "if_value": info.get("if_value"),
+                 "tss_source": "file" if info.get("tss") else None}
+    if out["tss"] is None:
+        sp = info.get("_speed") or []
+        t, if_, src = tss_mod.for_imported(
+            db, sport, secs, np_w=info.get("np_w"),
+            speeds=[float(v or 0) for v in sp] if any(sp) else None,
+            grades=grades(info.get("_dist") or [], info.get("_alt") or []),
+            distance_m=info.get("distance_m"))
+        if t is not None:
+            out.update(tss=t, if_value=if_ if out["if_value"] is None else out["if_value"],
+                       tss_source=src)
+    try:
+        ath = db.athlete()
+        lthr = estimate_lthr(ath) if ath.lthr else None     # só com o LTHR definido
+        ftp = ath.ftp_w
+    except Exception:
+        lthr = ftp = None
+    hr_b = list(db.get("hr_zones_pct_lthr", [68, 83, 94, 105]))
+    out["hr_zone_s"] = zone_seconds(info.get("_hr") or [], hr_b, lthr)
+    if sport in ("cycling", "rowing"):
+        from .intensity import ZONE_BOUNDS
+        out["power_zone_s"] = zone_seconds(info.get("_power") or [], list(ZONE_BOUNDS), ftp)
+    return out
 
 
 def parse_tcx(path: Path) -> dict:
@@ -228,9 +299,13 @@ def exists(db, info: dict) -> bool:
 
 
 def save(db, info: dict, sport: str | None = None, name: str | None = None) -> str:
-    """Guarda a atividade no desporto (por omissão, o que o ficheiro diz)."""
+    """Guarda a atividade no desporto (por omissão, o que o ficheiro diz), com a TSS, o IF e as
+    zonas calculados como o TrainingPeaks (ronda 37)."""
     gs.ensure(db)
     uid = "up:" + info["sha"]
+    info = dict(info, sport=sport or info["sport"])
+    m = metrics(db, info)
+    info["tss"], info["if_value"] = m["tss"], m["if_value"]
     db.conn.execute(
         "INSERT OR REPLACE INTO synced_activities(id, source, sport, source_sport, name,"
         " started_at, elapsed_s, moving_s, distance_m, ascent_m, avg_hr, max_hr, calories,"
@@ -241,7 +316,13 @@ def save(db, info: dict, sport: str | None = None, name: str | None = None) -> s
          info["moving_s"], info["distance_m"], info["ascent_m"], info["avg_hr"], info["max_hr"],
          info["calories"], None, now_iso(), info.get("tss"), info.get("if_value"),
          info.get("avg_power_w"), info.get("np_w")))
+    gs.set_zones(db, uid, m.get("hr_zone_s"), m.get("power_zone_s"), m.get("tss_source"))
     db.conn.commit()
+    try:                           # analisada logo (ronda 37)
+        from . import feedback as fbm
+        fbm.auto_analyse(db, "imported", uid)
+    except Exception:
+        pass
     return uid
 
 

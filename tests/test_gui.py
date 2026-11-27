@@ -46,6 +46,8 @@ class GuiCase(unittest.TestCase):
         # as sincronizações correm em segundo plano; nos testes acabam antes de seguir (os
         # testes do segundo plano em si — rondas 34 e 35 — desligam isto)
         self.app.inline_tasks = True
+        from perennia.io import strava as _strava    # o segredo em memória não passa de teste
+        _strava.SESSION_SECRET.clear()
         # o feedback no fim das sessões tem testes próprios (test_perennia)
         self.app.db.set("ask_feedback", False)
         # a contagem de 15 s antes das sessões tem testes próprios (test_session_setup)

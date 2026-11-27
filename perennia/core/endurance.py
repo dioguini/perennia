@@ -800,18 +800,14 @@ class EnduranceEngine:
                     " ORDER BY t_s", (self.session_id,))]
             except Exception:
                 speeds = []
+            # só com o ritmo gravado (como o TrainingPeaks): sem ele não há rTSS, e não se
+            # substitui pelo ritmo médio nem pela FC (ronda 37)
             if len(speeds) >= 30:
                 load = tss.rtss(speeds, self.t, 1000.0 / self.ctx.run_pace_s)
                 source = "rtss" if load is not None else None
-            elif tp:
-                if_ = self.ctx.run_pace_s / tp
-                load, source = self.t / 3600.0 * if_ * if_ * 100.0, "pace"
         elif self.sport == "swimming" and self.distance_m > 50:
             load = tss.stss(self.distance_m, self.t, self.ctx.swim_css_s)
             source = "stss" if load is not None else None
-        if load is None:
-            load = st.hr_load(self._hrs, self.lthr)
-            source = "hr" if load is not None else None
         return {"sport": self.sport, "title": self.title, "elapsed_s": int(self.t + self.paused_s),
                 "moving_s": int(self.t), "paused_s": int(self.paused_s),
                 "distance_m": round(self.distance_m, 1), "avg_pace_s": tp,

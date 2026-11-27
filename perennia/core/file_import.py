@@ -58,6 +58,8 @@ def import_file(db, kind: str, path: str | Path) -> tuple[dict, str]:
         from . import history_etl
         rep = history_etl.import_history(db, path)
         text = history_etl.import_text(rep)
+        from . import feedback as fbm            # analisadas logo (ronda 37)
+        rep["analysed"] = fbm.analyse_imported(db)
     else:
         raise ValueError(f"tipo desconhecido: {kind}")
     return rep, text

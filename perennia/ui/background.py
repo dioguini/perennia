@@ -148,6 +148,35 @@ class BackgroundTask:
             self.ok = True
         if self.ok is None:
             self.ok = not self.job.error
+        self.save_report(app)
+
+    def save_report(self, app) -> None:
+        """O relatório .txt em data/out/sincronizacoes (ronda 37): o que se passou, passo a
+        passo, para se saber o que aconteceu mesmo horas depois. Se falhou, a mensagem diz
+        onde ficou."""
+        self.report_path = None
+        if self.log is None or not hasattr(self.log, "transcript"):
+            return
+        try:
+            from perennia.core import garmin_sync as gs
+            rep = self.job.result[2] if isinstance(self.job.result, tuple) and \
+                len(self.job.result) == 3 and isinstance(self.job.result[2], dict) else None
+            self.report_path = gs.save_report(self.log, bool(self.ok), self.summary or
+                                              (self.job.error or ""), rep, self.title,
+                                              getattr(app, "data_dir", None))
+        except Exception:
+            self.report_path = None
+        if self.report_path is not None and not self.ok and not self.cancelled:
+            try:
+                from perennia.core import folders
+                shown = folders.shown(self.report_path, app.data_dir)
+            except Exception:
+                shown = str(self.report_path)
+            why = (self.summary or self.job.error or "").strip()
+            why = why if len(why) <= 160 else why[:157] + "…"
+            app.message(tr("{t}: falhou{w} — o relatório ficou em {p}",
+                           "{t}: failed{w} — the report is in {p}", t=self.short,
+                           w=f" ({why})" if why else "", p=shown))
 
     def wait(self, seconds: float) -> bool:
         """Espera que a thread acabe (ao sair da Perennia: o GarminDB foi parado e a pasta

@@ -119,6 +119,7 @@ def install_garmindb(call: Callable = subprocess.call) -> bool:
     code = call(gs.repair_command())
     import importlib
     importlib.invalidate_caches()
+    gs.clear_caches()
     return code == 0 and garmin_installed()
 
 

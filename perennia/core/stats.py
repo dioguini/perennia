@@ -668,9 +668,22 @@ def form_state(tsb: float) -> str:
 # CTL(d−1)) · (1 − e^(−1/42)) — e a forma (TSB) de um dia é o CTL menos o ATL
 # do dia ANTERIOR (a forma com que se entra no dia). Parte-se de zero, no dia
 # antes da 1.ª carga.
+# Como o TrainingPeaks (ronda 37): CTL_hoje = CTL_ontem + (TSS − CTL_ontem) / 42 e o mesmo com
+# 7 dias para a ATL; TSB de hoje = CTL de ontem − ATL de ontem. As constantes são opções
+# («pmc_ctl_days», «pmc_atl_days»).
 CTL_DAYS, ATL_DAYS = 42.0, 7.0
-K_CTL = 1.0 - math.exp(-1.0 / CTL_DAYS)
-K_ATL = 1.0 - math.exp(-1.0 / ATL_DAYS)
+
+
+def k_ctl() -> float:
+    return 1.0 / max(1.0, float(CTL_DAYS))
+
+
+def k_atl() -> float:
+    return 1.0 / max(1.0, float(ATL_DAYS))
+
+
+K_CTL = 1.0 / CTL_DAYS          # compatibilidade: o valor por omissão
+K_ATL = 1.0 / ATL_DAYS
 
 
 def pmc(daily: dict, today, db: Database | None = None, start=None) -> list[dict]:
@@ -688,14 +701,24 @@ def pmc(daily: dict, today, db: Database | None = None, start=None) -> list[dict
         while d < first:
             out.append({"date": d, "load": 0.0, "ctl": ctl, "atl": atl, "tsb": ctl - atl})
             d += timedelta(days=1)
+    kc, ka = k_ctl(), k_atl()
     while day <= today:
         load = daily.get(day, 0.0)
         tsb = ctl - atl                       # a forma: os valores de ontem
-        ctl += (load - ctl) * K_CTL
-        atl += (load - atl) * K_ATL
+        ctl += (load - ctl) * kc
+        atl += (load - atl) * ka
         out.append({"date": day, "load": load, "ctl": ctl, "atl": atl, "tsb": tsb})
         day += timedelta(days=1)
     return out
+
+
+SAME_ACTIVITY_PCT = 25.0     # a opção «import_same_activity_pct»
+
+
+def same_activity(a: float, b: float) -> bool:
+    """Duas atividades do mesmo dia e desporto com durações a ±`SAME_ACTIVITY_PCT` % são a
+    mesma (uma feita na Perennia e a mesma importada): não contam duas vezes."""
+    return abs(a - b) <= SAME_ACTIVITY_PCT / 100.0 * max(a, b)
 
 
 def synced_day(r: dict):
@@ -710,13 +733,12 @@ def synced_day(r: dict):
         return None
 
 
-def synced_load(r: dict, lthr: float | None) -> float | None:
-    """A carga de uma atividade importada: a TSS (do TrainingPeaks, do .fit ou calculada pela
-    potência); senão a carga pela FC média e o LTHR."""
+def synced_load(r: dict, lthr: float | None = None) -> float | None:
+    """A carga de uma atividade importada, como o TrainingPeaks: a TSS que veio com ela (do
+    TrainingPeaks, do relógio, ou calculada ao importar pela potência/ritmo do .fit). Sem dados
+    para a calcular, não há carga — não se inventa com a FC (ronda 37). `lthr` fica pela
+    compatibilidade."""
     load = r.get("tss")
-    secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
-    if load is None and r.get("avg_hr") and lthr and secs:
-        load = secs / 3600.0 * (float(r["avg_hr"]) / lthr) ** 2 * 100.0
     return float(load) if load else None
 
 
@@ -748,11 +770,9 @@ def synced_loads(db: Database, sports: tuple[str, ...], own: dict) -> dict:
             except ValueError:
                 continue
         secs = float(r.get("moving_s") or r.get("elapsed_s") or 0)
-        if any(abs(secs - s) <= 0.25 * max(secs, s) for s in own.get((day, sport), [])):
+        if any(same_activity(secs, s) for s in own.get((day, sport), [])):
             continue
-        load = r.get("tss")
-        if load is None and r.get("avg_hr") and lthr and secs:
-            load = secs / 3600.0 * (float(r["avg_hr"]) / lthr) ** 2 * 100.0
+        load = synced_load(r)
         if load:
             out[day] = out.get(day, 0.0) + float(load)
     return out

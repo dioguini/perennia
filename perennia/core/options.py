@@ -139,6 +139,41 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="how much a set's RPE changes with each arrow press",
        binds=(("perennia.core.strength", "RPE_STEP"),)),
     # ------------------------------------------------------------ treinos e importação
+    _o("import_same_activity_pct", "workouts", "Importadas: a mesma atividade se a duração "
+       "difere até", "Imported: the same activity if the duration differs by up to", INT, 25,
+       lo=5, hi=60, step=5, unit="%",
+       hint_pt="uma importada do mesmo dia e desporto que uma sessão da Perennia, com a duração "
+               "dentro disto, não conta duas vezes (calendário, forma, longevidade)",
+       hint_en="an imported activity on the same day and sport as a Perennia session, within "
+               "this duration, does not count twice (calendar, form, longevity)",
+       binds=(("perennia.core.stats", "SAME_ACTIVITY_PCT"),)),
+    _o("history_imported_max", "workouts", "Histórico: atividades importadas a mostrar",
+       "History: imported activities shown", INT, 200, lo=20, hi=5000, step=20,
+       hint_pt="quantas importadas aparecem no fim do Histórico de cada desporto",
+       hint_en="how many imported activities appear at the end of each sport's History",
+       binds=(("perennia.core.garmin_sync", "HISTORY_MAX"),)),
+    _o("analysis_impact_recent", "workouts", "Análise das importadas: impacto nas mais recentes",
+       "Imported analysis: impact on the most recent", INT, 30, lo=0, hi=1000, step=10,
+       hint_pt="ao importar muitas de uma vez, o impacto no índice de longevidade só se escreve "
+               "na análise das N mais recentes (o índice conta-as todas)",
+       hint_en="when importing many at once, the longevity impact is only written in the "
+               "analysis of the N most recent (the index counts them all)",
+       binds=(("perennia.core.feedback", "IMPACT_RECENT"),)),
+    _o("sync_chip_keep_s", "data", "Sincronização concluída: tempo no topo",
+       "Finished sync: time shown at the top", INT, 120, lo=5, hi=3600, step=5, unit="s",
+       hint_pt="quanto tempo fica «✓ <fonte>» ao lado de «Perennia» (um ✗ fica até ao OK)",
+       hint_en="how long «✓ <source>» stays next to «Perennia» (a ✗ stays until OK)",
+       binds=(("perennia.ui.background", "KEEP_OK_S"),)),
+    _o("pmc_ctl_days", "workouts", "Forma: constante da forma física (CTL)",
+       "Form: fitness (CTL) time constant", INT, 42, lo=7, hi=90, step=1, unit="d",
+       hint_pt="como o TrainingPeaks: CTL de hoje = CTL de ontem + (TSS − CTL de ontem) / 42",
+       hint_en="as in TrainingPeaks: today's CTL = yesterday's CTL + (TSS − yesterday's CTL) "
+               "/ 42", binds=(("perennia.core.stats", "CTL_DAYS"),)),
+    _o("pmc_atl_days", "workouts", "Forma: constante da fadiga (ATL)",
+       "Form: fatigue (ATL) time constant", INT, 7, lo=2, hi=28, step=1, unit="d",
+       hint_pt="como o TrainingPeaks: ATL de hoje = ATL de ontem + (TSS − ATL de ontem) / 7",
+       hint_en="as in TrainingPeaks: today's ATL = yesterday's ATL + (TSS − yesterday's ATL) "
+               "/ 7", binds=(("perennia.core.stats", "ATL_DAYS"),)),
     _o("workout_tolerance_pct", "workouts", "Tolerância do alvo de potência",
        "Power target tolerance", FLOAT, 5.0, lo=1.0, hi=25.0, step=0.5, unit="%",
        hint_pt="± % do alvo que conta como «no alvo» durante um treino",
@@ -160,6 +195,12 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="imported routes are resampled at this spacing (applies to new ones)",
        binds=(("perennia.core.gpx", "RESAMPLE_STEP_M"),)),
     # ------------------------------------------------------------ ligações externas
+    _o("strava_secret_in_db", "links", "Strava: guardar o Client Secret na base de dados",
+       "Strava: keep the Client Secret in the database", BOOL, False,
+       hint_pt="desligado (recomendado): o segredo fica só em memória até fechares, ou vem da "
+               "variável PERENNIA_STRAVA_CLIENT_SECRET", hint_en="off (recommended): the "
+               "secret stays in memory until you quit, or comes from "
+               "PERENNIA_STRAVA_CLIENT_SECRET"),
     _o("strava_redirect_port", "links", "Strava: porta do retorno local", "Strava: local callback port",
        INT, 8723, lo=1024, hi=65535, step=1,
        hint_pt="a porta onde a Perennia espera o regresso do Strava (só nesta máquina)",
@@ -220,9 +261,11 @@ OPTIONS: tuple[Opt, ...] = (
        hint_pt="cada 200 é um pedido ao Strava",
        hint_en="each 200 is one Strava request"),
     _o("garmin_sync_timeout_s", "links", "Garmin: tempo máximo de uma sincronização",
-       "Garmin: sync time limit", INT, 3600, lo=60, hi=21600, step=60, unit="s",
-       hint_pt="a sincronização é interrompida se demorar mais do que isto",
-       hint_en="the sync is stopped if it takes longer than this",
+       "Garmin: sync time limit", INT, 0, lo=0, hi=172800, step=600, unit="s",
+       hint_pt="0 = sem limite (o «Todo o histórico» pode levar horas); a sincronização é "
+               "interrompida se demorar mais do que isto",
+       hint_en="0 = no limit (the full history can take hours); the sync is stopped if it "
+               "takes longer than this",
        binds=(("perennia.core.garmin_sync", "SYNC_TIMEOUT_S"),)),
     # ------------------------------------------------------------ análise adhoc
     _o("adhoc_csv_sep", "adhoc", "CSV: separador de valores", "CSV: value separator", CHOICE, ";",
