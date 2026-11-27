@@ -26,8 +26,9 @@ Desde a ronda 29, depois disso os dados são **copiados** para `data/` (ver a se
 
 ## 1. O que precisas
 
-**Python 3.11 ou superior.** Mais nada — as três bibliotecas instalam-se com
-um comando e são todas de código aberto e multiplataforma.
+**Python 3.12 ou superior** (recomendado; a Perennia ainda abre com o 3.11, mas o **GarminDB
+precisa do 3.12+**). Mais nada — as bibliotecas instalam-se com um comando e são todas de código
+aberto e multiplataforma. O `perennia_setup` escolhe sozinho o Python mais recente que tiveres.
 
 Verifica o que tens:
 
@@ -58,8 +59,10 @@ Na pasta do projeto (a que tem o `main.py`):
 
 O script faz, por esta ordem (e diz o que fez em cada passo):
 
-1. confirma que há Python 3.11+; cria o ambiente virtual **`.venv`** (se ainda não existir) e
-   instala o `requirements.txt`;
+1. escolhe o Python mais recente que tiveres (3.12+; com só um 3.11, avisa que o GarminDB não
+   funciona); cria o ambiente virtual **`.venv`** (se ainda não existir — e, se o `.venv` for de um
+   Python antigo e houver um 3.12+, guarda o antigo em `.venv-antigo` e cria um novo) e instala o
+   `requirements.txt`;
 2. corre `python main.py --setup`, que cria a pasta **`data/`** com a estrutura toda e copia os
    **ficheiros modelo** para `data/in` (um `.gpx`, um treino `.zwo`, o plano modelo, um `LEIA-ME`
    em cada pasta); se houver dados de uma versão anterior na pasta do sistema, copia-os (ver a
@@ -2318,6 +2321,24 @@ dura…») passaram a ser as do painel e do construtor (pela NP do perfil do tre
 no limite de uma zona (por exemplo 105 %) conta agora para o mesmo eixo da longevidade que a zona
 mostra (Z4, Limiar), como no resto da aplicação.
 
+### Ronda 32: o GarminDB que funciona (o erro «field_enums»)
+
+O `fitfile` 2.0 (16/11/2026) partiu o GarminDB 3.x (`AttributeError: module 'fitfile' has no
+attribute 'field_enums'`) e o login antigo do GarminDB 3.x deixou de entrar. A solução é o
+**GarminDB 4 com o Python 3.12+** — ver «Sincronização (GarminDB)»:
+
+- os **Requisitos** do separador GarminDB verificam as versões (Python, GarminDB e fitfile do Python
+  da Perennia) e bloqueiam a sincronização com uma explicação, em vez de um erro do GarminDB;
+- o botão **Atualizar o GarminDB** (ou **Instalar o GarminDB**, se faltar) instala o GarminDB 4 no
+  `.venv`, com o relato no ecrã;
+- os erros típicos explicam-se em português: «field_enums», «No module named 'garmindb'» (instalado
+  noutro Python) e «garth» (login antigo);
+- o `perennia_setup` escolhe o Python mais recente (3.12+), troca um `.venv` antigo (guardado em
+  `.venv-antigo`), instala `garmindb>=4` e, se o GarminDB que lá estiver for incompatível, pergunta se
+  o atualiza; com o Python 3.11 já não instala o GarminDB;
+- a Perennia procura primeiro o `garmindb_cli.py` do seu próprio Python (o `.venv`), e só depois o
+  PATH.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -3291,6 +3312,26 @@ teu utilizador o lê) dentro de `data/garmin/config`, apontado por `credentials.
 fim (mesmo que falhe) é escrito por cima e apagado. **Só importar** (ler o que já está nas bases)
 não pede palavra-passe. Uma palavra-passe que estivesse escrita na configuração (à mão, ou das
 versões anteriores) é **retirada** antes de correr, e não é usada.
+
+**Versões que funcionam (desde 16/11/2026): Python 3.12+ e GarminDB 4.** Nesse dia saiu o
+`fitfile` 2.0, que tirou o `fitfile.field_enums`; o GarminDB 3.x (o último que o pip instala num
+Python 3.11) usa-o e falha logo ao arrancar com **`AttributeError: module 'fitfile' has no
+attribute 'field_enums'`**. E o GarminDB 3.x entra no Garmin pelo `garth`, que deixou de conseguir
+fazer logins novos (a Garmin mudou a autenticação). O GarminDB 4 resolve as duas coisas, mas precisa
+do Python 3.12 ou mais recente. A Perennia verifica isto: nos **Requisitos** aparece a linha
+«Versões: Python … · GarminDB … · fitfile …» (✓) ou o problema (✗) com o que fazer, e:
+
+- **com Python 3.12+** — carrega em **Atualizar o GarminDB** (no separador GarminDB; corre
+  `pip install --upgrade "garmindb>=4"` no Python da Perennia) ou corre o `perennia_setup` outra vez
+  (pergunta se queres atualizar). À mão: `.venv\Scripts\python -m pip install --upgrade
+  "garmindb>=4"` (Windows) ou `.venv/bin/python -m pip install --upgrade "garmindb>=4"`;
+- **com Python 3.11** — instala o Python 3.12 ou mais recente (python.org; no Windows marca «Add
+  python.exe to PATH») e corre o `perennia_setup` outra vez: ele usa o Python novo, guarda o `.venv`
+  antigo em `.venv-antigo` e cria um novo (os teus dados em `data/` não mudam). Com o 3.11 a
+  Perennia já não instala o GarminDB (ficaria avariado).
+
+Instala sempre o GarminDB **no Python da Perennia** (o `.venv`), não no Python do sistema: é com ele
+que a Perennia o corre (e procura primeiro o `garmindb_cli.py` do `.venv`).
 
 1. Instala e configura o GarminDB: o **`perennia_setup`** faz tudo (responde «s» ao GarminDB:
    instala-o, guarda o e-mail e faz o primeiro login com o código MFA, se a conta o tiver). Sem
@@ -4286,6 +4327,10 @@ Na primeira vez que abres a ronda 8, a carga das corridas (rTSS) e das
 natações (sTSS) já gravadas é **recalculada uma vez** com as fórmulas do
 TrainingPeaks, e o feedback no fim das sessões passa a estar sempre ligado.
 
+**A ronda 32 NÃO mexe na base de dados** (**não tens de fazer nada** na base): muda só o ambiente
+Python — o GarminDB 4 no `.venv` (Python 3.12+). Os teus dados em `data/` e a configuração do
+GarminDB em `data/garmin` ficam como estão.
+
 **A ronda 31 NÃO cria tabelas nem colunas e não grava nada novo** (**não tens de fazer nada**): o
 painel da ficha do treino calcula-se na hora a partir dos passos do treino. Muda só o texto da ficha
 (a TSS e a intensidade passam a ser as da NP do perfil, como no construtor) e o eixo da longevidade de
@@ -4576,7 +4621,16 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1524 testes a passar).
+**Verificado com testes automáticos nesta versão** (1540 testes a passar).
+
+*Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
+relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões
+certas, o GarminDB noutro Python), os requisitos a bloquear a sincronização, as explicações dos
+erros, «Atualizar o GarminDB» (o comando, o Python antigo recusado, o botão e o relato), o
+`garmindb_cli.py` do próprio `.venv` primeiro, o `perennia_setup` (não instala com o Python antigo,
+oferece a atualização, os scripts escolhem o 3.12+ e trocam o `.venv` antigo). Verificado também à
+mão: o erro reproduz-se num Python 3.11 (GarminDB 3.7.0 + fitfile 2.0.0), e num Python 3.12 com o
+GarminDB 3.9.0 avariado o «Atualizar» deixa o GarminDB 4.0.1 a funcionar.
 
 *Novidades da ronda 31 (7 testes novos em `tests/test_round31.py`):* o painel do impacto na ficha do
 treino de ciclismo (o mesmo IF e os mesmos sistemas do construtor, a TSS da ficha igual à do painel, o
