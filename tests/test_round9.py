@@ -447,10 +447,10 @@ class TestBuilderAndSessionWindow(tg.GuiCase):
             if b.list.items[idx].head:
                 # o valor começa sempre HEAD_VALUE_X depois do início da sua coluna
                 xs[b.list.items[idx].label] = (value.x - cell[1], value.anchor_x, cell[1])
-        self.assertEqual(len(xs), 4)                               # tipo, tags, nome, objetivo
+        self.assertEqual(len(xs), 5)               # nome, objetivo, notas · tipo, tags (r38)
         self.assertEqual({v[0] for v in xs.values()}, {b.HEAD_VALUE_X})
         self.assertEqual({v[1] for v in xs.values()}, {"left"})
-        # numa grelha 2 × 2 (ronda 30): o nome por baixo do tipo, o objetivo por baixo das tags
+        # numa grelha de 2 linhas (ronda 38): o tipo por baixo do nome, as tags do objetivo
         self.assertEqual(xs["Nome do treino"][2], xs["Tipo de treino"][2])
         self.assertEqual(xs["Objetivo do treino"][2], xs["Tags do treino"][2])
 

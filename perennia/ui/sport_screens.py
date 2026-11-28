@@ -1423,6 +1423,8 @@ class StrengthWorkoutEditor(EditScreen):
         wk = st.workout(db, workout_id) if workout_id else None
         self.name = wk["name"] if wk else t("str.new_name")
         self.description = (wk or {}).get("description") or ""
+        from perennia.core import objectives as ob
+        self.wnotes = ob.notes(db, "gym", workout_id) if workout_id else ""
         self.items: list[dict] = []
         if workout_id:
             for it in st.workout_items(db, workout_id):
@@ -1432,9 +1434,11 @@ class StrengthWorkoutEditor(EditScreen):
         self._esc_armed = False
 
     def enter(self) -> None:
+        from perennia.ui.goal_popup import notes_item
         rows = [Item(t("str.name"), value=self.name, data="text:name"),
                 Item(t("str.description"), value=self.description or "—",
-                     data="text:description")]
+                     data="text:description"),
+                notes_item(self.wnotes, self._edit_notes)]
         for i, it in enumerate(self.items):
             rows.append(Item(f"{i + 1}. {it['name']}", value=self._target(it),
                              detail=f"{t('str.rest')} {hms(it['rest_s'])}"
@@ -1465,11 +1469,16 @@ class StrengthWorkoutEditor(EditScreen):
         return f"{it['sets']} × {it['reps']}{unit}{load}{rpe}"
 
     def text_input(self, field: str, text: str) -> None:
+        if field == "wnotes":
+            self._edit_notes(text)               # as notas escrevem-se numa janela
+            return
         setattr(self, field, (getattr(self, field) or "") + text)
         self.dirty = True
         self.enter()
 
     def text_backspace(self, field: str) -> None:
+        if field == "wnotes":
+            return
         setattr(self, field, (getattr(self, field) or "")[:-1])
         self.dirty = True
         self.enter()
@@ -1519,12 +1528,25 @@ class StrengthWorkoutEditor(EditScreen):
         self._save()
         return True
 
+    def _edit_notes(self, extra: str = "") -> None:
+        """As notas do treinador (pré-treino), à parte da descrição."""
+        from perennia.ui.goal_popup import edit_notes
+
+        def save(value: str) -> None:
+            if value != self.wnotes:
+                self.wnotes = value
+                self.dirty = True
+            self.enter()
+        edit_notes(self.app, self.name, self.wnotes + extra, save)
+
     def _save(self, popup: bool = True) -> str | None:
         if not self.items:
             self.app.message(t("str.empty_plan"))
             return None
         self.workout_id = st.save_workout(self.app.db, self.workout_id, self.name,
                                           self.description or None, self.items)
+        from perennia.core import objectives as ob
+        ob.save_notes(self.app.db, "gym", self.workout_id, self.wnotes)
         self.dirty = False
         self._esc_armed = False
         self.enter()

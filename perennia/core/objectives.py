@@ -52,6 +52,7 @@ class Brief:
     threshold_label: str = ""     # «FTP 250 W» (linha tracejada do gráfico)
     note: str = ""
     goal_written: bool = False    # escrito por alguém (ou da biblioteca)
+    notes: str = ""               # as notas do treinador (pré-treino), à parte do objetivo
 
     def as_dict(self) -> dict:
         return {"desporto": self.sport, "treino": self.title, "objetivo": self.goal,
@@ -333,6 +334,10 @@ def ensure(db) -> None:
         "CREATE TABLE IF NOT EXISTS workout_goals (sport TEXT NOT NULL, workout_id TEXT NOT NULL,"
         " goal TEXT, blocks TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,"
         " PRIMARY KEY (sport, workout_id))")
+    # ronda 38: as notas do treinador (pré-treino), à parte do objetivo — como no TrainingPeaks
+    cols = {r[1] for r in db.conn.execute("PRAGMA table_info(workout_goals)")}
+    if "notes" not in cols:
+        db.conn.execute("ALTER TABLE workout_goals ADD COLUMN notes TEXT")
     db.conn.commit()
 
 
@@ -340,15 +345,33 @@ def stored(db, sport: str, wid: str | None) -> dict:
     if not wid:
         return {}
     ensure(db)
-    r = db.conn.execute("SELECT goal, blocks FROM workout_goals WHERE sport=? AND workout_id=?",
-                        (sport, str(wid))).fetchone()
+    r = db.conn.execute("SELECT goal, blocks, notes FROM workout_goals WHERE sport=? AND"
+                        " workout_id=?", (sport, str(wid))).fetchone()
     if r is None:
         return {}
     try:
         blocks = json.loads(r[1] or "[]")
     except ValueError:
         blocks = []
-    return {"goal": r[0] or "", "blocks": blocks}
+    return {"goal": r[0] or "", "blocks": blocks, "notes": r[2] or ""}
+
+
+NOTES_LIMIT = 2000             # a opção «workout_notes_max»
+
+
+def notes(db, sport: str, wid: str | None) -> str:
+    """As notas do treinador (pré-treino) de um treino: o que fazer antes, como o encarar,
+    cuidados — à parte do objetivo (o que o treino desenvolve)."""
+    return stored(db, sport, wid).get("notes", "") if wid else ""
+
+
+def save_notes(db, sport: str, wid: str, text: str) -> None:
+    ensure(db)
+    db.conn.execute(
+        "INSERT INTO workout_goals (sport, workout_id, notes) VALUES (?,?,?)"
+        " ON CONFLICT(sport, workout_id) DO UPDATE SET notes=excluded.notes,"
+        " updated_at=CURRENT_TIMESTAMP", (sport, str(wid), (text or "").strip() or None))
+    db.conn.commit()
 
 
 def save(db, sport: str, wid: str, goal: str | None = None,
@@ -376,6 +399,11 @@ def library_goal(name: str) -> str:
 
 def build(db, sport: str, wid: str | None, title: str, blocks: list,
           ctx: it.Context | None = None, description: str = "") -> Brief:
+    return with_notes(_build(db, sport, wid, title, blocks, ctx, description), db, sport, wid)
+
+
+def _build(db, sport: str, wid: str | None, title: str, blocks: list,
+           ctx: it.Context | None = None, description: str = "") -> Brief:
     """O resumo do treino a partir dos blocos (objetos com kind, dur_type, dur,
     lo e hi/end_pct, como os do construtor)."""
     ctx = ctx or it.Context.from_db(db, sport)
@@ -564,6 +592,11 @@ def block_at(brief: Brief, t: float) -> tuple[int, BriefBlock | None]:
 
 
 def gym_brief(db, wid: str, title: str, items: list[dict], modality: str = "strength") -> Brief:
+    return with_notes(_gym_brief(db, wid, title, items, modality), db, "gym", wid)
+
+
+def _gym_brief(db, wid: str, title: str, items: list[dict], modality: str = "strength"
+               ) -> Brief:
     """Planos do ginásio: cada exercício é um bloco; o alvo é séries × reps,
     carga, RPE e descanso; a intensidade vem do RPE pedido."""
     saved = stored(db, "gym", wid)
@@ -632,3 +665,9 @@ def workout_brief(db, sport: str, wid: str | None) -> Brief | None:
     if not name and not blocks:
         return None
     return build(db, sport, wid, name, blocks, description=desc)
+
+
+def with_notes(brief: Brief | None, db, sport: str, wid: str | None) -> Brief | None:
+    if brief is not None and wid:
+        brief.notes = notes(db, "gym" if sport == "strength" else sport, wid)
+    return brief

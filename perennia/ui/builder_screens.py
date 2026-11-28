@@ -190,6 +190,7 @@ class BlockBuilder(EditScreen):
         self.wtags = tags_mod.workout_tags(app.db, sport, wid)     # as tags livres do treino
         saved = ob.stored(app.db, sport, wid)
         self.wgoal = saved.get("goal") or ob.library_goal(self.name)
+        self.wnotes = saved.get("notes", "")            # as notas do treinador (pré-treino)
         for b, g in zip(self.blocks, saved.get("blocks") or []):
             b.goal = (g or {}).get("goal", "") if isinstance(g, dict) else ""
         # os objetivos são os do próprio treino: o que a ficha mostra é o que está
@@ -485,7 +486,7 @@ class BlockBuilder(EditScreen):
         head_y = h - 98 - 34 - 12
         self.list.head_y, self.list.head_x, self.list.head_w = head_y, 48, w - 96
         self.list.head_stack = True
-        self.list.head_cols = 2                        # tipo e tags · nome e objetivo (2 × 2)
+        self.list.head_cols = 3          # nome · objetivo · notas do treinador; tipo · tags
         self.list.head_value_x = self.HEAD_VALUE_X     # nome e objetivo alinhados à esquerda
         pal_top = head_y - 14 - self.HEAD_ROW_H * 2         # duas linhas de cabeçalho
         n = len(self.pal)
@@ -738,7 +739,7 @@ class BlockBuilder(EditScreen):
         self._refresh_impact()
         from perennia.ui.widgets import fit_text, text_px
         # com o painel do impacto à vista, a longevidade está lá (não se repete no subtítulo)
-        lg_text = "" if getattr(self, "_imp_box", None) else self._longevity_text()
+        lg_text = "" if self._lon_in_panel() else self._longevity_text()
         head = (f"{wm.control_name(self.control)} · " if self.sport != "gym"
                 else "") + self.summary.text.replace("\n", "  ·  ") + lg_text
         tail = self._coach_text()
@@ -873,8 +874,17 @@ class BlockBuilder(EditScreen):
                 self._layout()
                 self.redraw()
             return
-        # o nome e o objetivo do treino ficam em cima (head), um por baixo do outro
-        rows += [Item(tr("Tipo de treino", "Workout type"), value=self._wtype_text(),
+        # em cima (head), numa grelha 3 × 2: nome · objetivo · notas do treinador; tipo · tags
+        from perennia.ui.goal_popup import notes_item
+        rows += [Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
+                      data="text:name", head=True),
+                 Item(tr("Objetivo do treino", "Workout goal"),
+                      value=(self.wgoal[:70] + "…" if len(self.wgoal) > 71 else self.wgoal)
+                      or tr("Enter escreve o objetivo (numa janela)",
+                            "Enter writes the goal (in a window)"),
+                      data="text:wgoal", head=True, action=lambda: self._edit_goal("wgoal")),
+                 notes_item(self.wnotes, self._edit_notes, head=True),
+                 Item(tr("Tipo de treino", "Workout type"), value=self._wtype_text(),
                       data="cyc:wtype", head=True, dropdown=self._wtype_dropdown()),
                  Item(tr("Tags do treino", "Workout tags"),
                       value=" · ".join(self._auto_tags() + self.wtags),
@@ -882,13 +892,6 @@ class BlockBuilder(EditScreen):
                       detail=tr("as automáticas e as tuas · as sessões herdam-nas · Enter junta",
                                 "the automatic ones and yours · sessions inherit them · "
                                 "Enter adds")),
-                 Item(tr("Nome do treino", "Workout name"), value=self.name + "▏",
-                      data="text:name", head=True),
-                 Item(tr("Objetivo do treino", "Workout goal"),
-                      value=(self.wgoal[:70] + "…" if len(self.wgoal) > 71 else self.wgoal)
-                      or tr("Enter escreve o objetivo (numa janela)",
-                            "Enter writes the goal (in a window)"),
-                      data="text:wgoal", head=True, action=lambda: self._edit_goal("wgoal")),
                  Item(tr("Treinador", "Coach"), button=True, action=self._coach),
                  Item(tr("Guardar", "Save") + (" •" if self.dirty else ""), action=self._save,
                       button=True, primary=True)]
@@ -899,7 +902,7 @@ class BlockBuilder(EditScreen):
                         + f" · {wm.control_name(self.control)}",
                         f"{wm.control_name(self.control)} · "
                         + self.summary.text.replace("\n", "  ·  ")
-                        + ("" if getattr(self, "_imp_box", None) else self._longevity_text())
+                        + ("" if self._lon_in_panel() else self._longevity_text())
                         + self._coach_text(),
                         tr("Arrasta blocos da paleta · ←/→ bloco · ↑↓ linha · +/− duração · "
                            "D duplicar · Del apagar · Tab vista · o tipo de treino também "
@@ -931,6 +934,13 @@ class BlockBuilder(EditScreen):
         from perennia.ui import coach_screens
         text = coach_screens.live_verdict(self.app, self)
         return ("  ·  " + text) if text else ""
+
+    def _lon_in_panel(self) -> bool:
+        """A longevidade está à vista no painel? (sem altura, o painel esconde-a e ela volta ao
+        subtítulo — ronda 38)"""
+        panel = getattr(self, "impact_panel", None)
+        return bool(getattr(self, "_imp_box", None)) and panel is not None and \
+            getattr(panel, "_show", {}).get("lon", True)
 
     def _longevity_text(self) -> str:
         """O que este treino acrescentaria ao índice de longevidade (se o fizesses hoje):
@@ -1130,6 +1140,17 @@ class BlockBuilder(EditScreen):
         self.dirty = True
         self.redraw()
 
+    def _edit_notes(self, extra: str = "") -> None:
+        """As notas do treinador (pré-treino): à parte do objetivo, numa janela maior."""
+        from perennia.ui.goal_popup import edit_notes
+
+        def save(value: str) -> None:
+            if value != self.wnotes:
+                self.wnotes = value
+                self.dirty = True
+            self.enter()
+        edit_notes(self.app, self.name, self.wnotes + extra, save)
+
     def _edit_goal(self, field: str, extra: str = "") -> None:
         """Os objetivos (do treino e do bloco) escrevem-se numa janela."""
         if field == "wgoal":
@@ -1155,6 +1176,9 @@ class BlockBuilder(EditScreen):
         if field in ("wgoal", "goal"):
             self._edit_goal(field, text)         # escrever abre a janela do objetivo
             return
+        if field == "wnotes":
+            self._edit_notes(text)               # e a das notas do treinador
+            return
         if field == "name":
             self.name += text
         elif self.block is not None:
@@ -1165,8 +1189,8 @@ class BlockBuilder(EditScreen):
     def text_backspace(self, field: str) -> None:
         if field == "name":
             self.name = self.name[:-1]
-        elif field in ("wgoal", "goal"):
-            return                                # o objetivo edita-se na janela (Enter)
+        elif field in ("wgoal", "goal", "wnotes"):
+            return                                # o objetivo e as notas editam-se na janela
         elif self.block is not None:
             self.block.cue = self.block.cue[:-1]
         self.dirty = True
@@ -1299,6 +1323,7 @@ class BlockBuilder(EditScreen):
         from perennia.core import objectives as ob
         ob.save(self.app.db, self.sport, self.wid, self.wgoal.strip(),
                 [{"name": "", "goal": b.goal} for b in self.blocks])
+        ob.save_notes(self.app.db, self.sport, self.wid, self.wnotes)
         from perennia.core import tags as tags_mod
         tags_mod.set_workout_type(self.app.db, self.sport, self.wid, self.wtype)
         self.wtags = tags_mod.set_workout_tags(self.app.db, self.sport, self.wid, self.wtags)

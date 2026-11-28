@@ -253,10 +253,10 @@ class TestBuilderPanel(tg.GuiCase):
         self.assertIn("Long", scr.chrome.subtitle.text)             # a longevidade, no subtítulo
         self.assertEqual(scr.imp_if.text, "")
 
-    def test_head_rows_are_a_two_by_two_grid_above_the_palette(self):
+    def test_head_rows_are_a_two_row_grid_above_the_palette(self):
         scr = self.builder()
         lv = scr.list
-        self.assertEqual(lv.head_cols, 2)
+        self.assertEqual(lv.head_cols, 3)            # ronda 38: + as notas do treinador
         heads = [c for c in lv._cells if lv.items[c[0]].head]
         ys = sorted({round(c[2]) for c in heads}, reverse=True)
         self.assertEqual(len(ys), 2)                                # duas linhas

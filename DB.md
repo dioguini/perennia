@@ -1381,15 +1381,16 @@ O calendário: treinos planeados por dia.
 
 ## `workout_goals`
 
-O objetivo escrito de cada treino.
+O objetivo de cada treino (e dos blocos) e as notas do treinador (pré-treino), de todos os desportos.
 
 | coluna | tipo | o que é |
 |---|---|---|
-| `sport` | TEXT | desporto |
+| `sport` | TEXT | cycling | rowing | running | swimming | gym | conditioning |
 | `workout_id` | TEXT | → o treino |
-| `goal` | TEXT |  |
-| `blocks` | TEXT |  |
+| `goal` | TEXT | o objetivo do treino (o que desenvolve) |
+| `blocks` | TEXT | o objetivo de cada bloco (JSON) |
 | `updated_at` | TEXT | última alteração |
+| `notes` | TEXT | as notas do treinador (pré-treino), à parte do objetivo |
 
 ## `workout_meta`
 

@@ -160,3 +160,27 @@ class PasswordPopup(GoalPopup):
     def cancel(self) -> None:
         self.text = ""
         self.app.pop(force=True)
+
+
+# ------------------------------------------------- notas do treinador (ronda 38)
+
+
+def notes_item(text: str, on_edit, head: bool = False) -> Item:
+    """A linha «Notas do treinador (pré-treino)» dos construtores: à parte do objetivo (o que o
+    treino desenvolve), o que ler antes de o fazer — como as notas do treinador do
+    TrainingPeaks."""
+    first = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    return Item(tr("Notas do treinador", "Coach notes") if head else
+                tr("Notas do treinador (pré-treino)", "Coach notes (pre-workout)"),
+                value=(first[:70] + "…" if len(first) > 71 or "\n" in (text or "").strip()
+                       else first) or tr("Enter escreve as notas", "Enter writes the notes"),
+                data="text:wnotes", head=head, action=on_edit,
+                detail="" if head else tr("à parte do objetivo: o que ler antes do treino",
+                                          "apart from the goal: what to read before training"))
+
+
+def edit_notes(app, subtitle: str, text: str, save) -> None:
+    """A janela das notas do treinador (várias linhas)."""
+    from perennia.core import objectives as ob
+    app.push(GoalPopup(app, tr("Notas do treinador (pré-treino)", "Coach notes (pre-workout)"),
+                       subtitle, text or "", int(ob.NOTES_LIMIT), save, multiline=True))

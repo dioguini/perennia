@@ -134,6 +134,10 @@ class ImpactPanel:
         self.lon.x, self.lon.y = x0 + pad, base
         self.lon2.x, self.lon2.y = x0 + pad, base - 15
         self.note.x, self.note.y = x0 + pad, base - 30
+        # sem altura para as linhas de baixo, ficam escondidas (nunca saem da caixa)
+        floor = y0 + 7
+        self._show = {"lon": base >= floor, "lon2": base - 15 >= floor,
+                      "note": base - 30 >= floor}
         self._fill()
 
     def _fill(self) -> None:
@@ -161,9 +165,11 @@ class ImpactPanel:
             name.color = ACCENT if (star or sname == tx["focus"]) else TEXT
             fill.width = track.width * max(0.0, min(1.0, v / wi.EFFECT_MAX))
             val.text = fit_text(tx["rows"][sname], x1 - val.x - 10, 9)
-        self.lon.text = fit_text(tx["longevity"], room, 10, bold=True)
-        self.lon2.text = fit_text(tx["longevity2"], room, 9)
-        self.note.text = fit_text(tx["note"], room, 9)
+        show = getattr(self, "_show", {})
+        self.lon.text = fit_text(tx["longevity"], room, 10, bold=True) \
+            if show.get("lon", True) else ""
+        self.lon2.text = fit_text(tx["longevity2"], room, 9) if show.get("lon2", True) else ""
+        self.note.text = fit_text(tx["note"], room, 9) if show.get("note", True) else ""
 
     def draw(self) -> None:
         if self.own_batch and self.visible:

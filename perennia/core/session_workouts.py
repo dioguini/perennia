@@ -121,13 +121,16 @@ def _copy_extras(db, sport: str, src: str, dst: str) -> None:
     if r is not None:
         wm.save(db, sport, dst, r["control"], r["mode"], json.loads(r["blocks"] or "[]"))
     try:
-        g = db.conn.execute("SELECT goal, blocks FROM workout_goals WHERE sport = ? AND"
+        from . import objectives as ob
+        ob.ensure(db)
+        g = db.conn.execute("SELECT goal, blocks, notes FROM workout_goals WHERE sport = ? AND"
                             " workout_id = ?", (sport, str(src))).fetchone()
     except Exception:
         g = None
-    if g is not None:
-        db.conn.execute("INSERT OR REPLACE INTO workout_goals(sport, workout_id, goal, blocks)"
-                        " VALUES (?,?,?,?)", (sport, dst, g["goal"], g["blocks"]))
+    if g is not None:              # o objetivo e as notas do treinador vão com a cópia
+        db.conn.execute("INSERT OR REPLACE INTO workout_goals(sport, workout_id, goal, blocks,"
+                        " notes) VALUES (?,?,?,?,?)",
+                        (sport, dst, g["goal"], g["blocks"], g["notes"]))
         db.conn.commit()
 
 
