@@ -261,7 +261,7 @@ class TestTags(tg.GuiCase):
         b = bs.BlockBuilder(self.app, "cycling", None, control="erg")
         self.app.push(b)
         heads = [b.list.items[i].label for i in b.list.head_indices()]
-        self.assertEqual(heads[0], "Tipo de treino")
+        self.assertIn("Tipo de treino", heads)        # ronda 38: na 2.ª linha do cabeçalho
         self.assertIn("Automático", next(i for i in b.list.items
                                          if i.label == "Tipo de treino").value)
         self.select("Tipo de treino")

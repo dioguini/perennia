@@ -81,8 +81,8 @@ class TestBlockList(tg.GuiCase):
         b.enter()
         lv = b.list
         heads = [lv.items[i].label for i in lv.head_indices()]
-        self.assertEqual(heads, ["Tipo de treino", "Tags do treino", "Nome do treino",
-                                 "Objetivo do treino"])
+        self.assertEqual(heads, ["Nome do treino", "Objetivo do treino", "Notas do treinador",
+                                 "Tipo de treino", "Tags do treino"])
         cells = {lv.items[i].label: (x, y) for i, x, y, _w in lv._cells}
         name_y = cells["Nome do treino"][1]
         self.assertGreater(name_y, b.cy1)                  # por cima do gráfico
@@ -172,8 +172,8 @@ class TestBuilderRound5(tg.GuiCase):
             b.enter()
             self.assertEqual(b.list.columns, 1, sport)
             self.assertEqual([b.list.items[i].label for i in b.list.head_indices()],
-                             ["Tipo de treino", "Tags do treino", "Nome do treino",
-                              "Objetivo do treino"], sport)
+                             ["Nome do treino", "Objetivo do treino", "Notas do treinador",
+                              "Tipo de treino", "Tags do treino"], sport)
             self.assertTrue(b.list.items[[i.header for i in b.list.items].index(True)]
                             .label.startswith("Bloco 2 de"), sport)
             self.app.pop(force=True)

@@ -2549,6 +2549,34 @@ feedback fica. Corre em segundo plano.
 `session_feedback` com `kind = 'imported'`. Tudo criado sozinho ao abrir a Perennia (não há nada
 a fazer). Descrição de todas as tabelas: **[DB.md](DB.md)**.
 
+### Ronda 38: notas do treinador (pré-treino) em todos os treinos
+
+Como no TrainingPeaks, cada treino tem agora **duas coisas escritas, separadas**:
+
+- **Objetivo do treino:** o que o treino desenvolve («Subir o teto aeróbio…»). Já existia.
+- **Notas do treinador (pré-treino):** o que ler antes de o fazer — alimentação, aquecimento,
+  cuidados, como encarar cada parte («Come 2 h antes · se as pernas pesarem, corta 1 série»).
+  Escrevem-se numa janela de várias linhas (Enter muda de linha), até 2000 caracteres (opção
+  `workout_notes_max`).
+
+Onde:
+| Construtor | Onde estão as notas |
+|---|---|
+| Ciclismo, remo, corrida, natação (construtor de blocos) | em cima, ao lado do objetivo: **Nome · Objetivo · Notas do treinador** na 1.ª linha, **Tipo · Tags** na 2.ª |
+| Ginásio (editar o plano) | por baixo da descrição |
+| Conditioning | por baixo das tags |
+
+- **Na ficha do treino** (o ecrã antes de começar), as notas aparecem por baixo do objetivo, até 4
+  linhas. O botão **Notas do treinador** abre-as inteiras.
+- **Cada sessão guarda a cópia do treino** como foi feito, e as notas vão com ela (como o
+  objetivo).
+- Gravam-se com **Guardar**: sair com notas por gravar pergunta antes, como o resto.
+- Com pouca altura (janela 1280×720), o painel «Impacto do treino» do construtor já não deixa
+  as últimas linhas saírem da caixa. A longevidade passa para o subtítulo.
+
+**Base de dados:** coluna nova `workout_goals.notes`, criada sozinha ao abrir (nada a fazer).
+Os backups levam-na com os Treinos.
+
 ### Definições → Avançado (as opções afináveis)
 
 Tudo o que antes estava «escrito no código» e faz sentido mudares está agora em **Definições →
@@ -2594,6 +2622,7 @@ de omissão. Não estão disponíveis durante uma sessão.
 | Strava: guardar o Client Secret na base de dados (`strava_secret_in_db`) | sim / não | não | desligado: o segredo fica só em memória até fechares, ou vem de PERENNIA_STRAVA_CLIENT_SECRET (ronda 37) |
 | Forma: constante da CTL (`pmc_ctl_days`) | 7 a 90 d | 42 d | CTL hoje = CTL ontem + (TSS − CTL ontem) / 42, como o TrainingPeaks |
 | Forma: constante da ATL (`pmc_atl_days`) | 2 a 28 d | 7 d | o mesmo para a fadiga |
+| Notas do treinador: tamanho máximo (`workout_notes_max`) | 200 a 20000 car. | 2000 | quantos caracteres cabem nas notas do treinador de cada treino |
 | Importadas: a mesma atividade se a duração difere até (`import_same_activity_pct`) | 5 a 60 % | 25 % | não contar duas vezes uma sessão da Perennia e a mesma importada |
 | Histórico: atividades importadas a mostrar (`history_imported_max`) | 20 a 5000 | 200 | no fim do Histórico de cada desporto |
 | Análise das importadas: impacto nas mais recentes (`analysis_impact_recent`) | 0 a 1000 | 30 | com muitas de uma vez, o impacto na longevidade só se escreve nas N mais recentes |
@@ -4901,7 +4930,7 @@ procura aí; arrastar o `.gpx` para a janela funciona de qualquer sítio.
 
 ## 11. Estado honesto do que está feito
 
-**Verificado com testes automáticos nesta versão** (1585 testes a passar).
+**Verificado com testes automáticos nesta versão** (1592 testes a passar).
 
 *Novidades da ronda 32 (16 testes novos em `tests/test_round32.py`):* as versões do GarminDB (o erro
 relatado com o Python 3.11, o Python 3.12 com o GarminDB 3 a reparar, o login antigo, as versões

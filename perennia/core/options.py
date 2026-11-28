@@ -139,6 +139,11 @@ OPTIONS: tuple[Opt, ...] = (
        hint_en="how much a set's RPE changes with each arrow press",
        binds=(("perennia.core.strength", "RPE_STEP"),)),
     # ------------------------------------------------------------ treinos e importação
+    _o("workout_notes_max", "workouts", "Notas do treinador: tamanho máximo",
+       "Coach notes: maximum length", INT, 2000, lo=200, hi=20000, step=100, unit="car.",
+       hint_pt="quantos caracteres cabem nas notas do treinador (pré-treino) de cada treino",
+       hint_en="how many characters the coach notes (pre-workout) of each workout can hold",
+       binds=(("perennia.core.objectives", "NOTES_LIMIT"),)),
     _o("import_same_activity_pct", "workouts", "Importadas: a mesma atividade se a duração "
        "difere até", "Imported: the same activity if the duration differs by up to", INT, 25,
        lo=5, hi=60, step=5, unit="%",

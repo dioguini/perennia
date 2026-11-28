@@ -18,7 +18,7 @@ from perennia.core.i18n import t, tr
 from perennia.core.units import hms
 from perennia.gfx.compat import label as make_label
 from perennia.ui.app import Screen
-from perennia.ui.widgets import BORDER, DIM, GRID, PANEL, PANEL2, TEXT, Item
+from perennia.ui.widgets import ACCENT, BORDER, DIM, GRID, PANEL, PANEL2, TEXT, Item
 
 
 def wrap(text: str, width_px: float, size: float, max_lines: int = 0) -> str:
@@ -65,6 +65,11 @@ class BriefPanel:
         self.goal = make_label("", font_size=16, color=TEXT, anchor_y="top", batch=b,
                                multiline=True, width=400)
         self.auto_note = make_label("", font_size=11, color=DIM, anchor_y="top", batch=b)
+        # as notas do treinador (pré-treino), à parte do objetivo (ronda 38)
+        self.notes_title = make_label("", font_size=12, bold=True, color=ACCENT, anchor_y="top",
+                                      batch=b)
+        self.notes = make_label("", font_size=13, color=TEXT, anchor_y="top", batch=b,
+                                multiline=True, width=400)
         self.chart_bg = pyglet.shapes.Rectangle(0, 0, 1, 1, color=PANEL, batch=b)
         self.grid = [pyglet.shapes.Rectangle(0, 0, 1, 1, color=GRID, batch=b) for _ in range(4)]
         self.yticks = [make_label("", font_size=10, color=DIM, anchor_x="right",
@@ -160,6 +165,20 @@ class BriefPanel:
         self.auto_note.x, self.auto_note.y = ix, y
         if not brief.goal_written:
             y -= 18
+        notes = (getattr(brief, "notes", "") or "").strip()
+        if notes:
+            y -= 4
+            self.notes_title.text = tr("Notas do treinador", "Coach notes")
+            self.notes_title.x, self.notes_title.y = ix, y
+            y -= 20
+            ntext = wrap(" · ".join(ln.strip() for ln in notes.splitlines() if ln.strip()),
+                         text_w, 13, NOTES_LINES)
+            self.notes.text = ntext
+            self.notes.width = int(text_w)
+            self.notes.x, self.notes.y = ix, y
+            y -= 19 * (ntext.count("\n") + 1) + 4
+        else:
+            self.notes_title.text = self.notes.text = ""
         if show_imp:                               # o gráfico começa por baixo do painel
             y = min(y, self.impact.box[2] - 6)
         avail = y - bottom
@@ -299,6 +318,9 @@ class BriefPanel:
 # ====================================================================== ecrãs
 
 
+NOTES_LINES = 4          # as notas do treinador na ficha: até 4 linhas (o resto: «Notas» abre)
+
+
 class BriefScreen(Screen):
     """Base: o cartão do treino a toda a largura — objetivo, gráfico dos blocos
     e, por baixo, os objetivos de cada bloco — e as ações em baixo, à direita
@@ -373,6 +395,13 @@ class BriefScreen(Screen):
         from perennia.ui.builder_screens import BlockBuilder
         self.app.push(BlockBuilder(self.app, self.SPORT, self.wid))
 
+    def show_notes(self) -> None:
+        from perennia.ui.imported_screens import TextViewPopup
+        b = getattr(self, "brief_data", None)
+        if b is not None and (b.notes or "").strip():
+            self.app.push(TextViewPopup(self.app, tr("Notas do treinador", "Coach notes"),
+                                        b.notes))
+
     def enter(self) -> None:
         a = self.app
         b = self.make_brief()
@@ -386,6 +415,10 @@ class BriefScreen(Screen):
         # os objetivos vêm do próprio treino (escrevem-se no construtor)
         items = [Item(tr("Editar", "Edit"), button=True, action=self.edit),
                  Item(tr("Planear", "Plan"), button=True, action=self.plan, data="plan")]
+        if (getattr(b, "notes", "") or "").strip():
+            # as notas do treinador inteiras (na ficha só cabem 4 linhas)
+            items.insert(0, Item(tr("Notas do treinador", "Coach notes"), button=True,
+                                 action=self.show_notes))
         items.append(Item(tr("Exportar", "Export"), button=True, action=self.export,
                           primary=not (self.CAN_START and not self.future)))
         can_start = self.CAN_START and not self.future

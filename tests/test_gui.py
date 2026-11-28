@@ -115,6 +115,11 @@ class GuiCase(unittest.TestCase):
         «Dispositivos», usa os botões da faixa do topo."""
         scr = self.screen()
         view = scr.list
+        for i, item in enumerate(view.items):      # primeiro o rótulo exato («Treinador»
+            if item.label == text:                  # e não «Notas do treinador»)
+                view.index = i
+                view._sync()
+                return True
         for i, item in enumerate(view.items):
             if text.lower() in item.label.lower():
                 view.index = i

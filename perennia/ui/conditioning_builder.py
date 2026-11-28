@@ -62,6 +62,8 @@ class ConditioningBuilder(EditScreen):
         self.blocks: list[dict] = cnd.from_items(p["items"] if p else (items or []))
         from perennia.core import tags as tags_mod
         self.wtags = tags_mod.workout_tags(app.db, "strength", pid)
+        from perennia.core import objectives as ob
+        self.wnotes = ob.notes(app.db, "conditioning", pid) if pid else ""
         self.sel = 0 if self.blocks else -1
         self.drag: dict | None = None
         self._saved_state = self._state()
@@ -87,7 +89,7 @@ class ConditioningBuilder(EditScreen):
     # ------------------------------------------------------------- estado
 
     def _state(self) -> str:
-        return repr((self.name, self.blocks, self.wtags))
+        return repr((self.name, self.blocks, self.wtags, self.wnotes))
 
     def has_unsaved(self) -> bool:
         return not self.draft and self._state() != self._saved_state
@@ -198,6 +200,8 @@ class ConditioningBuilder(EditScreen):
                      detail=tr("as automáticas vêm dos blocos · Enter junta as tuas",
                                "the automatic ones come from the blocks · Enter adds yours"),
                      action=self._edit_tags)]
+        from perennia.ui.goal_popup import notes_item
+        rows.append(notes_item(self.wnotes, self._edit_notes))
         total = sum(self._spans()) if self.blocks else 0.0
         rows.append(Item(tr("Blocos · {n} · ≈ {t}", "Blocks · {n} · ≈ {t}", n=len(self.blocks),
                             t=hms(total)), header=True))
@@ -390,10 +394,21 @@ class ConditioningBuilder(EditScreen):
                                 tr("Treino de Conditioning", "Conditioning workout"),
                                 "conditioning", cnd.to_items(self.app.db, self.blocks))
         self.wtags = tags_mod.set_workout_tags(self.app.db, "strength", self.pid, self.wtags)
+        from perennia.core import objectives as ob
+        ob.save_notes(self.app.db, "conditioning", self.pid, self.wnotes)
         self.draft = False
         self._saved_state = self._state()
         self.app.message(tr("Treino de Conditioning guardado", "Conditioning workout saved"))
         self.enter()
+
+    def _edit_notes(self, extra: str = "") -> None:
+        """As notas do treinador (pré-treino) do treino de Conditioning."""
+        from perennia.ui.goal_popup import edit_notes
+
+        def save(value: str) -> None:
+            self.wnotes = value
+            self.enter()
+        edit_notes(self.app, self.name, self.wnotes + extra, save)
 
     def _start(self) -> None:
         if not self.blocks:
@@ -423,10 +438,15 @@ class ConditioningBuilder(EditScreen):
             self.blocks[int(field)]["seconds"] = max(10.0, float(value) * 60)
 
     def text_input(self, field: str, text: str) -> None:
+        if field == "wnotes":
+            self._edit_notes(text)               # as notas escrevem-se numa janela
+            return
         self.name += text
         self.enter()
 
     def text_backspace(self, field: str) -> None:
+        if field == "wnotes":
+            return
         self.name = self.name[:-1]
         self.enter()
 
